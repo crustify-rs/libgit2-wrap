@@ -105,6 +105,9 @@
 ^git_odb_free$
 ^git_oid$
 ^git_oid_t$
+^git_oidarray$
+^git_oidarray_dispose$
+^git_odb_writepack$
 ^git_odb_stream$
 ^git_odb_stream_free$
 ^git_odb_stream_t$

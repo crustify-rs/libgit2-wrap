@@ -1721,6 +1721,103 @@
    ]
   },
   {
+   "name": "git_odb_writepack",
+   "defined_in": "include/git2/odb_backend.h",
+   "_comment_agent": "Observed pack_backend__writepack construction and all field touchers. The callback table is immutable after construction; free dynamically destroys the concrete allocation.",
+   "fields": [
+    {
+     "name": "append",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "A fully constructed writepack installs a static append function and invokes it synchronously."
+     }
+    },
+    {
+     "name": "backend",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "A constructed built-in writepack retains its originating ODB backend but never owns it; external backend implementations may leave the public slot null. When present, the owning ODB/backend state must outlive the writepack. No observed writepack path dereferences or writes through this field."
+     }
+    },
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "A fully constructed writepack installs a static commit function and invokes it synchronously."
+     }
+    },
+    {
+     "name": "free",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "A fully constructed writepack installs a static destructor function; callers invoke it exactly once for owned allocations."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oidarray",
+   "defined_in": "include/git2/oidarray.h",
+   "_comment_agent": "Observed creation, conversion, reversal, disposal, and public result APIs. ids/count are a coupled owned array header.",
+   "fields": [
+    {
+     "name": "ids",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "The header uniquely owns count contiguous git_oid values allocated by libgit2; null with count zero is the empty state. git_oidarray_dispose frees the run but retains the header."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_packbuilder",
    "defined_in": "src/libgit2/pack-objects.h",
    "_comment_agent": "The public API treats git_packbuilder as opaque. Its complete internal pointer-field footprint was inspected to establish the retained repository/callback borrows and owned ODB, name, and object-list storage.",
@@ -4486,6 +4583,64 @@
    ]
   },
   {
+   "name": "git_oidarray_dispose",
+   "defined_in": "src/libgit2/oidarray.c",
+   "lifetime": {
+    "for": "arr",
+    "is_dropper": false,
+    "is_disposer": true,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "arr",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arr"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the inline header mutably, frees its owned ids run, and retains the header storage."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oidarray_free",
+   "defined_in": "src/libgit2/oidarray.c",
+   "lifetime": {
+    "for": "arr",
+    "is_dropper": false,
+    "is_disposer": true,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "arr",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arr"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the inline header mutably, frees its owned ids run, and retains the header storage."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_packbuilder_foreach_cb",
    "defined_in": null,
    "ptr_args": [
@@ -5708,6 +5863,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and releases one fully or partially constructed git_worktree; NULL is accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "pack_backend__writepack_free",
+   "defined_in": "src/libgit2/odb_pack.c",
+   "lifetime": {
+    "for": "_writepack",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "_writepack",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes the concrete pack writepack, frees its indexer, then releases the allocation; null is accepted."
      }
     }
    ]

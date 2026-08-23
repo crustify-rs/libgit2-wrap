@@ -2,7 +2,10 @@
 
 use core::ptr::NonNull;
 
+use ffibox::CBox;
+
 use crate::ffi;
+use crate::indexer::IndexerProgressMut;
 use crate::oid::{InvalidOidType, OidRef, OidType};
 
 ffibox::define_ctype!(
@@ -460,5 +463,198 @@ mod tests {
         let stream = unsafe { GitOdbStreamOwned::from_raw(raw) }.unwrap();
         drop(stream);
         assert_eq!(FREED.load(Ordering::SeqCst), 1);
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_odb_writepack
+    /// A polymorphic sink that incrementally writes a packfile into an object
+    /// database backend.
+    OdbWritepack,
+    OdbWritepackRef,
+    OdbWritepackMut,
+    ffi::git_odb_writepack
+);
+
+/// An exclusively owned writepack whose installed `free` callback releases
+/// its concrete allocation.
+pub type OdbWritepackOwned = CBox<OdbWritepack>;
+
+impl OdbWritepackRef<'_> {
+    /// Wraps: git_odb_writepack.backend
+    /// Reports whether the writepack records its originating backend.
+    ///
+    /// The backend itself remains a temporary lower-layer FFI dependency until
+    /// `git_odb_backend` has its own scheduled safe wrapper.
+    #[must_use]
+    pub fn has_backend(&self) -> bool {
+        // SAFETY: this live shared handle permits a raw-place read of the
+        // initialized pointer field without forming a reference to the backend
+        // or to C-visible writepack storage.
+        !unsafe { core::ptr::addr_of!((*self.as_ptr()).backend).read() }.is_null()
+    }
+}
+
+impl OdbWritepackMut<'_> {
+    /// Wraps: git_odb_writepack.append
+    /// Synchronously appends a chunk of packfile bytes and updates `stats`.
+    pub fn append(
+        &mut self,
+        data: &[u8],
+        stats: &mut IndexerProgressMut<'_>,
+    ) -> Result<(), core::ffi::c_int> {
+        let writepack = self.as_mut_ptr();
+        // SAFETY: this live exclusive handle covers a fully constructed
+        // writepack, and raw-place projection copies its initialized callback
+        // without forming a reference to C-visible memory.
+        let append = unsafe { core::ptr::addr_of!((*writepack).append).read() }
+            .expect("a valid git_odb_writepack has an append callback");
+        // SAFETY: `append` is installed for this live writepack. `data` keeps
+        // exactly its readable byte run alive for the synchronous call, and
+        // both writepack and progress have exclusive handles during it.
+        let status = unsafe {
+            append(
+                writepack,
+                data.as_ptr().cast::<core::ffi::c_void>(),
+                data.len(),
+                stats.as_mut_ptr(),
+            )
+        };
+        if status < 0 { Err(status) } else { Ok(()) }
+    }
+
+    /// Wraps: git_odb_writepack.commit
+    /// Finalizes the packfile and updates `stats`.
+    pub fn commit(&mut self, stats: &mut IndexerProgressMut<'_>) -> Result<(), core::ffi::c_int> {
+        let writepack = self.as_mut_ptr();
+        // SAFETY: as in `append`, raw-place projection copies the callback from
+        // this live, exclusively borrowed, fully constructed writepack.
+        let commit = unsafe { core::ptr::addr_of!((*writepack).commit).read() }
+            .expect("a valid git_odb_writepack has a commit callback");
+        // SAFETY: `commit` is installed for this writepack and both mutable
+        // arguments are exclusively borrowed for the duration of the call.
+        let status = unsafe { commit(writepack, stats.as_mut_ptr()) };
+        if status < 0 { Err(status) } else { Ok(()) }
+    }
+}
+
+/// Wraps: git_odb_writepack.free
+// SAFETY: adopting `OdbWritepackOwned` requires a unique, fully constructed
+// concrete allocation whose installed callback releases that allocation.
+// `CBox` invokes the callback exactly once and never accesses the pointer again.
+unsafe impl ffibox::CDropped for OdbWritepack {
+    unsafe fn c_drop(writepack: NonNull<Self>) {
+        let writepack = writepack.as_ptr().cast::<ffi::git_odb_writepack>();
+        // SAFETY: the `CDropped` contract supplies a live writepack, and
+        // raw-place projection copies its initialized callback without forming
+        // a reference to C-visible memory.
+        let free = unsafe { core::ptr::addr_of!((*writepack).free).read() }
+            .expect("a valid git_odb_writepack has a free callback");
+        // SAFETY: the callback is the concrete destructor installed for this
+        // uniquely owned writepack, and this is its one final invocation.
+        unsafe { free(writepack) }
+    }
+}
+
+#[cfg(test)]
+mod writepack_tests {
+    use core::mem::{align_of, size_of};
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    use crate::indexer::IndexerProgressMut;
+
+    use super::*;
+
+    static APPENDED: AtomicUsize = AtomicUsize::new(0);
+    static COMMITS: AtomicUsize = AtomicUsize::new(0);
+    static FREES: AtomicUsize = AtomicUsize::new(0);
+
+    unsafe extern "C" fn test_append(
+        _writepack: *mut ffi::git_odb_writepack,
+        data: *const core::ffi::c_void,
+        size: usize,
+        stats: *mut ffi::git_indexer_progress,
+    ) -> core::ffi::c_int {
+        if size != 0 {
+            // SAFETY: the callback contract provides `size` readable bytes, so
+            // a nonempty call permits reading the first one.
+            assert_eq!(unsafe { data.cast::<u8>().read() }, b'p');
+        }
+        APPENDED.store(size, Ordering::SeqCst);
+        // SAFETY: the callback contract supplies an exclusive live progress
+        // value, and raw-place projection writes its scalar field.
+        unsafe { core::ptr::addr_of_mut!((*stats).received_bytes).write(size) };
+        0
+    }
+
+    unsafe extern "C" fn test_commit(
+        _writepack: *mut ffi::git_odb_writepack,
+        _stats: *mut ffi::git_indexer_progress,
+    ) -> core::ffi::c_int {
+        COMMITS.fetch_add(1, Ordering::SeqCst);
+        0
+    }
+
+    unsafe extern "C" fn test_free(writepack: *mut ffi::git_odb_writepack) {
+        FREES.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: the test adopts exactly one allocation created by
+        // `Box::into_raw`, and the owning wrapper calls this function once.
+        unsafe { drop(Box::from_raw(writepack)) }
+    }
+
+    #[test]
+    fn wrapper_preserves_the_c_layout() {
+        assert_eq!(
+            size_of::<OdbWritepack>(),
+            size_of::<ffi::git_odb_writepack>()
+        );
+        assert_eq!(
+            align_of::<OdbWritepack>(),
+            align_of::<ffi::git_odb_writepack>()
+        );
+        assert_eq!(
+            size_of::<OdbWritepackRef<'_>>(),
+            size_of::<*const ffi::git_odb_writepack>()
+        );
+        assert_eq!(
+            size_of::<OdbWritepackMut<'_>>(),
+            size_of::<*mut ffi::git_odb_writepack>()
+        );
+    }
+
+    #[test]
+    fn owned_writepack_dispatches_and_frees() {
+        APPENDED.store(0, Ordering::SeqCst);
+        COMMITS.store(0, Ordering::SeqCst);
+        FREES.store(0, Ordering::SeqCst);
+
+        let raw = Box::into_raw(Box::new(ffi::git_odb_writepack {
+            backend: core::ptr::null_mut(),
+            append: Some(test_append),
+            commit: Some(test_commit),
+            free: Some(test_free),
+        }));
+        // SAFETY: `raw` is a unique fully initialized allocation whose
+        // installed destructor releases that exact allocation once.
+        let mut writepack =
+            unsafe { OdbWritepackOwned::from_raw(raw) }.expect("Box::into_raw is non-null");
+
+        // SAFETY: the bindgen progress record contains only integer fields, so
+        // all-zero is a valid initialized value.
+        let mut raw_stats: ffi::git_indexer_progress = unsafe { core::mem::zeroed() };
+        // SAFETY: `raw_stats` is initialized, live, and exclusively borrowed
+        // for this handle's use below.
+        let mut stats = unsafe { IndexerProgressMut::from_ptr(&raw mut raw_stats) }
+            .expect("a stack address is non-null");
+
+        assert!(!writepack.as_ref().has_backend());
+        assert_eq!(writepack.as_mut().append(b"pack", &mut stats), Ok(()));
+        assert_eq!(stats.as_ref().received_bytes(), 4);
+        assert_eq!(writepack.as_mut().commit(&mut stats), Ok(()));
+        assert_eq!(APPENDED.load(Ordering::SeqCst), 4);
+        assert_eq!(COMMITS.load(Ordering::SeqCst), 1);
+
+        drop(writepack);
+        assert_eq!(FREES.load(Ordering::SeqCst), 1);
     }
 }
