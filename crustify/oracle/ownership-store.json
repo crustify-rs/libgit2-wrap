@@ -97,6 +97,18 @@
    "defined_in": "include/git2/attr.h",
    "_comment_agent": "git_attr_value_t is a fieldless enum with no pointer, lifecycle, refcount, or locking semantics.",
    "fields": []
+  },
+  {
+   "name": "git_branch_iterator",
+   "defined_in": null,
+   "_comment_agent": "Public opaque iterator. Its allocation is uniquely owned and released by git_branch_iterator_free; no fields are published.",
+   "fields": []
+  },
+  {
+   "name": "git_branch_t",
+   "defined_in": "include/git2/types.h",
+   "_comment_agent": "Closed public branch-kind enum with LOCAL and REMOTE values plus the ALL bitwise filter value; it has no pointer or lifecycle fields.",
+   "fields": []
   }
  ],
  "symbols": [
@@ -227,6 +239,136 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees a complete annotated commit; NULL is explicitly accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_branch_iterator_free",
+   "defined_in": "src/libgit2/branch.c",
+   "lifetime": {
+    "for": "_iter",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "_iter",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes the iterator allocation and its nested reference iterator; NULL is explicitly accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_branch_iterator_new",
+   "defined_in": "src/libgit2/branch.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the non-null output slot and writes one newly allocated iterator on success; the caller assumes ownership of that iterator."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the repository for construction only; the resulting reference iterator does not retain the repository pointer, though libgit2 may mutate repository-owned internal state while creating it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_branch_next",
+   "defined_in": "src/libgit2/branch.c",
+   "ptr_args": [
+    {
+     "name": "_iter",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:_iter"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Mutably borrows the iterator for the call and advances its nested reference iterator; ownership remains with the caller."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the output slot and transfers ownership of one reference into it on success."
+     }
+    },
+    {
+     "name": "out_type",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out_type"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the scalar output slot and writes the yielded branch kind on success."
      }
     }
    ]
