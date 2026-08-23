@@ -1323,6 +1323,62 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_push",
+   "defined_in": "src/libgit2/push.h",
+   "_comment_agent": "git_push is opaque in the public API and handed to transport callbacks as a borrow. Its internal remote/repository pointers are borrowed; pb is temporary owned state whose stale field value must not be exposed.",
+   "fields": [
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Temporary owned packbuilder: initially null, allocated during do_push and consumed by git_packbuilder_free before do_push returns; the field is not cleared and is therefore not a safe post-call borrow surface."
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed from git_push_new's remote argument; the remote owns the push and frees it before freeing itself."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Copied from remote->repo; git_push neither retains nor frees it, and push use is nested within the owning remote and repository lifetimes."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -2186,6 +2242,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a complete match-list allocation; NULL is a no-op. It releases the retained pathspec count, arrays, pool, and header."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_push_free",
+   "defined_in": "src/libgit2/push.c",
+   "lifetime": {
+    "for": "push",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "push",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and frees a fully initialized push plus each owned collection; explicitly accepts null."
      }
     }
    ]
