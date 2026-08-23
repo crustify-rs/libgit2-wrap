@@ -335,6 +335,82 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_describe_options",
+   "defined_in": "include/git2/describe.h",
+   "_comment_agent": "The options struct owns no pointee storage. pattern is an optional borrowed input string whose caller must keep it valid through each describe operation.",
+   "fields": [
+    {
+     "name": "pattern",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated match pattern; libgit2 only reads it during describe calls and neither stores a copy nor frees it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_describe_result",
+   "defined_in": "src/libgit2/describe.c",
+   "_comment_agent": "A describe result owns its optional name/tag variant and borrows its repository. Its public destructor releases the owned variant and result storage but not the repository.",
+   "fields": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Deep-duplicated exact-match commit_name owned by the result; formatting may lazily populate its tag, and result_free releases its tag, path, and allocation."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed from the repository owning the input object (or passed to workdir); format uses it but result_free does not release it, so the repository must outlive result use."
+     }
+    },
+    {
+     "name": "tag",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Deep-duplicated possible_tag owned by the result; formatting may mutate the nested commit_name, and result_free releases the complete nested allocation."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -707,6 +783,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one owned git_config reference; NULL is a no-op. It decrements rc and releases the allocation and backend fields when the final count reaches zero."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_describe_result_free",
+   "defined_in": "src/libgit2/describe.c",
+   "lifetime": {
+    "for": "result",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "result",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and frees a complete describe result plus its owned name/tag variant; NULL is accepted as a no-op."
      }
     }
    ]

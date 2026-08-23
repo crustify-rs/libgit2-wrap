@@ -5,6 +5,9 @@
 ^git_attr_value_t$
 ^git_delta_t$
 ^git_describe_format_options$
+^git_describe_options$
+^git_describe_result$
+^git_describe_result_free$
 ^git_checkout_notify_t$
 ^git_checkout_perfdata$
 ^git_config_level_t$
