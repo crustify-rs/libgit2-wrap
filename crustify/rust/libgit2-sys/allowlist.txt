@@ -94,6 +94,8 @@
 ^git_reference_dup$
 ^git_reference_free$
 ^git_reference_t$
+^git_repository$
+^git_repository_free$
 ^git_pathspec$
 ^git_pathspec_free$
 ^git_pathspec_match_list$

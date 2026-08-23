@@ -3023,6 +3023,33 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_repository_free",
+   "defined_in": "src/libgit2/repository.c",
+   "lifetime": {
+    "for": "repo",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one repository allocation when non-null; cleans all repository-owned internals, zeros the header, and frees its storage. NULL is explicitly a no-op."
+     }
+    }
+   ]
   }
  ]
 }
