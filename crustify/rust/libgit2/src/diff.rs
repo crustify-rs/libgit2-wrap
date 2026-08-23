@@ -102,3 +102,160 @@ mod tests {
         assert_eq!(align_of::<Delta>(), align_of::<ffi::git_delta_t>());
     }
 }
+
+/// Wraps: git_diff_binary_t
+/// Describes the representation of one side of a binary diff.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum DiffBinaryKind {
+    /// No binary data is present.
+    None = ffi::git_diff_binary_t_GIT_DIFF_BINARY_NONE,
+    /// The data contains the deflated full contents of the file.
+    Literal = ffi::git_diff_binary_t_GIT_DIFF_BINARY_LITERAL,
+    /// The data contains a deflated delta from the other side.
+    Delta = ffi::git_diff_binary_t_GIT_DIFF_BINARY_DELTA,
+}
+
+/// A raw value that is not a valid [`DiffBinaryKind`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidDiffBinaryKind(ffi::git_diff_binary_t);
+
+impl InvalidDiffBinaryKind {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_diff_binary_t {
+        self.0
+    }
+}
+
+impl From<DiffBinaryKind> for ffi::git_diff_binary_t {
+    fn from(kind: DiffBinaryKind) -> Self {
+        kind as Self
+    }
+}
+
+impl TryFrom<ffi::git_diff_binary_t> for DiffBinaryKind {
+    type Error = InvalidDiffBinaryKind;
+
+    fn try_from(kind: ffi::git_diff_binary_t) -> Result<Self, Self::Error> {
+        match kind {
+            ffi::git_diff_binary_t_GIT_DIFF_BINARY_NONE => Ok(Self::None),
+            ffi::git_diff_binary_t_GIT_DIFF_BINARY_LITERAL => Ok(Self::Literal),
+            ffi::git_diff_binary_t_GIT_DIFF_BINARY_DELTA => Ok(Self::Delta),
+            value => Err(InvalidDiffBinaryKind(value)),
+        }
+    }
+}
+
+/// Wraps: git_diff_format_t
+/// Selects the text format generated from a diff.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum DiffFormat {
+    /// A full patch.
+    Patch = ffi::git_diff_format_t_GIT_DIFF_FORMAT_PATCH,
+    /// Patch file headers without hunks.
+    PatchHeader = ffi::git_diff_format_t_GIT_DIFF_FORMAT_PATCH_HEADER,
+    /// Raw diff output.
+    Raw = ffi::git_diff_format_t_GIT_DIFF_FORMAT_RAW,
+    /// File names only.
+    NameOnly = ffi::git_diff_format_t_GIT_DIFF_FORMAT_NAME_ONLY,
+    /// File names and status letters.
+    NameStatus = ffi::git_diff_format_t_GIT_DIFF_FORMAT_NAME_STATUS,
+    /// Patch-id input format.
+    PatchId = ffi::git_diff_format_t_GIT_DIFF_FORMAT_PATCH_ID,
+}
+
+/// A raw value that is not a valid [`DiffFormat`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidDiffFormat(ffi::git_diff_format_t);
+
+impl InvalidDiffFormat {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_diff_format_t {
+        self.0
+    }
+}
+
+impl From<DiffFormat> for ffi::git_diff_format_t {
+    fn from(format: DiffFormat) -> Self {
+        format as Self
+    }
+}
+
+impl TryFrom<ffi::git_diff_format_t> for DiffFormat {
+    type Error = InvalidDiffFormat;
+
+    fn try_from(format: ffi::git_diff_format_t) -> Result<Self, Self::Error> {
+        match format {
+            ffi::git_diff_format_t_GIT_DIFF_FORMAT_PATCH => Ok(Self::Patch),
+            ffi::git_diff_format_t_GIT_DIFF_FORMAT_PATCH_HEADER => Ok(Self::PatchHeader),
+            ffi::git_diff_format_t_GIT_DIFF_FORMAT_RAW => Ok(Self::Raw),
+            ffi::git_diff_format_t_GIT_DIFF_FORMAT_NAME_ONLY => Ok(Self::NameOnly),
+            ffi::git_diff_format_t_GIT_DIFF_FORMAT_NAME_STATUS => Ok(Self::NameStatus),
+            ffi::git_diff_format_t_GIT_DIFF_FORMAT_PATCH_ID => Ok(Self::PatchId),
+            value => Err(InvalidDiffFormat(value)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod binary_format_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn binary_kinds_round_trip_and_reject_unknown_values() {
+        for kind in [
+            DiffBinaryKind::None,
+            DiffBinaryKind::Literal,
+            DiffBinaryKind::Delta,
+        ] {
+            let raw = ffi::git_diff_binary_t::from(kind);
+            assert_eq!(DiffBinaryKind::try_from(raw), Ok(kind));
+        }
+
+        let invalid = ffi::git_diff_binary_t_GIT_DIFF_BINARY_DELTA + 1;
+        assert_eq!(
+            DiffBinaryKind::try_from(invalid).unwrap_err().value(),
+            invalid
+        );
+    }
+
+    #[test]
+    fn diff_formats_round_trip_and_reject_unknown_values() {
+        for format in [
+            DiffFormat::Patch,
+            DiffFormat::PatchHeader,
+            DiffFormat::Raw,
+            DiffFormat::NameOnly,
+            DiffFormat::NameStatus,
+            DiffFormat::PatchId,
+        ] {
+            let raw = ffi::git_diff_format_t::from(format);
+            assert_eq!(DiffFormat::try_from(raw), Ok(format));
+        }
+
+        let invalid = ffi::git_diff_format_t_GIT_DIFF_FORMAT_PATCH_ID + 1;
+        assert_eq!(DiffFormat::try_from(invalid).unwrap_err().value(), invalid);
+    }
+
+    #[test]
+    fn wrappers_match_their_c_enum_layouts() {
+        assert_eq!(
+            size_of::<DiffBinaryKind>(),
+            size_of::<ffi::git_diff_binary_t>()
+        );
+        assert_eq!(
+            align_of::<DiffBinaryKind>(),
+            align_of::<ffi::git_diff_binary_t>()
+        );
+        assert_eq!(size_of::<DiffFormat>(), size_of::<ffi::git_diff_format_t>());
+        assert_eq!(
+            align_of::<DiffFormat>(),
+            align_of::<ffi::git_diff_format_t>()
+        );
+    }
+}
