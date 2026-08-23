@@ -188,6 +188,22 @@ impl CheckoutPerfDataMut<'_> {
     }
 }
 
+/// Wraps: git_checkout_progress_cb
+/// Safe callable surface for checkout progress notifications.
+pub trait GitCheckoutProgressCallback {
+    /// Reports progress; `path == None` is the initial zero-step baseline.
+    fn call(&mut self, path: Option<&core::ffi::CStr>, completed: usize, total: usize);
+}
+
+impl<F> GitCheckoutProgressCallback for F
+where
+    F: FnMut(Option<&core::ffi::CStr>, usize, usize),
+{
+    fn call(&mut self, path: Option<&core::ffi::CStr>, completed: usize, total: usize) {
+        self(path, completed, total)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,6 +241,16 @@ mod tests {
         assert_eq!(data.as_ref().mkdir_calls(), 4);
         assert_eq!(data.as_ref().stat_calls(), 5);
         assert_eq!(data.as_ref().chmod_calls(), 6);
+    }
+
+    #[test]
+    fn progress_callback_accepts_the_null_baseline_path() {
+        let mut seen = None;
+        let mut callback = |path: Option<&core::ffi::CStr>, completed, total| {
+            seen = Some((path.is_none(), completed, total));
+        };
+        GitCheckoutProgressCallback::call(&mut callback, None, 0, 12);
+        assert_eq!(seen, Some((true, 0, 12)));
     }
 
     #[test]

@@ -2632,6 +2632,46 @@
    ]
   },
   {
+   "name": "git_branch_name_is_valid",
+   "defined_in": "src/libgit2/branch.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient NUL string; NULL is reported as invalid."
+     }
+    },
+    {
+     "name": "valid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:valid"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required scalar out-slot; initialized before any return."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_branch_next",
    "defined_in": "src/libgit2/branch.c",
    "ptr_args": [
@@ -2750,6 +2790,46 @@
    ]
   },
   {
+   "name": "git_checkout_progress_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Transient optional path; NULL establishes the initial progress baseline."
+     }
+    },
+    {
+     "name": "arg3",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg3"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller payload borrowed for the callback invocation."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_config_free",
    "defined_in": "src/libgit2/config.c",
    "lifetime": {
@@ -2772,6 +2852,126 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one owned git_config reference; NULL is a no-op. It decrements rc and releases the allocation and backend fields when the final count reaches zero."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_parse_bool",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required scalar out-slot written on successful boolean parsing."
+     }
+    },
+    {
+     "name": "value",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:value"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient NUL string; NULL produces a parse error."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_parse_int32",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required scalar out-slot written on successful int32 parsing."
+     }
+    },
+    {
+     "name": "value",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:value"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient NUL string; NULL produces a parse error."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_parse_int64",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required scalar out-slot written on successful int64 parsing."
+     }
+    },
+    {
+     "name": "value",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:value"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient NUL string; NULL produces a parse error."
      }
     }
    ]
@@ -2890,6 +3090,33 @@
    ]
   },
   {
+   "name": "git_error_clear",
+   "defined_in": "src/util/errors.c"
+  },
+  {
+   "name": "git_error_set_str",
+   "defined_in": "src/util/errors.c",
+   "ptr_args": [
+    {
+     "name": "string",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:string"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL string copied into thread-local error storage."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_index_conflict_iterator_free",
    "defined_in": "src/libgit2/index.c",
    "lifetime": {
@@ -2912,6 +3139,63 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees the iterator allocation; NULL is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_matched_path_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient matched index/worktree path."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient pathspec that matched the path."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller payload borrowed for the callback invocation."
      }
     }
    ]
@@ -2966,6 +3250,71 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a complete iterator, invokes its concrete callback destructor, releases common storage, and frees the allocation; NULL is accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_libgit2_features",
+   "defined_in": "src/libgit2/libgit2.c"
+  },
+  {
+   "name": "git_libgit2_opts",
+   "defined_in": "src/libgit2/settings.c"
+  },
+  {
+   "name": "git_libgit2_version",
+   "defined_in": "src/libgit2/libgit2.c",
+   "ptr_args": [
+    {
+     "name": "major",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:major"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required scalar out-slot."
+     }
+    },
+    {
+     "name": "minor",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:minor"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required scalar out-slot."
+     }
+    },
+    {
+     "name": "rev",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:rev"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required scalar out-slot."
      }
     }
    ]
@@ -3160,6 +3509,46 @@
    ]
   },
   {
+   "name": "git_packbuilder_foreach_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Transient object-data buffer whose element count is the size argument."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller payload borrowed for the callback invocation."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_packbuilder_free",
    "defined_in": "src/libgit2/pack-objects.c",
    "lifetime": {
@@ -3182,6 +3571,29 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and releases a complete packbuilder allocation and its owned fields; NULL is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_progress",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg3",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg3"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller payload borrowed for the callback invocation."
      }
     }
    ]
@@ -3290,6 +3702,86 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees a fully initialized push plus each owned collection; explicitly accepts null."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_push_transfer_progress_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg3",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg3"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller payload borrowed for the callback invocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_push_update_reference_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient non-null remote reference name."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Transient status string; NULL denotes a successful update."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller payload borrowed for the callback invocation."
      }
     }
    ]
@@ -3423,6 +3915,86 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees a complete reference; null is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_name_is_valid",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "refname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL string; implementation asserts non-null."
+     }
+    },
+    {
+     "name": "valid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:valid"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required scalar out-slot."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_normalize_name",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "buffer_out",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:buffer_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-owned writable byte buffer; size argument gives capacity and success writes a NUL-terminated name."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL string; implementation asserts non-null."
      }
     }
    ]
@@ -3612,6 +4184,46 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and destroys one remote allocation; NULL is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_name_is_valid",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote_name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote_name"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient NUL string; NULL is reported as invalid."
+     }
+    },
+    {
+     "name": "valid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:valid"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required scalar out-slot."
      }
     }
    ]
@@ -3884,6 +4496,46 @@
    ]
   },
   {
+   "name": "git_tag_name_is_valid",
+   "defined_in": "src/libgit2/tag.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient NUL string; NULL is reported as invalid."
+     }
+    },
+    {
+     "name": "valid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:valid"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required scalar out-slot."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_transaction_free",
    "defined_in": "src/libgit2/transaction.c",
    "lifetime": {
@@ -3906,6 +4558,46 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a complete transaction, releases its variant-specific resources and storage, and accepts NULL as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_transport_message_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient read-only message bytes whose element count is the len argument; not necessarily NUL-terminated."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller payload borrowed for the callback invocation."
      }
     }
    ]

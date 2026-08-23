@@ -53,6 +53,50 @@ unsafe impl CCloned for GitReference {
     }
 }
 
+/// Wraps: git_reference_name_is_valid
+/// Checks a required NUL-terminated reference name.
+pub fn git_reference_name_is_valid(refname: &core::ffi::CStr) -> Result<bool, i32> {
+    let mut valid = 0;
+    // SAFETY: `valid` is writable and `refname` is a live C string.
+    let status = unsafe { ffi::git_reference_name_is_valid(&mut valid, refname.as_ptr()) };
+    if status == 0 {
+        Ok(valid != 0)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_reference_normalize_name
+/// Normalizes `name` into `buffer` and returns the resulting C string.
+///
+/// The numeric `flags` are libgit2's reference-format bit set. An empty
+/// output buffer is rejected without calling C, whose implementation assumes
+/// a positive capacity.
+pub fn git_reference_normalize_name<'a>(
+    buffer: &'a mut [u8],
+    name: &core::ffi::CStr,
+    flags: u32,
+) -> Result<&'a core::ffi::CStr, i32> {
+    if buffer.is_empty() {
+        return Err(ffi::git_error_code_GIT_EBUFS);
+    }
+    // SAFETY: `buffer` is a writable run of `buffer.len()` bytes and `name` is
+    // a live C string. Libgit2 retains neither pointer and writes a terminating
+    // NUL on success.
+    let status = unsafe {
+        ffi::git_reference_normalize_name(
+            buffer.as_mut_ptr().cast(),
+            buffer.len(),
+            name.as_ptr(),
+            flags,
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    core::ffi::CStr::from_bytes_until_nul(buffer).map_err(|_| ffi::git_error_code_GIT_EBUFS)
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
@@ -77,6 +121,24 @@ mod tests {
             size_of::<Option<GitReferenceOwned>>(),
             size_of::<*mut ffi::git_reference>()
         );
+    }
+
+    #[test]
+    fn reference_names_validate_and_normalize_into_rust_storage() {
+        // SAFETY: initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        assert_eq!(git_reference_name_is_valid(c"refs/heads/main"), Ok(true));
+        let mut buffer = [0; 64];
+        assert_eq!(
+            git_reference_normalize_name(&mut buffer, c"refs//heads/main", 0),
+            Ok(c"refs/heads/main")
+        );
+        assert_eq!(
+            git_reference_normalize_name(&mut [], c"refs/heads/main", 0),
+            Err(ffi::git_error_code_GIT_EBUFS)
+        );
+        // SAFETY: balances this test's successful initialization.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 
     #[test]

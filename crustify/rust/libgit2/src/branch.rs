@@ -19,10 +19,38 @@ ffibox::impl_dropped!(
     ffi::git_branch_iterator_free
 );
 
+/// Wraps: git_branch_name_is_valid
+/// Checks whether `name` is a valid branch shorthand.
+///
+/// `None` mirrors libgit2's accepted null input and is reported as invalid.
+pub fn git_branch_name_is_valid(name: Option<&core::ffi::CStr>) -> Result<bool, i32> {
+    let mut valid = 0;
+    let name = name.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    // SAFETY: `valid` is a writable scalar out-slot and `name` is null or a
+    // live NUL-terminated string for the duration of the call.
+    let status = unsafe { ffi::git_branch_name_is_valid(&mut valid, name) };
+    if status == 0 {
+        Ok(valid != 0)
+    } else {
+        Err(status)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use core::mem::{align_of, size_of};
+
+    #[test]
+    fn branch_names_are_checked_without_exposing_out_slots() {
+        // SAFETY: initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        assert_eq!(git_branch_name_is_valid(Some(c"main")), Ok(true));
+        assert_eq!(git_branch_name_is_valid(Some(c"-bad")), Ok(false));
+        assert_eq!(git_branch_name_is_valid(None), Ok(false));
+        // SAFETY: balances this test's successful initialization.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
 
     #[test]
     fn branch_iterator_preserves_the_ffi_layout() {

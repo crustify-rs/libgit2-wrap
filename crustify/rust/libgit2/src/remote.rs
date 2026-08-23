@@ -47,6 +47,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn remote_names_use_a_typed_optional_c_string() {
+        // SAFETY: initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        assert_eq!(git_remote_name_is_valid(Some(c"origin")), Ok(true));
+        assert_eq!(git_remote_name_is_valid(None), Ok(false));
+        // SAFETY: balances this test's successful initialization.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
     fn fetch_prune_has_the_c_layout_and_values() {
         assert_eq!(
             size_of::<GitFetchPrune>(),
@@ -393,5 +403,51 @@ mod remote_type_tests {
         // SAFETY: `raw` came from this `Box::into_raw`, no handle remains, and
         // the cast recovers the allocation's original type.
         drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_remote>>()) });
+    }
+}
+
+/// Wraps: git_push_transfer_progress_cb
+/// Safe callable surface for push upload progress.
+pub trait GitPushTransferProgressCallback {
+    /// Reports the object and byte counts. A nonzero result stops the push.
+    fn call(&mut self, current: u32, total: u32, bytes: usize) -> i32;
+}
+
+impl<F> GitPushTransferProgressCallback for F
+where
+    F: FnMut(u32, u32, usize) -> i32,
+{
+    fn call(&mut self, current: u32, total: u32, bytes: usize) -> i32 {
+        self(current, total, bytes)
+    }
+}
+
+/// Wraps: git_push_update_reference_cb
+/// Safe callable surface for per-reference push status.
+pub trait GitPushUpdateReferenceCallback {
+    /// Reports a remote reference update. `status == None` denotes success.
+    fn call(&mut self, refname: &core::ffi::CStr, status: Option<&core::ffi::CStr>) -> i32;
+}
+
+impl<F> GitPushUpdateReferenceCallback for F
+where
+    F: FnMut(&core::ffi::CStr, Option<&core::ffi::CStr>) -> i32,
+{
+    fn call(&mut self, refname: &core::ffi::CStr, status: Option<&core::ffi::CStr>) -> i32 {
+        self(refname, status)
+    }
+}
+
+/// Wraps: git_remote_name_is_valid
+/// Checks whether `name` is a valid remote name.
+pub fn git_remote_name_is_valid(name: Option<&core::ffi::CStr>) -> Result<bool, i32> {
+    let mut valid = 0;
+    let name = name.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    // SAFETY: `valid` is writable and `name` is null or a live C string.
+    let status = unsafe { ffi::git_remote_name_is_valid(&mut valid, name) };
+    if status == 0 {
+        Ok(valid != 0)
+    } else {
+        Err(status)
     }
 }

@@ -53,11 +53,38 @@ impl<'a> GitErrorRef<'a> {
     }
 }
 
+/// Wraps: git_error_clear
+/// Clears this thread's last libgit2 error and platform error state.
+pub fn git_error_clear() {
+    // SAFETY: this function has no pointer arguments and only resets
+    // thread-local error state owned by libgit2.
+    unsafe { ffi::git_error_clear() }
+}
+
+/// Wraps: git_error_set_str
+/// Copies `message` into this thread's libgit2 error state.
+pub fn git_error_set_str(error_class: i32, message: &CStr) -> Result<(), i32> {
+    // SAFETY: `message` is a live NUL-terminated string and libgit2 copies it
+    // before returning rather than retaining the pointer.
+    let status = unsafe { ffi::git_error_set_str(error_class, message.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
 
     use super::*;
+
+    #[test]
+    fn thread_error_can_be_set_and_cleared_from_safe_rust() {
+        // SAFETY: initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        assert_eq!(git_error_set_str(1, c"failure"), Ok(()));
+        git_error_clear();
+        // SAFETY: balances this test's successful initialization.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
 
     #[test]
     fn error_wrapper_preserves_the_c_layout() {
