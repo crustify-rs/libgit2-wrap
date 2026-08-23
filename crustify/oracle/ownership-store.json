@@ -721,6 +721,158 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_iterator",
+   "defined_in": "src/libgit2/iterator.h",
+   "_comment_agent": "git_iterator is an opaque public note-iterator alias with uniquely owned allocation. Internally, start/end are optional duplicated ranges owned by the iterator; cb and comparison callbacks borrow static function tables/functions; repo and index are optional mutable borrowed dependencies that must remain alive while variants use them.",
+   "fields": [
+    {
+     "name": "cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Points to the static callback table selected by the concrete iterator constructor; every fully constructed iterator initializes it."
+     }
+    },
+    {
+     "name": "end",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional git__strdup range endpoint owned by the iterator and released by git_iterator_free."
+     }
+    },
+    {
+     "name": "entry_srch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Static case-sensitive or case-insensitive index-entry search function selected during initialization."
+     }
+    },
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional borrowed index retained by index/workdir variants and used when releasing snapshots; git_iterator_free does not release the index itself."
+     }
+    },
+    {
+     "name": "prefixcomp",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Static prefix comparison function selected during initialization."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional borrowed repository used by tree/workdir variants; the iterator does not release it, and libgit2 operations may mutate repository internals."
+     }
+    },
+    {
+     "name": "start",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional git__strdup range start owned by the iterator and released by git_iterator_free."
+     }
+    },
+    {
+     "name": "strcomp",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Static string comparison function selected during initialization."
+     }
+    },
+    {
+     "name": "strncomp",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Static bounded string comparison function selected during initialization."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -1260,6 +1412,60 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a complete indexer allocation and all owned fields; NULL is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_iterator_free",
+   "defined_in": "src/libgit2/iterator.c",
+   "lifetime": {
+    "for": "iter",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "iter",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes a complete iterator, invokes its concrete callback destructor, releases common storage, and frees the allocation; NULL is accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_note_iterator_free",
+   "defined_in": "src/libgit2/notes.c",
+   "lifetime": {
+    "for": "it",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "it",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Public note-iterator destructor; consumes one complete git_note_iterator and delegates to git_iterator_free, while NULL is accepted."
      }
     }
    ]
