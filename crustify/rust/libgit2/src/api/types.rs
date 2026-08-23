@@ -493,3 +493,161 @@ mod submodule_type_tests {
         );
     }
 }
+ffibox::define_ctype!(
+    /// Wraps: git_time
+    /// A layout-compatible timestamp and timezone offset from a Git signature.
+    GitTime,
+    GitTimeRef,
+    GitTimeMut,
+    ffi::git_time
+);
+
+/// A sign stored with a [`GitTime`] timezone offset.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum GitTimeSign {
+    /// A nonnegative offset, including ordinary `+0000` UTC.
+    Positive,
+    /// A negative offset, including the questionable `-0000` representation.
+    Negative,
+}
+
+impl GitTimeSign {
+    const fn from_raw(raw: core::ffi::c_char) -> Option<Self> {
+        match raw as u8 {
+            b'+' => Some(Self::Positive),
+            b'-' => Some(Self::Negative),
+            _ => None,
+        }
+    }
+
+    const fn as_raw(self) -> core::ffi::c_char {
+        match self {
+            Self::Positive => b'+' as core::ffi::c_char,
+            Self::Negative => b'-' as core::ffi::c_char,
+        }
+    }
+}
+
+/// A raw `git_time.sign` byte that is neither `+` nor `-`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidGitTimeSign(core::ffi::c_char);
+
+impl InvalidGitTimeSign {
+    /// Returns the unrecognized C byte.
+    #[must_use]
+    pub const fn value(self) -> core::ffi::c_char {
+        self.0
+    }
+}
+
+impl GitTimeRef<'_> {
+    /// Wraps: git_time.offset
+    /// Returns the timezone offset from UTC in minutes.
+    #[inline]
+    #[must_use]
+    pub fn offset(&self) -> core::ffi::c_int {
+        let ptr = self.as_ptr();
+        // SAFETY: `ptr` comes from this live shared handle; raw-place
+        // projection reads the initialized scalar without forming a reference.
+        unsafe { core::ptr::addr_of!((*ptr).offset).read() }
+    }
+
+    /// Wraps: git_time.sign
+    /// Returns the stored timezone sign after validating the C byte.
+    #[inline]
+    pub fn sign(&self) -> Result<GitTimeSign, InvalidGitTimeSign> {
+        let ptr = self.as_ptr();
+        // SAFETY: `ptr` comes from this live shared handle; raw-place
+        // projection reads the initialized scalar without forming a reference.
+        let raw = unsafe { core::ptr::addr_of!((*ptr).sign).read() };
+        GitTimeSign::from_raw(raw).ok_or(InvalidGitTimeSign(raw))
+    }
+
+    /// Wraps: git_time.time
+    /// Returns the number of seconds since the Unix epoch.
+    #[inline]
+    #[must_use]
+    pub fn time(&self) -> ffi::git_time_t {
+        let ptr = self.as_ptr();
+        // SAFETY: `ptr` comes from this live shared handle; raw-place
+        // projection reads the initialized scalar without forming a reference.
+        unsafe { core::ptr::addr_of!((*ptr).time).read() }
+    }
+}
+
+impl GitTimeMut<'_> {
+    /// Sets the timezone offset from UTC in minutes.
+    #[inline]
+    pub fn set_offset(&mut self, offset: core::ffi::c_int) {
+        let ptr = self.as_mut_ptr();
+        // SAFETY: `ptr` comes from this exclusive handle; raw-place projection
+        // writes the scalar without forming a reference to C-visible memory.
+        unsafe { core::ptr::addr_of_mut!((*ptr).offset).write(offset) }
+    }
+
+    /// Sets the stored timezone sign.
+    #[inline]
+    pub fn set_sign(&mut self, sign: GitTimeSign) {
+        let ptr = self.as_mut_ptr();
+        // SAFETY: `ptr` comes from this exclusive handle; raw-place projection
+        // writes a valid sign byte without forming a reference.
+        unsafe { core::ptr::addr_of_mut!((*ptr).sign).write(sign.as_raw()) }
+    }
+
+    /// Sets the number of seconds since the Unix epoch.
+    #[inline]
+    pub fn set_time(&mut self, time: ffi::git_time_t) {
+        let ptr = self.as_mut_ptr();
+        // SAFETY: `ptr` comes from this exclusive handle; raw-place projection
+        // writes the scalar without forming a reference to C-visible memory.
+        unsafe { core::ptr::addr_of_mut!((*ptr).time).write(time) }
+    }
+}
+
+#[cfg(test)]
+mod time_tests {
+    use super::*;
+    use core::mem::{align_of, size_of};
+
+    #[test]
+    fn time_wrapper_preserves_the_c_layout() {
+        assert_eq!(size_of::<GitTime>(), size_of::<ffi::git_time>());
+        assert_eq!(align_of::<GitTime>(), align_of::<ffi::git_time>());
+        assert_eq!(
+            size_of::<GitTimeRef<'_>>(),
+            size_of::<*const ffi::git_time>()
+        );
+        assert_eq!(size_of::<GitTimeMut<'_>>(), size_of::<*mut ffi::git_time>());
+    }
+
+    #[test]
+    fn borrowed_time_handles_read_write_and_validate_fields() {
+        let mut raw = ffi::git_time {
+            time: -1,
+            offset: -90,
+            sign: b'-' as core::ffi::c_char,
+        };
+
+        // SAFETY: `raw` is initialized, non-null, exclusively borrowed for the
+        // handle's lifetime, and remains live until the handle is last used.
+        let mut time = unsafe { GitTimeMut::from_ptr(&raw mut raw) }
+            .expect("the address of a stack value is non-null");
+        assert_eq!(time.as_ref().time(), -1);
+        assert_eq!(time.as_ref().offset(), -90);
+        assert_eq!(time.as_ref().sign(), Ok(GitTimeSign::Negative));
+
+        time.set_time(2);
+        time.set_offset(30);
+        time.set_sign(GitTimeSign::Positive);
+        assert_eq!(time.as_ref().time(), 2);
+        assert_eq!(time.as_ref().offset(), 30);
+        assert_eq!(time.as_ref().sign(), Ok(GitTimeSign::Positive));
+
+        raw.sign = b'?' as core::ffi::c_char;
+        // SAFETY: `raw` remains initialized and live and is only shared for
+        // this handle's lifetime.
+        let time = unsafe { GitTimeRef::from_ptr(&raw mut raw) }
+            .expect("the address of a stack value is non-null");
+        assert_eq!(time.sign().unwrap_err().value(), b'?' as core::ffi::c_char);
+    }
+}

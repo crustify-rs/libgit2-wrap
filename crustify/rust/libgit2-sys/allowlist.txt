@@ -119,3 +119,5 @@
 ^git_submodule$
 ^git_submodule_dup$
 ^git_submodule_free$
+^git_time$
+^git_trace_level_t$
