@@ -16,6 +16,8 @@
 ^git_diff_format_t$
 ^git_libgit2_(init|shutdown)$
 ^git_clone_local_t$
+^git_diff_stats_format_t$
+^git_direction$
 ^git_config$
 ^git_config_free$
 ^git_config_new$

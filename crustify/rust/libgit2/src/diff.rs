@@ -1,5 +1,7 @@
 //! Safe wrappers for libgit2 diff APIs.
 
+use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
+
 use crate::ffi;
 
 /// The kind of change represented by a diff delta.
@@ -256,6 +258,141 @@ mod binary_format_tests {
         assert_eq!(
             align_of::<DiffFormat>(),
             align_of::<ffi::git_diff_format_t>()
+        );
+    }
+}
+
+/// Wraps: git_diff_stats_format_t
+/// A checked set of formats to include when rendering diff statistics.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct DiffStatsFormat(ffi::git_diff_stats_format_t);
+
+impl DiffStatsFormat {
+    /// Do not render any statistics.
+    pub const NONE: Self = Self(ffi::git_diff_stats_format_t_GIT_DIFF_STATS_NONE);
+    /// Render full per-file statistics, like `--stat`.
+    pub const FULL: Self = Self(ffi::git_diff_stats_format_t_GIT_DIFF_STATS_FULL);
+    /// Render abbreviated totals, like `--shortstat`.
+    pub const SHORT: Self = Self(ffi::git_diff_stats_format_t_GIT_DIFF_STATS_SHORT);
+    /// Render numeric per-file statistics, like `--numstat`.
+    pub const NUMBER: Self = Self(ffi::git_diff_stats_format_t_GIT_DIFF_STATS_NUMBER);
+    /// Include creations, renames, and mode changes.
+    pub const INCLUDE_SUMMARY: Self =
+        Self(ffi::git_diff_stats_format_t_GIT_DIFF_STATS_INCLUDE_SUMMARY);
+    /// Every format published by this version of libgit2.
+    pub const ALL: Self =
+        Self(Self::FULL.0 | Self::SHORT.0 | Self::NUMBER.0 | Self::INCLUDE_SUMMARY.0);
+
+    /// Converts raw bits when they contain only published formats.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_diff_stats_format_t) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 flag bits.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_diff_stats_format_t {
+        self.0
+    }
+
+    /// Returns whether no format is selected.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every format in `other` is selected.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any format in `other` is selected.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl From<DiffStatsFormat> for ffi::git_diff_stats_format_t {
+    fn from(format: DiffStatsFormat) -> Self {
+        format.bits()
+    }
+}
+
+impl BitOr for DiffStatsFormat {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for DiffStatsFormat {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for DiffStatsFormat {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for DiffStatsFormat {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+#[cfg(test)]
+mod diff_stats_format_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn diff_stats_formats_form_checked_sets() {
+        let mut formats = DiffStatsFormat::FULL | DiffStatsFormat::INCLUDE_SUMMARY;
+        assert!(formats.contains(DiffStatsFormat::FULL));
+        assert!(formats.intersects(DiffStatsFormat::INCLUDE_SUMMARY));
+        assert!(!formats.intersects(DiffStatsFormat::NUMBER));
+
+        formats |= DiffStatsFormat::NUMBER;
+        formats &= DiffStatsFormat::NUMBER | DiffStatsFormat::INCLUDE_SUMMARY;
+        assert_eq!(
+            formats,
+            DiffStatsFormat::NUMBER | DiffStatsFormat::INCLUDE_SUMMARY
+        );
+    }
+
+    #[test]
+    fn raw_diff_stats_bits_are_validated() {
+        assert!(DiffStatsFormat::NONE.is_empty());
+        assert_eq!(
+            DiffStatsFormat::from_bits(DiffStatsFormat::ALL.bits()),
+            Some(DiffStatsFormat::ALL)
+        );
+        assert_eq!(DiffStatsFormat::from_bits(1 << 31), None);
+    }
+
+    #[test]
+    fn diff_stats_format_preserves_the_c_enum_layout() {
+        assert_eq!(
+            size_of::<DiffStatsFormat>(),
+            size_of::<ffi::git_diff_stats_format_t>()
+        );
+        assert_eq!(
+            align_of::<DiffStatsFormat>(),
+            align_of::<ffi::git_diff_stats_format_t>()
         );
     }
 }
