@@ -41,6 +41,9 @@
 ^git_patch_free$
 ^git_rebase$
 ^git_rebase_free$
+^git_reflog$
+^git_reflog_entry$
+^git_reflog_free$
 ^git_merge_file_favor_t$
 ^git_merge_file_input$
 ^git_diff_stats_format_t$

@@ -1558,6 +1558,82 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_reflog",
+   "defined_in": "src/libgit2/reflog.h",
+   "_comment_agent": "Publicly returned reflogs own ref_name and one refdb count. Internal transaction duplicates are pool-backed, so their ref_name has an alternate borrow from the transaction pool; their null db is never used as an owned refdb count.",
+   "fields": [
+    {
+     "name": "db",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "A public read installs one incremented git_refdb count, released by git_reflog_free. It is null during backend construction and in transaction pool copies; refcount and backend operations mutate the pointee."
+     }
+    },
+    {
+     "name": "ref_name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Normally a git__strdup allocation released with the reflog; transaction-only copies instead point into the transaction pool. Null exists during failed or pool-backed construction."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reflog_entry",
+   "defined_in": "src/libgit2/reflog.h",
+   "_comment_agent": "Ordinary entries own their duplicated signature and optional message. Transaction-only duplicates store both allocations in the transaction pool, producing an alternate pool-borrowed representation that is never individually destroyed.",
+   "fields": [
+    {
+     "name": "committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "A fully formed ordinary entry owns a duplicated signature; transaction copies borrow a pool duplicate. Null is possible during failed construction, and parsing initializes through this pointer."
+     }
+    },
+    {
+     "name": "msg",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional owned message in ordinary entries, released by git_reflog_entry__free; transaction copies borrow pool storage. Append normalizes newlines through the allocation."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -2502,6 +2578,60 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one owned refcount. NULL is explicitly accepted; the final count frees the backend and git_refdb allocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reflog_entry__free",
+   "defined_in": "src/libgit2/reflog.c",
+   "lifetime": {
+    "for": "entry",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "Consumes one ordinary heap entry plus its signature and optional message; callers never pass null."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reflog_free",
+   "defined_in": "src/libgit2/reflog.c",
+   "lifetime": {
+    "for": "reflog",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "reflog",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes a public reflog allocation and all of its owned fields; null is explicitly accepted."
      }
     }
    ]
