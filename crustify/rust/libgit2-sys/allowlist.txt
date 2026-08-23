@@ -1,6 +1,9 @@
 ^crustify_git__.*$
 ^git_annotated_commit$
 ^git_annotated_commit_free$
+^git_commit$
+^git_commit_dup$
+^git_commit_free$
 ^git_apply_location_t$
 ^git_attr_value_t$
 ^git_delta_t$

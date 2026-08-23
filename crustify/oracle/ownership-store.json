@@ -310,6 +310,123 @@
    "fields": []
   },
   {
+   "name": "git_commit",
+   "defined_in": "src/libgit2/commit.h",
+   "_comment_agent": "The public API keeps git_commit opaque. Internally, its reference-counted git_object base ultimately disposes all pointer fields: signatures and strings are individually owned, and parent_ids owns a resizable git_oid buffer. Several members are null during quick/partial parsing, message_encoding and body are optional, and summary/body are populated lazily.",
+   "fields": [
+    {
+     "name": "author",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned git_signature storage allocated and filled during full parsing, absent during quick parsing or failed partial construction, and released by git_signature_free."
+     }
+    },
+    {
+     "name": "body",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional lazily allocated body string owned by the commit and released by git__free; remains null when the message has no body."
+     }
+    },
+    {
+     "name": "committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned git_signature storage allocated and filled by commit_parse, then released by git_signature_free; null is tolerated during failed partial construction."
+     }
+    },
+    {
+     "name": "message_encoding",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional encoding-header copy allocated by parsing, owned by the commit, and released by git__free."
+     }
+    },
+    {
+     "name": "parent_ids.ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned resizable array of inline git_oid values; the pointer may be null for zeroed/cleared or failed storage and git_array_clear releases it."
+     }
+    },
+    {
+     "name": "raw_header",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Owned header copy for fully parsed commits; null in quick or partial parses and released by git__free."
+     }
+    },
+    {
+     "name": "raw_message",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Owned NUL-terminated message copy for fully parsed commits; null in quick or partial parses and released by git__free."
+     }
+    },
+    {
+     "name": "summary",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional lazily allocated summary string owned by the commit and released by git__free."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_config",
    "defined_in": "src/libgit2/config.h",
    "_comment_agent": "git_config is refcounted through rc: git_config_new initializes one count, repository storage increments it, and git_config_free decrements it before releasing the object.",
@@ -2831,6 +2948,85 @@
       "nullable": true,
       "mutable": true,
       "note": "Opaque caller payload borrowed for the callback invocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_dup",
+   "defined_in": "src/libgit2/object_api.c",
+   "lifetime": {
+    "for": "obj",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": false,
+     "upref": true
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed live commit whose underlying git_object reference count is incremented; the original remains valid."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed output slot written with a newly owned reference to the same commit."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_free",
+   "defined_in": "src/libgit2/object_api.c",
+   "lifetime": {
+    "for": "obj",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one outstanding commit/object reference; null is accepted, and the final decrement releases the allocation."
      }
     }
    ]
