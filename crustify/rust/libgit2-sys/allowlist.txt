@@ -101,6 +101,10 @@
 ^git_odb_free$
 ^git_oid$
 ^git_oid_t$
+^git_odb_stream$
+^git_odb_stream_free$
+^git_odb_stream_t$
+^GIT_STREAM_(RDONLY|WRONLY|RW)$
 ^git_packbuilder$
 ^git_packbuilder_free$
 ^git_proxy_t$

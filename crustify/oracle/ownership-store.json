@@ -1527,6 +1527,113 @@
    ]
   },
   {
+   "name": "git_odb_stream",
+   "defined_in": "include/git2/odb_backend.h",
+   "_comment_agent": "git_odb_stream is a polymorphic base header. It uniquely owns its optional hash context, borrows its originating backend/ODB lifetime, and stores static code callbacks selected by stream mode. The public git_odb_stream_free routine cleans the hash context before invoking the concrete free callback.",
+   "fields": [
+    {
+     "name": "backend",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "The stream borrows the backend selected from its originating ODB; it does not retain or free it. Stream callbacks invoke mutable backend operations, so the ODB/backend owner must outlive the stream."
+     }
+    },
+    {
+     "name": "finalize_write",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Static synchronous code callback. It is installed for writable streams and null for read-only streams."
+     }
+    },
+    {
+     "name": "free",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Every fully constructed stream installs a process-code destructor callback. The callback is static and releases the concrete enclosing allocation when invoked by git_odb_stream_free."
+     }
+    },
+    {
+     "name": "hash_ctx",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "The frontend or read-stream implementation allocates this mutable hash context and git_odb_stream_free cleans and frees it. Custom streams may leave it null."
+     }
+    },
+    {
+     "name": "read",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Static synchronous code callback. It is installed for readable streams and null for write-only streams."
+     }
+    },
+    {
+     "name": "write",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Static synchronous code callback. It is installed for writable streams and null for read-only streams."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_packbuilder",
    "defined_in": "src/libgit2/pack-objects.h",
    "_comment_agent": "The public API treats git_packbuilder as opaque. Its complete internal pointer-field footprint was inspected to establish the retained repository/callback borrows and owned ODB, name, and object-list storage.",
@@ -4231,6 +4338,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one git_odb reference; NULL is explicitly accepted. It decrements rc and destroys the complete object only when the final unowned count is released."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_stream_free",
+   "defined_in": "src/libgit2/odb.c",
+   "lifetime": {
+    "for": "stream",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "stream",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and releases a stream allocation; null is explicitly accepted. It cleans the owned hash context, then invokes the concrete stream destructor."
      }
     }
    ]
