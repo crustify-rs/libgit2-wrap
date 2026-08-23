@@ -1,1 +1,77 @@
 //! Safe wrappers for libgit2 proxy APIs.
+
+use crate::ffi;
+
+/// Wraps: git_proxy_t
+/// Selects how libgit2 discovers or connects to a proxy.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+#[repr(u32)]
+pub enum ProxyType {
+    /// Do not explicitly connect through a proxy.
+    #[default]
+    None = ffi::git_proxy_t_GIT_PROXY_NONE,
+    /// Discover the proxy from Git configuration.
+    Auto = ffi::git_proxy_t_GIT_PROXY_AUTO,
+    /// Connect through a caller-specified proxy URL.
+    Specified = ffi::git_proxy_t_GIT_PROXY_SPECIFIED,
+}
+
+/// An integer that is not a published [`ProxyType`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidProxyType(ffi::git_proxy_t);
+
+impl InvalidProxyType {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_proxy_t {
+        self.0
+    }
+}
+
+impl From<ProxyType> for ffi::git_proxy_t {
+    fn from(proxy_type: ProxyType) -> Self {
+        proxy_type as Self
+    }
+}
+
+impl TryFrom<ffi::git_proxy_t> for ProxyType {
+    type Error = InvalidProxyType;
+
+    fn try_from(proxy_type: ffi::git_proxy_t) -> Result<Self, Self::Error> {
+        match proxy_type {
+            ffi::git_proxy_t_GIT_PROXY_NONE => Ok(Self::None),
+            ffi::git_proxy_t_GIT_PROXY_AUTO => Ok(Self::Auto),
+            ffi::git_proxy_t_GIT_PROXY_SPECIFIED => Ok(Self::Specified),
+            value => Err(InvalidProxyType(value)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn proxy_types_round_trip_through_the_c_type() {
+        for proxy_type in [ProxyType::None, ProxyType::Auto, ProxyType::Specified] {
+            let raw = ffi::git_proxy_t::from(proxy_type);
+            assert_eq!(ProxyType::try_from(raw), Ok(proxy_type));
+        }
+    }
+
+    #[test]
+    fn invalid_proxy_type_is_rejected_without_constructing_an_enum() {
+        let invalid = ffi::git_proxy_t_GIT_PROXY_SPECIFIED + 1;
+        let error = ProxyType::try_from(invalid).unwrap_err();
+        assert_eq!(error.value(), invalid);
+    }
+
+    #[test]
+    fn proxy_type_matches_the_c_abi_scalar() {
+        assert_eq!(size_of::<ProxyType>(), size_of::<ffi::git_proxy_t>());
+        assert_eq!(align_of::<ProxyType>(), align_of::<ffi::git_proxy_t>());
+    }
+}

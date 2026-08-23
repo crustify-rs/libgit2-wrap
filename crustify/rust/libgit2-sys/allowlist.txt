@@ -72,3 +72,4 @@
 ^git_oid_t$
 ^git_packbuilder$
 ^git_packbuilder_free$
+^git_proxy_t$
