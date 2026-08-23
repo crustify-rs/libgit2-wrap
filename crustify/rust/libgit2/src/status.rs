@@ -2,6 +2,8 @@
 
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
+use ffibox::CBox;
+
 use crate::ffi;
 
 /// Wraps: git_status_show_t
@@ -195,9 +197,37 @@ impl Not for Status {
     }
 }
 
+ffibox::define_ctype!(
+    /// Wraps: git_status_list
+    /// An opaque list of repository status entries managed by libgit2.
+    ///
+    /// Dropping an owner releases both optional diff objects, the collected
+    /// entries, and the list allocation. Libgit2 publishes no operation for
+    /// cloning a list or acquiring another ownership share.
+    GitStatusList,
+    GitStatusListRef,
+    GitStatusListMut,
+    ffi::git_status_list
+);
+
+/// An exclusively owned, fully constructed status list.
+pub type GitStatusListOwned = CBox<GitStatusList>;
+
+// SAFETY: `git_status_list_free` is the public destructor for a complete
+// status-list allocation. It releases all owned fields and the allocation and
+// accepts null, although `CBox` supplies one live non-null allocation once.
+ffibox::impl_dropped!(
+    GitStatusList,
+    ffi::git_status_list,
+    ffi::git_status_list_free
+);
+
 #[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
+    use core::ptr;
+
+    use ffibox::{CCell, CDropped};
 
     use super::*;
 
@@ -240,5 +270,45 @@ mod tests {
         );
         assert_eq!(size_of::<Status>(), size_of::<ffi::git_status_t>());
         assert_eq!(align_of::<Status>(), align_of::<ffi::git_status_t>());
+    }
+
+    #[test]
+    fn status_list_preserves_the_opaque_c_seam_and_lifecycle() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<GitStatusList>();
+        assert_dropped::<GitStatusList>();
+        assert_eq!(
+            size_of::<GitStatusList>(),
+            size_of::<ffi::git_status_list>()
+        );
+        assert_eq!(
+            align_of::<GitStatusList>(),
+            align_of::<ffi::git_status_list>()
+        );
+        assert_eq!(
+            size_of::<GitStatusListRef<'_>>(),
+            size_of::<*const ffi::git_status_list>()
+        );
+        assert_eq!(
+            size_of::<GitStatusListMut<'_>>(),
+            size_of::<*mut ffi::git_status_list>()
+        );
+        assert_eq!(
+            size_of::<GitStatusListOwned>(),
+            size_of::<*mut ffi::git_status_list>()
+        );
+    }
+
+    #[test]
+    fn null_status_list_seams_create_no_handle() {
+        // SAFETY: these conversion seams explicitly accept null and return
+        // `None` without borrowing or adopting an object.
+        unsafe {
+            assert!(GitStatusListRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitStatusListMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitStatusListOwned::from_raw(ptr::null_mut()).is_none());
+        }
     }
 }

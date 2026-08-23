@@ -108,3 +108,6 @@
 ^git_reset_t$
 ^git_status_show_t$
 ^git_status_t$
+^git_stash_apply_progress_t$
+^git_status_list$
+^git_status_list_free$

@@ -1992,6 +1992,43 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_status_list",
+   "defined_in": "src/libgit2/status.h",
+   "_comment_agent": "Both diff fields start null, are independently populated according to status show options, and are unconditionally released by the list destructor (git_diff_free accepts null).",
+   "fields": [
+    {
+     "name": "head2idx",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owns one optional git_diff reference produced by git_diff_tree_to_index; git_status_list_free releases it with git_diff_free, and rename analysis may mutate the pointee."
+     }
+    },
+    {
+     "name": "idx2wd",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owns one optional git_diff reference produced by git_diff_index_to_workdir; git_status_list_free releases it with git_diff_free, and rename analysis may mutate the pointee."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -3258,6 +3295,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees a complete walker allocation; NULL is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_status_list_free",
+   "defined_in": "src/libgit2/status.c",
+   "lifetime": {
+    "for": "status",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "status",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and destroys the complete status-list allocation; null is explicitly accepted."
      }
     }
    ]
