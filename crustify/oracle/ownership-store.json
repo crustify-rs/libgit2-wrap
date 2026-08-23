@@ -2,6 +2,97 @@
  "_comment": "Authored analysis: ownership, lifecycle, refcount and locking judgements that no composer can derive, keyed to the C entities they describe. The structural half of each record (field layout, signatures, footprints, casts) is composed from the CodeQL tables on demand and merged in at read time, so a re-extract rewrites nothing here. Written only by `crustify-oracle <target> query {types,symbols} --update`; read through crustify.manifests. Hand-edit at your own risk: `--update` validates a submission against the composed skeleton (unknown field, wrong kind, ptr-invariant violation) and this file does not.",
  "types": [
   {
+   "name": "git_annotated_commit",
+   "defined_in": "src/libgit2/annotated_commit.h",
+   "_comment_agent": "The public API keeps git_annotated_commit opaque. Internal inspection shows the discriminant selects two ownership variants: real commits own commit/tree and duplicated strings; virtual commits own index and the parents buffer. Pointer members are nullable across the union-like variants and all are released by git_annotated_commit_free.",
+   "fields": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "A duplicated git_commit owned by the real variant and released with git_commit_free; absent for virtual commits."
+     }
+    },
+    {
+     "name": "description",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "A git__strdup allocation for real commits and null for virtual commits, released by git__free."
+     }
+    },
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Owned only by the virtual variant and released with git_index_free; absent for real commits."
+     }
+    },
+    {
+     "name": "ref_name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional git__strdup allocation for reference/fetch-head commits, released by git__free."
+     }
+    },
+    {
+     "name": "remote_url",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional git__strdup allocation for fetch-head commits, released by git__free."
+     }
+    },
+    {
+     "name": "tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Lazily populated for a real annotated commit by git_commit_tree and released with git_tree_free; absent for virtual commits."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_attr_value_t",
    "defined_in": "include/git2/attr.h",
    "_comment_agent": "git_attr_value_t is a fieldless enum with no pointer, lifecycle, refcount, or locking semantics.",
@@ -112,6 +203,33 @@
      "note": "Returns null on allocation failure or a fresh, mutable NUL-terminated deep copy allocated through libgit2's current allocator; the caller releases it through git__free while a compatible allocator remains installed."
     }
    }
+  },
+  {
+   "name": "git_annotated_commit_free",
+   "defined_in": "src/libgit2/annotated_commit.c",
+   "lifetime": {
+    "for": "annotated_commit",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "annotated_commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and frees a complete annotated commit; NULL is explicitly accepted as a no-op."
+     }
+    }
+   ]
   }
  ]
 }
