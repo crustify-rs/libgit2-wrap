@@ -1,3 +1,5 @@
 ^crustify_git__.*$
 ^git_attr_value_t$
+^git_config_level_t$
+^git_credential_t$
 ^git_libgit2_(init|shutdown)$
