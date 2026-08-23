@@ -543,6 +543,30 @@
    ]
   },
   {
+   "name": "git_diff_line",
+   "defined_in": "include/git2/diff.h",
+   "_comment_agent": "Inspected every content/content_len assignment, read, and release path. Ownership is runtime-conditional at the containing patch implementation level, so the wrapper exposes a borrowed counted view and does not assume standalone ownership.",
+   "fields": [
+    {
+     "name": "content",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Counted, non-NUL-terminated bytes. Parsed-patch lines own separately allocated content which patch_parsed__free releases; generated, apply, print, and xdiff lines borrow parent or callback backing storage. Public observations bind the bytes to the line/containing patch lifetime. Zero-initialized and empty construction paths permit NULL with length zero; the const pointer is never written through."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_stats",
    "defined_in": "src/libgit2/diff_stats.c",
    "_comment_agent": "The public type is opaque. Its successful constructor owns one refcounted git_diff handle and one files_changed-length statistics buffer; its public destructor releases both before freeing the header.",
@@ -580,25 +604,23 @@
    ]
   },
   {
-   "name": "git_diff_line",
-   "defined_in": "include/git2/diff.h",
-   "_comment_agent": "Inspected every content/content_len assignment, read, and release path. Ownership is runtime-conditional at the containing patch implementation level, so the wrapper exposes a borrowed counted view and does not assume standalone ownership.",
+   "name": "git_error",
+   "defined_in": "include/git2/errors.h",
+   "_comment_agent": "git_error itself has no unconditional lifecycle contract: git_error_last returns libgit2-managed TLS/static storage, while internal git_error_save may allocate a separately freed snapshot. The message field therefore has runtime-conditional owned/borrowed string storage.",
    "fields": [
     {
-     "name": "content",
+     "name": "message",
      "ptr": {
       "scalar": null,
-      "array": {
-       "by_val": true
-      },
-      "string": false,
+      "array": null,
+      "string": true,
       "owned": true,
       "borrowed": {
-       "lifetime": "self"
+       "lifetime": "other"
       },
       "nullable": true,
-      "mutable": false,
-      "note": "Counted, non-NUL-terminated bytes. Parsed-patch lines own separately allocated content which patch_parsed__free releases; generated, apply, print, and xdiff lines borrow parent or callback backing storage. Public observations bind the bytes to the line/containing patch lifetime. Zero-initialized and empty construction paths permit NULL with length zero; the const pointer is never written through."
+      "mutable": true,
+      "note": "Runtime-conditional storage: git_error_save duplicates and owns the NUL-terminated message, the TLS error borrows its containing threadstate's git_str buffer, and static sentinel errors borrow string literals. git_error_free releases only saved non-static objects. Public git_error_last exposes a const borrowed view. NULL is accepted by set_error/restore and free, though ordinary published errors use non-null messages."
      }
     }
    ]

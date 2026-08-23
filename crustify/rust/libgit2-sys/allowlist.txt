@@ -30,6 +30,8 @@
 ^git_clone_local_t$
 ^git_diff_stats_format_t$
 ^git_direction$
+^git_error$
+^git_fetch_prune_t$
 ^git_index_time$
 ^git_config$
 ^git_config_free$
