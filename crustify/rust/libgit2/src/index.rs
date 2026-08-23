@@ -1,5 +1,7 @@
 //! Safe wrappers for libgit2 index APIs.
 
+use ffibox::CBox;
+
 use crate::ffi;
 
 ffibox::define_ctype!(
@@ -55,9 +57,42 @@ impl IndexTimeMut<'_> {
     }
 }
 
+ffibox::define_ctype!(
+    /// Wraps: git_index_conflict_iterator
+    /// Opaque storage for an iterator over conflicts in a libgit2 index.
+    ///
+    /// The iterator borrows the index supplied to its constructor. Safe
+    /// constructor and iteration wrappers must therefore keep that exclusive
+    /// index borrow alive for as long as the owner exists.
+    GitIndexConflictIterator,
+    GitIndexConflictIteratorRef,
+    GitIndexConflictIteratorMut,
+    ffi::git_index_conflict_iterator
+);
+
+/// An owning conflict-iterator allocation.
+///
+/// This raw ownership building block does not by itself carry the iterator's
+/// borrow of its source index. Safe constructors must wrap it in a
+/// lifetime-carrying handle before returning it.
+pub type GitIndexConflictIteratorOwned = CBox<GitIndexConflictIterator>;
+
+// SAFETY: `git_index_conflict_iterator_free` is the public destructor for a
+// fully formed conflict-iterator allocation and accepts null, although `CBox`
+// always supplies a live non-null allocation exactly once. It does not access
+// the borrowed index stored by the iterator.
+ffibox::impl_dropped!(
+    GitIndexConflictIterator,
+    ffi::git_index_conflict_iterator,
+    ffi::git_index_conflict_iterator_free
+);
+
 #[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
+    use core::ptr;
+
+    use ffibox::{CCell, CDropped};
 
     use super::*;
 
@@ -93,5 +128,45 @@ mod tests {
         time.set_nanoseconds(5);
         assert_eq!(time.as_ref().seconds(), 4);
         assert_eq!(time.as_ref().nanoseconds(), 5);
+    }
+
+    #[test]
+    fn conflict_iterator_preserves_the_ffi_layout_and_lifecycle_contract() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<GitIndexConflictIterator>();
+        assert_dropped::<GitIndexConflictIterator>();
+        assert_eq!(
+            size_of::<GitIndexConflictIterator>(),
+            size_of::<ffi::git_index_conflict_iterator>()
+        );
+        assert_eq!(
+            align_of::<GitIndexConflictIterator>(),
+            align_of::<ffi::git_index_conflict_iterator>()
+        );
+        assert_eq!(
+            size_of::<GitIndexConflictIteratorRef<'_>>(),
+            size_of::<*const ffi::git_index_conflict_iterator>()
+        );
+        assert_eq!(
+            size_of::<GitIndexConflictIteratorMut<'_>>(),
+            size_of::<*mut ffi::git_index_conflict_iterator>()
+        );
+        assert_eq!(
+            size_of::<GitIndexConflictIteratorOwned>(),
+            size_of::<*mut ffi::git_index_conflict_iterator>()
+        );
+    }
+
+    #[test]
+    fn null_conflict_iterator_seams_create_no_handle() {
+        // SAFETY: each conversion accepts null and returns `None` without
+        // borrowing or adopting an object.
+        unsafe {
+            assert!(GitIndexConflictIteratorRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitIndexConflictIteratorMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitIndexConflictIteratorOwned::from_raw(ptr::null_mut()).is_none());
+        }
     }
 }

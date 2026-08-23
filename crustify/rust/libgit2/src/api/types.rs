@@ -100,3 +100,77 @@ mod tests {
         assert_eq!(align_of::<GitBranchType>(), align_of::<ffi::git_branch_t>());
     }
 }
+
+/// Wraps: git_filemode_t
+/// A file mode accepted by libgit2 index and tree APIs.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GitFileMode(ffi::git_filemode_t);
+
+impl GitFileMode {
+    /// An unreadable or absent entry.
+    pub const UNREADABLE: Self = Self(ffi::git_filemode_t_GIT_FILEMODE_UNREADABLE);
+    /// A tree (directory) entry.
+    pub const TREE: Self = Self(ffi::git_filemode_t_GIT_FILEMODE_TREE);
+    /// A regular, non-executable blob.
+    pub const BLOB: Self = Self(ffi::git_filemode_t_GIT_FILEMODE_BLOB);
+    /// An executable blob.
+    pub const BLOB_EXECUTABLE: Self = Self(ffi::git_filemode_t_GIT_FILEMODE_BLOB_EXECUTABLE);
+    /// A symbolic link.
+    pub const LINK: Self = Self(ffi::git_filemode_t_GIT_FILEMODE_LINK);
+    /// A gitlink (submodule commit).
+    pub const COMMIT: Self = Self(ffi::git_filemode_t_GIT_FILEMODE_COMMIT);
+
+    /// Converts a raw value when it is one of libgit2's published file modes.
+    pub const fn from_raw(raw: ffi::git_filemode_t) -> Option<Self> {
+        match raw {
+            ffi::git_filemode_t_GIT_FILEMODE_UNREADABLE
+            | ffi::git_filemode_t_GIT_FILEMODE_TREE
+            | ffi::git_filemode_t_GIT_FILEMODE_BLOB
+            | ffi::git_filemode_t_GIT_FILEMODE_BLOB_EXECUTABLE
+            | ffi::git_filemode_t_GIT_FILEMODE_LINK
+            | ffi::git_filemode_t_GIT_FILEMODE_COMMIT => Some(Self(raw)),
+            _ => None,
+        }
+    }
+
+    /// Returns the underlying libgit2 file mode.
+    pub const fn as_raw(self) -> ffi::git_filemode_t {
+        self.0
+    }
+}
+
+impl From<GitFileMode> for ffi::git_filemode_t {
+    fn from(value: GitFileMode) -> Self {
+        value.as_raw()
+    }
+}
+
+#[cfg(test)]
+mod filemode_tests {
+    use super::*;
+    use core::mem::{align_of, size_of};
+
+    #[test]
+    fn published_file_modes_round_trip() {
+        for mode in [
+            GitFileMode::UNREADABLE,
+            GitFileMode::TREE,
+            GitFileMode::BLOB,
+            GitFileMode::BLOB_EXECUTABLE,
+            GitFileMode::LINK,
+            GitFileMode::COMMIT,
+        ] {
+            assert_eq!(GitFileMode::from_raw(mode.as_raw()), Some(mode));
+            assert_eq!(ffi::git_filemode_t::from(mode), mode.as_raw());
+        }
+
+        assert_eq!(GitFileMode::from_raw(1), None);
+    }
+
+    #[test]
+    fn file_mode_preserves_the_c_enum_layout() {
+        assert_eq!(size_of::<GitFileMode>(), size_of::<ffi::git_filemode_t>());
+        assert_eq!(align_of::<GitFileMode>(), align_of::<ffi::git_filemode_t>());
+    }
+}
