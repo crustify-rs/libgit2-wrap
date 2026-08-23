@@ -132,3 +132,5 @@
 ^git_tree_entry$
 ^git_tree_entry_dup$
 ^git_tree_entry_free$
+^git_worktree_prune_options$
+^git_writestream$

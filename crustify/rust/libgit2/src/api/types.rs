@@ -1,6 +1,7 @@
 //! Safe wrappers for libgit2 types APIs.
 
 use core::ops::{BitOr, BitOrAssign};
+use core::ptr::NonNull;
 
 use crate::ffi;
 
@@ -649,5 +650,167 @@ mod time_tests {
         let time = unsafe { GitTimeRef::from_ptr(&raw mut raw) }
             .expect("the address of a stack value is non-null");
         assert_eq!(time.sign().unwrap_err().value(), b'?' as core::ffi::c_char);
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_writestream
+    /// A polymorphic byte stream that dispatches through callbacks installed
+    /// by its concrete implementation.
+    GitWriteStream,
+    GitWriteStreamRef,
+    GitWriteStreamMut,
+    ffi::git_writestream
+);
+
+/// An exclusively owned write stream whose `free` callback releases its
+/// concrete allocation.
+pub type GitWriteStreamOwned = ffibox::CBox<GitWriteStream>;
+
+impl GitWriteStreamMut<'_> {
+    /// Wraps: git_writestream.close
+    /// Flushes or finalizes this stream without releasing its allocation.
+    pub fn close(&mut self) -> Result<(), core::ffi::c_int> {
+        let stream = self.as_mut_ptr();
+        // SAFETY: this exclusive handle addresses a live, fully constructed
+        // stream, and raw-place projection reads its initialized callback
+        // without forming a reference to C-visible memory.
+        let close = unsafe { core::ptr::addr_of!((*stream).close).read() }
+            .expect("a valid git_writestream has a close callback");
+        // SAFETY: `close` is the callback installed for this live stream and
+        // the exclusive handle prevents another Rust call during invocation.
+        let error = unsafe { close(stream) };
+        if error < 0 { Err(error) } else { Ok(()) }
+    }
+
+    /// Wraps: git_writestream.write
+    /// Writes `buffer` synchronously to this stream.
+    pub fn write(&mut self, buffer: &[u8]) -> Result<(), core::ffi::c_int> {
+        let stream = self.as_mut_ptr();
+        // SAFETY: this exclusive handle addresses a live, fully constructed
+        // stream, and raw-place projection reads its initialized callback
+        // without forming a reference to C-visible memory.
+        let write = unsafe { core::ptr::addr_of!((*stream).write).read() }
+            .expect("a valid git_writestream has a write callback");
+        // SAFETY: `write` is installed for this live stream. The slice keeps
+        // exactly `buffer.len()` readable bytes alive for the synchronous
+        // callback, and the exclusive handle prevents a concurrent Rust call.
+        let error = unsafe {
+            write(
+                stream,
+                buffer.as_ptr().cast::<core::ffi::c_char>(),
+                buffer.len(),
+            )
+        };
+        if error < 0 { Err(error) } else { Ok(()) }
+    }
+}
+
+/// Wraps: git_writestream.free
+// SAFETY: adopting `GitWriteStreamOwned` requires an owning pointer whose
+// installed callback finalizes and releases that concrete allocation; borrowed
+// stack-backed streams use handles instead. `CBox` invokes this callback once
+// and never touches the allocation afterward.
+unsafe impl ffibox::CDropped for GitWriteStream {
+    unsafe fn c_drop(stream: NonNull<Self>) {
+        let stream = stream.as_ptr().cast::<ffi::git_writestream>();
+        // SAFETY: the `CDropped` contract supplies a live, fully constructed
+        // stream, and raw-place projection reads its callback without forming
+        // a reference to C-visible memory.
+        let free = unsafe { core::ptr::addr_of!((*stream).free).read() }
+            .expect("a valid git_writestream has a free callback");
+        // SAFETY: `free` is the concrete destructor installed for this owned
+        // stream and the `CDropped` contract grants its one final invocation.
+        unsafe { free(stream) }
+    }
+}
+
+#[cfg(test)]
+mod writestream_tests {
+    use super::*;
+    use core::mem::{align_of, size_of};
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    static WRITTEN_LEN: AtomicUsize = AtomicUsize::new(0);
+    static FIRST_BYTE: AtomicUsize = AtomicUsize::new(0);
+    static CLOSES: AtomicUsize = AtomicUsize::new(0);
+    static FREES: AtomicUsize = AtomicUsize::new(0);
+
+    unsafe extern "C" fn test_write(
+        _stream: *mut ffi::git_writestream,
+        buffer: *const core::ffi::c_char,
+        len: usize,
+    ) -> core::ffi::c_int {
+        WRITTEN_LEN.store(len, Ordering::SeqCst);
+        if len != 0 {
+            // SAFETY: the write-callback contract supplies at least `len`
+            // readable bytes, so a nonempty call permits reading byte zero.
+            let first = unsafe { buffer.cast::<u8>().read() };
+            FIRST_BYTE.store(first.into(), Ordering::SeqCst);
+        }
+        0
+    }
+
+    unsafe extern "C" fn test_close(_stream: *mut ffi::git_writestream) -> core::ffi::c_int {
+        CLOSES.fetch_add(1, Ordering::SeqCst);
+        0
+    }
+
+    unsafe extern "C" fn test_free(stream: *mut ffi::git_writestream) {
+        FREES.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: this test adopts exactly one pointer produced by
+        // `Box::into_raw`, and `CBox` calls this destructor exactly once.
+        unsafe { drop(Box::from_raw(stream)) }
+    }
+
+    #[test]
+    fn writestream_wrapper_preserves_layout() {
+        assert_eq!(
+            size_of::<GitWriteStream>(),
+            size_of::<ffi::git_writestream>()
+        );
+        assert_eq!(
+            align_of::<GitWriteStream>(),
+            align_of::<ffi::git_writestream>()
+        );
+        assert_eq!(
+            size_of::<GitWriteStreamRef<'_>>(),
+            size_of::<*const ffi::git_writestream>()
+        );
+        assert_eq!(
+            size_of::<GitWriteStreamMut<'_>>(),
+            size_of::<*mut ffi::git_writestream>()
+        );
+        assert_eq!(
+            size_of::<GitWriteStreamOwned>(),
+            size_of::<*mut ffi::git_writestream>()
+        );
+    }
+
+    #[test]
+    fn owned_writestream_calls_operations_and_dynamic_destructor() {
+        WRITTEN_LEN.store(0, Ordering::SeqCst);
+        FIRST_BYTE.store(0, Ordering::SeqCst);
+        CLOSES.store(0, Ordering::SeqCst);
+        FREES.store(0, Ordering::SeqCst);
+
+        let raw = Box::into_raw(Box::new(ffi::git_writestream {
+            write: Some(test_write),
+            close: Some(test_close),
+            free: Some(test_free),
+        }));
+        // SAFETY: `raw` is a unique, fully initialized stream allocation and
+        // its installed destructor reclaims the same allocation exactly once.
+        let mut stream = unsafe { GitWriteStreamOwned::from_raw(raw) }
+            .expect("Box::into_raw never returns null");
+
+        assert_eq!(stream.as_mut().write(b"abc"), Ok(()));
+        assert_eq!(stream.as_mut().close(), Ok(()));
+        assert_eq!(WRITTEN_LEN.load(Ordering::SeqCst), 3);
+        assert_eq!(FIRST_BYTE.load(Ordering::SeqCst), usize::from(b'a'));
+        assert_eq!(CLOSES.load(Ordering::SeqCst), 1);
+
+        drop(stream);
+        assert_eq!(FREES.load(Ordering::SeqCst), 1);
     }
 }
