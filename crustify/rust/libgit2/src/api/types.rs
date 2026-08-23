@@ -331,3 +331,165 @@ mod reference_type_tests {
         );
     }
 }
+
+/// Wraps: git_submodule_ignore_t
+/// Controls which changes libgit2 ignores when checking a submodule's status.
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum GitSubmoduleIgnore {
+    /// Use the ignore rule from the submodule's configuration.
+    Unspecified = ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_UNSPECIFIED,
+    /// Treat every tracked or untracked change as dirty.
+    None = ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_NONE,
+    /// Ignore untracked files but detect tracked-file changes.
+    Untracked = ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_UNTRACKED,
+    /// Ignore worktree changes and only detect a moved `HEAD`.
+    Dirty = ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_DIRTY,
+    /// Never inspect the submodule for dirty state.
+    All = ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_ALL,
+}
+
+/// A raw value that is not a published [`GitSubmoduleIgnore`] rule.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidGitSubmoduleIgnore(ffi::git_submodule_ignore_t);
+
+impl InvalidGitSubmoduleIgnore {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_submodule_ignore_t {
+        self.0
+    }
+}
+
+impl From<GitSubmoduleIgnore> for ffi::git_submodule_ignore_t {
+    fn from(value: GitSubmoduleIgnore) -> Self {
+        value as Self
+    }
+}
+
+impl TryFrom<ffi::git_submodule_ignore_t> for GitSubmoduleIgnore {
+    type Error = InvalidGitSubmoduleIgnore;
+
+    fn try_from(value: ffi::git_submodule_ignore_t) -> Result<Self, Self::Error> {
+        match value {
+            ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_UNSPECIFIED => Ok(Self::Unspecified),
+            ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_NONE => Ok(Self::None),
+            ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_UNTRACKED => Ok(Self::Untracked),
+            ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_DIRTY => Ok(Self::Dirty),
+            ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_ALL => Ok(Self::All),
+            value => Err(InvalidGitSubmoduleIgnore(value)),
+        }
+    }
+}
+
+/// Wraps: git_submodule_update_t
+/// Selects how libgit2 updates a submodule.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum GitSubmoduleUpdate {
+    /// No update rule has been selected.
+    #[default]
+    Default = ffi::git_submodule_update_t_GIT_SUBMODULE_UPDATE_DEFAULT,
+    /// Check out the superproject's recorded commit as a detached `HEAD`.
+    Checkout = ffi::git_submodule_update_t_GIT_SUBMODULE_UPDATE_CHECKOUT,
+    /// Rebase the checked-out branch onto the superproject's recorded commit.
+    Rebase = ffi::git_submodule_update_t_GIT_SUBMODULE_UPDATE_REBASE,
+    /// Merge the superproject's recorded commit into the checked-out branch.
+    Merge = ffi::git_submodule_update_t_GIT_SUBMODULE_UPDATE_MERGE,
+    /// Do not update the submodule.
+    None = ffi::git_submodule_update_t_GIT_SUBMODULE_UPDATE_NONE,
+}
+
+/// A raw value that is not a published [`GitSubmoduleUpdate`] strategy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidGitSubmoduleUpdate(ffi::git_submodule_update_t);
+
+impl InvalidGitSubmoduleUpdate {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_submodule_update_t {
+        self.0
+    }
+}
+
+impl From<GitSubmoduleUpdate> for ffi::git_submodule_update_t {
+    fn from(value: GitSubmoduleUpdate) -> Self {
+        value as Self
+    }
+}
+
+impl TryFrom<ffi::git_submodule_update_t> for GitSubmoduleUpdate {
+    type Error = InvalidGitSubmoduleUpdate;
+
+    fn try_from(value: ffi::git_submodule_update_t) -> Result<Self, Self::Error> {
+        match value {
+            ffi::git_submodule_update_t_GIT_SUBMODULE_UPDATE_DEFAULT => Ok(Self::Default),
+            ffi::git_submodule_update_t_GIT_SUBMODULE_UPDATE_CHECKOUT => Ok(Self::Checkout),
+            ffi::git_submodule_update_t_GIT_SUBMODULE_UPDATE_REBASE => Ok(Self::Rebase),
+            ffi::git_submodule_update_t_GIT_SUBMODULE_UPDATE_MERGE => Ok(Self::Merge),
+            ffi::git_submodule_update_t_GIT_SUBMODULE_UPDATE_NONE => Ok(Self::None),
+            value => Err(InvalidGitSubmoduleUpdate(value)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod submodule_type_tests {
+    use super::*;
+    use core::mem::{align_of, size_of};
+
+    #[test]
+    fn published_ignore_rules_round_trip() {
+        for rule in [
+            GitSubmoduleIgnore::Unspecified,
+            GitSubmoduleIgnore::None,
+            GitSubmoduleIgnore::Untracked,
+            GitSubmoduleIgnore::Dirty,
+            GitSubmoduleIgnore::All,
+        ] {
+            let raw = ffi::git_submodule_ignore_t::from(rule);
+            assert_eq!(GitSubmoduleIgnore::try_from(raw), Ok(rule));
+        }
+
+        let error = GitSubmoduleIgnore::try_from(0).unwrap_err();
+        assert_eq!(error.value(), 0);
+    }
+
+    #[test]
+    fn published_update_strategies_round_trip() {
+        for strategy in [
+            GitSubmoduleUpdate::Default,
+            GitSubmoduleUpdate::Checkout,
+            GitSubmoduleUpdate::Rebase,
+            GitSubmoduleUpdate::Merge,
+            GitSubmoduleUpdate::None,
+        ] {
+            let raw = ffi::git_submodule_update_t::from(strategy);
+            assert_eq!(GitSubmoduleUpdate::try_from(raw), Ok(strategy));
+        }
+
+        let invalid = ffi::git_submodule_update_t_GIT_SUBMODULE_UPDATE_NONE + 1;
+        let error = GitSubmoduleUpdate::try_from(invalid).unwrap_err();
+        assert_eq!(error.value(), invalid);
+    }
+
+    #[test]
+    fn submodule_types_match_the_c_abi_scalars() {
+        assert_eq!(
+            size_of::<GitSubmoduleIgnore>(),
+            size_of::<ffi::git_submodule_ignore_t>()
+        );
+        assert_eq!(
+            align_of::<GitSubmoduleIgnore>(),
+            align_of::<ffi::git_submodule_ignore_t>()
+        );
+        assert_eq!(
+            size_of::<GitSubmoduleUpdate>(),
+            size_of::<ffi::git_submodule_update_t>()
+        );
+        assert_eq!(
+            align_of::<GitSubmoduleUpdate>(),
+            align_of::<ffi::git_submodule_update_t>()
+        );
+    }
+}
