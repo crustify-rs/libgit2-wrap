@@ -109,6 +109,23 @@
    "defined_in": "include/git2/types.h",
    "_comment_agent": "Closed public branch-kind enum with LOCAL and REMOTE values plus the ALL bitwise filter value; it has no pointer or lifecycle fields.",
    "fields": []
+  },
+  {
+   "name": "git_clone_local_t",
+   "defined_in": "include/git2/clone.h",
+   "_comment_agent": "Closed public C enum with four scalar values and no ownership-bearing fields.",
+   "fields": []
+  },
+  {
+   "name": "git_config",
+   "defined_in": "src/libgit2/config.h",
+   "_comment_agent": "git_config is refcounted through rc: git_config_new initializes one count, repository storage increments it, and git_config_free decrements it before releasing the object.",
+   "fields": [
+    {
+     "name": "rc",
+     "refcount": true
+    }
+   ]
   }
  ],
  "symbols": [
@@ -369,6 +386,33 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrows the scalar output slot and writes the yielded branch kind on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_free",
+   "defined_in": "src/libgit2/config.c",
+   "lifetime": {
+    "for": "config",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one owned git_config reference; NULL is a no-op. It decrements rc and releases the allocation and backend fields when the final count reaches zero."
      }
     }
    ]

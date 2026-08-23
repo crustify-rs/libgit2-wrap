@@ -1,5 +1,7 @@
 //! Safe wrappers for libgit2 config APIs.
 
+use ffibox::CBox;
+
 use crate::ffi;
 
 /// Wraps: git_config_level_t
@@ -51,9 +53,52 @@ impl GitConfigLevel {
     }
 }
 
+ffibox::define_ctype!(
+    /// Wraps: git_config
+    /// Opaque, refcounted configuration object managed by libgit2.
+    GitConfig,
+    GitConfigRef,
+    GitConfigMut,
+    ffi::git_config
+);
+
+/// An owned reference count to a [`GitConfig`].
+///
+/// Dropping it calls `git_config_free`, which releases one count. Libgit2 does
+/// not publish an operation that increments a config's reference count, so
+/// this owner intentionally does not implement `Clone`.
+pub type GitConfigOwned = CBox<GitConfig>;
+
+// SAFETY: `git_config_free` consumes exactly one reference to a fully formed
+// `git_config`; it decrements the embedded count and releases the allocation
+// and its backend fields when that was the final reference. It accepts null,
+// although `CBox` always supplies a non-null pointer.
+ffibox::impl_dropped!(GitConfig, ffi::git_config, ffi::git_config_free);
+
 #[cfg(test)]
 mod tests {
+    use core::ptr;
+
     use super::*;
+
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and refcounted;
+            // `Drop` below balances this successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard. The config owner is dropped before the guard.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
 
     #[test]
     fn published_levels_round_trip() {
@@ -81,5 +126,25 @@ mod tests {
         assert_eq!(GitConfigLevel::from_raw(0), None);
         assert_eq!(GitConfigLevel::from_raw(1), None);
         assert_eq!(GitConfigLevel::from_raw(-2), None);
+    }
+
+    #[test]
+    fn config_owner_provides_shared_and_exclusive_handles() {
+        let _init = Libgit2Init::acquire();
+        let mut raw = ptr::null_mut();
+
+        // SAFETY: libgit2 is initialized and `raw` is a writable out slot.
+        assert_eq!(unsafe { ffi::git_config_new(&mut raw) }, 0);
+        // SAFETY: a successful `git_config_new` returns a fresh owned count,
+        // whose matching down-reference operation is `git_config_free`.
+        let mut config = unsafe { GitConfigOwned::from_raw(raw) }
+            .expect("git_config_new returned success with a null config");
+
+        let shared = config.as_ref();
+        assert_eq!(shared.as_ptr(), raw.cast_const());
+
+        let mut exclusive = config.as_mut();
+        assert_eq!(exclusive.as_mut_ptr(), raw);
+        assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
     }
 }
