@@ -68,3 +68,5 @@
 ^git_object_t$
 ^git_oid$
 ^git_oid_t$
+^git_packbuilder$
+^git_packbuilder_free$

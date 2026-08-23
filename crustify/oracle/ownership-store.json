@@ -1064,6 +1064,107 @@
    "defined_in": "include/git2/types.h",
    "_comment_agent": "git_object_t is a fieldless C enum with no ownership or lifetime-bearing members.",
    "fields": []
+  },
+  {
+   "name": "git_packbuilder",
+   "defined_in": "src/libgit2/pack-objects.h",
+   "_comment_agent": "The public API treats git_packbuilder as opaque. Its complete internal pointer-field footprint was inspected to establish the retained repository/callback borrows and owned ODB, name, and object-list storage.",
+   "fields": [
+    {
+     "name": "object_list",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned mutable git_pobject allocation grown with git__reallocarray, indexed through nr_objects/nr_alloc, and released by git_packbuilder_free."
+     }
+    },
+    {
+     "name": "odb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "git_repository_odb gives the builder an owned reference; pack operations use it and git_packbuilder_free releases that reference with git_odb_free."
+     }
+    },
+    {
+     "name": "pack_name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned NUL-terminated duplicate created with git__strdup after writing; absent beforehand and released by git_packbuilder_free with git__free."
+     }
+    },
+    {
+     "name": "progress_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed function pointer installed by git_packbuilder_set_callbacks; points to static executable code and is never released."
+     }
+    },
+    {
+     "name": "progress_cb_payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque application callback state retained by git_packbuilder_set_callbacks and passed back unchanged; the callback may mutate it and the application must keep it alive."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed from git_packbuilder_new's repo argument and retained for the packbuilder lifetime; pack operations call repository APIs through it, while git_packbuilder_free does not release it."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -1819,6 +1920,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one outstanding object reference; null is accepted. git_cached_obj_decref releases the allocation when its refcount reaches zero."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_free",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "lifetime": {
+    "for": "pb",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and releases a complete packbuilder allocation and its owned fields; NULL is explicitly accepted."
      }
     }
    ]
