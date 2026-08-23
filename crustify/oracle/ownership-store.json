@@ -59,6 +59,52 @@
      }
     }
    ]
+  },
+  {
+   "name": "git__strdup",
+   "defined_in": "src/util/alloc.c",
+   "lifetime": {
+    "for": "str",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": true,
+     "upref": false
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:str"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads the complete NUL-terminated source string through strlen and memcpy without retaining it. A null or unterminated source is invalid."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": null,
+     "array": {
+      "by_val": true
+     },
+     "string": true,
+     "owned": true,
+     "borrowed": null,
+     "nullable": true,
+     "mutable": true,
+     "note": "Returns null on allocation failure or a fresh, mutable NUL-terminated deep copy allocated through libgit2's current allocator; the caller releases it through git__free while a compatible allocator remains installed."
+    }
+   }
   }
  ]
 }

@@ -126,3 +126,8 @@ GIT_EXTERN(void) crustify_git__free(void *ptr)
 {
 	git__free(ptr);
 }
+
+GIT_EXTERN(char *) crustify_git__strdup(const char *str)
+{
+	return git__strdup(str);
+}

@@ -18,7 +18,8 @@
               ],
               "members": {
                 "functions": [
-                  "git__free"
+                  "git__free",
+                  "git__strdup"
                 ],
                 "types": [],
                 "callbacks": [],
