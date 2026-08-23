@@ -8,15 +8,21 @@ use crate::ffi;
 
 /// Wraps: git__free
 /// Deleter strategy for allocations made by libgit2's configured allocator.
+///
+/// Libgit2 looks up its process-global `gfree` callback when the owner is
+/// dropped, rather than recording the callback that allocated the block. Code
+/// that replaces the allocator must therefore keep its new `gfree` compatible
+/// with every outstanding allocation.
 pub struct GitMallocFree;
 
-// SAFETY: `c_drop` dispatches through the same configurable allocator used by
-// libgit2 allocation routines. `CVoidBox::from_raw` requires callers to supply
-// a compatible allocation.
+// SAFETY: `c_drop` dispatches through libgit2's currently installed `gfree`.
+// `CVoidBox::from_raw` requires callers to supply a compatible allocation; for
+// this strategy that obligation includes keeping the installed callback
+// compatible until the owner is dropped.
 unsafe impl CDropped for GitMallocFree {
     unsafe fn c_drop(obj: NonNull<Self>) {
-        // SAFETY: the `CDropped` contract guarantees that `obj` is a uniquely
-        // owned allocation made by libgit2's currently configured allocator.
+        // SAFETY: the `CDropped` contract guarantees that `obj` is uniquely
+        // owned and compatible with libgit2's currently installed `gfree`.
         unsafe { ffi::crustify_git__free(obj.as_ptr().cast()) }
     }
 }

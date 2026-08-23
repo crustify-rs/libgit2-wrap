@@ -55,7 +55,7 @@
       "borrowed": null,
       "nullable": true,
       "mutable": true,
-      "note": "Consumes an allocation made by libgit2's currently installed allocator and dispatches to its gfree callback; the configured allocator contract makes NULL a no-op. The allocation may hold one object, raw bytes, or a NUL-terminated string."
+      "note": "Consumes an allocation through libgit2's gfree callback; NULL is a no-op. Because git__free reads the mutable global allocator at deallocation time, the installed gfree must remain compatible with the allocator that created a live allocation. The allocation may hold one object, raw bytes, or a NUL-terminated string."
      }
     }
    ]
