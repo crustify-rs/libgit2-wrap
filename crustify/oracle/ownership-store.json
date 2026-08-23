@@ -873,6 +873,45 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_merge_file_input",
+   "defined_in": "include/git2/merge.h",
+   "_comment_agent": "git_merge_file_input is a non-owning by-value descriptor. Both pointer fields borrow external storage for the duration of any merge operation; the header has no disposer or cloner.",
+   "fields": [
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed NUL-terminated file name. Public callers supply it; merge code reads it and may temporarily substitute a static default, but never frees or mutates it."
+     }
+    },
+    {
+     "name": "ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed byte span counted by size. It may contain interior NUL bytes; merge routines only read it and never free it. Null is the initialized empty representation."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
