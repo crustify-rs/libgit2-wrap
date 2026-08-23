@@ -99,35 +99,6 @@
    "fields": []
   },
   {
-   "name": "git_branch_iterator",
-   "defined_in": null,
-   "_comment_agent": "Public opaque iterator. Its allocation is uniquely owned and released by git_branch_iterator_free; no fields are published.",
-   "fields": []
-  },
-  {
-   "name": "git_branch_t",
-   "defined_in": "include/git2/types.h",
-   "_comment_agent": "Closed public branch-kind enum with LOCAL and REMOTE values plus the ALL bitwise filter value; it has no pointer or lifecycle fields.",
-   "fields": []
-  },
-  {
-   "name": "git_clone_local_t",
-   "defined_in": "include/git2/clone.h",
-   "_comment_agent": "Closed public C enum with four scalar values and no ownership-bearing fields.",
-   "fields": []
-  },
-  {
-   "name": "git_config",
-   "defined_in": "src/libgit2/config.h",
-   "_comment_agent": "git_config is refcounted through rc: git_config_new initializes one count, repository storage increments it, and git_config_free decrements it before releasing the object.",
-   "fields": [
-    {
-     "name": "rc",
-     "refcount": true
-    }
-   ]
-  },
-  {
    "name": "git_blame",
    "defined_in": "src/libgit2/blame.h",
    "_comment_agent": "The public API exposes git_blame only as an opaque, uniquely owned result released by git_blame_free. Internally it owns its duplicated path, optional mailmap and blob, hunk/path vectors, and counted line/index buffers; it borrows the repository. final, ent, final_buf, and current_hunk are transient aliases or work-state pointers and are not published as fields.",
@@ -289,6 +260,59 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_branch_iterator",
+   "defined_in": null,
+   "_comment_agent": "Public opaque iterator. Its allocation is uniquely owned and released by git_branch_iterator_free; no fields are published.",
+   "fields": []
+  },
+  {
+   "name": "git_branch_t",
+   "defined_in": "include/git2/types.h",
+   "_comment_agent": "Closed public branch-kind enum with LOCAL and REMOTE values plus the ALL bitwise filter value; it has no pointer or lifecycle fields.",
+   "fields": []
+  },
+  {
+   "name": "git_buf",
+   "defined_in": "include/git2/buffer.h",
+   "_comment_agent": "Public git_buf owns a counted mutable byte allocation through ptr, except for its NULL initial state and the static empty sentinel. reserved is allocation capacity and size is initialized payload length.",
+   "fields": [
+    {
+     "name": "ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Counted mutable byte buffer owned by git_buf when allocated; empty sanitized buffers may instead point at the static git_str__initstr sentinel. NULL is valid in GIT_BUF_INIT. The size excludes a guaranteed trailing NUL, but interior NUL bytes are allowed, so this is modeled as an array rather than a string. git_buf_dispose handles the owned-vs-static runtime gate."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_clone_local_t",
+   "defined_in": "include/git2/clone.h",
+   "_comment_agent": "Closed public C enum with four scalar values and no ownership-bearing fields.",
+   "fields": []
+  },
+  {
+   "name": "git_config",
+   "defined_in": "src/libgit2/config.h",
+   "_comment_agent": "git_config is refcounted through rc: git_config_new initializes one count, repository storage increments it, and git_config_free decrements it before releasing the object.",
+   "fields": [
+    {
+     "name": "rc",
+     "refcount": true
+    }
+   ]
   }
  ],
  "symbols": [
@@ -424,6 +448,33 @@
    ]
   },
   {
+   "name": "git_blame_free",
+   "defined_in": "src/libgit2/blame.c",
+   "lifetime": {
+    "for": "blame",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "blame",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and releases one fully constructed git_blame and all of its owned resources; NULL is explicitly accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_branch_iterator_free",
    "defined_in": "src/libgit2/branch.c",
    "lifetime": {
@@ -554,6 +605,64 @@
    ]
   },
   {
+   "name": "git_buf_dispose",
+   "defined_in": "src/libgit2/buf.c",
+   "lifetime": {
+    "for": "buf",
+    "is_dropper": false,
+    "is_disposer": true,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "buf",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:buf"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrows and mutates the git_buf header, conditionally frees its owned ptr field, and resets it in place; a NULL header is accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_buf_free",
+   "defined_in": "src/libgit2/buf.c",
+   "lifetime": {
+    "for": "buffer",
+    "is_dropper": false,
+    "is_disposer": true,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "buffer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:buffer"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Deprecated alias for git_buf_dispose; borrows the header, disposes its ptr field, and leaves the header reset in place."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_config_free",
    "defined_in": "src/libgit2/config.c",
    "lifetime": {
@@ -576,33 +685,6 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one owned git_config reference; NULL is a no-op. It decrements rc and releases the allocation and backend fields when the final count reaches zero."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_blame_free",
-   "defined_in": "src/libgit2/blame.c",
-   "lifetime": {
-    "for": "blame",
-    "is_dropper": true,
-    "is_disposer": false,
-    "is_cloner": null
-   },
-   "ptr_args": [
-    {
-     "name": "blame",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": true,
-      "note": "Consumes and releases one fully constructed git_blame and all of its owned resources; NULL is explicitly accepted as a no-op."
      }
     }
    ]

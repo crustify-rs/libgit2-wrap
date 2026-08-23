@@ -17,3 +17,7 @@
 ^git_config_new$
 ^git_blame$
 ^git_blame_free$
+^git_buf$
+^git_buf_dispose$
+^git_cert_t$
+^GIT_CERT_(NONE|X509|HOSTKEY_LIBSSH2|STRARRAY)$
