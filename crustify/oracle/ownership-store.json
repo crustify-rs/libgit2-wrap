@@ -1165,6 +1165,98 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_patch",
+   "defined_in": "src/libgit2/patch.h",
+   "_comment_agent": "git_patch is a refcounted polymorphic base. The public down-reference is git_patch_free; a per-instance static free_fn selects the concrete generated or parsed destructor when the count reaches zero.",
+   "fields": [
+    {
+     "name": "delta",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Runtime-conditional: parsed patches allocate and free the delta, generated-from-diff patches borrow a delta kept alive by their retained diff, and direct generated patches point into their own derived allocation. Every fully formed public patch has a delta."
+     }
+    },
+    {
+     "name": "free_fn",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Variant destructor selected from static functions. git_patch__free checks for null so partially initialized/zeroed bases are accepted internally."
+     }
+    },
+    {
+     "name": "hunks.ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned growable array buffer of git_patch_hunk values; null represents an empty array and the selected patch destructor clears it."
+     }
+    },
+    {
+     "name": "lines.ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned growable array buffer of git_diff_line values; null represents an empty array and the selected patch destructor clears it (parsed variants also free owned line contents)."
+     }
+    },
+    {
+     "name": "rc",
+     "refcount": true
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "The patch borrows the optional repository. Generated patch variants retain their backing diff/file-content state, which keeps the repository alive; parsed patches leave this null. git_patch_owner publishes a mutable repository handle."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -1947,6 +2039,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and releases a complete packbuilder allocation and its owned fields; NULL is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_patch_free",
+   "defined_in": "src/libgit2/patch.c",
+   "lifetime": {
+    "for": "patch",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "patch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one owning patch reference. Null is accepted; the allocation and fields are released through free_fn when the reference count reaches zero."
      }
     }
    ]
