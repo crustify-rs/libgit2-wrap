@@ -4,9 +4,10 @@ use core::ffi::CStr;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
-use ffibox::CSlice;
+use ffibox::{CLenDropped, CSlice, CVal, CVec, CrustifyStr};
 
 use crate::ffi;
+use crate::util::alloc::GitStrdupFree;
 
 /// Wraps: git_merge_analysis_t
 /// A layout-compatible set of merge opportunities reported by libgit2.
@@ -294,6 +295,237 @@ impl MergeFileInputMut<'_> {
     }
 }
 
+ffibox::define_ctype!(
+    /// Wraps: git_merge_file_result
+    /// An inline result header that owns its optional path and merged bytes.
+    MergeFileResult,
+    MergeFileResultRef,
+    MergeFileResultMut,
+    ffi::git_merge_file_result
+);
+
+// `git_merge_file_result_free` releases the result's fields but retains its
+// inline header.
+ffibox::impl_cvalued!(
+    MergeFileResult,
+    ffi::git_merge_file_result,
+    ffi::git_merge_file_result_free
+);
+
+/// Owned path allocation stored in a [`MergeFileResult`].
+pub type MergeFilePath = CrustifyStr<GitStrdupFree>;
+
+/// Deleter for the counted byte allocation stored in a
+/// [`MergeFileResult`].
+pub struct MergeFileContentsFree;
+
+// SAFETY: valid merge results store a uniquely owned byte allocation made by
+// libgit2's configured allocator. The installed allocator must remain
+// compatible until the allocation is dropped, as for `GitStrdupFree`.
+unsafe impl CLenDropped for MergeFileContentsFree {
+    unsafe fn c_drop_len(ptr: *mut u8, _byte_len: usize) {
+        // SAFETY: the `CLenDropped` contract proves that `ptr` is the unique
+        // libgit2 allocation moved out of a valid merge result.
+        unsafe { ffi::crustify_git__free(ptr.cast()) }
+    }
+}
+
+/// Owned merged bytes detached from a [`MergeFileResult`].
+pub type MergeFileContents = CVec<u8, MergeFileContentsFree>;
+
+impl MergeFileResult {
+    /// Constructs an empty owned result whose fields are disposed on drop.
+    #[must_use]
+    pub fn new() -> CVal<Self> {
+        // Bindgen's C layout consists only of integers and pointers, and this
+        // is the empty result representation used by libgit2.
+        CVal::new(Self::zeroed())
+    }
+}
+
+impl<'a> MergeFileResultRef<'a> {
+    /// Wraps: git_merge_file_result.automergeable
+    /// Reports whether the output was merged without conflict markers.
+    #[must_use]
+    pub fn is_automergeable(&self) -> bool {
+        // SAFETY: this live shared handle permits a raw-place read of the
+        // initialized scalar without forming a reference to C-owned memory.
+        unsafe { addr_of!((*self.as_ptr()).automergeable).read() != 0 }
+    }
+
+    /// Wraps: git_merge_file_result.path
+    /// Borrows the selected result path, or returns `None` for a path conflict.
+    #[must_use]
+    pub fn path(&self) -> Option<&'a CStr> {
+        // SAFETY: raw-place projection reads the initialized pointer field
+        // without forming a reference to the result header.
+        let path = unsafe { addr_of!((*self.as_ptr()).path).read() };
+        if path.is_null() {
+            return None;
+        }
+
+        // SAFETY: a valid merge result's non-null path is NUL-terminated and
+        // remains owned by the result for the handle's lifetime.
+        Some(unsafe { CStr::from_ptr(path) })
+    }
+
+    /// Wraps: git_merge_file_result.mode
+    /// Returns the file mode selected for the merged result.
+    #[must_use]
+    pub fn mode(&self) -> u32 {
+        // SAFETY: as `is_automergeable`, for this initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).mode).read() }
+    }
+
+    /// Wraps: git_merge_file_result.ptr
+    /// Borrows the counted merged bytes.
+    ///
+    /// A null pointer is represented by `None`, including the empty result.
+    #[must_use]
+    pub fn contents(&self) -> Option<CSlice<'a, u8>> {
+        // SAFETY: both fields are initialized members of this live shared
+        // result and are read by raw-place projection.
+        let (ptr, len) = unsafe {
+            (
+                addr_of!((*self.as_ptr()).ptr)
+                    .read()
+                    .cast_mut()
+                    .cast::<u8>(),
+                addr_of!((*self.as_ptr()).len).read(),
+            )
+        };
+        let ptr = NonNull::new(ptr)?;
+        // SAFETY: a valid result owns at least `len` initialized bytes at its
+        // non-null content pointer, and the view is tied to the result handle.
+        Some(unsafe { CSlice::from_raw_parts(ptr, len) })
+    }
+
+    /// Wraps: git_merge_file_result.len
+    /// Returns the number of initialized merged bytes.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        // SAFETY: as `is_automergeable`, for this initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).len).read() }
+    }
+
+    /// Returns whether the merged byte span is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl MergeFileResultMut<'_> {
+    /// Sets whether the result was merged without conflict markers.
+    pub fn set_automergeable(&mut self, automergeable: bool) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).automergeable).write(u32::from(automergeable)) }
+    }
+
+    /// Sets the file mode selected for the merged result.
+    pub fn set_mode(&mut self, mode: u32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).mode).write(mode) }
+    }
+
+    /// Moves the owned path out, leaving the result's path empty.
+    #[must_use]
+    pub fn take_path(&mut self) -> Option<MergeFilePath> {
+        let result = self.as_mut_ptr();
+        // SAFETY: this exclusive handle permits reading and clearing the owned
+        // pointer field. Clearing it transfers its unique ownership out.
+        let path = unsafe {
+            let path = addr_of!((*result).path).read().cast_mut();
+            addr_of_mut!((*result).path).write(core::ptr::null());
+            path
+        };
+        // SAFETY: a non-null path moved from a valid merge result is a unique,
+        // NUL-terminated allocation from libgit2's configured allocator.
+        unsafe { MergeFilePath::from_raw(path) }
+    }
+
+    /// Replaces the owned path and disposes the previous allocation.
+    pub fn set_path(&mut self, path: Option<MergeFilePath>) {
+        let path = path.map_or(core::ptr::null_mut(), MergeFilePath::into_raw);
+        let old = self.take_path();
+        // SAFETY: the exclusive handle permits installing ownership of the
+        // compatible path allocation after the old pointer was cleared.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).path).write(path) }
+        drop(old);
+    }
+
+    /// Moves the owned merged bytes out, leaving a null, empty span.
+    #[must_use]
+    pub fn take_contents(&mut self) -> Option<MergeFileContents> {
+        let result = self.as_mut_ptr();
+        // SAFETY: the exclusive handle permits reading and clearing both
+        // ownership fields as one transfer, leaving a valid empty result.
+        let (ptr, len) = unsafe {
+            let ptr = addr_of!((*result).ptr).read().cast_mut().cast::<u8>();
+            let len = addr_of!((*result).len).read();
+            addr_of_mut!((*result).ptr).write(core::ptr::null());
+            addr_of_mut!((*result).len).write(0);
+            (ptr, len)
+        };
+        // SAFETY: a non-null pointer moved from a valid result uniquely owns
+        // `len` initialized bytes from libgit2's configured allocator.
+        unsafe { MergeFileContents::from_raw_parts(ptr, len) }
+    }
+
+    /// Replaces the owned merged bytes and disposes the previous allocation.
+    pub fn set_contents(&mut self, contents: Option<MergeFileContents>) {
+        let (ptr, len) = contents.map_or((core::ptr::null_mut(), 0), CVec::into_raw_parts);
+        let old = self.take_contents();
+        let result = self.as_mut_ptr();
+        // SAFETY: the exclusive handle permits installing the compatible
+        // allocation and its exact initialized length after the old span was
+        // cleared.
+        unsafe {
+            addr_of_mut!((*result).ptr).write(ptr.cast());
+            addr_of_mut!((*result).len).write(len);
+        }
+        drop(old);
+    }
+}
+
+/// Wraps: git_merge_preference_t
+/// The user's configured preference for fast-forward merges.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+#[repr(u32)]
+pub enum MergePreference {
+    /// No merge preference was configured.
+    #[default]
+    None = ffi::git_merge_preference_t_GIT_MERGE_PREFERENCE_NONE,
+    /// Do not perform a fast-forward merge.
+    NoFastForward = ffi::git_merge_preference_t_GIT_MERGE_PREFERENCE_NO_FASTFORWARD,
+    /// Only perform a fast-forward merge.
+    FastForwardOnly = ffi::git_merge_preference_t_GIT_MERGE_PREFERENCE_FASTFORWARD_ONLY,
+}
+
+impl From<MergePreference> for ffi::git_merge_preference_t {
+    fn from(preference: MergePreference) -> Self {
+        preference as Self
+    }
+}
+
+impl TryFrom<ffi::git_merge_preference_t> for MergePreference {
+    type Error = ffi::git_merge_preference_t;
+
+    fn try_from(preference: ffi::git_merge_preference_t) -> Result<Self, Self::Error> {
+        match preference {
+            ffi::git_merge_preference_t_GIT_MERGE_PREFERENCE_NONE => Ok(Self::None),
+            ffi::git_merge_preference_t_GIT_MERGE_PREFERENCE_NO_FASTFORWARD => {
+                Ok(Self::NoFastForward)
+            }
+            ffi::git_merge_preference_t_GIT_MERGE_PREFERENCE_FASTFORWARD_ONLY => {
+                Ok(Self::FastForwardOnly)
+            }
+            other => Err(other),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
@@ -400,5 +632,108 @@ mod tests {
         assert!(input.as_ref().contents().is_none());
         assert!(input.as_ref().path().is_none());
         assert_eq!(input.as_ref().size(), 0);
+    }
+    #[test]
+    fn merge_file_result_preserves_the_c_layout() {
+        assert_eq!(
+            size_of::<MergeFileResult>(),
+            size_of::<ffi::git_merge_file_result>()
+        );
+        assert_eq!(
+            align_of::<MergeFileResult>(),
+            align_of::<ffi::git_merge_file_result>()
+        );
+        assert_eq!(
+            size_of::<MergeFileResultRef<'_>>(),
+            size_of::<*const ffi::git_merge_file_result>()
+        );
+        assert_eq!(
+            size_of::<MergeFileResultMut<'_>>(),
+            size_of::<*mut ffi::git_merge_file_result>()
+        );
+    }
+
+    #[test]
+    fn empty_owned_result_supports_shared_and_exclusive_handles() {
+        let mut result = MergeFileResult::new();
+        assert!(result.as_ref().path().is_none());
+        assert!(result.as_ref().contents().is_none());
+        assert!(result.as_ref().is_empty());
+
+        let mut result_mut = result.as_mut();
+        result_mut.set_automergeable(true);
+        result_mut.set_mode(0o100644);
+
+        let result_ref = result_mut.as_ref();
+        assert!(result_ref.is_automergeable());
+        assert_eq!(result_ref.mode(), 0o100644);
+    }
+
+    #[test]
+    fn owned_fields_move_through_the_result_without_double_free() {
+        // SAFETY: libgit2 initialization is refcounted and this successful
+        // call is balanced after all configured allocations are dropped.
+        let initialized = unsafe { ffi::git_libgit2_init() };
+        assert!(initialized > 0);
+
+        // SAFETY: libgit2 is initialized, so successful calls return fresh
+        // allocations from its configured allocator.
+        let raw_path = unsafe { ffi::crustify_git__strdup(c"merged.txt".as_ptr()) };
+        // SAFETY: `raw_path` is null or the unique NUL-terminated allocation
+        // just returned by libgit2.
+        let path = unsafe { MergeFilePath::from_raw(raw_path) }.unwrap();
+
+        // SAFETY: libgit2 is initialized; a non-null result uniquely owns four
+        // writable bytes from its configured allocator.
+        let raw_contents = unsafe { ffi::crustify_git__malloc(4) }.cast::<u8>();
+        assert!(!raw_contents.is_null());
+        // SAFETY: the allocation above contains four writable bytes.
+        unsafe { core::ptr::copy_nonoverlapping(b"text".as_ptr(), raw_contents, 4) };
+        // SAFETY: all four uniquely owned bytes are initialized and use the
+        // lifecycle strategy for libgit2's configured allocator.
+        let contents = unsafe { MergeFileContents::from_raw_parts(raw_contents, 4) }.unwrap();
+
+        let mut result = MergeFileResult::new();
+        result.as_mut().set_path(Some(path));
+        result.as_mut().set_contents(Some(contents));
+        assert_eq!(result.as_ref().path(), Some(c"merged.txt"));
+        assert_eq!(result.as_ref().len(), 4);
+        let view = result.as_ref().contents().unwrap();
+        let mut copied = [0; 4];
+        assert!(view.copy_to_slice(&mut copied));
+        assert_eq!(&copied, b"text");
+
+        let path = result.as_mut().take_path().unwrap();
+        let contents = result.as_mut().take_contents().unwrap();
+        assert!(result.as_ref().path().is_none());
+        assert!(result.as_ref().contents().is_none());
+        drop(path);
+        drop(contents);
+        drop(result);
+
+        // SAFETY: balances this test's successful initialization call.
+        let remaining = unsafe { ffi::git_libgit2_shutdown() };
+        assert!(remaining >= 0);
+    }
+
+    #[test]
+    fn merge_preferences_validate_raw_values() {
+        for preference in [
+            MergePreference::None,
+            MergePreference::NoFastForward,
+            MergePreference::FastForwardOnly,
+        ] {
+            let raw = ffi::git_merge_preference_t::from(preference);
+            assert_eq!(MergePreference::try_from(raw), Ok(preference));
+        }
+        assert_eq!(MergePreference::try_from(3), Err(3));
+        assert_eq!(
+            size_of::<MergePreference>(),
+            size_of::<ffi::git_merge_preference_t>()
+        );
+        assert_eq!(
+            align_of::<MergePreference>(),
+            align_of::<ffi::git_merge_preference_t>()
+        );
     }
 }

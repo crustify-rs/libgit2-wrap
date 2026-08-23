@@ -914,6 +914,41 @@
    ]
   },
   {
+   "name": "git_merge_file_result",
+   "defined_in": "include/git2/merge.h",
+   "_comment_agent": "The public result is an inline/by-value header that owns its optional path and counted content allocations; its public free routine disposes those fields without freeing the header.",
+   "fields": [
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "git_merge_file_result producers duplicate the selected path with git__strdup; git_merge_file_result_free releases it with git__free. A filename conflict may leave it null."
+     }
+    },
+    {
+     "name": "ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "The result owns len bytes produced by xdl_merge or git__malloc; git_merge_file_result_free releases the allocation with git__free. Empty or unmerged results may use null."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_message_trailer",
    "defined_in": "include/git2/message.h",
    "_comment_agent": "git_message_trailers stores both pointers into the array-owned extracted trailer block; git_message_trailer_array_free releases that block and the trailer array together.",
@@ -1592,6 +1627,35 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a complete mailmap when non-null, frees every owned entry, disposes the entries vector, and releases the mailmap allocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_merge_file_result_free",
+   "defined_in": "src/libgit2/merge_file.c",
+   "lifetime": {
+    "for": "result",
+    "is_dropper": false,
+    "is_disposer": true,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "result",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:result"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "The routine accepts a nullable borrowed result header, reads its fields, and frees the path and content allocations while retaining the header storage."
      }
     }
    ]
