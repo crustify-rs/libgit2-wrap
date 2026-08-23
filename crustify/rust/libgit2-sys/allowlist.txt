@@ -162,3 +162,7 @@
 ^git_feature_t$
 ^git_libgit2_opt_t$
 ^git_error_code$
+^git_blame_options$
+^git_blob$
+^git_blob_dup$
+^git_blob_free$

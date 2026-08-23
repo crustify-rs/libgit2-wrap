@@ -262,6 +262,51 @@
    ]
   },
   {
+   "name": "git_blame_options",
+   "defined_in": "include/git2/blame.h",
+   "_comment_agent": "All published fields are by-value scalars or embedded git_oid values; the options struct owns no pointer fields and has no lifecycle primitive.",
+   "fields": []
+  },
+  {
+   "name": "git_blob",
+   "defined_in": "src/libgit2/blob.h",
+   "_comment_agent": "The data union is discriminated by raw: either an owned reference-counted ODB object or a borrowed immutable byte buffer.",
+   "fields": [
+    {
+     "name": "data.odb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "When raw is clear, git_blob__parse stores a non-null git_odb_object after taking a cache reference; git_blob__free releases that reference. Refcount operations mutate the pointee."
+     }
+    },
+    {
+     "name": "data.raw.data",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "When raw is set, this is a caller-owned byte buffer stored by git_blob__parse_raw with data.raw.size; the blob neither copies nor frees it. Empty input may use null."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_branch_iterator",
    "defined_in": null,
    "_comment_agent": "Public opaque iterator. Its allocation is uniquely owned and released by git_branch_iterator_free; no fields are published.",
@@ -2763,6 +2808,85 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and releases one fully constructed git_blame and all of its owned resources; NULL is explicitly accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_dup",
+   "defined_in": "src/libgit2/object_api.c",
+   "lifetime": {
+    "for": "obj",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": false,
+     "upref": true
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed live blob; git_object_dup increments its cache refcount and returns the same address."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed non-null output slot receives a newly owned blob reference."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_free",
+   "defined_in": "src/libgit2/object_api.c",
+   "lifetime": {
+    "for": "obj",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one blob cache reference through git_object_free; null is accepted."
      }
     }
    ]
