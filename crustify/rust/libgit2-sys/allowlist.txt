@@ -124,3 +124,6 @@
 ^git_submodule_free$
 ^git_time$
 ^git_trace_level_t$
+^git_treewalk_mode$
+^git_worktree$
+^git_worktree_free$

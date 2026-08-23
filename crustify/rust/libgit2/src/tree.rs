@@ -4,6 +4,48 @@ use ffibox::{define_ctype, impl_dropped};
 
 use crate::ffi;
 
+/// Wraps: git_treewalk_mode
+/// Selects whether a tree walk visits each entry before or after its children.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+#[repr(u32)]
+pub enum TreeWalkMode {
+    /// Visit an entry before visiting its children.
+    Pre = ffi::git_treewalk_mode_GIT_TREEWALK_PRE,
+    /// Visit an entry after visiting its children.
+    Post = ffi::git_treewalk_mode_GIT_TREEWALK_POST,
+}
+
+/// A C value that is not a published [`TreeWalkMode`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidTreeWalkMode(ffi::git_treewalk_mode);
+
+impl InvalidTreeWalkMode {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_treewalk_mode {
+        self.0
+    }
+}
+
+impl From<TreeWalkMode> for ffi::git_treewalk_mode {
+    fn from(mode: TreeWalkMode) -> Self {
+        mode as Self
+    }
+}
+
+impl TryFrom<ffi::git_treewalk_mode> for TreeWalkMode {
+    type Error = InvalidTreeWalkMode;
+
+    fn try_from(mode: ffi::git_treewalk_mode) -> Result<Self, Self::Error> {
+        match mode {
+            ffi::git_treewalk_mode_GIT_TREEWALK_PRE => Ok(Self::Pre),
+            ffi::git_treewalk_mode_GIT_TREEWALK_POST => Ok(Self::Post),
+            value => Err(InvalidTreeWalkMode(value)),
+        }
+    }
+}
+
 /// Wraps: git_tree_update_t
 /// Action applied to a path by a tree update.
 #[repr(u32)]
@@ -143,5 +185,32 @@ mod tests {
     fn tree_builder_registers_its_c_destructor() {
         fn assert_dropped<T: CDropped>() {}
         assert_dropped::<TreeBuilder>();
+    }
+
+    #[test]
+    fn tree_walk_modes_round_trip_through_the_c_type() {
+        for mode in [TreeWalkMode::Pre, TreeWalkMode::Post] {
+            let raw = ffi::git_treewalk_mode::from(mode);
+            assert_eq!(TreeWalkMode::try_from(raw), Ok(mode));
+        }
+    }
+
+    #[test]
+    fn invalid_tree_walk_mode_is_rejected_without_constructing_an_enum() {
+        let invalid = ffi::git_treewalk_mode_GIT_TREEWALK_POST + 1;
+        let error = TreeWalkMode::try_from(invalid).unwrap_err();
+        assert_eq!(error.value(), invalid);
+    }
+
+    #[test]
+    fn tree_walk_mode_matches_the_c_abi_scalar() {
+        assert_eq!(
+            size_of::<TreeWalkMode>(),
+            size_of::<ffi::git_treewalk_mode>()
+        );
+        assert_eq!(
+            align_of::<TreeWalkMode>(),
+            align_of::<ffi::git_treewalk_mode>()
+        );
     }
 }

@@ -2164,6 +2164,91 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_worktree",
+   "defined_in": "src/libgit2/worktree.h",
+   "_comment_agent": "All six pointer fields are separately allocated NUL-terminated strings released by git_worktree_free. calloc makes each field null during fallible construction; parent_path also remains null for a successfully constructed worktree when no parent is supplied. The pointee bytes are only read after construction.",
+   "fields": [
+    {
+     "name": "commondir_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Detached/read-link allocation; nullable during fallible construction; released by git_worktree_free."
+     }
+    },
+    {
+     "name": "gitdir_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Detached git_str allocation; nullable during fallible construction; released by git_worktree_free."
+     }
+    },
+    {
+     "name": "gitlink_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Detached/read-link allocation; nullable during fallible construction; released by git_worktree_free."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "git__strdup allocation; nullable during partial construction; released by git_worktree_free."
+     }
+    },
+    {
+     "name": "parent_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional git__strdup allocation; null when no parent is supplied; released by git_worktree_free."
+     }
+    },
+    {
+     "name": "worktree_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Allocated dirname string; nullable during fallible construction; released by git_worktree_free."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -3670,6 +3755,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees a complete treebuilder allocation; a null argument is accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_worktree_free",
+   "defined_in": "src/libgit2/worktree.c",
+   "lifetime": {
+    "for": "wt",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "wt",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and releases one fully or partially constructed git_worktree; NULL is accepted as a no-op."
      }
     }
    ]
