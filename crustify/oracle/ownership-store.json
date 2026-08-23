@@ -1634,6 +1634,52 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_refspec",
+   "defined_in": "src/libgit2/refspec.h",
+   "_comment_agent": "All three char pointers are independently allocated NUL-terminated strings owned by the refspec and released by git_refspec__dispose. They can be null during initialization, after disposal, and (for dst) in complete negative/fetch refspecs. No code mutates their bytes after storage.",
+   "fields": [
+    {
+     "name": "dst",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Independent duplicated/detached string allocation; freed by git_refspec__dispose; legitimately null for some complete refspecs as well as partial/disposed values."
+     }
+    },
+    {
+     "name": "src",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Independent git__strndup/git__strdup allocation; freed by git_refspec__dispose; null in zeroed/partially initialized or disposed values."
+     }
+    },
+    {
+     "name": "string",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Independent git__strdup allocation; freed by git_refspec__dispose; null in zeroed/partially initialized or disposed values."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -2632,6 +2678,62 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a public reflog allocation and all of its owned fields; null is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_refspec__dispose",
+   "defined_in": "src/libgit2/refspec.c",
+   "lifetime": {
+    "for": "refspec",
+    "is_dropper": false,
+    "is_disposer": true,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "refspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspec"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Mutably borrows a by-value or embedded refspec, frees its owned string fields, and zeroes the retained header; NULL is accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_refspec_free",
+   "defined_in": "src/libgit2/refspec.c",
+   "lifetime": {
+    "for": "refspec",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "refspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes a heap-allocated complete refspec, disposes its fields, and frees the header; NULL is accepted."
      }
     }
    ]
