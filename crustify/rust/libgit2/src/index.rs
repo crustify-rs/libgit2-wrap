@@ -1,5 +1,8 @@
 //! Safe wrappers for libgit2 index APIs.
 
+use core::ffi::CStr;
+use core::ptr::{addr_of, addr_of_mut};
+
 use ffibox::CBox;
 
 use crate::ffi;
@@ -258,3 +261,302 @@ pub type GitIndexOwned = CBox<GitIndex>;
 // the allocation; it accepts null, although `CBox` always supplies a live
 // non-null object exactly once.
 ffibox::impl_dropped!(GitIndex, ffi::git_index, ffi::git_index_free);
+
+ffibox::define_ctype!(
+    /// Wraps: git_index_entry
+    /// The public, layout-compatible representation of one index entry.
+    IndexEntry,
+    IndexEntryRef,
+    IndexEntryMut,
+    ffi::git_index_entry
+);
+
+impl<'a> IndexEntryRef<'a> {
+    /// Wraps: git_index_entry.path
+    /// Returns the optional NUL-terminated path borrowed by this entry.
+    #[must_use]
+    pub fn path(&self) -> Option<&'a CStr> {
+        // SAFETY: raw-place projection reads the initialized pointer field
+        // without forming a reference to the C-visible entry.
+        let path = unsafe { addr_of!((*self.as_ptr()).path).read() };
+        if path.is_null() {
+            None
+        } else {
+            // SAFETY: a usable entry requires its non-null path to remain a
+            // NUL-terminated string for the entry's lifetime. The returned
+            // reference is bounded by this handle's borrow.
+            Some(unsafe { CStr::from_ptr(path) })
+        }
+    }
+
+    /// Wraps: git_index_entry.mode
+    /// Returns the entry's file mode.
+    #[must_use]
+    pub fn mode(&self) -> u32 {
+        // SAFETY: this live shared handle permits a raw-place read of the
+        // initialized scalar without forming a reference to C-visible memory.
+        unsafe { addr_of!((*self.as_ptr()).mode).read() }
+    }
+
+    /// Wraps: git_index_entry.flags
+    /// Returns the entry's on-disk flag bits.
+    #[must_use]
+    pub fn flags(&self) -> u16 {
+        // SAFETY: this live shared handle permits a raw-place read of the
+        // initialized scalar without forming a reference to C-visible memory.
+        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+    }
+
+    /// Wraps: git_index_entry.file_size
+    /// Returns the cached, truncated file size.
+    #[must_use]
+    pub fn file_size(&self) -> u32 {
+        // SAFETY: as `mode`, for this initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).file_size).read() }
+    }
+
+    /// Wraps: git_index_entry.id
+    /// Borrows the inline object identifier.
+    #[must_use]
+    pub fn id(&self) -> crate::oid::OidRef<'a> {
+        // SAFETY: `id` is an inline, initialized field of this live entry. The
+        // projected pointer is non-null and the handle cannot outlive `self`.
+        unsafe { crate::oid::OidRef::from_ptr(addr_of!((*self.as_ptr()).id).cast_mut()) }
+            .expect("an inline field address is non-null")
+    }
+
+    /// Wraps: git_index_entry.mtime
+    /// Borrows the inline modification timestamp.
+    #[must_use]
+    pub fn mtime(&self) -> IndexTimeRef<'a> {
+        // SAFETY: `mtime` is an inline, initialized field of this live entry.
+        // The projected pointer is non-null and retains the entry's lifetime.
+        unsafe { IndexTimeRef::from_ptr(addr_of!((*self.as_ptr()).mtime).cast_mut()) }
+            .expect("an inline field address is non-null")
+    }
+
+    /// Wraps: git_index_entry.ctime
+    /// Borrows the inline creation/change timestamp.
+    #[must_use]
+    pub fn ctime(&self) -> IndexTimeRef<'a> {
+        // SAFETY: `ctime` is an inline, initialized field of this live entry.
+        // The projected pointer is non-null and retains the entry's lifetime.
+        unsafe { IndexTimeRef::from_ptr(addr_of!((*self.as_ptr()).ctime).cast_mut()) }
+            .expect("an inline field address is non-null")
+    }
+
+    /// Wraps: git_index_entry.uid
+    /// Returns the cached owner user ID.
+    #[must_use]
+    pub fn uid(&self) -> u32 {
+        // SAFETY: as `mode`, for this initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).uid).read() }
+    }
+
+    /// Wraps: git_index_entry.flags_extended
+    /// Returns the entry's extended flag bits.
+    #[must_use]
+    pub fn flags_extended(&self) -> u16 {
+        // SAFETY: this live shared handle permits a raw-place read of the
+        // initialized scalar without forming a reference to C-visible memory.
+        unsafe { addr_of!((*self.as_ptr()).flags_extended).read() }
+    }
+
+    /// Wraps: git_index_entry.gid
+    /// Returns the cached owner group ID.
+    #[must_use]
+    pub fn gid(&self) -> u32 {
+        // SAFETY: as `mode`, for this initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).gid).read() }
+    }
+
+    /// Wraps: git_index_entry.ino
+    /// Returns the cached inode number.
+    #[must_use]
+    pub fn ino(&self) -> u32 {
+        // SAFETY: as `mode`, for this initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).ino).read() }
+    }
+
+    /// Wraps: git_index_entry.dev
+    /// Returns the cached device number.
+    #[must_use]
+    pub fn dev(&self) -> u32 {
+        // SAFETY: as `mode`, for this initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).dev).read() }
+    }
+}
+
+impl IndexEntryMut<'_> {
+    /// Stores a borrowed path pointer in this entry.
+    ///
+    /// # Safety
+    ///
+    /// A non-null `path` must remain alive and NUL-terminated for every later
+    /// use of the entry, including uses after this handle is released.
+    pub unsafe fn set_borrowed_path(&mut self, path: Option<&CStr>) {
+        let path = path.map_or(core::ptr::null(), CStr::as_ptr);
+        // SAFETY: this exclusive handle permits a raw-place field write, and
+        // the caller upholds the stored pointer's lifetime contract.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).path).write(path) }
+    }
+
+    /// Clears the optional borrowed path.
+    pub fn clear_path(&mut self) {
+        // SAFETY: storing null creates no borrowed-pointer lifetime obligation.
+        unsafe { self.set_borrowed_path(None) }
+    }
+
+    /// Sets the entry's file mode.
+    pub fn set_mode(&mut self, value: u32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write
+        // without forming a reference to C-visible memory.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).mode).write(value) }
+    }
+
+    /// Replaces the entry's on-disk flag bits.
+    pub fn set_flags(&mut self, value: u16) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write
+        // without forming a reference to C-visible memory.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(value) }
+    }
+
+    /// Sets the cached, truncated file size.
+    pub fn set_file_size(&mut self, value: u32) {
+        // SAFETY: as `set_mode`, for this scalar field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).file_size).write(value) }
+    }
+
+    /// Borrows the inline object identifier exclusively.
+    #[must_use]
+    pub fn id_mut(&mut self) -> crate::oid::OidMut<'_> {
+        // SAFETY: this exclusive reborrow projects the live inline field. Its
+        // address is non-null and the returned handle is bounded by `&mut self`.
+        unsafe { crate::oid::OidMut::from_ptr(addr_of_mut!((*self.as_mut_ptr()).id)) }
+            .expect("an inline field address is non-null")
+    }
+
+    /// Borrows the inline modification timestamp exclusively.
+    #[must_use]
+    pub fn mtime_mut(&mut self) -> IndexTimeMut<'_> {
+        // SAFETY: this exclusive reborrow projects the live inline field. Its
+        // address is non-null and the returned handle is bounded by `&mut self`.
+        unsafe { IndexTimeMut::from_ptr(addr_of_mut!((*self.as_mut_ptr()).mtime)) }
+            .expect("an inline field address is non-null")
+    }
+
+    /// Borrows the inline creation/change timestamp exclusively.
+    #[must_use]
+    pub fn ctime_mut(&mut self) -> IndexTimeMut<'_> {
+        // SAFETY: this exclusive reborrow projects the live inline field. Its
+        // address is non-null and the returned handle is bounded by `&mut self`.
+        unsafe { IndexTimeMut::from_ptr(addr_of_mut!((*self.as_mut_ptr()).ctime)) }
+            .expect("an inline field address is non-null")
+    }
+
+    /// Sets the cached owner user ID.
+    pub fn set_uid(&mut self, value: u32) {
+        // SAFETY: as `set_mode`, for this scalar field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).uid).write(value) }
+    }
+
+    /// Replaces the entry's extended flag bits.
+    pub fn set_flags_extended(&mut self, value: u16) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write
+        // without forming a reference to C-visible memory.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags_extended).write(value) }
+    }
+
+    /// Sets the cached owner group ID.
+    pub fn set_gid(&mut self, value: u32) {
+        // SAFETY: as `set_mode`, for this scalar field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).gid).write(value) }
+    }
+
+    /// Sets the cached inode number.
+    pub fn set_ino(&mut self, value: u32) {
+        // SAFETY: as `set_mode`, for this scalar field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).ino).write(value) }
+    }
+
+    /// Sets the cached device number.
+    pub fn set_dev(&mut self, value: u32) {
+        // SAFETY: as `set_mode`, for this scalar field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).dev).write(value) }
+    }
+}
+
+#[cfg(test)]
+mod entry_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn index_entry_wrapper_preserves_the_c_layout() {
+        assert_eq!(size_of::<IndexEntry>(), size_of::<ffi::git_index_entry>());
+        assert_eq!(align_of::<IndexEntry>(), align_of::<ffi::git_index_entry>());
+        assert_eq!(
+            size_of::<IndexEntryRef<'_>>(),
+            size_of::<*const ffi::git_index_entry>()
+        );
+        assert_eq!(
+            size_of::<IndexEntryMut<'_>>(),
+            size_of::<*mut ffi::git_index_entry>()
+        );
+    }
+
+    #[test]
+    fn borrowed_handles_access_every_entry_field() {
+        let mut raw = IndexEntry::zeroed();
+        // SAFETY: `raw` is a live, initialized, layout-compatible wrapper and
+        // is exclusively borrowed until the handle's last use.
+        let mut entry = unsafe { IndexEntryMut::from_ptr(addr_of_mut!(raw).cast()) }
+            .expect("the address of a stack value is non-null");
+
+        // SAFETY: the static C string outlives every use of `raw`.
+        unsafe { entry.set_borrowed_path(Some(c"src/lib.rs")) };
+        entry.set_mode(0o100644);
+        entry.set_flags(0x1234);
+        entry.set_file_size(42);
+        entry.set_uid(1000);
+        entry.set_flags_extended(0x4000);
+        entry.set_gid(1001);
+        entry.set_ino(7);
+        entry.set_dev(8);
+        entry.mtime_mut().set_seconds(9);
+        entry.mtime_mut().set_nanoseconds(10);
+        entry.ctime_mut().set_seconds(11);
+        entry.ctime_mut().set_nanoseconds(12);
+        entry.id_mut().set_oid_type(crate::oid::OidType::Sha256);
+
+        let entry = entry.as_ref();
+        assert_eq!(entry.path(), Some(c"src/lib.rs"));
+        assert_eq!(entry.mode(), 0o100644);
+        assert_eq!(entry.flags(), 0x1234);
+        assert_eq!(entry.file_size(), 42);
+        assert_eq!(entry.uid(), 1000);
+        assert_eq!(entry.flags_extended(), 0x4000);
+        assert_eq!(entry.gid(), 1001);
+        assert_eq!(entry.ino(), 7);
+        assert_eq!(entry.dev(), 8);
+        assert_eq!(entry.mtime().seconds(), 9);
+        assert_eq!(entry.mtime().nanoseconds(), 10);
+        assert_eq!(entry.ctime().seconds(), 11);
+        assert_eq!(entry.ctime().nanoseconds(), 12);
+        assert_eq!(entry.id().oid_type(), Ok(crate::oid::OidType::Sha256));
+    }
+
+    #[test]
+    fn zeroed_entry_has_no_path_and_can_be_cleared() {
+        let mut raw = IndexEntry::zeroed();
+        // SAFETY: `raw` is live, initialized, layout-compatible, and
+        // exclusively borrowed by the handle until its last use.
+        let mut entry = unsafe { IndexEntryMut::from_ptr(addr_of_mut!(raw).cast()) }.unwrap();
+        assert_eq!(entry.as_ref().path(), None);
+        // SAFETY: the static string outlives the entry.
+        unsafe { entry.set_borrowed_path(Some(c"temporary")) };
+        entry.clear_path();
+        assert_eq!(entry.as_ref().path(), None);
+    }
+}

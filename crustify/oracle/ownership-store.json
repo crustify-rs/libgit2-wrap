@@ -1054,6 +1054,28 @@
    ]
   },
   {
+   "name": "git_index_entry",
+   "defined_in": "include/git2/index.h",
+   "_comment_agent": "Inspected all path field touchers and index_entry_create/dup/free. The pointer's concrete backing differs between caller-built input values and index-owned returned entries, so the uniform public field contract is a nullable immutable borrowed C string whose actual keeper must outlive every use of the enclosing entry.",
+   "fields": [
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "The public struct is usable as caller-owned by-value input: git_index_add copies the path before returning, so such a path is externally borrowed. Entries stored by an index instead point into trailing storage in entry_internal and remain valid only with that containing entry/index. The field never independently owns or frees the string; null is a valid zero-initialized pre-construction state."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_indexer",
    "defined_in": "src/libgit2/indexer.c",
    "_comment_agent": "The public API treats git_indexer as opaque. Its retained ODB and callback state are borrowed, while its internal pack singleton is owned and released by git_indexer_free.",
