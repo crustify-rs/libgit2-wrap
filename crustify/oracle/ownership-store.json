@@ -1808,6 +1808,190 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_revwalk",
+   "defined_in": "src/libgit2/revwalk.h",
+   "_comment_agent": "Reviewed all pointer fields against revwalk.c. Public wrap remains opaque; these facts document internal ownership and lifetime coupling.",
+   "fields": [
+    {
+     "name": "enqueue",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initialized to one of the translation unit's static enqueue functions and only invoked as code."
+     }
+    },
+    {
+     "name": "get_next",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initialized to one of the translation unit's static next functions and only invoked as code."
+     }
+    },
+    {
+     "name": "hide_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional stored code pointer; revwalk invokes but never mutates function code."
+     }
+    },
+    {
+     "name": "hide_cb_payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller payload stored alongside hide_cb and passed back without ownership transfer."
+     }
+    },
+    {
+     "name": "iterator_rand",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned linked-list head used for unsorted iteration and freed by git_revwalk_reset."
+     }
+    },
+    {
+     "name": "iterator_reverse",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned linked-list head built for reverse iteration and freed by git_revwalk_reset."
+     }
+    },
+    {
+     "name": "iterator_topo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned linked-list head built for topological iteration and freed by git_revwalk_reset."
+     }
+    },
+    {
+     "name": "odb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "git_repository_odb gives the walker an owned reference count released by git_revwalk_free."
+     }
+    },
+    {
+     "name": "pathspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "git_revwalk_pathspec stores the caller's pathspec without retaining or freeing it; revwalk only reads it."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed repository stored by git_revwalk_new; the repository must outlive the walker."
+     }
+    },
+    {
+     "name": "user_input",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned linked-list head allocated while pushing commits and freed by git_revwalk_reset."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -3047,6 +3231,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one repository allocation when non-null; cleans all repository-owned internals, zeros the header, and frees its storage. NULL is explicitly a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_free",
+   "defined_in": "src/libgit2/revwalk.c",
+   "lifetime": {
+    "for": "walk",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and frees a complete walker allocation; NULL is explicitly accepted."
      }
     }
    ]
