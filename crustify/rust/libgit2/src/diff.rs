@@ -1,6 +1,7 @@
 //! Safe wrappers for libgit2 diff APIs.
 
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
+use core::ptr::{addr_of, addr_of_mut};
 
 use crate::ffi;
 
@@ -394,5 +395,77 @@ mod diff_stats_format_tests {
             align_of::<DiffStatsFormat>(),
             align_of::<ffi::git_diff_stats_format_t>()
         );
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_diff_patchid_options
+    /// Options controlling patch-id calculation.
+    DiffPatchIdOptions,
+    DiffPatchIdOptionsRef,
+    DiffPatchIdOptionsMut,
+    ffi::git_diff_patchid_options
+);
+
+impl DiffPatchIdOptionsRef<'_> {
+    /// Wraps: git_diff_patchid_options.version
+    /// Returns the ABI version of this options value.
+    #[must_use]
+    pub fn version(&self) -> u32 {
+        // SAFETY: `self` carries a live shared borrow of the complete C
+        // object, and `addr_of!` projects the scalar field without forming a
+        // reference to C-owned memory.
+        unsafe { addr_of!((*self.as_ptr()).version).read() }
+    }
+}
+
+impl DiffPatchIdOptionsMut<'_> {
+    /// Sets the ABI version of this options value.
+    pub fn set_version(&mut self, version: u32) {
+        // SAFETY: `self` carries an exclusive borrow of the complete C object,
+        // and `addr_of_mut!` projects the scalar field without forming a
+        // reference to C-owned memory.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+}
+
+#[cfg(test)]
+mod patch_id_options_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn patch_id_options_preserve_the_c_layout() {
+        assert_eq!(
+            size_of::<DiffPatchIdOptions>(),
+            size_of::<ffi::git_diff_patchid_options>()
+        );
+        assert_eq!(
+            align_of::<DiffPatchIdOptions>(),
+            align_of::<ffi::git_diff_patchid_options>()
+        );
+        assert_eq!(
+            size_of::<DiffPatchIdOptionsRef<'_>>(),
+            size_of::<*const ffi::git_diff_patchid_options>()
+        );
+        assert_eq!(
+            size_of::<DiffPatchIdOptionsMut<'_>>(),
+            size_of::<*mut ffi::git_diff_patchid_options>()
+        );
+    }
+
+    #[test]
+    fn borrowed_handles_read_and_write_the_version() {
+        let mut options = DiffPatchIdOptions::zeroed();
+        let raw = addr_of_mut!(options).cast::<ffi::git_diff_patchid_options>();
+
+        // SAFETY: `raw` points to the live, initialized, layout-compatible
+        // stack value above, and this is its only active handle.
+        let mut options = unsafe { DiffPatchIdOptionsMut::from_ptr(raw) }
+            .expect("the address of a stack value is non-null");
+
+        options.set_version(1);
+        assert_eq!(options.as_ref().version(), 1);
     }
 }

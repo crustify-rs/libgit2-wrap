@@ -411,6 +411,43 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_diff_stats",
+   "defined_in": "src/libgit2/diff_stats.c",
+   "_comment_agent": "The public type is opaque. Its successful constructor owns one refcounted git_diff handle and one files_changed-length statistics buffer; its public destructor releases both before freeing the header.",
+   "fields": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "git_diff_get_stats stores a non-null git_diff, increments its reference count, and git_diff_stats_free releases that owned count with git_diff_free."
+     }
+    },
+    {
+     "name": "filestats",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "git_diff_get_stats allocates a mutable diff_file_stats array whose element count is files_changed; construction fails if allocation returns null, and git_diff_stats_free releases the buffer with git__free."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -810,6 +847,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees a complete describe result plus its owned name/tag variant; NULL is accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_stats_free",
+   "defined_in": "src/libgit2/diff_stats.c",
+   "lifetime": {
+    "for": "stats",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "stats",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and frees a git_diff_stats allocation; null is accepted as a no-op."
      }
     }
    ]
