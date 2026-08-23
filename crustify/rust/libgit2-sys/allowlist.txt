@@ -56,6 +56,8 @@
 ^git_remote_create_detached$
 ^git_remote_dup$
 ^git_remote_free$
+^git_remote_autotag_option_t$
+^git_remote_completion_t$
 ^git_index_time$
 ^git_indexer_progress$
 ^git_config$

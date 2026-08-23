@@ -67,6 +67,123 @@ mod tests {
         assert_eq!(GitFetchPrune::try_from(2), Ok(GitFetchPrune::NoPrune));
         assert_eq!(GitFetchPrune::try_from(3), Err(3));
     }
+
+    #[test]
+    fn remote_autotag_options_have_the_c_layout_and_values() {
+        assert_eq!(
+            size_of::<GitRemoteAutotagOption>(),
+            size_of::<ffi::git_remote_autotag_option_t>()
+        );
+        assert_eq!(
+            align_of::<GitRemoteAutotagOption>(),
+            align_of::<ffi::git_remote_autotag_option_t>()
+        );
+
+        for (option, raw) in [
+            (GitRemoteAutotagOption::Unspecified, 0),
+            (GitRemoteAutotagOption::Auto, 1),
+            (GitRemoteAutotagOption::None, 2),
+            (GitRemoteAutotagOption::All, 3),
+        ] {
+            assert_eq!(ffi::git_remote_autotag_option_t::from(option), raw);
+            assert_eq!(GitRemoteAutotagOption::try_from(raw), Ok(option));
+        }
+        assert_eq!(GitRemoteAutotagOption::try_from(4), Err(4));
+    }
+
+    #[test]
+    fn remote_completion_values_have_the_c_layout_and_values() {
+        assert_eq!(
+            size_of::<GitRemoteCompletion>(),
+            size_of::<ffi::git_remote_completion_t>()
+        );
+        assert_eq!(
+            align_of::<GitRemoteCompletion>(),
+            align_of::<ffi::git_remote_completion_t>()
+        );
+
+        for (completion, raw) in [
+            (GitRemoteCompletion::Download, 0),
+            (GitRemoteCompletion::Indexing, 1),
+            (GitRemoteCompletion::Error, 2),
+        ] {
+            assert_eq!(ffi::git_remote_completion_t::from(completion), raw);
+            assert_eq!(GitRemoteCompletion::try_from(raw), Ok(completion));
+        }
+        assert_eq!(GitRemoteCompletion::try_from(3), Err(3));
+    }
+}
+
+/// Wraps: git_remote_autotag_option_t
+/// Controls which tags are downloaded while fetching from a remote.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+#[repr(u32)]
+pub enum GitRemoteAutotagOption {
+    /// Use the remote or repository configuration.
+    #[default]
+    Unspecified = ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_UNSPECIFIED,
+    /// Download tags that point to objects already being downloaded.
+    Auto = ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_AUTO,
+    /// Do not download tags beyond those selected by refspecs.
+    None = ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_NONE,
+    /// Download every tag.
+    All = ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_ALL,
+}
+
+impl From<GitRemoteAutotagOption> for ffi::git_remote_autotag_option_t {
+    fn from(value: GitRemoteAutotagOption) -> Self {
+        value as Self
+    }
+}
+
+impl TryFrom<ffi::git_remote_autotag_option_t> for GitRemoteAutotagOption {
+    type Error = ffi::git_remote_autotag_option_t;
+
+    fn try_from(value: ffi::git_remote_autotag_option_t) -> Result<Self, Self::Error> {
+        match value {
+            ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_UNSPECIFIED => {
+                Ok(Self::Unspecified)
+            }
+            ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_AUTO => Ok(Self::Auto),
+            ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_NONE => Ok(Self::None),
+            ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_ALL => Ok(Self::All),
+            other => Err(other),
+        }
+    }
+}
+
+/// Wraps: git_remote_completion_t
+/// Identifies the remote operation reported by a completion callback.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+#[repr(u32)]
+pub enum GitRemoteCompletion {
+    /// Object downloading finished.
+    Download = ffi::git_remote_completion_t_GIT_REMOTE_COMPLETION_DOWNLOAD,
+    /// Indexing downloaded objects finished.
+    Indexing = ffi::git_remote_completion_t_GIT_REMOTE_COMPLETION_INDEXING,
+    /// The remote operation failed.
+    Error = ffi::git_remote_completion_t_GIT_REMOTE_COMPLETION_ERROR,
+}
+
+impl From<GitRemoteCompletion> for ffi::git_remote_completion_t {
+    fn from(value: GitRemoteCompletion) -> Self {
+        value as Self
+    }
+}
+
+impl TryFrom<ffi::git_remote_completion_t> for GitRemoteCompletion {
+    type Error = ffi::git_remote_completion_t;
+
+    fn try_from(value: ffi::git_remote_completion_t) -> Result<Self, ffi::git_remote_completion_t> {
+        match value {
+            ffi::git_remote_completion_t_GIT_REMOTE_COMPLETION_DOWNLOAD => Ok(Self::Download),
+            ffi::git_remote_completion_t_GIT_REMOTE_COMPLETION_INDEXING => Ok(Self::Indexing),
+            ffi::git_remote_completion_t_GIT_REMOTE_COMPLETION_ERROR => Ok(Self::Error),
+            other => Err(other),
+        }
+    }
 }
 
 ffibox::define_ctype!(
