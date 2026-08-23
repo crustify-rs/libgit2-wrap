@@ -30,6 +30,11 @@ unsafe impl CDropped for GitMallocFree {
 /// Wraps: git__free
 /// Deleter and cloner strategy for NUL-terminated strings allocated through
 /// libgit2's configured allocator.
+///
+/// Cloning uses the process-global allocator installed at clone time, while
+/// dropping uses the process-global `gfree` installed at drop time. Code that
+/// replaces the allocator must therefore keep its new `gfree` compatible with
+/// every outstanding string, including clones made under an earlier allocator.
 pub struct GitStrdupFree;
 
 // SAFETY: `c_drop` dispatches through libgit2's currently installed `gfree`.
@@ -46,7 +51,8 @@ unsafe impl CDropped for GitStrdupFree {
 /// Wraps: git__strdup
 // SAFETY: `c_clone` delegates to `git__strdup`, which copies the complete
 // NUL-terminated input into a fresh allocation made by libgit2's configured
-// allocator. A successful result therefore owes one matching `c_drop`.
+// allocator. Under the strategy's documented allocator-compatibility
+// invariant, a successful result therefore owes one matching `c_drop`.
 unsafe impl CCloned for GitStrdupFree {
     unsafe fn c_clone(obj: NonNull<Self>) -> Option<NonNull<Self>> {
         // SAFETY: the `CCloned` contract guarantees that `obj` addresses a live
