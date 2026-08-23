@@ -313,6 +313,28 @@
      "refcount": true
     }
    ]
+  },
+  {
+   "name": "git_describe_format_options",
+   "defined_in": "include/git2/describe.h",
+   "_comment_agent": "Public format options are caller-owned by value and have no lifecycle operation. dirty_suffix is an optional borrowed const C string read synchronously by git_describe__format.",
+   "fields": [
+    {
+     "name": "dirty_suffix",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "The options struct only borrows this optional NUL-terminated suffix. git_describe__format copies the options by value and reads the string during the formatting call; no path stores, mutates, clones, or frees it. The caller must keep the suffix alive while the options may be used."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
