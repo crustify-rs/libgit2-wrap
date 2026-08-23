@@ -1,0 +1,12 @@
+[package]
+name = "crustify-libc"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+ffibox = { path = "/opt/ffibox" }
+libc-sys = { path = "../libc-sys" }
+
+[lints]
+workspace = true

@@ -1,0 +1,14 @@
+# Crustify local and derived artifacts.
+.providers
+tmp
+.worktrees
+rust/target
+rust.bak
+oracle/codeql
+oracle/.cache
+campaigns/**/logs
+audit/unsafe.json
+cli-config.json
+bak
+stats.md
+evaluation/**/manifests/

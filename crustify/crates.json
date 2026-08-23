@@ -1,0 +1,20 @@
+{
+  "crates": {
+    "libgit2": {
+      "kind": "library",
+      "in_tree": true,
+      "crate_path": "crustify/rust/libgit2",
+      "sys_crate": "crustify/rust/libgit2-sys",
+      "depends_on": ["libc"],
+      "modules": {}
+    },
+    "libc": {
+      "kind": "library",
+      "in_tree": false,
+      "crate_path": "crustify/rust/libc",
+      "sys_crate": "crustify/rust/libc-sys",
+      "depends_on": [],
+      "modules": {}
+    }
+  }
+}

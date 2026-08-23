@@ -1,0 +1,10 @@
+[workspace]
+resolver = "3"
+members = ["libgit2", "libgit2-sys", "libc", "libc-sys"]
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+undocumented_unsafe_blocks = "deny"
+module_inception = "allow"

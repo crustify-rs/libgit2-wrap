@@ -1,0 +1,12 @@
+[package]
+name = "libgit2"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+ffibox = { path = "/opt/ffibox" }
+libgit2-sys = { path = "../libgit2-sys" }
+
+[lints]
+workspace = true

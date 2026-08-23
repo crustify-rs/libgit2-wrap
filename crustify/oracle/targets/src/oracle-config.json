@@ -1,0 +1,17 @@
+{
+  "impl_files": [
+    "src/"
+  ],
+  "api_headers": [
+    "include/"
+  ],
+  "out_of_scope": {
+    "paths": [],
+    "features": [
+      "GIT_SSH",
+      "GIT_HTTPS",
+      "GIT_AUTH_NTLM",
+      "GIT_AUTH_NEGOTIATE"
+    ]
+  }
+}

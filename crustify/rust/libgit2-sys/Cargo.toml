@@ -1,0 +1,8 @@
+[package]
+name = "libgit2-sys"
+version = "0.1.0"
+edition = "2024"
+links = "git2"
+publish = false
+
+[build-dependencies]
