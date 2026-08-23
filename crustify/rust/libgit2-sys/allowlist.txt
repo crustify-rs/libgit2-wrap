@@ -45,3 +45,5 @@
 ^git_filemode_t$
 ^git_index_conflict_iterator$
 ^git_index_conflict_iterator_free$
+^git_indexer$
+^git_indexer_free$

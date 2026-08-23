@@ -648,6 +648,79 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_indexer",
+   "defined_in": "src/libgit2/indexer.c",
+   "_comment_agent": "The public API treats git_indexer as opaque. Its retained ODB and callback state are borrowed, while its internal pack singleton is owned and released by git_indexer_free.",
+   "fields": [
+    {
+     "name": "odb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Copied from git_indexer_options without an up-ref and never released by git_indexer_free; callers keep the ODB alive through the indexer's use. Read operations receive the non-const ODB handle and may mutate its internal state."
+     }
+    },
+    {
+     "name": "pack",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "git_packfile_alloc initializes this owned singleton; construction begins with NULL and git_indexer_free releases a successfully constructed pack with git_packfile_free. Indexing mutates the pack and mapped-window state."
+     }
+    },
+    {
+     "name": "progress_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional callback copied from the options and invoked but never freed or modified; its validity must cover indexer operations and is coupled to progress_payload."
+     }
+    },
+    {
+     "name": "progress_payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque optional application payload copied from the options and passed to progress_cb without transfer or release; the callback may mutate the pointee and the caller must keep it alive."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -1160,6 +1233,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees the iterator allocation; NULL is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_indexer_free",
+   "defined_in": "src/libgit2/indexer.c",
+   "lifetime": {
+    "for": "idx",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "idx",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes a complete indexer allocation and all owned fields; NULL is explicitly accepted."
      }
     }
    ]
