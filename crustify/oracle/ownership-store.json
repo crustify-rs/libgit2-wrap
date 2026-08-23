@@ -1444,6 +1444,33 @@
    ]
   },
   {
+   "name": "git_mailmap_free",
+   "defined_in": "src/libgit2/mailmap.c",
+   "lifetime": {
+    "for": "mm",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "mm",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes a complete mailmap when non-null, frees every owned entry, disposes the entries vector, and releases the mailmap allocation."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_note_iterator_free",
    "defined_in": "src/libgit2/notes.c",
    "lifetime": {

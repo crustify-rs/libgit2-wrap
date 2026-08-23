@@ -27,6 +27,9 @@
 ^git_diff_line$
 ^GIT_DIFF_HUNK_HEADER_SIZE$
 ^git_libgit2_(init|shutdown)$
+^git_mailmap$
+^git_mailmap_free$
+^git_merge_analysis_t$
 ^git_clone_local_t$
 ^git_diff_stats_format_t$
 ^git_direction$
