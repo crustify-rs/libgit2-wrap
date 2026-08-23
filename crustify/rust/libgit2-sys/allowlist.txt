@@ -106,3 +106,5 @@
 ^git_rebase_operation_t$
 ^git_refcount$
 ^git_reset_t$
+^git_status_show_t$
+^git_status_t$
