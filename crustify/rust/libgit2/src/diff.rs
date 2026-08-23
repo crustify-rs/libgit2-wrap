@@ -469,3 +469,326 @@ mod patch_id_options_tests {
         assert_eq!(options.as_ref().version(), 1);
     }
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_diff_hunk
+    /// A span of modified lines and its textual header.
+    DiffHunk,
+    DiffHunkRef,
+    DiffHunkMut,
+    ffi::git_diff_hunk
+);
+
+impl<'a> DiffHunkRef<'a> {
+    /// Wraps: git_diff_hunk.header
+    /// Returns the initialized header bytes, excluding the trailing NUL.
+    ///
+    /// Returns `None` when a malformed C value has no room for its required
+    /// trailing NUL byte.
+    #[must_use]
+    pub fn header(&self) -> Option<ffibox::CSlice<'a, u8>> {
+        let len = self.header_len();
+        if len >= ffi::GIT_DIFF_HUNK_HEADER_SIZE as usize {
+            return None;
+        }
+
+        // SAFETY: this live shared handle covers the complete C value, and
+        // raw-place projection does not form a reference to its header.
+        let header = unsafe { core::ptr::addr_of!((*self.as_ptr()).header) }
+            .cast::<u8>()
+            .cast_mut();
+        // SAFETY: `header` points into the live hunk carried by this handle,
+        // and `len` was checked to stay within the initialized header prefix.
+        Some(unsafe {
+            ffibox::CSlice::from_raw_parts(core::ptr::NonNull::new_unchecked(header), len)
+        })
+    }
+
+    /// Wraps: git_diff_hunk.header_len
+    /// Returns the number of header bytes before the trailing NUL.
+    #[must_use]
+    pub fn header_len(&self) -> usize {
+        // SAFETY: this live shared handle covers the complete C value, and
+        // raw-place projection reads the scalar without forming a reference.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).header_len).read() }
+    }
+
+    /// Wraps: git_diff_hunk.new_lines
+    /// Returns the number of lines in the new file.
+    #[must_use]
+    pub fn new_lines(&self) -> i32 {
+        // SAFETY: as `header_len`, for this initialized scalar field.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).new_lines).read() }
+    }
+
+    /// Wraps: git_diff_hunk.new_start
+    /// Returns the starting line number in the new file.
+    #[must_use]
+    pub fn new_start(&self) -> i32 {
+        // SAFETY: as `header_len`, for this initialized scalar field.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).new_start).read() }
+    }
+
+    /// Wraps: git_diff_hunk.old_lines
+    /// Returns the number of lines in the old file.
+    #[must_use]
+    pub fn old_lines(&self) -> i32 {
+        // SAFETY: as `header_len`, for this initialized scalar field.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).old_lines).read() }
+    }
+
+    /// Wraps: git_diff_hunk.old_start
+    /// Returns the starting line number in the old file.
+    #[must_use]
+    pub fn old_start(&self) -> i32 {
+        // SAFETY: as `header_len`, for this initialized scalar field.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).old_start).read() }
+    }
+}
+
+impl DiffHunkMut<'_> {
+    /// Replaces the header and maintains its length and trailing NUL.
+    ///
+    /// Returns `false` without modifying the hunk when `header` is too long.
+    #[must_use]
+    pub fn set_header(&mut self, header: &[u8]) -> bool {
+        if header.len() >= ffi::GIT_DIFF_HUNK_HEADER_SIZE as usize {
+            return false;
+        }
+
+        let ptr = self.as_mut_ptr();
+        // SAFETY: this exclusive handle permits writes to the hunk. The
+        // capacity check leaves one byte for the terminator; the source Rust
+        // slice cannot overlap C-visible hunk storage.
+        unsafe {
+            let destination = core::ptr::addr_of_mut!((*ptr).header).cast::<u8>();
+            core::ptr::copy_nonoverlapping(header.as_ptr(), destination, header.len());
+            destination.add(header.len()).write(0);
+            core::ptr::addr_of_mut!((*ptr).header_len).write(header.len());
+        }
+        true
+    }
+
+    /// Sets the number of lines in the new file.
+    pub fn set_new_lines(&mut self, value: i32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).new_lines).write(value) }
+    }
+
+    /// Sets the starting line number in the new file.
+    pub fn set_new_start(&mut self, value: i32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).new_start).write(value) }
+    }
+
+    /// Sets the number of lines in the old file.
+    pub fn set_old_lines(&mut self, value: i32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).old_lines).write(value) }
+    }
+
+    /// Sets the starting line number in the old file.
+    pub fn set_old_start(&mut self, value: i32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).old_start).write(value) }
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_diff_line
+    /// A counted byte span and its position in a diff.
+    DiffLine,
+    DiffLineRef,
+    DiffLineMut,
+    ffi::git_diff_line
+);
+
+impl<'a> DiffLineRef<'a> {
+    /// Wraps: git_diff_line.content_len
+    /// Returns the number of bytes in the content span.
+    #[must_use]
+    pub fn content_len(&self) -> usize {
+        // SAFETY: this live shared handle covers the complete C value, and
+        // raw-place projection reads the scalar without forming a reference.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).content_len).read() }
+    }
+
+    /// Wraps: git_diff_line.content
+    /// Returns the non-NUL-terminated content as a borrowed counted view.
+    ///
+    /// An empty C value whose pointer is null is represented by `None`.
+    #[must_use]
+    pub fn content(&self) -> Option<ffibox::CSlice<'a, u8>> {
+        // SAFETY: this live shared handle permits reading the pointer field by
+        // raw-place projection without forming a reference to C-owned memory.
+        let content = unsafe { core::ptr::addr_of!((*self.as_ptr()).content).read() };
+        let content = core::ptr::NonNull::new(content.cast_mut().cast::<u8>())?;
+        // SAFETY: a valid `git_diff_line` exposes `content_len` initialized
+        // bytes at its non-null content pointer. Their backing owner keeps
+        // them alive for at least the line handle's lifetime.
+        Some(unsafe { ffibox::CSlice::from_raw_parts(content, self.content_len()) })
+    }
+
+    /// Wraps: git_diff_line.origin
+    /// Returns the raw `git_diff_line_t` character code.
+    #[must_use]
+    pub fn origin(&self) -> core::ffi::c_char {
+        // SAFETY: as `content_len`, for this initialized scalar field.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).origin).read() }
+    }
+
+    /// Wraps: git_diff_line.new_lineno
+    /// Returns the new-file line number, or `-1` for a deleted line.
+    #[must_use]
+    pub fn new_lineno(&self) -> i32 {
+        // SAFETY: as `content_len`, for this initialized scalar field.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).new_lineno).read() }
+    }
+
+    /// Wraps: git_diff_line.old_lineno
+    /// Returns the old-file line number, or `-1` for an added line.
+    #[must_use]
+    pub fn old_lineno(&self) -> i32 {
+        // SAFETY: as `content_len`, for this initialized scalar field.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).old_lineno).read() }
+    }
+
+    /// Wraps: git_diff_line.content_offset
+    /// Returns the byte offset of the content in the original file.
+    #[must_use]
+    pub fn content_offset(&self) -> ffi::git_off_t {
+        // SAFETY: as `content_len`, for this initialized scalar field.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).content_offset).read() }
+    }
+
+    /// Wraps: git_diff_line.num_lines
+    /// Returns the number of newline characters in the content.
+    #[must_use]
+    pub fn num_lines(&self) -> i32 {
+        // SAFETY: as `content_len`, for this initialized scalar field.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).num_lines).read() }
+    }
+}
+
+impl DiffLineMut<'_> {
+    /// Stores a borrowed content span and updates its count.
+    ///
+    /// # Safety
+    ///
+    /// The span must remain live for every later use of the line. The line
+    /// must be in a borrowed-content or empty state, and no enclosing owner may
+    /// later try to release the stored pointer as owned allocation.
+    pub unsafe fn set_borrowed_content(&mut self, content: Option<&[u8]>) {
+        let (content, len) = content.map_or((core::ptr::null(), 0), |content| {
+            (content.as_ptr().cast::<core::ffi::c_char>(), content.len())
+        });
+        let ptr = self.as_mut_ptr();
+        // SAFETY: this exclusive handle permits raw-place writes. The caller
+        // supplies the stored pointer's lifetime and ownership obligations.
+        unsafe {
+            core::ptr::addr_of_mut!((*ptr).content).write(content);
+            core::ptr::addr_of_mut!((*ptr).content_len).write(len);
+        }
+    }
+
+    /// Sets the raw `git_diff_line_t` character code.
+    pub fn set_origin(&mut self, value: core::ffi::c_char) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).origin).write(value) }
+    }
+
+    /// Sets the new-file line number.
+    pub fn set_new_lineno(&mut self, value: i32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).new_lineno).write(value) }
+    }
+
+    /// Sets the old-file line number.
+    pub fn set_old_lineno(&mut self, value: i32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).old_lineno).write(value) }
+    }
+
+    /// Sets the byte offset of the content in the original file.
+    pub fn set_content_offset(&mut self, value: ffi::git_off_t) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).content_offset).write(value) }
+    }
+
+    /// Sets the number of newline characters in the content.
+    pub fn set_num_lines(&mut self, value: i32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).num_lines).write(value) }
+    }
+}
+
+#[cfg(test)]
+mod diff_record_tests {
+    use super::*;
+    use core::mem::{align_of, size_of};
+
+    #[test]
+    fn diff_record_wrappers_preserve_the_c_layouts() {
+        assert_eq!(size_of::<DiffHunk>(), size_of::<ffi::git_diff_hunk>());
+        assert_eq!(align_of::<DiffHunk>(), align_of::<ffi::git_diff_hunk>());
+        assert_eq!(size_of::<DiffLine>(), size_of::<ffi::git_diff_line>());
+        assert_eq!(align_of::<DiffLine>(), align_of::<ffi::git_diff_line>());
+    }
+
+    #[test]
+    fn hunk_handles_read_and_write_fields() {
+        let mut hunk = DiffHunk::zeroed();
+        let raw = core::ptr::addr_of_mut!(hunk).cast::<ffi::git_diff_hunk>();
+        // SAFETY: `raw` points to the initialized, layout-compatible stack
+        // value above and this is its only active handle.
+        let mut hunk = unsafe { DiffHunkMut::from_ptr(raw) }.unwrap();
+
+        assert!(hunk.set_header(b"@@ -1,2 +3,4 @@\n"));
+        hunk.set_old_start(1);
+        hunk.set_old_lines(2);
+        hunk.set_new_start(3);
+        hunk.set_new_lines(4);
+
+        let shared = hunk.as_ref();
+        assert_eq!(shared.old_start(), 1);
+        assert_eq!(shared.old_lines(), 2);
+        assert_eq!(shared.new_start(), 3);
+        assert_eq!(shared.new_lines(), 4);
+        let header = shared.header().unwrap();
+        assert_eq!(header.len(), shared.header_len());
+        assert_eq!(header.elem(0), Some(b'@'));
+        assert_eq!(header.elem(header.len() - 1), Some(b'\n'));
+
+        let oversized = [b'x'; ffi::GIT_DIFF_HUNK_HEADER_SIZE as usize];
+        assert!(!hunk.set_header(&oversized));
+    }
+
+    #[test]
+    fn line_handles_keep_content_counted_and_borrowed() {
+        let mut line = DiffLine::zeroed();
+        let raw = core::ptr::addr_of_mut!(line).cast::<ffi::git_diff_line>();
+        // SAFETY: `raw` points to the initialized, layout-compatible stack
+        // value above and this is its only active handle.
+        let mut line = unsafe { DiffLineMut::from_ptr(raw) }.unwrap();
+
+        line.set_origin(b'+' as core::ffi::c_char);
+        line.set_old_lineno(-1);
+        line.set_new_lineno(7);
+        line.set_num_lines(1);
+        line.set_content_offset(42);
+        // SAFETY: the byte string has static storage, this standalone line has
+        // no enclosing disposer, and its zeroed content pointer owns nothing.
+        unsafe { line.set_borrowed_content(Some(b"hello\n")) };
+
+        let shared = line.as_ref();
+        assert_eq!(shared.origin(), b'+' as core::ffi::c_char);
+        assert_eq!(shared.old_lineno(), -1);
+        assert_eq!(shared.new_lineno(), 7);
+        assert_eq!(shared.num_lines(), 1);
+        assert_eq!(shared.content_offset(), 42);
+        assert_eq!(shared.content_len(), 6);
+        let content = shared.content().unwrap();
+        assert_eq!(content.elem(0), Some(b'h'));
+        assert_eq!(content.elem(5), Some(b'\n'));
+    }
+}

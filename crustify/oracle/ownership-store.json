@@ -448,6 +448,30 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_diff_line",
+   "defined_in": "include/git2/diff.h",
+   "_comment_agent": "Inspected every content/content_len assignment, read, and release path. Ownership is runtime-conditional at the containing patch implementation level, so the wrapper exposes a borrowed counted view and does not assume standalone ownership.",
+   "fields": [
+    {
+     "name": "content",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Counted, non-NUL-terminated bytes. Parsed-patch lines own separately allocated content which patch_parsed__free releases; generated, apply, print, and xdiff lines borrow parent or callback backing storage. Public observations bind the bytes to the line/containing patch lifetime. Zero-initialized and empty construction paths permit NULL with length zero; the const pointer is never written through."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
