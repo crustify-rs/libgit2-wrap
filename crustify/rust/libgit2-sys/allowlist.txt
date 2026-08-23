@@ -1,2 +1,3 @@
 ^crustify_git__.*$
+^git_attr_value_t$
 ^git_libgit2_(init|shutdown)$
