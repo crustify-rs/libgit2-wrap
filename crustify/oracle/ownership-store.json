@@ -2029,6 +2029,35 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_strarray",
+   "defined_in": "include/git2/strarray.h",
+   "_comment_agent": "git_strarray is a by-value header. Library output owns its counted pointer array and strings and is reset by git_strarray_dispose; input instances commonly borrow stack arrays and string storage and must not be disposed. Borrowed handles therefore only view contents, while owned CVal instances arise empty or from libgit2 output/deep copy.",
+   "fields": [
+    {
+     "name": "strings",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": {
+         "lifetime": "other"
+        }
+       }
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Counted char-pointer array. Library-produced results own the outer allocation and each non-null NUL-terminated string; caller-supplied input arrays borrow both, so ownership is runtime-conditional. Null outer pointers represent empty arrays (malformed caller inputs may pair null with nonzero count), and git_strarray_copy explicitly tolerates null elements."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -3322,6 +3351,113 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and destroys the complete status-list allocation; null is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_strarray_copy",
+   "defined_in": "src/libgit2/strarray.c",
+   "lifetime": {
+    "for": "src",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": true,
+     "upref": false
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "src",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:src"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient shared borrow of a valid source header; each non-null string is duplicated into the target."
+     }
+    },
+    {
+     "name": "tgt",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:tgt"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Writes a deep copy into caller-provided header storage, which must be empty because the routine overwrites it without disposing old fields."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_strarray_dispose",
+   "defined_in": "src/libgit2/strarray.c",
+   "lifetime": {
+    "for": "array",
+    "is_dropper": false,
+    "is_disposer": true,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "array",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:array"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrows a nullable by-value header, frees each owned string and the pointer array, then zeroes the retained header."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_strarray_free",
+   "defined_in": "src/libgit2/strarray.c",
+   "lifetime": {
+    "for": "array",
+    "is_dropper": false,
+    "is_disposer": true,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "array",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:array"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Deprecated alias of git_strarray_dispose; borrows and resets the retained header while releasing its fields."
      }
     }
    ]

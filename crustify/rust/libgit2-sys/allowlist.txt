@@ -113,3 +113,6 @@
 ^git_status_list_free$
 ^git_submodule_ignore_t$
 ^git_submodule_update_t$
+^git_strarray$
+^git_strarray_copy$
+^git_strarray_dispose$
