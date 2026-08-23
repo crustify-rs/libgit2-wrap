@@ -80,3 +80,5 @@
 ^git_pathspec_match_list$
 ^git_pathspec_match_list_free$
 ^git_push$
+^git_rebase_operation_t$
+^git_refcount$

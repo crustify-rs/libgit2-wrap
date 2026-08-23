@@ -1,4 +1,5 @@
 #include <git2.h>
+#include "util.h"
 
 /* Allocator primitives needed by the Rust bindings. */
 void *crustify_git__malloc(size_t len);

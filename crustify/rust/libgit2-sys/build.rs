@@ -26,6 +26,7 @@ fn main() {
     command
         .arg("--")
         .arg(format!("-I{}", repo_root.join("include").display()))
+        .arg(format!("-I{}", repo_root.join("src/util").display()))
         .arg(format!(
             "-I{}",
             repo_root.join("build-crustify/gen_headers").display()

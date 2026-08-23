@@ -4,6 +4,60 @@ use ffibox::CBox;
 
 use crate::ffi;
 
+/// Wraps: git_rebase_operation_t
+/// An instruction in a rebase sequence.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+#[repr(u32)]
+pub enum RebaseOperationType {
+    /// Cherry-pick the commit and continue after resolving conflicts.
+    Pick = ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_PICK,
+    /// Cherry-pick the commit after allowing its message to be rewritten.
+    Reword = ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_REWORD,
+    /// Cherry-pick the commit, then pause so its changes can be edited.
+    Edit = ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_EDIT,
+    /// Combine the commit and its message with the preceding commit.
+    Squash = ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_SQUASH,
+    /// Combine the commit while discarding its commit message.
+    Fixup = ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_FIXUP,
+    /// Run a command instead of cherry-picking a commit.
+    Exec = ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_EXEC,
+}
+
+/// A raw value that is not a published [`RebaseOperationType`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidRebaseOperationType(ffi::git_rebase_operation_t);
+
+impl InvalidRebaseOperationType {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_rebase_operation_t {
+        self.0
+    }
+}
+
+impl From<RebaseOperationType> for ffi::git_rebase_operation_t {
+    fn from(operation: RebaseOperationType) -> Self {
+        operation as Self
+    }
+}
+
+impl TryFrom<ffi::git_rebase_operation_t> for RebaseOperationType {
+    type Error = InvalidRebaseOperationType;
+
+    fn try_from(operation: ffi::git_rebase_operation_t) -> Result<Self, Self::Error> {
+        match operation {
+            ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_PICK => Ok(Self::Pick),
+            ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_REWORD => Ok(Self::Reword),
+            ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_EDIT => Ok(Self::Edit),
+            ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_SQUASH => Ok(Self::Squash),
+            ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_FIXUP => Ok(Self::Fixup),
+            ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_EXEC => Ok(Self::Exec),
+            value => Err(InvalidRebaseOperationType(value)),
+        }
+    }
+}
+
 ffibox::define_ctype!(
     /// Wraps: git_rebase
     /// An opaque in-progress rebase managed by libgit2.
@@ -34,6 +88,40 @@ mod tests {
     use ffibox::{CCell, CDropped};
 
     use super::*;
+
+    #[test]
+    fn operation_types_round_trip_through_the_c_type() {
+        for operation in [
+            RebaseOperationType::Pick,
+            RebaseOperationType::Reword,
+            RebaseOperationType::Edit,
+            RebaseOperationType::Squash,
+            RebaseOperationType::Fixup,
+            RebaseOperationType::Exec,
+        ] {
+            let raw = ffi::git_rebase_operation_t::from(operation);
+            assert_eq!(RebaseOperationType::try_from(raw), Ok(operation));
+        }
+    }
+
+    #[test]
+    fn unknown_operation_type_is_rejected() {
+        let invalid = ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_EXEC + 1;
+        let error = RebaseOperationType::try_from(invalid).unwrap_err();
+        assert_eq!(error.value(), invalid);
+    }
+
+    #[test]
+    fn operation_type_matches_the_c_abi_scalar() {
+        assert_eq!(
+            size_of::<RebaseOperationType>(),
+            size_of::<ffi::git_rebase_operation_t>()
+        );
+        assert_eq!(
+            align_of::<RebaseOperationType>(),
+            align_of::<ffi::git_rebase_operation_t>()
+        );
+    }
 
     #[test]
     fn opaque_rebase_preserves_the_c_layout_and_lifecycle_contract() {
