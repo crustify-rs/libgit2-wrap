@@ -112,6 +112,33 @@ mod tests {
         }
         assert_eq!(GitRemoteCompletion::try_from(3), Err(3));
     }
+
+    #[test]
+    fn remote_redirect_has_the_c_layout_and_values() {
+        assert_eq!(
+            size_of::<GitRemoteRedirect>(),
+            size_of::<ffi::git_remote_redirect_t>()
+        );
+        assert_eq!(
+            align_of::<GitRemoteRedirect>(),
+            align_of::<ffi::git_remote_redirect_t>()
+        );
+        assert_eq!(ffi::git_remote_redirect_t::from(GitRemoteRedirect::None), 1);
+        assert_eq!(
+            ffi::git_remote_redirect_t::from(GitRemoteRedirect::Initial),
+            2
+        );
+        assert_eq!(ffi::git_remote_redirect_t::from(GitRemoteRedirect::All), 4);
+    }
+
+    #[test]
+    fn remote_redirect_defaults_to_initial_and_validates_raw_values() {
+        assert_eq!(GitRemoteRedirect::default(), GitRemoteRedirect::Initial);
+        assert_eq!(GitRemoteRedirect::try_from(1), Ok(GitRemoteRedirect::None));
+        assert_eq!(GitRemoteRedirect::try_from(4), Ok(GitRemoteRedirect::All));
+        assert_eq!(GitRemoteRedirect::try_from(0), Err(0));
+        assert_eq!(GitRemoteRedirect::try_from(3), Err(3));
+    }
 }
 
 /// Wraps: git_remote_autotag_option_t
@@ -181,6 +208,40 @@ impl TryFrom<ffi::git_remote_completion_t> for GitRemoteCompletion {
             ffi::git_remote_completion_t_GIT_REMOTE_COMPLETION_DOWNLOAD => Ok(Self::Download),
             ffi::git_remote_completion_t_GIT_REMOTE_COMPLETION_INDEXING => Ok(Self::Indexing),
             ffi::git_remote_completion_t_GIT_REMOTE_COMPLETION_ERROR => Ok(Self::Error),
+            other => Err(other),
+        }
+    }
+}
+
+/// Wraps: git_remote_redirect_t
+/// Controls when a remote operation may follow an off-site redirect.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+#[repr(u32)]
+pub enum GitRemoteRedirect {
+    /// Never follow an off-site redirect.
+    None = ffi::git_remote_redirect_t_GIT_REMOTE_REDIRECT_NONE,
+    /// Follow an off-site redirect only for the initial request.
+    #[default]
+    Initial = ffi::git_remote_redirect_t_GIT_REMOTE_REDIRECT_INITIAL,
+    /// Follow off-site redirects at any stage.
+    All = ffi::git_remote_redirect_t_GIT_REMOTE_REDIRECT_ALL,
+}
+
+impl From<GitRemoteRedirect> for ffi::git_remote_redirect_t {
+    fn from(value: GitRemoteRedirect) -> Self {
+        value as Self
+    }
+}
+
+impl TryFrom<ffi::git_remote_redirect_t> for GitRemoteRedirect {
+    type Error = ffi::git_remote_redirect_t;
+
+    fn try_from(value: ffi::git_remote_redirect_t) -> Result<Self, Self::Error> {
+        match value {
+            ffi::git_remote_redirect_t_GIT_REMOTE_REDIRECT_NONE => Ok(Self::None),
+            ffi::git_remote_redirect_t_GIT_REMOTE_REDIRECT_INITIAL => Ok(Self::Initial),
+            ffi::git_remote_redirect_t_GIT_REMOTE_REDIRECT_ALL => Ok(Self::All),
             other => Err(other),
         }
     }
