@@ -116,3 +116,13 @@ int git_allocator_setup(git_allocator *allocator)
 	memcpy(&git__allocator, allocator, sizeof(*allocator));
 	return 0;
 }
+
+GIT_EXTERN(void *) crustify_git__malloc(size_t len)
+{
+	return git__malloc(len);
+}
+
+GIT_EXTERN(void) crustify_git__free(void *ptr)
+{
+	git__free(ptr);
+}

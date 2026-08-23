@@ -5,3 +5,5 @@
 pub mod ffi {
     pub use libgit2_sys::*;
 }
+
+pub mod util;

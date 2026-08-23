@@ -1,1 +1,2 @@
-a^
+^crustify_git__.*$
+^git_libgit2_(init|shutdown)$

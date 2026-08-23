@@ -6,7 +6,29 @@
       "crate_path": "crustify/rust/libgit2",
       "sys_crate": "crustify/rust/libgit2-sys",
       "depends_on": ["libc"],
-      "modules": {}
+      "modules": {
+        "util": {
+          "rust_path": "src/util",
+          "rs": {
+            "src/util/alloc.rs": {
+              "tu": "src/util/alloc.c",
+              "headers": [
+                "include/git2/sys/alloc.h",
+                "src/util/alloc.h"
+              ],
+              "members": {
+                "functions": [
+                  "git__free"
+                ],
+                "types": [],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            }
+          }
+        }
+      }
     },
     "libc": {
       "kind": "library",
@@ -14,7 +36,28 @@
       "crate_path": "crustify/rust/libc",
       "sys_crate": "crustify/rust/libc-sys",
       "depends_on": [],
-      "modules": {}
+      "modules": {
+        "ffi": {
+          "rust_path": "src/ffi",
+          "rs": {
+            "src/stdlib.rs": {
+              "tu": null,
+              "headers": [
+                "/usr/include/stdlib.h"
+              ],
+              "members": {
+                "functions": [
+                  "free"
+                ],
+                "types": [],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

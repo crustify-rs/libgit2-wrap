@@ -1,0 +1,64 @@
+{
+ "_comment": "Authored analysis: ownership, lifecycle, refcount and locking judgements that no composer can derive, keyed to the C entities they describe. The structural half of each record (field layout, signatures, footprints, casts) is composed from the CodeQL tables on demand and merged in at read time, so a re-extract rewrites nothing here. Written only by `crustify-oracle <target> query {types,symbols} --update`; read through crustify.manifests. Hand-edit at your own risk: `--update` validates a submission against the composed skeleton (unknown field, wrong kind, ptr-invariant violation) and this file does not.",
+ "types": [],
+ "symbols": [
+  {
+   "name": "free",
+   "defined_in": null,
+   "lifetime": {
+    "for": "__ptr",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "__ptr",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": {
+       "by_val": true
+      },
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and deallocates a malloc-family allocation; C specifies NULL as a no-op. The allocation may hold one object, raw bytes, or a NUL-terminated string."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git__free",
+   "defined_in": "src/util/alloc.h",
+   "lifetime": {
+    "for": "ptr",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "ptr",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": {
+       "by_val": true
+      },
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes an allocation made by libgit2's currently installed allocator and dispatches to its gfree callback; the configured allocator contract makes NULL a no-op. The allocation may hold one object, raw bytes, or a NUL-terminated string."
+     }
+    }
+   ]
+  }
+ ]
+}

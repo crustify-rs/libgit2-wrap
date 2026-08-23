@@ -62,4 +62,8 @@ int git_allocator_global_init(void);
  */
 int git_allocator_setup(git_allocator *allocator);
 
+/* Exported bindgen shims for the header-inline allocation primitives. */
+GIT_EXTERN(void *) crustify_git__malloc(size_t len);
+GIT_EXTERN(void) crustify_git__free(void *ptr);
+
 #endif
