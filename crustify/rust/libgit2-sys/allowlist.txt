@@ -52,6 +52,10 @@
 ^git_refspec_free$
 ^git_error$
 ^git_fetch_prune_t$
+^git_remote$
+^git_remote_create_detached$
+^git_remote_dup$
+^git_remote_free$
 ^git_index_time$
 ^git_indexer_progress$
 ^git_config$

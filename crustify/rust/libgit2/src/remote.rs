@@ -1,5 +1,9 @@
 //! Safe wrappers for libgit2 remote APIs.
 
+use core::ptr::NonNull;
+
+use ffibox::{CBox, CCloned};
+
 use crate::ffi;
 
 /// Wraps: git_fetch_prune_t
@@ -62,5 +66,154 @@ mod tests {
         assert_eq!(GitFetchPrune::try_from(0), Ok(GitFetchPrune::Unspecified));
         assert_eq!(GitFetchPrune::try_from(2), Ok(GitFetchPrune::NoPrune));
         assert_eq!(GitFetchPrune::try_from(3), Err(3));
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_remote
+    /// Opaque remote configuration and connection state managed by libgit2.
+    ///
+    /// Repository-backed remotes borrow their repository, which must remain
+    /// alive while the remote is used. Detached remotes have no repository.
+    /// Owned handles release the remote with `git_remote_free`; cloning makes
+    /// an independent deep copy with `git_remote_dup`.
+    GitRemote,
+    GitRemoteRef,
+    GitRemoteMut,
+    ffi::git_remote
+);
+
+/// An owned libgit2 remote.
+pub type GitRemoteOwned = CBox<GitRemote>;
+
+// SAFETY: `git_remote_free` destroys a fully initialized remote and all of its
+// owned fields. `GitRemote` is transparent over the corresponding bindgen type.
+ffibox::impl_dropped!(GitRemote, ffi::git_remote, ffi::git_remote_free);
+
+// SAFETY: `git_remote_dup` deep-copies the source's owned strings and refspecs
+// into a fresh allocation. A successful result is independent of the source
+// and is released by the `CDropped` implementation above.
+unsafe impl CCloned for GitRemote {
+    unsafe fn c_clone(obj: NonNull<Self>) -> Option<NonNull<Self>> {
+        let mut duplicate = core::ptr::null_mut();
+        // SAFETY: the trait caller supplies a live remote, `duplicate` is a
+        // valid output slot, and the wrapper is layout-compatible with the C
+        // type. The routine only reads the source and initializes a new owner.
+        let result = unsafe {
+            ffi::git_remote_dup(
+                core::ptr::addr_of_mut!(duplicate),
+                obj.as_ptr().cast::<ffi::git_remote>(),
+            )
+        };
+
+        (result == 0)
+            .then(|| NonNull::new(duplicate.cast::<Self>()))
+            .flatten()
+    }
+}
+
+#[cfg(test)]
+mod remote_type_tests {
+    use core::mem::{MaybeUninit, align_of, size_of};
+    use core::ptr;
+
+    use ffibox::{CCell, CCloned, CDropped};
+
+    use super::*;
+
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and refcounted;
+            // `Drop` below balances this successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard. Remote owners are dropped before the guard.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    #[test]
+    fn opaque_representation_and_handles_match_the_c_seam() {
+        fn assert_cell<T: CCell>() {}
+
+        assert_cell::<GitRemote>();
+        assert_eq!(size_of::<GitRemote>(), size_of::<ffi::git_remote>());
+        assert_eq!(align_of::<GitRemote>(), align_of::<ffi::git_remote>());
+        assert_eq!(
+            size_of::<GitRemoteRef<'_>>(),
+            size_of::<*const ffi::git_remote>()
+        );
+        assert_eq!(
+            size_of::<GitRemoteMut<'_>>(),
+            size_of::<*mut ffi::git_remote>()
+        );
+        assert_eq!(
+            size_of::<Option<GitRemoteOwned>>(),
+            size_of::<*mut ffi::git_remote>()
+        );
+    }
+
+    #[test]
+    fn remote_registers_deep_copy_lifecycle() {
+        fn assert_lifecycle<T: CDropped + CCloned>() {}
+        assert_lifecycle::<GitRemote>();
+    }
+
+    #[test]
+    fn owned_remote_deep_copy_has_independent_storage() {
+        let _init = Libgit2Init::acquire();
+        let mut raw = ptr::null_mut();
+
+        // SAFETY: libgit2 is initialized, `raw` is a writable output slot,
+        // and the byte string is NUL-terminated and immutable for the call.
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_create_detached(
+                    core::ptr::addr_of_mut!(raw),
+                    c"https://example.invalid/repo".as_ptr(),
+                )
+            },
+            0
+        );
+        // SAFETY: the successful constructor returned a fresh remote whose
+        // matching destructor is registered on `GitRemote`.
+        let remote = unsafe { GitRemoteOwned::from_raw(raw) }
+            .expect("git_remote_create_detached succeeded with a null remote");
+
+        let duplicate = remote.try_clone().expect("git_remote_dup failed");
+        assert_ne!(remote.as_ptr(), duplicate.as_ptr());
+    }
+
+    #[test]
+    fn borrowed_handles_preserve_the_remote_pointer() {
+        let storage = Box::new(MaybeUninit::<ffi::git_remote>::zeroed());
+        let raw = Box::into_raw(storage).cast::<ffi::git_remote>();
+
+        {
+            // SAFETY: `raw` addresses live, suitably aligned opaque storage,
+            // and the shared handle remains within this scope.
+            let shared = unsafe { GitRemoteRef::from_ptr(raw) }.unwrap();
+            assert_eq!(shared.as_ptr(), raw.cast_const());
+        }
+
+        {
+            // SAFETY: the shared handle is gone, the storage remains live, and
+            // this scope has exclusive access to it.
+            let mut exclusive = unsafe { GitRemoteMut::from_ptr(raw) }.unwrap();
+            assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
+            assert_eq!(exclusive.as_mut_ptr(), raw);
+        }
+
+        // SAFETY: `raw` came from this `Box::into_raw`, no handle remains, and
+        // the cast recovers the allocation's original type.
+        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_remote>>()) });
     }
 }

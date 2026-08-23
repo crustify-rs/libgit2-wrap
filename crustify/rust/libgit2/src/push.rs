@@ -4,7 +4,7 @@ use crate::ffi;
 
 ffibox::define_ctype!(
     /// Wraps: git_push
-    /// Opaque state for a push operation owned by its [`git_remote`](crate::ffi::git_remote).
+    /// Opaque state for a push operation owned by its [`GitRemote`](crate::remote::GitRemote).
     ///
     /// Libgit2 exposes `git_push` to transport callbacks as a borrowed handle;
     /// it does not publish construction or destruction operations for callers.

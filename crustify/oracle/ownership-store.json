@@ -1680,6 +1680,99 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_remote",
+   "defined_in": "src/libgit2/remote.h",
+   "_comment_agent": "Inspected constructors, duplication, setters, connect/upload paths, and git_remote_free across remote.c, fetch.c and push.c.",
+   "fields": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Heap-duplicated NUL string; git_remote_free releases it. Anonymous remotes may have no name; contents are only read and replacement swaps the pointer."
+     }
+    },
+    {
+     "name": "push",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional git_push allocation created for an upload and released by git_push_free when replaced or when the remote is freed."
+     }
+    },
+    {
+     "name": "pushurl",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional heap-duplicated push URL; replacement and git_remote_free release it, while callers only read its bytes."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Weak repository pointer copied by git_remote_dup and never released by git_remote_free. Detached remotes store NULL; repository-backed operations may mutate the repository."
+     }
+    },
+    {
+     "name": "transport",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional transport transferred from a factory to the remote after connection; disconnected and released through its free callback."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Heap-duplicated NUL string released or replaced with git__free; configuration-only remotes and construction failure paths may leave it NULL."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -2734,6 +2827,85 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a heap-allocated complete refspec, disposes its fields, and frees the header; NULL is accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_dup",
+   "defined_in": "src/libgit2/remote.c",
+   "lifetime": {
+    "for": "source",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": true,
+     "upref": false
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "dest",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:dest"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Writable out slot receiving a fresh owned deep copy on success."
+     }
+    },
+    {
+     "name": "source",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:source"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Read-only source retained by the caller; the body deep-copies owned strings and refspecs."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_free",
+   "defined_in": "src/libgit2/remote.c",
+   "lifetime": {
+    "for": "remote",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and destroys one remote allocation; NULL is explicitly accepted."
      }
     }
    ]
