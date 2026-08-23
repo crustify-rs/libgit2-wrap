@@ -2142,6 +2142,99 @@
    ]
   },
   {
+   "name": "git_transaction",
+   "defined_in": "src/libgit2/transaction.c",
+   "_comment_agent": "The public API keeps transactions opaque. Reference transactions borrow their repository, own one refdb count, and keep lock/pool state inline; config transactions borrow the config and own the type-erased backend-instance count released indirectly by git_config_unlock. The variant discriminator makes the inactive pointer fields null.",
+   "fields": [
+    {
+     "name": "cfg",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed configuration for the config-transaction variant and passed to git_config_unlock; null for reference transactions."
+     }
+    },
+    {
+     "name": "cfg_data",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Type-erased backend_instance count acquired by git_config_lock and consumed through git_config_unlock; null for reference transactions."
+     }
+    },
+    {
+     "name": "db",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Reference transactions own the count returned by git_repository_refdb and release it with git_refdb_free; null for config transactions."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed repository for the reference-transaction variant; the caller must keep it alive. Null for config transactions."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_tree_entry",
+   "defined_in": "src/libgit2/tree.h",
+   "_comment_agent": "The public API keeps the layout opaque. filename is always a non-null immutable NUL string. In self-contained duplicated entries it points into trailing storage in the same allocation; tree-owned entries point into storage kept alive by the containing tree, so all published borrows remain bounded by the entry handle's own lifetime.",
+   "fields": [
+    {
+     "name": "filename",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed NUL string: trailing self storage for standalone owned entries, or containing-tree storage for tree-owned entries; never freed separately."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_treebuilder",
    "defined_in": "src/libgit2/tree.h",
    "_comment_agent": "The repository pointer is a non-null borrowed keepalive dependency installed by git_treebuilder_new; it is never released by git_treebuilder_free.",
@@ -3728,6 +3821,112 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one reference when non-null; decrements rc and releases the allocation on the final reference."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_transaction_free",
+   "defined_in": "src/libgit2/transaction.c",
+   "lifetime": {
+    "for": "tx",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "tx",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes a complete transaction, releases its variant-specific resources and storage, and accepts NULL as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_tree_entry_dup",
+   "defined_in": "src/libgit2/tree.c",
+   "lifetime": {
+    "for": "source",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": true,
+     "upref": false
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "dest",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:dest"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed out-slot receives a fresh self-contained owned entry on success."
+     }
+    },
+    {
+     "name": "source",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:source"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads a live source without consuming it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_tree_entry_free",
+   "defined_in": "src/libgit2/tree.c",
+   "lifetime": {
+    "for": "entry",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes a user-owned self-contained tree entry and accepts NULL as a no-op; tree-owned borrowed entries must not be passed here."
      }
     }
    ]

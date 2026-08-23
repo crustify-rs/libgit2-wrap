@@ -1,6 +1,8 @@
 //! Safe wrappers for libgit2 tree APIs.
 
-use ffibox::{define_ctype, impl_dropped};
+use core::ptr::NonNull;
+
+use ffibox::{CBox, CCloned, define_ctype, impl_dropped};
 
 use crate::ffi;
 
@@ -88,6 +90,52 @@ impl TryFrom<ffi::git_tree_update_t> for TreeUpdateType {
 }
 
 define_ctype!(
+    /// Wraps: git_tree_entry
+    /// An opaque entry in a Git tree.
+    ///
+    /// A borrowed handle may refer to storage owned by a tree. Owned entries,
+    /// such as deep copies, release their self-contained allocation with
+    /// `git_tree_entry_free`.
+    GitTreeEntry,
+    GitTreeEntryRef,
+    GitTreeEntryMut,
+    ffi::git_tree_entry
+);
+
+/// An owned, self-contained tree entry.
+pub type GitTreeEntryOwned = CBox<GitTreeEntry>;
+
+// SAFETY: `git_tree_entry_free` is the public destructor for a user-owned,
+// self-contained tree entry and accepts null, although `CDropped` supplies a
+// live non-null allocation.
+impl_dropped!(GitTreeEntry, ffi::git_tree_entry, ffi::git_tree_entry_free);
+
+// SAFETY: `git_tree_entry_dup` leaves its live source unchanged and, on
+// success, writes a fresh self-contained allocation that is independently
+// releasable by `git_tree_entry_free`.
+unsafe impl CCloned for GitTreeEntry {
+    unsafe fn c_clone(obj: NonNull<Self>) -> Option<NonNull<Self>> {
+        let mut duplicate = core::ptr::null_mut();
+        // SAFETY: the `CCloned` caller supplies a live source, `duplicate` is
+        // a valid output slot, and the wrapper is layout-compatible with the
+        // corresponding bindgen type.
+        let result = unsafe {
+            ffi::git_tree_entry_dup(
+                core::ptr::addr_of_mut!(duplicate),
+                obj.as_ptr().cast::<ffi::git_tree_entry>(),
+            )
+        };
+
+        if result == 0 {
+            NonNull::new(duplicate.cast::<Self>())
+        } else {
+            debug_assert!(duplicate.is_null());
+            None
+        }
+    }
+}
+
+define_ctype!(
     /// Wraps: git_treebuilder
     /// An opaque in-memory tree builder owned by libgit2.
     ///
@@ -111,7 +159,7 @@ impl_dropped!(TreeBuilder, ffi::git_treebuilder, ffi::git_treebuilder_free);
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
 
-    use ffibox::CDropped;
+    use ffibox::{CCloned, CDropped};
 
     use super::*;
 
@@ -140,6 +188,58 @@ mod tests {
             align_of::<TreeUpdateType>(),
             align_of::<ffi::git_tree_update_t>()
         );
+    }
+
+    #[test]
+    fn opaque_entry_representation_and_handles_match_the_c_seam() {
+        assert_eq!(size_of::<GitTreeEntry>(), size_of::<ffi::git_tree_entry>());
+        assert_eq!(
+            align_of::<GitTreeEntry>(),
+            align_of::<ffi::git_tree_entry>()
+        );
+        assert_eq!(
+            size_of::<GitTreeEntryRef<'static>>(),
+            size_of::<*const ffi::git_tree_entry>()
+        );
+        assert_eq!(
+            size_of::<GitTreeEntryMut<'static>>(),
+            size_of::<*mut ffi::git_tree_entry>()
+        );
+        assert_eq!(
+            size_of::<Option<GitTreeEntryOwned>>(),
+            size_of::<*mut ffi::git_tree_entry>()
+        );
+    }
+
+    #[test]
+    fn borrowed_handles_preserve_the_entry_pointer() {
+        let storage = Box::new(MaybeUninit::<ffi::git_tree_entry>::zeroed());
+        let raw = Box::into_raw(storage).cast::<ffi::git_tree_entry>();
+
+        {
+            // SAFETY: `raw` addresses live, suitably aligned opaque storage
+            // and remains live for the duration of the shared handle.
+            let shared = unsafe { GitTreeEntryRef::from_ptr(raw) }.unwrap();
+            assert_eq!(shared.as_ptr(), raw.cast_const());
+        }
+
+        {
+            // SAFETY: the shared handle is gone, the storage remains live,
+            // and this scope has exclusive access to it.
+            let mut exclusive = unsafe { GitTreeEntryMut::from_ptr(raw) }.unwrap();
+            assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
+            assert_eq!(exclusive.as_mut_ptr(), raw);
+        }
+
+        // SAFETY: `raw` came from `Box::into_raw`, no handle remains, and the
+        // cast recovers the allocation's original type.
+        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_tree_entry>>()) });
+    }
+
+    #[test]
+    fn tree_entry_registers_deep_copy_and_drop_lifecycle() {
+        fn assert_lifecycle<T: CDropped + CCloned>() {}
+        assert_lifecycle::<GitTreeEntry>();
     }
 
     #[test]

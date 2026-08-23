@@ -127,3 +127,8 @@
 ^git_treewalk_mode$
 ^git_worktree$
 ^git_worktree_free$
+^git_transaction$
+^git_transaction_free$
+^git_tree_entry$
+^git_tree_entry_dup$
+^git_tree_entry_free$
