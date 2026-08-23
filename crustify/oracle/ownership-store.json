@@ -794,6 +794,50 @@
    ]
   },
   {
+   "name": "git_diff_binary_file",
+   "defined_in": "include/git2/diff.h",
+   "_comment_agent": "The data member is a nullable counted byte allocation. Generation and parsing allocate it through libgit2's configured allocator, and the enclosing patch (or the temporary callback producer) releases it with git__free. Callback consumers borrow the complete git_diff_binary_file and only read its bytes.",
+   "fields": [
+    {
+     "name": "data",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Owns datalen initialized deflated bytes allocated through libgit2; null is used when no binary data is present. The containing patch or temporary producer frees the allocation with git__free."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_file",
+   "defined_in": "include/git2/diff.h",
+   "_comment_agent": "The path is a nullable borrowed NUL-terminated string. Generated diffs point into their owning diff pool; parsed patches point into allocations owned by the enclosing patch, sometimes at an interior offset. The git_diff_file header never independently releases the path.",
+   "fields": [
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrows a NUL-terminated path kept alive by the enclosing diff or patch. It may be null for an absent/partially initialized side and can point into another owning allocation."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_line",
    "defined_in": "include/git2/diff.h",
    "_comment_agent": "Inspected every content/content_len assignment, read, and release path. Ownership is runtime-conditional at the containing patch implementation level, so the wrapper exposes a borrowed counted view and does not assume standalone ownership.",

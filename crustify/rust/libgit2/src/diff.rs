@@ -900,3 +900,410 @@ mod diff_tests {
         assert_eq!(diff.as_mut().as_ref().as_ptr(), raw.cast_const());
     }
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_diff_binary_file
+    /// One owned, compressed side of a binary diff.
+    DiffBinaryFile,
+    DiffBinaryFileRef,
+    DiffBinaryFileMut,
+    ffi::git_diff_binary_file
+);
+
+/// Deleter for a binary-diff byte allocation detached from its header.
+pub struct DiffBinaryDataFree;
+
+// SAFETY: a valid binary file's non-null data pointer uniquely owns an
+// allocation made through libgit2's configured allocator. As elsewhere in
+// this crate, that allocator must remain compatible until the owner is
+// dropped.
+unsafe impl ffibox::CLenDropped for DiffBinaryDataFree {
+    unsafe fn c_drop_len(ptr: *mut u8, _byte_len: usize) {
+        // SAFETY: the `CLenDropped` contract guarantees unique ownership of a
+        // compatible libgit2 allocation; `git__free` does not need its length.
+        unsafe { ffi::crustify_git__free(ptr.cast()) }
+    }
+}
+
+/// Compressed bytes detached from a [`DiffBinaryFile`].
+pub type DiffBinaryData = ffibox::CVec<u8, DiffBinaryDataFree>;
+
+impl<'a> DiffBinaryFileRef<'a> {
+    /// Wraps: git_diff_binary_file.data
+    /// Borrows the compressed binary data.
+    ///
+    /// A null pointer is represented by `None`, including a side for which no
+    /// binary content was generated.
+    #[must_use]
+    pub fn data(&self) -> Option<ffibox::CSlice<'a, u8>> {
+        let file = self.as_ptr();
+        // SAFETY: both fields are initialized members of this live shared
+        // handle and are read with raw-place projections.
+        let (data, len) = unsafe {
+            (
+                addr_of!((*file).data).read().cast_mut().cast::<u8>(),
+                addr_of!((*file).datalen).read(),
+            )
+        };
+        let data = NonNull::new(data)?;
+        // SAFETY: a valid binary file exposes `len` initialized bytes at its
+        // non-null data pointer. The view is bounded by this handle's borrow.
+        Some(unsafe { ffibox::CSlice::from_raw_parts(data, len) })
+    }
+
+    /// Wraps: git_diff_binary_file.type
+    /// Returns the binary representation kind, rejecting unknown C values.
+    pub fn kind(&self) -> Result<DiffBinaryKind, InvalidDiffBinaryKind> {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        let kind = unsafe { addr_of!((*self.as_ptr()).type_).read() };
+        DiffBinaryKind::try_from(kind)
+    }
+
+    /// Wraps: git_diff_binary_file.datalen
+    /// Returns the compressed byte count.
+    #[must_use]
+    pub fn data_len(&self) -> usize {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).datalen).read() }
+    }
+
+    /// Wraps: git_diff_binary_file.inflatedlen
+    /// Returns the byte count after inflation.
+    #[must_use]
+    pub fn inflated_len(&self) -> usize {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).inflatedlen).read() }
+    }
+}
+
+impl DiffBinaryFileMut<'_> {
+    /// Sets the binary representation kind.
+    pub fn set_kind(&mut self, kind: DiffBinaryKind) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).type_).write(kind.into()) }
+    }
+
+    /// Sets the byte count after inflation.
+    pub fn set_inflated_len(&mut self, inflated_len: usize) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).inflatedlen).write(inflated_len) }
+    }
+
+    /// Moves out the compressed allocation, leaving a null, empty span.
+    #[must_use]
+    pub fn take_data(&mut self) -> Option<DiffBinaryData> {
+        let file = self.as_mut_ptr();
+        // SAFETY: this exclusive handle permits transferring the pointer and
+        // its count together, then leaving the valid null/zero representation.
+        let (data, len) = unsafe {
+            let data = addr_of!((*file).data).read().cast_mut().cast::<u8>();
+            let len = addr_of!((*file).datalen).read();
+            addr_of_mut!((*file).data).write(core::ptr::null());
+            addr_of_mut!((*file).datalen).write(0);
+            (data, len)
+        };
+        // SAFETY: a non-null pointer moved from a valid binary file uniquely
+        // owns `len` initialized bytes from libgit2's configured allocator.
+        unsafe { DiffBinaryData::from_raw_parts(data, len) }
+    }
+
+    /// Replaces the compressed allocation and disposes the previous one.
+    pub fn set_data(&mut self, data: Option<DiffBinaryData>) {
+        let (data, len) = data.map_or((core::ptr::null_mut(), 0), ffibox::CVec::into_raw_parts);
+        let old = self.take_data();
+        let file = self.as_mut_ptr();
+        // SAFETY: this exclusive handle permits installing the compatible
+        // allocation and its exact initialized length after clearing the old
+        // span.
+        unsafe {
+            addr_of_mut!((*file).data).write(data.cast());
+            addr_of_mut!((*file).datalen).write(len);
+        }
+        drop(old);
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_diff_file
+    /// One file-like side of a diff delta.
+    DiffFile,
+    DiffFileRef,
+    DiffFileMut,
+    ffi::git_diff_file
+);
+
+impl<'a> DiffFileRef<'a> {
+    /// Wraps: git_diff_file.size
+    /// Returns the entry size in bytes.
+    #[must_use]
+    pub fn size(&self) -> u64 {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).size).read() }
+    }
+
+    /// Wraps: git_diff_file.path
+    /// Borrows the optional NUL-terminated repository-relative path.
+    #[must_use]
+    pub fn path(&self) -> Option<&'a core::ffi::CStr> {
+        // SAFETY: this live shared handle permits reading the initialized
+        // pointer field without forming a reference to the C object.
+        let path = unsafe { addr_of!((*self.as_ptr()).path).read() };
+        if path.is_null() {
+            return None;
+        }
+        // SAFETY: a valid diff file's non-null path is NUL-terminated and is
+        // kept alive by the enclosing diff or patch for the handle's lifetime.
+        Some(unsafe { core::ffi::CStr::from_ptr(path) })
+    }
+
+    /// Wraps: git_diff_file.mode
+    /// Returns the published file mode, or `None` for a malformed C value.
+    #[must_use]
+    pub fn mode(&self) -> Option<crate::api::types::GitFileMode> {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        let mode = unsafe { addr_of!((*self.as_ptr()).mode).read() };
+        crate::api::types::GitFileMode::from_raw(mode.into())
+    }
+
+    /// Wraps: git_diff_file.flags
+    /// Returns the raw combination of `git_diff_flag_t` bits.
+    #[must_use]
+    pub fn flags(&self) -> u32 {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+    }
+
+    /// Wraps: git_diff_file.id
+    /// Borrows the inline object identifier.
+    #[must_use]
+    pub fn id(&self) -> crate::oid::OidRef<'a> {
+        // SAFETY: raw-place projection reaches the live inline `git_oid`
+        // without forming a reference to it.
+        let id = unsafe { addr_of!((*self.as_ptr()).id) }.cast_mut();
+        // SAFETY: `id` is non-null, initialized, and remains part of this diff
+        // file for the shared handle's full `'a` lifetime.
+        unsafe { crate::oid::OidRef::from_ptr(id) }.expect("an inline field is non-null")
+    }
+
+    /// Wraps: git_diff_file.id_abbrev
+    /// Returns the known hexadecimal object-ID width.
+    #[must_use]
+    pub fn id_abbrev(&self) -> u16 {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).id_abbrev).read() }
+    }
+}
+
+impl DiffFileMut<'_> {
+    /// Sets the entry size in bytes.
+    pub fn set_size(&mut self, size: u64) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).size).write(size) }
+    }
+
+    /// Stores a borrowed NUL-terminated repository-relative path.
+    ///
+    /// # Safety
+    ///
+    /// A non-null `path` must remain alive and NUL-terminated for every later
+    /// use of the diff file, including uses after this handle is released.
+    pub unsafe fn set_borrowed_path(&mut self, path: Option<&core::ffi::CStr>) {
+        let path = path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+        // SAFETY: this exclusive handle permits the raw-place write, and the
+        // caller upholds the stored pointer's lifetime and validity.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).path).write(path) }
+    }
+
+    /// Clears the optional borrowed path.
+    pub fn clear_path(&mut self) {
+        // SAFETY: null stores no borrow and creates no lifetime obligation.
+        unsafe { self.set_borrowed_path(None) }
+    }
+
+    /// Sets the published file mode.
+    pub fn set_mode(&mut self, mode: crate::api::types::GitFileMode) {
+        let mode = mode.as_raw();
+        debug_assert!(u16::try_from(mode).is_ok());
+        // SAFETY: every published libgit2 file mode fits the field's 16 bits,
+        // and this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).mode).write(mode as u16) }
+    }
+
+    /// Sets the raw combination of `git_diff_flag_t` bits.
+    pub fn set_flags(&mut self, flags: u32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+    }
+
+    /// Borrows the inline object identifier exclusively.
+    #[must_use]
+    pub fn id_mut(&mut self) -> crate::oid::OidMut<'_> {
+        // SAFETY: raw-place projection reaches the live inline `git_oid`
+        // without forming a reference to it.
+        let id = unsafe { addr_of_mut!((*self.as_mut_ptr()).id) };
+        // SAFETY: `id` is non-null and initialized, and the returned handle is
+        // bounded by this exclusive reborrow.
+        unsafe { crate::oid::OidMut::from_ptr(id) }.expect("an inline field is non-null")
+    }
+
+    /// Sets the known hexadecimal object-ID width.
+    pub fn set_id_abbrev(&mut self, id_abbrev: u16) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).id_abbrev).write(id_abbrev) }
+    }
+}
+
+#[cfg(test)]
+mod diff_file_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn wrappers_preserve_c_layout_and_handle_shape() {
+        assert_eq!(
+            size_of::<DiffBinaryFile>(),
+            size_of::<ffi::git_diff_binary_file>()
+        );
+        assert_eq!(
+            align_of::<DiffBinaryFile>(),
+            align_of::<ffi::git_diff_binary_file>()
+        );
+        assert_eq!(
+            size_of::<DiffBinaryFileRef<'_>>(),
+            size_of::<*const ffi::git_diff_binary_file>()
+        );
+        assert_eq!(size_of::<DiffFile>(), size_of::<ffi::git_diff_file>());
+        assert_eq!(align_of::<DiffFile>(), align_of::<ffi::git_diff_file>());
+        assert_eq!(
+            size_of::<DiffFileMut<'_>>(),
+            size_of::<*mut ffi::git_diff_file>()
+        );
+    }
+
+    #[test]
+    fn binary_file_handles_read_and_update_fields() {
+        let bytes = b"compressed";
+        let mut raw = ffi::git_diff_binary_file {
+            type_: ffi::git_diff_binary_t_GIT_DIFF_BINARY_LITERAL,
+            data: bytes.as_ptr().cast(),
+            datalen: bytes.len(),
+            inflatedlen: 42,
+        };
+
+        // SAFETY: `raw` is initialized and exclusively borrowed for the
+        // handle's lifetime. Its data pointer remains live and immutable.
+        let mut file = unsafe { DiffBinaryFileMut::from_ptr(&raw mut raw) }
+            .expect("the address of a stack value is non-null");
+        assert_eq!(file.as_ref().kind(), Ok(DiffBinaryKind::Literal));
+        assert_eq!(file.as_ref().data_len(), bytes.len());
+        assert_eq!(file.as_ref().inflated_len(), 42);
+        let mut copied = [0; 10];
+        assert!(
+            file.as_ref()
+                .data()
+                .expect("non-null data")
+                .copy_to_slice(&mut copied)
+        );
+        assert_eq!(&copied, bytes);
+
+        file.set_kind(DiffBinaryKind::Delta);
+        file.set_inflated_len(84);
+        assert_eq!(file.as_ref().kind(), Ok(DiffBinaryKind::Delta));
+        assert_eq!(file.as_ref().inflated_len(), 84);
+    }
+
+    #[test]
+    fn binary_data_moves_through_the_header_without_double_free() {
+        // SAFETY: libgit2 initialization is process-global and refcounted;
+        // this test balances its successful acquisition below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        let source = b"data";
+        // SAFETY: libgit2 is initialized, so a non-null result is a fresh
+        // allocation from its configured allocator.
+        let allocation = unsafe { ffi::crustify_git__malloc(source.len()) }.cast::<u8>();
+        assert!(!allocation.is_null());
+        // SAFETY: `allocation` has `source.len()` writable bytes and is fresh,
+        // so the source and destination do not overlap.
+        unsafe { allocation.copy_from_nonoverlapping(source.as_ptr(), source.len()) }
+        // SAFETY: the fresh allocation uniquely owns exactly `source.len()`
+        // initialized bytes and matches `DiffBinaryDataFree`.
+        let owned = unsafe { DiffBinaryData::from_raw_parts(allocation, source.len()) }
+            .expect("libgit2 allocated the binary data");
+
+        let mut raw = ffi::git_diff_binary_file {
+            type_: ffi::git_diff_binary_t_GIT_DIFF_BINARY_LITERAL,
+            data: core::ptr::null(),
+            datalen: 0,
+            inflatedlen: source.len(),
+        };
+        // SAFETY: `raw` is initialized and exclusively borrowed for the
+        // handle's lifetime.
+        let mut file = unsafe { DiffBinaryFileMut::from_ptr(&raw mut raw) }
+            .expect("the address of a stack value is non-null");
+        file.set_data(Some(owned));
+        assert_eq!(file.as_ref().data_len(), source.len());
+
+        let detached = file.take_data().expect("the installed allocation");
+        assert_eq!(detached.as_slice(), source);
+        assert!(file.as_ref().data().is_none());
+        assert_eq!(file.as_ref().data_len(), 0);
+        drop(detached);
+
+        // SAFETY: balances this test's successful initialization after its
+        // libgit2 allocation has been released.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
+    fn diff_file_handles_project_inline_and_borrowed_fields() {
+        let mut raw = ffi::git_diff_file {
+            id: ffi::git_oid {
+                type_: ffi::git_oid_t_GIT_OID_SHA1 as u8,
+                id: [0; 32],
+            },
+            path: c"old.txt".as_ptr(),
+            size: 7,
+            flags: 3,
+            mode: crate::api::types::GitFileMode::BLOB.as_raw() as u16,
+            id_abbrev: 7,
+        };
+
+        // SAFETY: `raw` is initialized and exclusively borrowed for the
+        // handle's lifetime; both test paths have static storage.
+        let mut file = unsafe { DiffFileMut::from_ptr(&raw mut raw) }
+            .expect("the address of a stack value is non-null");
+        assert_eq!(file.as_ref().path(), Some(c"old.txt"));
+        assert_eq!(file.as_ref().size(), 7);
+        assert_eq!(file.as_ref().flags(), 3);
+        assert_eq!(
+            file.as_ref().mode(),
+            Some(crate::api::types::GitFileMode::BLOB)
+        );
+        assert_eq!(file.as_ref().id_abbrev(), 7);
+
+        file.set_size(11);
+        file.set_flags(16);
+        file.set_mode(crate::api::types::GitFileMode::BLOB_EXECUTABLE);
+        file.set_id_abbrev(12);
+        // SAFETY: the static path outlives every use of `file` and `raw`.
+        unsafe { file.set_borrowed_path(Some(c"new.txt")) }
+        file.id_mut().set_oid_type(crate::oid::OidType::Sha256);
+
+        {
+            let shared = file.as_ref();
+            assert_eq!(shared.path(), Some(c"new.txt"));
+            assert_eq!(shared.size(), 11);
+            assert_eq!(shared.flags(), 16);
+            assert_eq!(
+                shared.mode(),
+                Some(crate::api::types::GitFileMode::BLOB_EXECUTABLE)
+            );
+            assert_eq!(shared.id_abbrev(), 12);
+            assert_eq!(shared.id().oid_type(), Ok(crate::oid::OidType::Sha256));
+        }
+        file.clear_path();
+        assert_eq!(file.as_ref().path(), None);
+    }
+}
