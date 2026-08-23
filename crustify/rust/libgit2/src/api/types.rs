@@ -174,3 +174,78 @@ mod filemode_tests {
         assert_eq!(align_of::<GitFileMode>(), align_of::<ffi::git_filemode_t>());
     }
 }
+
+/// Wraps: git_object_t
+/// A checked libgit2 object kind.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GitObjectType(ffi::git_object_t);
+
+impl GitObjectType {
+    /// A wildcard accepted by APIs that permit any object kind.
+    pub const ANY: Self = Self(ffi::git_object_t_GIT_OBJECT_ANY);
+    /// An invalid or unknown object kind.
+    pub const INVALID: Self = Self(ffi::git_object_t_GIT_OBJECT_INVALID);
+    /// A commit object.
+    pub const COMMIT: Self = Self(ffi::git_object_t_GIT_OBJECT_COMMIT);
+    /// A tree object.
+    pub const TREE: Self = Self(ffi::git_object_t_GIT_OBJECT_TREE);
+    /// A blob object.
+    pub const BLOB: Self = Self(ffi::git_object_t_GIT_OBJECT_BLOB);
+    /// An annotated tag object.
+    pub const TAG: Self = Self(ffi::git_object_t_GIT_OBJECT_TAG);
+
+    /// Converts a raw value when it is a published libgit2 object kind.
+    pub const fn from_raw(raw: ffi::git_object_t) -> Option<Self> {
+        match raw {
+            ffi::git_object_t_GIT_OBJECT_ANY
+            | ffi::git_object_t_GIT_OBJECT_INVALID
+            | ffi::git_object_t_GIT_OBJECT_COMMIT
+            | ffi::git_object_t_GIT_OBJECT_TREE
+            | ffi::git_object_t_GIT_OBJECT_BLOB
+            | ffi::git_object_t_GIT_OBJECT_TAG => Some(Self(raw)),
+            _ => None,
+        }
+    }
+
+    /// Returns the underlying C value.
+    pub const fn as_raw(self) -> ffi::git_object_t {
+        self.0
+    }
+}
+
+impl From<GitObjectType> for ffi::git_object_t {
+    fn from(value: GitObjectType) -> Self {
+        value.as_raw()
+    }
+}
+
+#[cfg(test)]
+mod object_type_tests {
+    use super::*;
+    use core::mem::{align_of, size_of};
+
+    #[test]
+    fn published_object_kinds_round_trip() {
+        for kind in [
+            GitObjectType::ANY,
+            GitObjectType::INVALID,
+            GitObjectType::COMMIT,
+            GitObjectType::TREE,
+            GitObjectType::BLOB,
+            GitObjectType::TAG,
+        ] {
+            assert_eq!(GitObjectType::from_raw(kind.as_raw()), Some(kind));
+            assert_eq!(ffi::git_object_t::from(kind), kind.as_raw());
+        }
+
+        assert_eq!(GitObjectType::from_raw(0), None);
+        assert_eq!(GitObjectType::from_raw(5), None);
+    }
+
+    #[test]
+    fn object_type_preserves_the_c_enum_layout() {
+        assert_eq!(size_of::<GitObjectType>(), size_of::<ffi::git_object_t>());
+        assert_eq!(align_of::<GitObjectType>(), align_of::<ffi::git_object_t>());
+    }
+}

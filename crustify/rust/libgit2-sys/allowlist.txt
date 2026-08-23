@@ -62,3 +62,7 @@
 ^git_iterator$
 ^git_note_iterator$
 ^git_note_iterator_free$
+^git_object$
+^git_object_dup$
+^git_object_free$
+^git_object_t$

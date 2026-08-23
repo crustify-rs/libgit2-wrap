@@ -1034,6 +1034,36 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_object",
+   "defined_in": "src/libgit2/object.h",
+   "_comment_agent": "git_object is a refcounted base object. Its cached header owns the reference count; its repository member is a nullable external borrow. The public API keeps the layout opaque.",
+   "fields": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed repository pointer set for repository-backed objects and null for objects parsed directly from raw data. The repository must outlive the object; freeing or closing it invalidates the object. Accessors expose a mutable repository pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_t",
+   "defined_in": "include/git2/types.h",
+   "_comment_agent": "git_object_t is a fieldless C enum with no ownership or lifetime-bearing members.",
+   "fields": []
   }
  ],
  "symbols": [
@@ -1710,6 +1740,85 @@
       "nullable": true,
       "mutable": true,
       "note": "Public note-iterator destructor; consumes one complete git_note_iterator and delegates to git_iterator_free, while NULL is accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_dup",
+   "defined_in": "src/libgit2/object.c",
+   "lifetime": {
+    "for": "source",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": false,
+     "upref": true
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "dest",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:dest"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed output slot written with a newly owned reference to the same object."
+     }
+    },
+    {
+     "name": "source",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:source"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed live object whose refcount is incremented; the original remains valid."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_free",
+   "defined_in": "src/libgit2/object.c",
+   "lifetime": {
+    "for": "object",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "object",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one outstanding object reference; null is accepted. git_cached_obj_decref releases the allocation when its refcount reaches zero."
      }
     }
    ]
