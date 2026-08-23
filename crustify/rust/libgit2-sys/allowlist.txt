@@ -116,3 +116,6 @@
 ^git_strarray$
 ^git_strarray_copy$
 ^git_strarray_dispose$
+^git_submodule$
+^git_submodule_dup$
+^git_submodule_free$

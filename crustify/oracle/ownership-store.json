@@ -2058,6 +2058,88 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_submodule",
+   "defined_in": "src/libgit2/submodule.h",
+   "_comment_agent": "git_submodule is an opaque public refcounted handle. Its private layout owns name, url, and branch strings; path is either an alias of name or a distinct owned string. repo is a non-owning pointer to the parent repository, which must remain alive while repository-dependent submodule operations run.",
+   "fields": [
+    {
+     "name": "branch",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional duplicated branch string, initialized NULL and freed by submodule_release."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": false,
+      "note": "Owned NUL-terminated name allocated by git__strdup or transferred from parsed config data; released by submodule_release."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": {
+       "lifetime": "field:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initially aliases name; may later be replaced by a distinct git__strdup allocation. submodule_release frees it only when it differs from name."
+     }
+    },
+    {
+     "name": "rc",
+     "refcount": true
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Non-owning parent repository pointer copied by submodule_alloc; release clears but never frees it. Repository-dependent operations may mutate through it and require the repository to remain alive."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional duplicated URL string; documentation explicitly permits NULL and submodule_release frees it."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -3458,6 +3540,85 @@
       "nullable": true,
       "mutable": true,
       "note": "Deprecated alias of git_strarray_dispose; borrows and resets the retained header while releasing its fields."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_dup",
+   "defined_in": "src/libgit2/submodule.c",
+   "lifetime": {
+    "for": "source",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": false,
+     "upref": true
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the output slot and writes one newly owned reference to the same submodule."
+     }
+    },
+    {
+     "name": "source",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:source"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the live source and increments its refcount."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_free",
+   "defined_in": "src/libgit2/submodule.c",
+   "lifetime": {
+    "for": "sm",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "sm",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one reference when non-null; decrements rc and releases the allocation on the final reference."
      }
     }
    ]
