@@ -2140,6 +2140,30 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_treebuilder",
+   "defined_in": "src/libgit2/tree.h",
+   "_comment_agent": "The repository pointer is a non-null borrowed keepalive dependency installed by git_treebuilder_new; it is never released by git_treebuilder_free.",
+   "fields": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "git_treebuilder_new stores repo without retaining it; treebuilder operations dereference it, so the repository must outlive the builder. git_treebuilder_free does not free the repository."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -3619,6 +3643,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one reference when non-null; decrements rc and releases the allocation on the final reference."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_treebuilder_free",
+   "defined_in": "src/libgit2/tree.c",
+   "lifetime": {
+    "for": "bld",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "bld",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and frees a complete treebuilder allocation; a null argument is accepted as a no-op."
      }
     }
    ]
