@@ -1379,6 +1379,114 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_rebase",
+   "defined_in": "src/libgit2/rebase.c",
+   "_comment_agent": "The public API keeps git_rebase opaque and uniquely owns each completed handle. Internally it retains a non-owning repository pointer, owns optional index and commit references, three optional duplicated/path strings, and a growable operation array; git_rebase_free releases every owned field and the header.",
+   "fields": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional owned index reference used by in-memory rebases. git_rebase_inmemory_index increments its refcount before lending ownership out, and git_rebase_free releases the rebase's count."
+     }
+    },
+    {
+     "name": "last_commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional owned git_commit reference used by in-memory rebases. Commit steps replace it after releasing the prior reference, and git_rebase_free releases the final reference."
+     }
+    },
+    {
+     "name": "onto_name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional owned onto name, duplicated or detached during construction and released by git_rebase_free."
+     }
+    },
+    {
+     "name": "operations.ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned growable array of git_rebase_operation values. Null represents an empty array; rebase setup appends and mutates entries, and git_rebase_free clears the backing allocation."
+     }
+    },
+    {
+     "name": "orig_head_name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional owned original-head name, duplicated or detached during construction and released by git_rebase_free; detached-head rebases leave it null."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed repository stored by git_rebase_init/open without incrementing ownership. Rebase operations call mutable repository APIs through it and git_rebase_free does not release it, so the repository must outlive the rebase."
+     }
+    },
+    {
+     "name": "state_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional owned NUL-terminated state-directory path detached from git_str storage and released by git_rebase_free. It is read but not mutated after installation."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -2269,6 +2377,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees a fully initialized push plus each owned collection; explicitly accepts null."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_rebase_free",
+   "defined_in": "src/libgit2/rebase.c",
+   "lifetime": {
+    "for": "rebase",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "rebase",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and frees a complete git_rebase and each owned field; NULL is explicitly accepted as a no-op."
      }
     }
    ]
