@@ -33,6 +33,7 @@
 ^git_error$
 ^git_fetch_prune_t$
 ^git_index_time$
+^git_indexer_progress$
 ^git_config$
 ^git_config_free$
 ^git_config_new$
