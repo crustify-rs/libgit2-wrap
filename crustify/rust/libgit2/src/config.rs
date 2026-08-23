@@ -1,5 +1,7 @@
 //! Safe wrappers for libgit2 config APIs.
 
+use core::ffi::CStr;
+use core::ptr::addr_of;
 use ffibox::CBox;
 
 use crate::ffi;
@@ -188,5 +190,161 @@ mod tests {
         let mut exclusive = config.as_mut();
         assert_eq!(exclusive.as_mut_ptr(), raw);
         assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_config_entry
+    /// A configuration entry whose storage is managed by its concrete backend.
+    GitConfigEntry,
+    GitConfigEntryRef,
+    GitConfigEntryMut,
+    ffi::git_config_entry
+);
+
+/// An owned configuration entry returned by libgit2.
+pub type GitConfigEntryOwned = CBox<GitConfigEntry>;
+
+// SAFETY: a fully formed entry is the first member of a
+// `git_config_backend_entry`; `git_config_entry_free` invokes that concrete
+// entry's finalizer exactly once and accepts null, although `CBox` is non-null.
+ffibox::impl_dropped!(
+    GitConfigEntry,
+    ffi::git_config_entry,
+    ffi::git_config_entry_free
+);
+
+impl<'a> GitConfigEntryRef<'a> {
+    /// Wraps: git_config_entry.name
+    /// Returns the normalized configuration name.
+    #[must_use]
+    pub fn name(&self) -> &'a CStr {
+        // SAFETY: every live backend entry has a non-null NUL-terminated name
+        // kept alive by its concrete entry owner. Raw-place projection forms
+        // no reference to the C-visible entry itself.
+        unsafe { CStr::from_ptr(addr_of!((*self.as_ptr()).name).read()) }
+    }
+
+    /// Wraps: git_config_entry.value
+    /// Returns the literal value, or `None` for a valueless entry.
+    #[must_use]
+    pub fn value(&self) -> Option<&'a CStr> {
+        // SAFETY: raw-place projection reads the initialized pointer field
+        // without forming a reference to the C-visible entry.
+        let value = unsafe { addr_of!((*self.as_ptr()).value).read() };
+        if value.is_null() {
+            None
+        } else {
+            // SAFETY: a non-null value is a NUL-terminated string kept alive
+            // by the concrete entry owner and bounded by this handle's borrow.
+            Some(unsafe { CStr::from_ptr(value) })
+        }
+    }
+
+    /// Wraps: git_config_entry.level
+    /// Returns the validated source level of this entry.
+    #[must_use]
+    pub fn level(&self) -> Option<GitConfigLevel> {
+        // SAFETY: this live handle permits a raw-place scalar read without
+        // forming a reference to the C-visible entry.
+        let level = unsafe { addr_of!((*self.as_ptr()).level).read() };
+        GitConfigLevel::from_raw(level)
+    }
+
+    /// Wraps: git_config_entry.include_depth
+    /// Returns the include nesting depth at which this entry was read.
+    #[must_use]
+    pub fn include_depth(&self) -> u32 {
+        // SAFETY: this live handle permits a raw-place scalar read without
+        // forming a reference to the C-visible entry.
+        unsafe { addr_of!((*self.as_ptr()).include_depth).read() }
+    }
+
+    /// Wraps: git_config_entry.origin_path
+    /// Returns the optional path from which this entry was read.
+    #[must_use]
+    pub fn origin_path(&self) -> Option<&'a CStr> {
+        // SAFETY: raw-place projection reads the initialized pointer field
+        // without forming a reference to the C-visible entry.
+        let path = unsafe { addr_of!((*self.as_ptr()).origin_path).read() };
+        if path.is_null() {
+            None
+        } else {
+            // SAFETY: a non-null origin path is a NUL-terminated string kept
+            // alive by the concrete entry owner and bounded by this borrow.
+            Some(unsafe { CStr::from_ptr(path) })
+        }
+    }
+
+    /// Wraps: git_config_entry.backend_type
+    /// Returns the backend kind that supplied this entry.
+    #[must_use]
+    pub fn backend_type(&self) -> &'a CStr {
+        // SAFETY: every live backend entry has a non-null NUL-terminated
+        // backend kind kept alive by its owner. Raw-place projection forms no
+        // reference to the C-visible entry itself.
+        unsafe { CStr::from_ptr(addr_of!((*self.as_ptr()).backend_type).read()) }
+    }
+}
+
+#[cfg(test)]
+mod entry_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn config_entry_wrapper_preserves_the_c_layout() {
+        assert_eq!(
+            size_of::<GitConfigEntry>(),
+            size_of::<ffi::git_config_entry>()
+        );
+        assert_eq!(
+            align_of::<GitConfigEntry>(),
+            align_of::<ffi::git_config_entry>()
+        );
+        assert_eq!(
+            size_of::<GitConfigEntryRef<'_>>(),
+            size_of::<*const ffi::git_config_entry>()
+        );
+        assert_eq!(
+            size_of::<GitConfigEntryMut<'_>>(),
+            size_of::<*mut ffi::git_config_entry>()
+        );
+    }
+
+    #[test]
+    fn config_entry_handle_reads_required_and_optional_fields() {
+        let mut raw = ffi::git_config_entry {
+            name: c"core.bare".as_ptr(),
+            value: c"true".as_ptr(),
+            backend_type: c"file".as_ptr(),
+            origin_path: c"/repo/.git/config".as_ptr(),
+            include_depth: 2,
+            level: GitConfigLevel::LOCAL.as_raw(),
+        };
+
+        // SAFETY: `raw` and all string literals remain live for the handle's
+        // complete use, and this is the only handle accessing the local value.
+        let entry = unsafe { GitConfigEntryMut::from_ptr(&raw mut raw) }
+            .expect("the address of a local entry is non-null");
+        let shared = entry.as_ref();
+        assert_eq!(shared.name(), c"core.bare");
+        assert_eq!(shared.value(), Some(c"true"));
+        assert_eq!(shared.backend_type(), c"file");
+        assert_eq!(shared.origin_path(), Some(c"/repo/.git/config"));
+        assert_eq!(shared.include_depth(), 2);
+        assert_eq!(shared.level(), Some(GitConfigLevel::LOCAL));
+
+        raw.value = core::ptr::null();
+        raw.origin_path = core::ptr::null();
+        raw.level = 1;
+        // SAFETY: the prior handle is no longer used, and `raw` remains live
+        // with valid null optional fields and an initialized integer level.
+        let entry = unsafe { GitConfigEntryRef::from_ptr(&raw mut raw) }
+            .expect("the address of a local entry is non-null");
+        assert_eq!(entry.value(), None);
+        assert_eq!(entry.origin_path(), None);
+        assert_eq!(entry.level(), None);
     }
 }

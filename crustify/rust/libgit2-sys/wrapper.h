@@ -1,4 +1,5 @@
 #include <git2.h>
+#include <git2/sys/credential.h>
 #include "util.h"
 
 /* Allocator primitives needed by the Rust bindings. */

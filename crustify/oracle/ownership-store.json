@@ -438,6 +438,89 @@
    ]
   },
   {
+   "name": "git_config_entry",
+   "defined_in": "include/git2/config.h",
+   "_comment_agent": "git_config_entry is the public prefix of a dynamically finalized git_config_backend_entry. Its four const char pointers are owned collectively by the concrete backend entry (direct allocations or storage held by its retained config-list); git_config_entry_free invokes the concrete finalizer. The strings remain live for the entry owner's lifetime and are read-only through the published API.",
+   "fields": [
+    {
+     "name": "backend_type",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": false,
+      "note": "Required interned NUL-terminated backend kind held by the retained config-list and released indirectly by the entry finalizer."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": false,
+      "note": "Required normalized NUL-terminated name, retained by the concrete backend entry and released indirectly by its finalizer."
+     }
+    },
+    {
+     "name": "origin_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional interned NUL-terminated origin path held by the retained config-list and released indirectly by the entry finalizer."
+     }
+    },
+    {
+     "name": "value",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional literal NUL-terminated value; valueless configuration entries use NULL. Storage is released indirectly by the concrete entry finalizer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_credential",
+   "defined_in": "include/git2/sys/credential.h",
+   "_comment_agent": "git_credential is a polymorphic public base header. Every fully constructed credential installs a non-null immutable finalizer callback with static code lifetime; the callback frees the concrete allocation and any secret-bearing fields. credtype is a by-value bit tag.",
+   "fields": [
+    {
+     "name": "free",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required concrete finalizer callback installed by every successful credential constructor. The code pointer is static and git_credential_free invokes it exactly once for an owned credential."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_describe_format_options",
    "defined_in": "include/git2/describe.h",
    "_comment_agent": "Public format options are caller-owned by value and have no lifecycle operation. dirty_suffix is an optional borrowed const C string read synchronously by git_describe__format.",
@@ -3032,6 +3115,33 @@
    ]
   },
   {
+   "name": "git_config_entry_free",
+   "defined_in": "src/libgit2/config.c",
+   "lifetime": {
+    "for": "entry",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes an optional owned config-entry result; non-null values are dynamically finalized through the enclosing git_config_backend_entry callback."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_config_free",
    "defined_in": "src/libgit2/config.c",
    "lifetime": {
@@ -3174,6 +3284,33 @@
       "nullable": true,
       "mutable": false,
       "note": "Optional transient NUL string; NULL produces a parse error."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_credential_free",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "lifetime": {
+    "for": "cred",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "cred",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes an optional owned, fully constructed credential and invokes its concrete finalizer callback."
      }
     }
    ]

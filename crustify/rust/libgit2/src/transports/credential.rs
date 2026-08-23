@@ -1,6 +1,9 @@
 //! Safe wrappers for libgit2 credential APIs.
 
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
+use core::ptr::addr_of;
+
+use ffibox::CBox;
 
 use crate::ffi;
 
@@ -136,5 +139,121 @@ mod tests {
         );
         assert_eq!(GitCredentialType::from_bits(1 << 31), None);
         assert!(GitCredentialType::EMPTY.is_empty());
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_credential
+    /// Polymorphic base header for an authentication credential.
+    GitCredential,
+    GitCredentialRef,
+    GitCredentialMut,
+    ffi::git_credential
+);
+
+/// An owned, fully constructed credential.
+pub type GitCredentialOwned = CBox<GitCredential>;
+
+// SAFETY: every fully formed credential has a non-null concrete finalizer in
+// its base header. `git_credential_free` invokes it exactly once and accepts
+// null, although `CBox` always supplies a non-null pointer.
+ffibox::impl_dropped!(GitCredential, ffi::git_credential, ffi::git_credential_free);
+
+impl GitCredentialRef<'_> {
+    /// Wraps: git_credential.free
+    /// Returns whether the credential header contains its required finalizer.
+    #[must_use]
+    pub fn has_deallocator(&self) -> bool {
+        // SAFETY: this live handle permits a raw-place field read without
+        // forming a reference to the C-visible credential.
+        unsafe { addr_of!((*self.as_ptr()).free).read().is_some() }
+    }
+
+    /// Wraps: git_credential.credtype
+    /// Returns the credential kind when its bit set is published by libgit2.
+    #[must_use]
+    pub fn credential_type(&self) -> Option<GitCredentialType> {
+        // SAFETY: this live handle permits a raw-place scalar read without
+        // forming a reference to the C-visible credential.
+        let credtype = unsafe { addr_of!((*self.as_ptr()).credtype).read() };
+        GitCredentialType::from_bits(credtype)
+    }
+}
+
+#[cfg(test)]
+mod credential_tests {
+    use core::mem::{align_of, size_of};
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
+
+    static DROP_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+    unsafe extern "C" fn test_credential_free(credential: *mut ffi::git_credential) {
+        DROP_COUNT.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: the lifecycle test passes the unique pointer produced by
+        // `Box::into_raw`, and this callback is invoked exactly once.
+        drop(unsafe { Box::from_raw(credential) });
+    }
+
+    #[test]
+    fn credential_wrapper_preserves_the_c_layout() {
+        assert_eq!(size_of::<GitCredential>(), size_of::<ffi::git_credential>());
+        assert_eq!(
+            align_of::<GitCredential>(),
+            align_of::<ffi::git_credential>()
+        );
+        assert_eq!(
+            size_of::<GitCredentialRef<'_>>(),
+            size_of::<*const ffi::git_credential>()
+        );
+        assert_eq!(
+            size_of::<GitCredentialMut<'_>>(),
+            size_of::<*mut ffi::git_credential>()
+        );
+    }
+
+    #[test]
+    fn credential_handle_validates_kind_and_finalizer() {
+        let mut raw = ffi::git_credential {
+            credtype: GitCredentialType::USERNAME.bits(),
+            free: Some(test_credential_free),
+        };
+
+        // SAFETY: `raw` remains live for the complete handle use and this is
+        // the only handle accessing the local credential header.
+        let credential = unsafe { GitCredentialRef::from_ptr(&raw mut raw) }
+            .expect("the address of a local credential is non-null");
+        assert_eq!(
+            credential.credential_type(),
+            Some(GitCredentialType::USERNAME)
+        );
+        assert!(credential.has_deallocator());
+
+        raw.credtype = 1 << 31;
+        raw.free = None;
+        // SAFETY: the previous handle is no longer used and `raw` remains a
+        // live initialized header for these diagnostic getters.
+        let credential = unsafe { GitCredentialRef::from_ptr(&raw mut raw) }
+            .expect("the address of a local credential is non-null");
+        assert_eq!(credential.credential_type(), None);
+        assert!(!credential.has_deallocator());
+    }
+
+    #[test]
+    fn credential_owner_invokes_the_concrete_finalizer_once() {
+        DROP_COUNT.store(0, Ordering::SeqCst);
+        let raw = Box::into_raw(Box::new(ffi::git_credential {
+            credtype: GitCredentialType::DEFAULT.bits(),
+            free: Some(test_credential_free),
+        }));
+
+        // SAFETY: `raw` is a fresh, fully formed credential allocation whose
+        // installed finalizer reclaims this exact `Box` allocation.
+        let credential =
+            unsafe { GitCredentialOwned::from_raw(raw) }.expect("Box::into_raw never returns null");
+        assert!(credential.as_ref().has_deallocator());
+        drop(credential);
+        assert_eq!(DROP_COUNT.load(Ordering::SeqCst), 1);
     }
 }
