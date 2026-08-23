@@ -1,7 +1,9 @@
 //! Safe wrappers for libgit2 diff APIs.
 
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
-use core::ptr::{addr_of, addr_of_mut};
+use core::ptr::{NonNull, addr_of, addr_of_mut};
+
+use ffibox::{CBox, CDropped};
 
 use crate::ffi;
 
@@ -790,5 +792,111 @@ mod diff_record_tests {
         let content = shared.content().unwrap();
         assert_eq!(content.elem(0), Some(b'h'));
         assert_eq!(content.elem(5), Some(b'\n'));
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_diff
+    /// An opaque diff result managed by libgit2.
+    ///
+    /// Use [`DiffOwned`] for an owned reference count. Some diff constructors
+    /// retain a non-owning repository pointer, so their safe wrappers must keep
+    /// that repository alive for every operation that can consult it.
+    Diff,
+    DiffRef,
+    DiffMut,
+    ffi::git_diff
+);
+
+/// An owned reference count to a [`Diff`].
+///
+/// Dropping it calls `git_diff_free`. Libgit2 does not publish an operation
+/// that increments a diff's reference count, so this owner is not `Clone`.
+pub type DiffOwned = CBox<Diff>;
+
+// SAFETY: `git_diff_free` consumes one reference count to a fully constructed
+// `git_diff`; on the final count it invokes the concrete generated- or
+// parsed-diff destructor. Although the C function accepts null, `CBox` always
+// supplies a live non-null pointer.
+unsafe impl CDropped for Diff {
+    unsafe fn c_drop(obj: NonNull<Self>) {
+        // SAFETY: the `CDropped` contract guarantees that `obj` represents one
+        // live owned count, and `Diff` is transparent over `ffi::git_diff`.
+        unsafe { ffi::git_diff_free(obj.as_ptr().cast()) }
+    }
+}
+
+#[cfg(test)]
+mod diff_tests {
+    use core::mem::{align_of, size_of};
+    use core::ptr;
+
+    use ffibox::CCell;
+
+    use super::*;
+
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and
+            // refcounted; this guard balances the successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard, after the diff owner has already been dropped.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    #[test]
+    fn opaque_diff_preserves_the_ffi_layout_and_handle_shape() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<Diff>();
+        assert_dropped::<Diff>();
+        assert_eq!(size_of::<Diff>(), size_of::<ffi::git_diff>());
+        assert_eq!(align_of::<Diff>(), align_of::<ffi::git_diff>());
+        assert_eq!(size_of::<DiffRef<'_>>(), size_of::<*const ffi::git_diff>());
+        assert_eq!(size_of::<DiffMut<'_>>(), size_of::<*mut ffi::git_diff>());
+        assert_eq!(size_of::<DiffOwned>(), size_of::<*mut ffi::git_diff>());
+    }
+
+    #[test]
+    fn null_diff_seams_create_no_handle_or_owner() {
+        // SAFETY: these conversions explicitly accept null and return `None`
+        // without borrowing or adopting an object.
+        unsafe {
+            assert!(DiffRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(DiffMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(DiffOwned::from_raw(ptr::null_mut()).is_none());
+        }
+    }
+
+    #[test]
+    fn parsed_diff_supports_owned_shared_and_exclusive_handles() {
+        let _libgit2 = Libgit2Init::acquire();
+        let mut raw = ptr::null_mut();
+
+        // SAFETY: `raw` is a valid out-slot and the empty input is readable for
+        // zero bytes. On success libgit2 initializes `raw` with one owned diff
+        // reference count.
+        assert_eq!(
+            unsafe { ffi::git_diff_from_buffer(&mut raw, b"".as_ptr().cast(), 0) },
+            0
+        );
+
+        // SAFETY: the successful constructor transferred one non-null owned
+        // count through `raw`, which has not been adopted elsewhere.
+        let mut diff = unsafe { DiffOwned::from_raw(raw) }.expect("empty parsed diff");
+        assert_eq!(diff.as_ref().as_ptr(), raw.cast_const());
+        assert_eq!(diff.as_mut().as_mut_ptr(), raw);
+        assert_eq!(diff.as_mut().as_ref().as_ptr(), raw.cast_const());
     }
 }

@@ -413,6 +413,136 @@
    ]
   },
   {
+   "name": "git_diff",
+   "defined_in": "src/libgit2/diff.h",
+   "_comment_agent": "git_diff is publicly opaque but internally refcounted. Its repository slot is a nullable non-owning pointer (parsed diffs leave it null; generated diffs retain a repository borrow). All callback slots are non-owning addresses of static libgit2 functions and are initialized for every fully constructed generated or parsed diff.",
+   "fields": [
+    {
+     "name": "entrycomp",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initialized to a static case-sensitive or case-insensitive comparison routine."
+     }
+    },
+    {
+     "name": "free_fn",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initialized to the generated- or parsed-diff static destructor before publication."
+     }
+    },
+    {
+     "name": "patch_fn",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initialized to the generated- or parsed-diff static patch factory before publication."
+     }
+    },
+    {
+     "name": "pfxcomp",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initialized to a static case-sensitive or case-insensitive prefix routine."
+     }
+    },
+    {
+     "name": "rc",
+     "refcount": true
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Generated diffs borrow their repository and use it for later diff/patch operations; parsed diffs store null. The diff destructor does not release the repository."
+     }
+    },
+    {
+     "name": "strcomp",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initialized to a static libgit2 comparison routine for every fully constructed diff."
+     }
+    },
+    {
+     "name": "strncomp",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initialized to a static libgit2 comparison routine for every fully constructed diff."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_stats",
    "defined_in": "src/libgit2/diff_stats.c",
    "_comment_agent": "The public type is opaque. Its successful constructor owns one refcounted git_diff handle and one files_changed-length statistics buffer; its public destructor releases both before freeing the header.",
@@ -871,6 +1001,65 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees a complete describe result plus its owned name/tag variant; NULL is accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_addref",
+   "defined_in": "src/libgit2/diff.c",
+   "lifetime": {
+    "for": "diff",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": false,
+     "upref": true
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Transiently borrows a live diff and atomically increments its embedded reference count, producing another ownership count for the same pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_free",
+   "defined_in": "src/libgit2/diff.c",
+   "lifetime": {
+    "for": "diff",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one git_diff reference count; null is explicitly accepted. The final decrement invokes the concrete diff destructor."
      }
     }
    ]
