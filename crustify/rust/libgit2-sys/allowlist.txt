@@ -70,6 +70,8 @@
 ^git_remote_autotag_option_t$
 ^git_remote_completion_t$
 ^git_remote_redirect_t$
+^git_index$
+^git_index_free$
 ^git_index_time$
 ^git_indexer_progress$
 ^git_config$

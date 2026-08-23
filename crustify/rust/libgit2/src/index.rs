@@ -113,6 +113,37 @@ mod tests {
     use super::*;
 
     #[test]
+    fn opaque_index_preserves_the_c_seam_and_lifecycle_contract() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<GitIndex>();
+        assert_dropped::<GitIndex>();
+        assert_eq!(size_of::<GitIndex>(), size_of::<ffi::git_index>());
+        assert_eq!(align_of::<GitIndex>(), align_of::<ffi::git_index>());
+        assert_eq!(
+            size_of::<GitIndexRef<'_>>(),
+            size_of::<*const ffi::git_index>()
+        );
+        assert_eq!(
+            size_of::<GitIndexMut<'_>>(),
+            size_of::<*mut ffi::git_index>()
+        );
+        assert_eq!(size_of::<GitIndexOwned>(), size_of::<*mut ffi::git_index>());
+    }
+
+    #[test]
+    fn null_index_seams_create_no_handles() {
+        // SAFETY: these conversion seams explicitly accept null and return
+        // `None` without borrowing or adopting an object.
+        unsafe {
+            assert!(GitIndexRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitIndexMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitIndexOwned::from_raw(ptr::null_mut()).is_none());
+        }
+    }
+
+    #[test]
     fn index_time_wrapper_preserves_the_c_layout() {
         assert_eq!(size_of::<IndexTime>(), size_of::<ffi::git_index_time>());
         assert_eq!(align_of::<IndexTime>(), align_of::<ffi::git_index_time>());
@@ -204,3 +235,26 @@ mod callback_tests {
         );
     }
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_index
+    /// An opaque, reference-counted libgit2 index.
+    ///
+    /// Each [`GitIndexOwned`] represents one reference count and releases it
+    /// with `git_index_free`. Libgit2 does not publish an operation for
+    /// acquiring another count, so owning handles intentionally do not
+    /// implement `Clone`.
+    GitIndex,
+    GitIndexRef,
+    GitIndexMut,
+    ffi::git_index
+);
+
+/// An owned reference count to a libgit2 index.
+pub type GitIndexOwned = CBox<GitIndex>;
+
+// SAFETY: `git_index_free` consumes exactly one reference to a complete
+// `git_index`. On the final count it disposes the index-owned fields and frees
+// the allocation; it accepts null, although `CBox` always supplies a live
+// non-null object exactly once.
+ffibox::impl_dropped!(GitIndex, ffi::git_index, ffi::git_index_free);

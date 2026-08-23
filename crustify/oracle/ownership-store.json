@@ -921,6 +921,115 @@
    ]
   },
   {
+   "name": "git_index",
+   "defined_in": "src/libgit2/index.h",
+   "_comment_agent": "git_index is publicly opaque but internally refcounted. tree points into the sibling tree_pool arena; comparator slots always borrow static functions; index_file_path owns an optional strdup allocation.",
+   "fields": [
+    {
+     "name": "entries_cmp_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initialized to a static strcmp-style comparator."
+     }
+    },
+    {
+     "name": "entries_search",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initialized to one of the static index-entry search functions."
+     }
+    },
+    {
+     "name": "entries_search_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initialized to one of the static path-search functions."
+     }
+    },
+    {
+     "name": "index_file_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional git__strdup result; index_free releases it with git__free."
+     }
+    },
+    {
+     "name": "rc",
+     "refcount": true
+    },
+    {
+     "name": "reuc_search",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Initialized to one of the static case-sensitive/case-insensitive comparator functions."
+     }
+    },
+    {
+     "name": "tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "field:tree_pool"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Cache nodes are allocated in tree_pool; clearing that sibling pool invalidates the pointer, which is repeatedly nulled and rebuilt."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_index_conflict_iterator",
    "defined_in": "src/libgit2/index.h",
    "_comment_agent": "The conflict iterator exclusively owns only its allocation and borrows the external index stored in `index`.",
@@ -3646,6 +3755,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees the iterator allocation; NULL is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_free",
+   "defined_in": "src/libgit2/index.c",
+   "lifetime": {
+    "for": "index",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one git_index reference count; NULL is explicitly accepted. The final decrement disposes fields and frees storage."
      }
     }
    ]
