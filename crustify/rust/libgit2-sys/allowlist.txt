@@ -31,6 +31,9 @@
 ^git_mailmap_free$
 ^git_merge_analysis_t$
 ^git_clone_local_t$
+^git_message_trailer$
+^git_note$
+^git_note_free$
 ^git_merge_file_favor_t$
 ^git_merge_file_input$
 ^git_diff_stats_format_t$

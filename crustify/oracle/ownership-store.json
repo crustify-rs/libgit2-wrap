@@ -912,6 +912,93 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_message_trailer",
+   "defined_in": "include/git2/message.h",
+   "_comment_agent": "git_message_trailers stores both pointers into the array-owned extracted trailer block; git_message_trailer_array_free releases that block and the trailer array together.",
+   "fields": [
+    {
+     "name": "key",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated key points into the owning git_message_trailer_array's _trailer_block and remains live only while that array remains live."
+     }
+    },
+    {
+     "name": "value",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated value points into the owning git_message_trailer_array's _trailer_block and remains live only while that array remains live."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_note",
+   "defined_in": "src/libgit2/notes.h",
+   "_comment_agent": "A successfully constructed git_note uniquely owns both duplicated signatures and its duplicated message; git_note_free releases all fields then the header.",
+   "fields": [
+    {
+     "name": "author",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": false,
+      "note": "note_new deep-duplicates the commit signature and git_note_free releases the unique stored signature."
+     }
+    },
+    {
+     "name": "committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": false,
+      "note": "note_new deep-duplicates the commit signature and git_note_free releases the unique stored signature."
+     }
+    },
+    {
+     "name": "message",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": false,
+      "note": "note_new duplicates the blob contents into a NUL-terminated allocation and git_note_free releases it; no live-note path mutates the bytes."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -1505,6 +1592,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a complete mailmap when non-null, frees every owned entry, disposes the entries vector, and releases the mailmap allocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_note_free",
+   "defined_in": "src/libgit2/notes.c",
+   "lifetime": {
+    "for": "note",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "note",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and frees a fully formed git_note; NULL is explicitly accepted."
      }
     }
    ]
