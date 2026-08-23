@@ -737,3 +737,369 @@ mod tests {
         );
     }
 }
+
+/// Known `git_merge_file_flag_t` bits accepted by file-level merges.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct MergeFileFlags(ffi::git_merge_file_flag_t);
+
+impl MergeFileFlags {
+    /// Use libgit2's default file-merge behavior.
+    pub const DEFAULT: Self = Self(ffi::git_merge_file_flag_t_GIT_MERGE_FILE_DEFAULT);
+    /// Produce standard two-sided conflict markers.
+    pub const STYLE_MERGE: Self = Self(ffi::git_merge_file_flag_t_GIT_MERGE_FILE_STYLE_MERGE);
+    /// Include the common ancestor in conflict markers.
+    pub const STYLE_DIFF3: Self = Self(ffi::git_merge_file_flag_t_GIT_MERGE_FILE_STYLE_DIFF3);
+    /// Condense non-alphanumeric regions while comparing.
+    pub const SIMPLIFY_ALNUM: Self = Self(ffi::git_merge_file_flag_t_GIT_MERGE_FILE_SIMPLIFY_ALNUM);
+    /// Ignore all whitespace changes.
+    pub const IGNORE_WHITESPACE: Self =
+        Self(ffi::git_merge_file_flag_t_GIT_MERGE_FILE_IGNORE_WHITESPACE);
+    /// Ignore changes in the amount of whitespace.
+    pub const IGNORE_WHITESPACE_CHANGE: Self =
+        Self(ffi::git_merge_file_flag_t_GIT_MERGE_FILE_IGNORE_WHITESPACE_CHANGE);
+    /// Ignore whitespace changes at the ends of lines.
+    pub const IGNORE_WHITESPACE_EOL: Self =
+        Self(ffi::git_merge_file_flag_t_GIT_MERGE_FILE_IGNORE_WHITESPACE_EOL);
+    /// Use the patience-diff algorithm.
+    pub const DIFF_PATIENCE: Self = Self(ffi::git_merge_file_flag_t_GIT_MERGE_FILE_DIFF_PATIENCE);
+    /// Spend extra time finding a minimal diff.
+    pub const DIFF_MINIMAL: Self = Self(ffi::git_merge_file_flag_t_GIT_MERGE_FILE_DIFF_MINIMAL);
+    /// Produce zealous diff3 conflict markers.
+    pub const STYLE_ZDIFF3: Self = Self(ffi::git_merge_file_flag_t_GIT_MERGE_FILE_STYLE_ZDIFF3);
+    /// Accept output containing conflict markers as a merge result.
+    pub const ACCEPT_CONFLICTS: Self =
+        Self(ffi::git_merge_file_flag_t_GIT_MERGE_FILE_ACCEPT_CONFLICTS);
+    /// Every file-merge flag published by this libgit2 version.
+    pub const ALL: Self = Self(
+        Self::STYLE_MERGE.0
+            | Self::STYLE_DIFF3.0
+            | Self::SIMPLIFY_ALNUM.0
+            | Self::IGNORE_WHITESPACE.0
+            | Self::IGNORE_WHITESPACE_CHANGE.0
+            | Self::IGNORE_WHITESPACE_EOL.0
+            | Self::DIFF_PATIENCE.0
+            | Self::DIFF_MINIMAL.0
+            | Self::STYLE_ZDIFF3.0
+            | Self::ACCEPT_CONFLICTS.0,
+    );
+
+    /// Converts raw bits when every bit is known to this libgit2 version.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_merge_file_flag_t) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 flag bits.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_merge_file_flag_t {
+        self.0
+    }
+
+    /// Returns whether no behavior-changing flag is set.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every flag in `other` is present.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+}
+
+impl BitOr for MergeFileFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for MergeFileFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for MergeFileFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for MergeFileFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for MergeFileFlags {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(self.0 ^ Self::ALL.0)
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_merge_file_options
+    /// Borrowing options that control a file-level merge.
+    MergeFileOptions,
+    MergeFileOptionsRef,
+    MergeFileOptionsMut,
+    ffi::git_merge_file_options
+);
+
+impl<'a> MergeFileOptionsRef<'a> {
+    /// Wraps: git_merge_file_options.flags
+    /// Returns the validated file-merge behavior flags.
+    pub fn flags(&self) -> Result<MergeFileFlags, ffi::git_merge_file_flag_t> {
+        // SAFETY: this live shared handle permits a raw-place scalar read
+        // without forming a reference to C-visible memory.
+        let flags = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        MergeFileFlags::from_bits(flags).ok_or(flags)
+    }
+
+    /// Wraps: git_merge_file_options.version
+    /// Returns the ABI version of this options value.
+    #[must_use]
+    pub fn version(&self) -> u32 {
+        // SAFETY: as `flags`, for this initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).version).read() }
+    }
+
+    /// Wraps: git_merge_file_options.favor
+    /// Returns the validated conflict-side preference.
+    pub fn favor(&self) -> Result<MergeFileFavor, ffi::git_merge_file_favor_t> {
+        // SAFETY: as `flags`, for this initialized scalar field.
+        let favor = unsafe { addr_of!((*self.as_ptr()).favor).read() };
+        MergeFileFavor::try_from(favor)
+    }
+
+    /// Wraps: git_merge_file_options.marker_size
+    /// Returns the requested conflict-marker width, or zero for the default.
+    #[must_use]
+    pub fn marker_size(&self) -> u16 {
+        // SAFETY: as `flags`, for this initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).marker_size).read() }
+    }
+
+    /// Wraps: git_merge_file_options.their_label
+    /// Returns the optional label borrowed for the "theirs" side.
+    #[must_use]
+    pub fn their_label(&self) -> Option<&'a CStr> {
+        // SAFETY: raw-place projection reads the initialized pointer field
+        // without forming a reference to C-visible memory.
+        let label = unsafe { addr_of!((*self.as_ptr()).their_label).read() };
+        // SAFETY: a valid options value requires this non-null label to stay
+        // NUL-terminated and live for the handle lifetime.
+        unsafe { optional_borrowed_label(label) }
+    }
+
+    /// Wraps: git_merge_file_options.our_label
+    /// Returns the optional label borrowed for the "ours" side.
+    #[must_use]
+    pub fn our_label(&self) -> Option<&'a CStr> {
+        // SAFETY: as `their_label`, for this initialized pointer field.
+        let label = unsafe { addr_of!((*self.as_ptr()).our_label).read() };
+        // SAFETY: as `their_label`, for this borrowed string field.
+        unsafe { optional_borrowed_label(label) }
+    }
+
+    /// Wraps: git_merge_file_options.ancestor_label
+    /// Returns the optional label borrowed for the common ancestor.
+    #[must_use]
+    pub fn ancestor_label(&self) -> Option<&'a CStr> {
+        // SAFETY: as `their_label`, for this initialized pointer field.
+        let label = unsafe { addr_of!((*self.as_ptr()).ancestor_label).read() };
+        // SAFETY: as `their_label`, for this borrowed string field.
+        unsafe { optional_borrowed_label(label) }
+    }
+}
+
+unsafe fn optional_borrowed_label<'a>(label: *const core::ffi::c_char) -> Option<&'a CStr> {
+    if label.is_null() {
+        None
+    } else {
+        // SAFETY: every non-null label in a valid options value is a
+        // NUL-terminated string that remains live for the handle lifetime;
+        // the caller obtains this helper only through such a handle getter.
+        Some(unsafe { CStr::from_ptr(label) })
+    }
+}
+
+impl MergeFileOptionsMut<'_> {
+    /// Sets the file-merge behavior flags.
+    pub fn set_flags(&mut self, flags: MergeFileFlags) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
+    }
+
+    /// Sets the ABI version of this options value.
+    pub fn set_version(&mut self, version: u32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+
+    /// Sets which side wins conflicting regions.
+    pub fn set_favor(&mut self, favor: MergeFileFavor) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).favor).write(favor.into()) }
+    }
+
+    /// Sets the conflict-marker width, using zero for libgit2's default.
+    pub fn set_marker_size(&mut self, marker_size: u16) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).marker_size).write(marker_size) }
+    }
+
+    /// Stores an optional caller-owned label for the "theirs" side.
+    ///
+    /// # Safety
+    ///
+    /// A non-null `label` must remain alive and NUL-terminated for every later
+    /// use of the options value, including uses after this handle is released.
+    pub unsafe fn set_borrowed_their_label(&mut self, label: Option<&CStr>) {
+        let label = label.map_or(core::ptr::null(), CStr::as_ptr);
+        // SAFETY: this exclusive handle permits the raw-place field write, and
+        // the caller upholds the stored string's lifetime contract.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).their_label).write(label) }
+    }
+
+    /// Stores an optional caller-owned label for the "ours" side.
+    ///
+    /// # Safety
+    ///
+    /// A non-null `label` must remain alive and NUL-terminated for every later
+    /// use of the options value, including uses after this handle is released.
+    pub unsafe fn set_borrowed_our_label(&mut self, label: Option<&CStr>) {
+        let label = label.map_or(core::ptr::null(), CStr::as_ptr);
+        // SAFETY: as `set_borrowed_their_label`, for this pointer field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).our_label).write(label) }
+    }
+
+    /// Stores an optional caller-owned label for the common ancestor.
+    ///
+    /// # Safety
+    ///
+    /// A non-null `label` must remain alive and NUL-terminated for every later
+    /// use of the options value, including uses after this handle is released.
+    pub unsafe fn set_borrowed_ancestor_label(&mut self, label: Option<&CStr>) {
+        let label = label.map_or(core::ptr::null(), CStr::as_ptr);
+        // SAFETY: as `set_borrowed_their_label`, for this pointer field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).ancestor_label).write(label) }
+    }
+
+    /// Clears the optional "theirs" label.
+    pub fn clear_their_label(&mut self) {
+        // SAFETY: storing null creates no borrowed-pointer lifetime obligation.
+        unsafe { self.set_borrowed_their_label(None) }
+    }
+
+    /// Clears the optional "ours" label.
+    pub fn clear_our_label(&mut self) {
+        // SAFETY: storing null creates no borrowed-pointer lifetime obligation.
+        unsafe { self.set_borrowed_our_label(None) }
+    }
+
+    /// Clears the optional common-ancestor label.
+    pub fn clear_ancestor_label(&mut self) {
+        // SAFETY: storing null creates no borrowed-pointer lifetime obligation.
+        unsafe { self.set_borrowed_ancestor_label(None) }
+    }
+}
+
+#[cfg(test)]
+mod file_options_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn file_options_wrapper_preserves_the_c_layout() {
+        assert_eq!(
+            size_of::<MergeFileOptions>(),
+            size_of::<ffi::git_merge_file_options>()
+        );
+        assert_eq!(
+            align_of::<MergeFileOptions>(),
+            align_of::<ffi::git_merge_file_options>()
+        );
+        assert_eq!(
+            size_of::<MergeFileOptionsRef<'_>>(),
+            size_of::<*const ffi::git_merge_file_options>()
+        );
+        assert_eq!(
+            size_of::<MergeFileOptionsMut<'_>>(),
+            size_of::<*mut ffi::git_merge_file_options>()
+        );
+    }
+
+    #[test]
+    fn file_options_handles_validate_and_update_every_field() {
+        let mut storage = MergeFileOptions::zeroed();
+        let raw = addr_of_mut!(storage).cast::<ffi::git_merge_file_options>();
+
+        // SAFETY: `raw` points to the live, initialized, layout-compatible
+        // stack value above and this is its only active handle.
+        let mut options = unsafe { MergeFileOptionsMut::from_ptr(raw) }
+            .expect("the address of stack storage is non-null");
+        let flags = MergeFileFlags::STYLE_DIFF3 | MergeFileFlags::DIFF_PATIENCE;
+        options.set_version(1);
+        options.set_flags(flags);
+        options.set_favor(MergeFileFavor::Theirs);
+        options.set_marker_size(11);
+        // SAFETY: all three C string literals have static storage duration.
+        unsafe {
+            options.set_borrowed_ancestor_label(Some(c"base"));
+            options.set_borrowed_our_label(Some(c"ours"));
+            options.set_borrowed_their_label(Some(c"theirs"));
+        }
+
+        let shared = options.as_ref();
+        assert_eq!(shared.version(), 1);
+        assert_eq!(shared.flags(), Ok(flags));
+        assert_eq!(shared.favor(), Ok(MergeFileFavor::Theirs));
+        assert_eq!(shared.marker_size(), 11);
+        assert_eq!(shared.ancestor_label(), Some(c"base"));
+        assert_eq!(shared.our_label(), Some(c"ours"));
+        assert_eq!(shared.their_label(), Some(c"theirs"));
+
+        options.clear_ancestor_label();
+        options.clear_our_label();
+        options.clear_their_label();
+        assert_eq!(options.as_ref().ancestor_label(), None);
+        assert_eq!(options.as_ref().our_label(), None);
+        assert_eq!(options.as_ref().their_label(), None);
+    }
+
+    #[test]
+    fn unknown_file_option_values_are_rejected() {
+        let unknown_flags = MergeFileFlags::ALL.bits() << 1;
+        assert_eq!(MergeFileFlags::from_bits(unknown_flags), None);
+        assert!(MergeFileFlags::DEFAULT.is_empty());
+
+        let mut raw = ffi::git_merge_file_options {
+            version: 1,
+            ancestor_label: core::ptr::null(),
+            our_label: core::ptr::null(),
+            their_label: core::ptr::null(),
+            favor: 99,
+            flags: unknown_flags,
+            marker_size: 0,
+        };
+        // SAFETY: `raw` is live initialized stack storage used only through
+        // this shared handle for the rest of the test.
+        let options = unsafe { MergeFileOptionsRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(options.flags(), Err(unknown_flags));
+        assert_eq!(options.favor(), Err(99));
+    }
+}

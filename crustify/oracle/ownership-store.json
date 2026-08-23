@@ -1340,6 +1340,58 @@
    ]
   },
   {
+   "name": "git_merge_file_options",
+   "defined_in": "include/git2/merge.h",
+   "_comment_agent": "The three optional labels are shallow-copied with the options and never released by it; every consumer treats them as read-only NUL-terminated strings. Callers must keep non-null labels alive through all uses.",
+   "fields": [
+    {
+     "name": "ancestor_label",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated label; libgit2 only reads it while consuming the options value."
+     }
+    },
+    {
+     "name": "our_label",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated label; libgit2 only reads it while consuming the options value."
+     }
+    },
+    {
+     "name": "their_label",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated label; libgit2 only reads it while consuming the options value."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_merge_file_result",
    "defined_in": "include/git2/merge.h",
    "_comment_agent": "The public result is an inline/by-value header that owns its optional path and counted content allocations; its public free routine disposes those fields without freeing the header.",
@@ -1407,6 +1459,41 @@
       "nullable": false,
       "mutable": false,
       "note": "NUL-terminated value points into the owning git_message_trailer_array's _trailer_block and remains live only while that array remains live."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_message_trailer_array",
+   "defined_in": "include/git2/message.h",
+   "_comment_agent": "git_message_trailers transfers two coordinated allocations into the value: trailers owns count by-value descriptors whose key/value pointers borrow the separately owned _trailer_block. The public disposer frees both fields but retains the caller's header.",
+   "fields": [
+    {
+     "name": "_trailer_block",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Private uniquely owned NUL-terminated allocation produced by extract_trailer_block; trailer key/value pointers borrow subranges of it, and git_message_trailer_array_free releases it."
+     }
+    },
+    {
+     "name": "trailers",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Unique git-array allocation containing count initialized git_message_trailer values; elements borrow their strings from _trailer_block, and the array disposer releases the allocation."
      }
     }
    ]
@@ -4178,6 +4265,35 @@
       "nullable": true,
       "mutable": false,
       "note": "The routine accepts a nullable borrowed result header, reads its fields, and frees the path and content allocations while retaining the header storage."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_message_trailer_array_free",
+   "defined_in": "src/libgit2/trailer.c",
+   "lifetime": {
+    "for": "arr",
+    "is_dropper": false,
+    "is_disposer": true,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "arr",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arr"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a live array header and frees both owned pointer fields without freeing or clearing the header itself."
      }
     }
    ]
