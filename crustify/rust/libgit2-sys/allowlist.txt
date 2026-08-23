@@ -15,3 +15,5 @@
 ^git_config$
 ^git_config_free$
 ^git_config_new$
+^git_blame$
+^git_blame_free$
