@@ -298,6 +298,12 @@
    ]
   },
   {
+   "name": "git_cert",
+   "defined_in": "include/git2/cert.h",
+   "_comment_agent": "Public git_cert is a one-field by-value base record. cert_type is a scalar git_cert_t discriminant initialized by the concrete certificate producer and thereafter read through public callbacks; the type has no pointer fields, refcount, or independent lifecycle operation.",
+   "fields": []
+  },
+  {
    "name": "git_clone_local_t",
    "defined_in": "include/git2/clone.h",
    "_comment_agent": "Closed public C enum with four scalar values and no ownership-bearing fields.",
