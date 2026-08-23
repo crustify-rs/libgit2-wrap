@@ -1257,6 +1257,72 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_pathspec",
+   "defined_in": "src/libgit2/pathspec.h",
+   "_comment_agent": "git_pathspec owns its optional detached prefix string and is reference counted through rc. git_pathspec_new creates the first count; match lists increment it; git_pathspec_free releases one count.",
+   "fields": [
+    {
+     "name": "prefix",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional NUL-terminated common prefix detached from a git_str; git_pathspec__clear releases it with git__free. Consumers only read the stored bytes."
+     }
+    },
+    {
+     "name": "rc",
+     "refcount": true
+    }
+   ]
+  },
+  {
+   "name": "git_pathspec_match_list",
+   "defined_in": "src/libgit2/pathspec.h",
+   "_comment_agent": "A match list owns one reference to its compiled pathspec, its matches pointer-array allocation, its failures array, and its pool. Match elements are borrowed: strings live in the list pool, while diff deltas live in the source diff.",
+   "fields": [
+    {
+     "name": "matches.ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "other"
+        }
+       }
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned growable allocation of borrowed pointers. String-mode elements point into this list's pool; diff-mode elements point into the source git_diff and require that external object to remain alive."
+     }
+    },
+    {
+     "name": "pathspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "Owns one refcount acquired by pathspec_match_alloc and released by pathspec_match_free; valid completed match lists always store a non-null pathspec."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -2066,6 +2132,60 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one owning patch reference. Null is accepted; the allocation and fields are released through free_fn when the reference count reaches zero."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_pathspec_free",
+   "defined_in": "src/libgit2/pathspec.c",
+   "lifetime": {
+    "for": "ps",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "ps",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one owned git_pathspec reference; NULL is a no-op. The final down-reference clears owned fields and frees the allocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_pathspec_match_list_free",
+   "defined_in": "src/libgit2/pathspec.c",
+   "lifetime": {
+    "for": "m",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "m",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes a complete match-list allocation; NULL is a no-op. It releases the retained pathspec count, arrays, pool, and header."
      }
     }
    ]

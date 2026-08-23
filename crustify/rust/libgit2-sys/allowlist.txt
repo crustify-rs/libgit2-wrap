@@ -73,3 +73,7 @@
 ^git_packbuilder$
 ^git_packbuilder_free$
 ^git_proxy_t$
+^git_pathspec$
+^git_pathspec_free$
+^git_pathspec_match_list$
+^git_pathspec_match_list_free$
