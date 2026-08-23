@@ -1492,6 +1492,41 @@
    "fields": []
   },
   {
+   "name": "git_odb",
+   "defined_in": "src/libgit2/odb.h",
+   "_comment_agent": "git_odb is reference-counted through rc. Its only direct pointer field, cgraph, is nullable owned mutable storage replaced and destroyed under the ODB mutex.",
+   "fields": [
+    {
+     "name": "cgraph",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "The zero-initialized slot exclusively owns one optional git_commit_graph. git_odb_set_commit_graph transfers a replacement into the slot after freeing the old value; git_odb refreshes it through this pointer, and odb_free releases it with git_commit_graph_free."
+     },
+     "locked_by": {
+      "lock": "lock",
+      "lock_op": [
+       "git_mutex_lock"
+      ],
+      "unlock_op": [
+       "git_mutex_unlock"
+      ]
+     }
+    },
+    {
+     "name": "rc",
+     "refcount": true
+    }
+   ]
+  },
+  {
    "name": "git_packbuilder",
    "defined_in": "src/libgit2/pack-objects.h",
    "_comment_agent": "The public API treats git_packbuilder as opaque. Its complete internal pointer-field footprint was inspected to establish the retained repository/callback borrows and owned ODB, name, and object-list storage.",
@@ -4169,6 +4204,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one outstanding object reference; null is accepted. git_cached_obj_decref releases the allocation when its refcount reaches zero."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_free",
+   "defined_in": "src/libgit2/odb.c",
+   "lifetime": {
+    "for": "db",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "db",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one git_odb reference; NULL is explicitly accepted. It decrements rc and destroys the complete object only when the final unowned count is released."
      }
     }
    ]

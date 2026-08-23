@@ -97,6 +97,8 @@
 ^git_object_dup$
 ^git_object_free$
 ^git_object_t$
+^git_odb$
+^git_odb_free$
 ^git_oid$
 ^git_oid_t$
 ^git_packbuilder$
