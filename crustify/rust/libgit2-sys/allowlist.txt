@@ -75,6 +75,9 @@
 ^git_packbuilder$
 ^git_packbuilder_free$
 ^git_proxy_t$
+^git_refdb$
+^git_refdb_free$
+^git_refdb_t$
 ^git_pathspec$
 ^git_pathspec_free$
 ^git_pathspec_match_list$
