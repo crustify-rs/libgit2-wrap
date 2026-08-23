@@ -249,3 +249,85 @@ mod object_type_tests {
         assert_eq!(align_of::<GitObjectType>(), align_of::<ffi::git_object_t>());
     }
 }
+
+/// Wraps: git_reference_t
+/// The published kind of a Git reference.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum GitReferenceType {
+    /// An invalid or uninitialized reference kind.
+    Invalid = ffi::git_reference_t_GIT_REFERENCE_INVALID,
+    /// A direct reference whose target is an object ID.
+    Direct = ffi::git_reference_t_GIT_REFERENCE_DIRECT,
+    /// A symbolic reference whose target is another reference name.
+    Symbolic = ffi::git_reference_t_GIT_REFERENCE_SYMBOLIC,
+    /// A mask containing both valid reference kinds.
+    All = ffi::git_reference_t_GIT_REFERENCE_ALL,
+}
+
+/// A raw reference kind not published by libgit2.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidGitReferenceType(ffi::git_reference_t);
+
+impl InvalidGitReferenceType {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_reference_t {
+        self.0
+    }
+}
+
+impl From<GitReferenceType> for ffi::git_reference_t {
+    fn from(value: GitReferenceType) -> Self {
+        value as Self
+    }
+}
+
+impl TryFrom<ffi::git_reference_t> for GitReferenceType {
+    type Error = InvalidGitReferenceType;
+
+    fn try_from(value: ffi::git_reference_t) -> Result<Self, Self::Error> {
+        match value {
+            ffi::git_reference_t_GIT_REFERENCE_INVALID => Ok(Self::Invalid),
+            ffi::git_reference_t_GIT_REFERENCE_DIRECT => Ok(Self::Direct),
+            ffi::git_reference_t_GIT_REFERENCE_SYMBOLIC => Ok(Self::Symbolic),
+            ffi::git_reference_t_GIT_REFERENCE_ALL => Ok(Self::All),
+            value => Err(InvalidGitReferenceType(value)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod reference_type_tests {
+    use super::*;
+    use core::mem::{align_of, size_of};
+
+    #[test]
+    fn published_reference_kinds_round_trip() {
+        for kind in [
+            GitReferenceType::Invalid,
+            GitReferenceType::Direct,
+            GitReferenceType::Symbolic,
+            GitReferenceType::All,
+        ] {
+            let raw = ffi::git_reference_t::from(kind);
+            assert_eq!(GitReferenceType::try_from(raw), Ok(kind));
+        }
+
+        let invalid = ffi::git_reference_t_GIT_REFERENCE_ALL + 1;
+        let error = GitReferenceType::try_from(invalid).unwrap_err();
+        assert_eq!(error.value(), invalid);
+    }
+
+    #[test]
+    fn reference_type_matches_the_c_abi_scalar() {
+        assert_eq!(
+            size_of::<GitReferenceType>(),
+            size_of::<ffi::git_reference_t>()
+        );
+        assert_eq!(
+            align_of::<GitReferenceType>(),
+            align_of::<ffi::git_reference_t>()
+        );
+    }
+}

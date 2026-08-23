@@ -1560,6 +1560,41 @@
    ]
   },
   {
+   "name": "git_reference",
+   "defined_in": "src/libgit2/refs.h",
+   "_comment_agent": "The public API keeps git_reference opaque. Internal pointer ownership follows alloc/dup/free in src/libgit2/refs.c.",
+   "fields": [
+    {
+     "name": "db",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Each attached reference owns one refcount on the refdb; git_reference_dup increments it and git_reference_free decrements it. Fresh allocations remain null until attached to a refdb."
+     }
+    },
+    {
+     "name": "target.symbolic",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "A symbolic reference owns a git__strdup allocation freed by git_reference_free. The union storage is null in calloc-initialized direct references; valid symbolic targets are non-null and not mutated in place."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_reflog",
    "defined_in": "src/libgit2/reflog.h",
    "_comment_agent": "Publicly returned reflogs own ref_name and one refdb count. Internal transaction duplicates are pool-backed, so their ref_name has an alternate borrow from the transaction pool; their null db is never used as an owned refdb count.",
@@ -2717,6 +2752,85 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one owned refcount. NULL is explicitly accepted; the final count frees the backend and git_refdb allocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_dup",
+   "defined_in": "src/libgit2/refs.c",
+   "lifetime": {
+    "for": "source",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": true,
+     "upref": false
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "dest",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:dest"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed out-slot receives a newly allocated owned reference on success."
+     }
+    },
+    {
+     "name": "source",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:source"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads a live source and leaves it owned by the caller."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_free",
+   "defined_in": "src/libgit2/refs.c",
+   "lifetime": {
+    "for": "reference",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "reference",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and frees a complete reference; null is explicitly accepted."
      }
     }
    ]
