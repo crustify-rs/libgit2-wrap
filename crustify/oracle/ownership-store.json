@@ -2133,6 +2133,39 @@
    ]
   },
   {
+   "name": "git_push_update",
+   "defined_in": "include/git2/remote.h",
+   "_comment_agent": "Each push update owns both duplicated refname strings, while the enclosing git_push owns the update allocation and lends const update pointers only during negotiation callbacks.",
+   "fields": [
+    {
+     "name": "dst_refname",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": false,
+      "note": "add_update duplicates the destination refname with git__strdup; git_push_free releases it with git__free. Published negotiation callbacks receive the update only as const and all observed accesses read the NUL-terminated bytes."
+     }
+    },
+    {
+     "name": "src_refname",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": false,
+      "note": "add_update duplicates the source refname with git__strdup; git_push_free releases it with git__free. Published negotiation callbacks receive the update only as const and all observed accesses read the NUL-terminated bytes."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_rebase",
    "defined_in": "src/libgit2/rebase.c",
    "_comment_agent": "The public API keeps git_rebase opaque and uniquely owns each completed handle. Internally it retains a non-owning repository pointer, owns optional index and commit references, three optional duplicated/path strings, and a growable operation array; git_rebase_free releases every owned field and the header.",
@@ -2236,6 +2269,28 @@
       "nullable": true,
       "mutable": false,
       "note": "Optional owned NUL-terminated state-directory path detached from git_str storage and released by git_rebase_free. It is read but not mutated after installation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_rebase_operation",
+   "defined_in": "include/git2/rebase.h",
+   "_comment_agent": "Operations are inline elements of the rebase-owned operations array. exec is an optional borrowed const C string; id is an inline value.",
+   "fields": [
+    {
+     "name": "exec",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "rebase_operation_alloc stores the const input pointer without copying; it is non-null only for EXEC operations and must remain valid with the operation/rebase. Non-EXEC operations carry NULL."
      }
     }
    ]

@@ -1,8 +1,11 @@
 //! Safe wrappers for libgit2 rebase APIs.
 
+use core::ptr::addr_of;
+
 use ffibox::CBox;
 
 use crate::ffi;
+use crate::oid::OidRef;
 
 /// Wraps: git_rebase_operation_t
 /// An instruction in a rebase sequence.
@@ -181,6 +184,110 @@ mod tests {
             assert!(GitRebaseRef::from_ptr(ptr::null_mut()).is_none());
             assert!(GitRebaseMut::from_ptr(ptr::null_mut()).is_none());
             assert!(GitRebaseOwned::from_raw(ptr::null_mut()).is_none());
+        }
+    }
+
+    #[test]
+    fn rebase_operation_layout_and_fields_match_the_c_value() {
+        fn assert_cell<T: CCell>() {}
+
+        let mut raw = ffi::git_rebase_operation {
+            type_: ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_EXEC,
+            id: ffi::git_oid {
+                type_: ffi::git_oid_t_GIT_OID_SHA1 as u8,
+                id: [0x5a; 32],
+            },
+            exec: c"make test".as_ptr(),
+        };
+
+        assert_cell::<GitRebaseOperation>();
+        assert_eq!(
+            size_of::<GitRebaseOperation>(),
+            size_of::<ffi::git_rebase_operation>()
+        );
+        assert_eq!(
+            align_of::<GitRebaseOperation>(),
+            align_of::<ffi::git_rebase_operation>()
+        );
+
+        // SAFETY: `raw` is fully initialized and remains live and unchanged
+        // for the shared handle's lifetime.
+        let operation = unsafe { GitRebaseOperationRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(operation.operation_type(), Ok(RebaseOperationType::Exec));
+        assert_eq!(operation.exec(), Ok(Some(c"make test")));
+        assert!(matches!(operation.id(), Ok(None)));
+
+        raw.type_ = ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_PICK;
+        raw.exec = core::ptr::null();
+        // SAFETY: `raw` remains fully initialized and live; no prior handle is
+        // used after this new shared borrow is created.
+        let operation = unsafe { GitRebaseOperationRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(operation.exec(), Ok(None));
+        assert_eq!(
+            operation.id().unwrap().unwrap().raw_bytes().elem(0),
+            Some(0x5a)
+        );
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_rebase_operation
+    /// A rebase instruction borrowed from its enclosing rebase.
+    ///
+    /// Libgit2 stores operations inline and invalidates their addresses when
+    /// the rebase is freed. The optional command string follows the same
+    /// lifetime.
+    GitRebaseOperation,
+    GitRebaseOperationRef,
+    GitRebaseOperationMut,
+    ffi::git_rebase_operation
+);
+
+impl<'a> GitRebaseOperationRef<'a> {
+    /// Wraps: git_rebase_operation.type
+    /// Returns the instruction kind after validating the C discriminant.
+    pub fn operation_type(&self) -> Result<RebaseOperationType, InvalidRebaseOperationType> {
+        // SAFETY: this live shared handle permits a raw-place scalar read
+        // without forming a reference to C-visible operation storage.
+        let raw = unsafe { addr_of!((*self.as_ptr()).type_).read() };
+        RebaseOperationType::try_from(raw)
+    }
+
+    /// Wraps: git_rebase_operation.id
+    /// Borrows the commit ID, or returns `None` for an `Exec` instruction.
+    pub fn id(&self) -> Result<Option<OidRef<'a>>, InvalidRebaseOperationType> {
+        if self.operation_type()? == RebaseOperationType::Exec {
+            return Ok(None);
+        }
+
+        // SAFETY: raw-place projection reaches the inline initialized OID
+        // of a non-`Exec` operation without forming a reference, and the field
+        // lives for this operation handle's full borrow.
+        let ptr = unsafe { addr_of!((*self.as_ptr()).id) }.cast_mut();
+        // SAFETY: `ptr` addresses the live inline OID and inherits `'a` from
+        // the enclosing operation handle.
+        Ok(Some(
+            unsafe { OidRef::from_ptr(ptr) }.expect("an inline field is non-null"),
+        ))
+    }
+
+    /// Wraps: git_rebase_operation.exec
+    /// Borrows the command for an `Exec` instruction, if present.
+    pub fn exec(&self) -> Result<Option<&'a core::ffi::CStr>, InvalidRebaseOperationType> {
+        if self.operation_type()? != RebaseOperationType::Exec {
+            return Ok(None);
+        }
+
+        // SAFETY: this shared handle permits a raw-place read of the pointer
+        // populated for an `Exec` operation without forming a reference to
+        // C-visible operation storage.
+        let ptr = unsafe { addr_of!((*self.as_ptr()).exec).read() };
+        if ptr.is_null() {
+            Ok(None)
+        } else {
+            // SAFETY: a non-null libgit2 command points to a live
+            // NUL-terminated string for the operation's lifetime.
+            Ok(Some(unsafe { core::ffi::CStr::from_ptr(ptr) }))
         }
     }
 }

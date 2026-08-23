@@ -1,10 +1,11 @@
 //! Safe wrappers for libgit2 remote APIs.
 
-use core::ptr::NonNull;
+use core::ptr::{NonNull, addr_of};
 
 use ffibox::{CBox, CCloned};
 
 use crate::ffi;
+use crate::oid::OidRef;
 
 /// Wraps: git_fetch_prune_t
 /// Controls whether a fetch prunes remote-tracking references.
@@ -449,5 +450,123 @@ pub fn git_remote_name_is_valid(name: Option<&core::ffi::CStr>) -> Result<bool, 
         Ok(valid != 0)
     } else {
         Err(status)
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_push_update
+    /// An update lent by libgit2 to a push-negotiation callback.
+    ///
+    /// The enclosing push owns the update and its reference-name strings.
+    /// Borrowed handles must not outlive the callback invocation that supplied
+    /// the update.
+    GitPushUpdate,
+    GitPushUpdateRef,
+    GitPushUpdateMut,
+    ffi::git_push_update
+);
+
+impl<'a> GitPushUpdateRef<'a> {
+    /// Wraps: git_push_update.src
+    /// Borrows the current target of the source reference.
+    #[must_use]
+    pub fn src(&self) -> OidRef<'a> {
+        // SAFETY: raw-place projection reaches the inline initialized OID
+        // without forming a reference, and the field lives for this update
+        // handle's full borrow.
+        let ptr = unsafe { addr_of!((*self.as_ptr()).src) }.cast_mut();
+        // SAFETY: `ptr` addresses the live inline OID and inherits `'a` from
+        // the enclosing update handle.
+        unsafe { OidRef::from_ptr(ptr) }.expect("an inline field is non-null")
+    }
+
+    /// Wraps: git_push_update.dst
+    /// Borrows the new target of the destination reference.
+    #[must_use]
+    pub fn dst(&self) -> OidRef<'a> {
+        // SAFETY: raw-place projection reaches the inline initialized OID
+        // without forming a reference, and the field lives for this update
+        // handle's full borrow.
+        let ptr = unsafe { addr_of!((*self.as_ptr()).dst) }.cast_mut();
+        // SAFETY: `ptr` addresses the live inline OID and inherits `'a` from
+        // the enclosing update handle.
+        unsafe { OidRef::from_ptr(ptr) }.expect("an inline field is non-null")
+    }
+
+    /// Wraps: git_push_update.dst_refname
+    /// Borrows the destination reference name.
+    #[must_use]
+    pub fn dst_refname(&self) -> &'a core::ffi::CStr {
+        // SAFETY: this shared handle permits a raw-place read of the pointer
+        // field without forming a reference to C-visible update storage.
+        let ptr = unsafe { addr_of!((*self.as_ptr()).dst_refname).read() };
+        assert!(
+            !ptr.is_null(),
+            "a valid libgit2 push update has a destination reference name"
+        );
+        // SAFETY: libgit2 owns a live NUL-terminated string for the lifetime
+        // of the update and the null check above establishes a valid start.
+        unsafe { core::ffi::CStr::from_ptr(ptr) }
+    }
+
+    /// Wraps: git_push_update.src_refname
+    /// Borrows the source reference name.
+    #[must_use]
+    pub fn src_refname(&self) -> &'a core::ffi::CStr {
+        // SAFETY: this shared handle permits a raw-place read of the pointer
+        // field without forming a reference to C-visible update storage.
+        let ptr = unsafe { addr_of!((*self.as_ptr()).src_refname).read() };
+        assert!(
+            !ptr.is_null(),
+            "a valid libgit2 push update has a source reference name"
+        );
+        // SAFETY: libgit2 owns a live NUL-terminated string for the lifetime
+        // of the update and the null check above establishes a valid start.
+        unsafe { core::ffi::CStr::from_ptr(ptr) }
+    }
+}
+
+#[cfg(test)]
+mod push_update_tests {
+    use core::mem::{align_of, size_of};
+
+    use ffibox::CCell;
+
+    use super::*;
+
+    #[test]
+    fn push_update_layout_and_fields_match_the_c_value() {
+        fn assert_cell<T: CCell>() {}
+
+        let mut raw = ffi::git_push_update {
+            src_refname: c"refs/heads/source".as_ptr().cast_mut(),
+            dst_refname: c"refs/heads/destination".as_ptr().cast_mut(),
+            src: ffi::git_oid {
+                type_: ffi::git_oid_t_GIT_OID_SHA1 as u8,
+                id: [0x11; 32],
+            },
+            dst: ffi::git_oid {
+                type_: ffi::git_oid_t_GIT_OID_SHA256 as u8,
+                id: [0x22; 32],
+            },
+        };
+
+        assert_cell::<GitPushUpdate>();
+        assert_eq!(
+            size_of::<GitPushUpdate>(),
+            size_of::<ffi::git_push_update>()
+        );
+        assert_eq!(
+            align_of::<GitPushUpdate>(),
+            align_of::<ffi::git_push_update>()
+        );
+
+        // SAFETY: `raw` is a fully initialized update and remains live and
+        // unchanged for the shared handle's lifetime.
+        let update = unsafe { GitPushUpdateRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(update.src_refname(), c"refs/heads/source");
+        assert_eq!(update.dst_refname(), c"refs/heads/destination");
+        assert_eq!(update.src().raw_bytes().elem(0), Some(0x11));
+        assert_eq!(update.dst().raw_bytes().elem(0), Some(0x22));
     }
 }
