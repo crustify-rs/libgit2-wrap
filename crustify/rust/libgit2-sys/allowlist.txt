@@ -1,4 +1,6 @@
 ^crustify_git__.*$
+^crustify_git_cached_obj_(incref|decref)$
+^git_cached_obj$
 ^git_annotated_commit$
 ^git_annotated_commit_free$
 ^git_commit$

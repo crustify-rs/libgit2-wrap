@@ -256,3 +256,13 @@ void git_cached_obj_decref(void *_obj)
 		}
 	}
 }
+
+GIT_EXTERN(void) crustify_git_cached_obj_incref(git_cached_obj *obj)
+{
+	git_cached_obj_incref(obj);
+}
+
+GIT_EXTERN(void) crustify_git_cached_obj_decref(git_cached_obj *obj)
+{
+	git_cached_obj_decref(obj);
+}

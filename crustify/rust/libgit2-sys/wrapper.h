@@ -3,6 +3,7 @@
 #include <git2/sys/refdb_backend.h>
 #include <git2/sys/repository.h>
 #include "util.h"
+#include "cache.h"
 
 /* Allocator primitives needed by the Rust bindings. */
 void *crustify_git__malloc(size_t len);

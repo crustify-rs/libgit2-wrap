@@ -3578,6 +3578,17 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_cached_obj",
+   "defined_in": "src/libgit2/cache.h",
+   "_comment_agent": "git_cached_obj is the common prefix of git_object and git_odb_object. Its refcount field is atomically incremented/decremented by git_cached_obj_incref/decref; the remaining fields are initialized before cache publication and contain no pointers.",
+   "fields": [
+    {
+     "name": "refcount",
+     "refcount": true
+    }
+   ]
   }
  ],
  "symbols": [
@@ -17205,6 +17216,65 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and destroys a complete iterator; null is explicitly accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_cached_obj_decref",
+   "defined_in": "src/libgit2/cache.c",
+   "lifetime": {
+    "for": "_obj",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "_obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "Consumes one live git_cached_obj-compatible reference; on the final decrement dispatches destruction by the cache flags."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_cached_obj_incref",
+   "defined_in": "src/libgit2/cache.h",
+   "lifetime": {
+    "for": "_obj",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": false,
+     "upref": true
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "_obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:_obj"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required live git_cached_obj-compatible prefix; increments its atomic refcount without taking the caller's existing reference."
      }
     }
    ]
