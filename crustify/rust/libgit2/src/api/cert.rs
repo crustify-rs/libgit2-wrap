@@ -1,5 +1,7 @@
 //! Safe wrappers for libgit2 cert APIs.
 
+use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+
 use crate::ffi;
 
 /// Wraps: git_cert_t
@@ -145,5 +147,142 @@ mod tests {
         let mut cert = unsafe { GitCertMut::from_ptr(&raw mut raw) }.unwrap();
         assert_eq!(cert.as_mut_ptr().cast_const(), cert.as_ref().as_ptr());
         assert_eq!(cert.as_ref().cert_type(), Ok(GitCertType::HostkeyLibssh2));
+    }
+}
+
+/// Wraps: git_cert_ssh_t
+/// Available SSH host-key fingerprint representations.
+///
+/// This is a layout-compatible bit set. Raw values retain unknown bits so a
+/// certificate produced by a newer libgit2 version can still be inspected and
+/// passed through safely.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitCertSsh(ffi::git_cert_ssh_t);
+
+impl GitCertSsh {
+    /// No host-key representation is available.
+    pub const EMPTY: Self = Self(0);
+    /// An MD5 fingerprint is available.
+    pub const MD5: Self = Self(ffi::git_cert_ssh_t_GIT_CERT_SSH_MD5);
+    /// A SHA-1 fingerprint is available.
+    pub const SHA1: Self = Self(ffi::git_cert_ssh_t_GIT_CERT_SSH_SHA1);
+    /// A SHA-256 fingerprint is available.
+    pub const SHA256: Self = Self(ffi::git_cert_ssh_t_GIT_CERT_SSH_SHA256);
+    /// The raw host key is available.
+    pub const RAW: Self = Self(ffi::git_cert_ssh_t_GIT_CERT_SSH_RAW);
+    /// Every representation published by this libgit2 API.
+    pub const ALL: Self = Self(Self::MD5.0 | Self::SHA1.0 | Self::SHA256.0 | Self::RAW.0);
+
+    /// Retain all bits from a raw libgit2 value, including unknown bits.
+    #[inline]
+    #[must_use]
+    pub const fn from_bits_retain(bits: ffi::git_cert_ssh_t) -> Self {
+        Self(bits)
+    }
+
+    /// Return the raw libgit2 flag bits.
+    #[inline]
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_cert_ssh_t {
+        self.0
+    }
+
+    /// Return whether every representation in `other` is available.
+    #[inline]
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Return whether at least one representation in `other` is available.
+    #[inline]
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+
+    /// Return whether no representation bits are set.
+    #[inline]
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+}
+
+impl From<ffi::git_cert_ssh_t> for GitCertSsh {
+    fn from(bits: ffi::git_cert_ssh_t) -> Self {
+        Self::from_bits_retain(bits)
+    }
+}
+
+impl From<GitCertSsh> for ffi::git_cert_ssh_t {
+    fn from(flags: GitCertSsh) -> Self {
+        flags.bits()
+    }
+}
+
+impl BitOr for GitCertSsh {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitCertSsh {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitCertSsh {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitCertSsh {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for GitCertSsh {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(self.0 ^ Self::ALL.0)
+    }
+}
+
+#[cfg(test)]
+mod ssh_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn ssh_representations_form_bit_sets() {
+        let mut available = GitCertSsh::MD5 | GitCertSsh::SHA256;
+        assert!(available.contains(GitCertSsh::MD5));
+        assert!(available.intersects(GitCertSsh::SHA256));
+        assert!(!available.intersects(GitCertSsh::RAW));
+
+        available |= GitCertSsh::RAW;
+        available &= !GitCertSsh::MD5;
+        assert!(!available.contains(GitCertSsh::MD5));
+        assert!(available.contains(GitCertSsh::RAW));
+    }
+
+    #[test]
+    fn ssh_representations_retain_raw_bits_and_match_the_c_layout() {
+        let unknown = GitCertSsh::from_bits_retain(1 << 10);
+        assert_eq!(unknown.bits(), 1 << 10);
+        assert_eq!(ffi::git_cert_ssh_t::from(unknown), 1 << 10);
+        assert_eq!(size_of::<GitCertSsh>(), size_of::<ffi::git_cert_ssh_t>());
+        assert_eq!(align_of::<GitCertSsh>(), align_of::<ffi::git_cert_ssh_t>());
     }
 }

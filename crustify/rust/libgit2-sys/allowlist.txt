@@ -94,7 +94,9 @@
 ^git_buf_dispose$
 ^git_cert$
 ^git_cert_t$
+^git_cert_ssh_t$
 ^GIT_CERT_(NONE|X509|HOSTKEY_LIBSSH2|STRARRAY)$
+^git_checkout_strategy_t$
 ^git_filemode_t$
 ^git_index_conflict_iterator$
 ^git_index_conflict_iterator_free$
