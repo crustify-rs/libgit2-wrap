@@ -3526,6 +3526,12 @@
    ]
   },
   {
+   "name": "git_time",
+   "defined_in": "include/git2/types.h",
+   "_comment_agent": "git_time is a plain by-value timestamp: no pointer fields, no allocation of its own and no lifecycle primitive. The only aggregate that embeds it is git_signature.when, whose lifecycle releases it, so a borrowed handle projected out of the enclosing signature is the whole ownership story. `sign` is NOT a validated discriminator: git_signature__parse memsets the signature, so it stays 0 whenever the parsed buffer carries no timezone field, and src/libgit2/signature.c:389 copies tz_start[0] verbatim after the malformed-timezone branch has already reset offset to 0, so any byte can reach it. git_signature__writebuf reads it loosely, as '-' when the offset is negative or the byte is '-' and '+' otherwise. A Rust accessor must therefore validate the byte rather than transmute it, and treat 0 and stray bytes as ordinary, expected inputs.",
+   "fields": []
+  },
+  {
    "name": "git_transaction",
    "defined_in": "src/libgit2/transaction.c",
    "_comment_agent": "The public API keeps transactions opaque. Reference transactions borrow their repository, own one refdb count, and keep lock/pool state inline; config transactions borrow the config and own the type-erased backend-instance count released indirectly by git_config_unlock. The variant discriminator makes the inactive pointer fields null.",

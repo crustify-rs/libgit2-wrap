@@ -506,6 +506,13 @@ ffibox::define_ctype!(
 );
 
 /// A sign stored with a [`GitTime`] timezone offset.
+///
+/// Libgit2 does not treat `git_time.sign` as a validated discriminator: a
+/// parsed signature is zeroed first, so the byte stays `0` when the buffer
+/// carried no timezone field, and a malformed timezone marker is copied into
+/// it verbatim. Reading it therefore validates rather than transmutes, and an
+/// [`InvalidGitTimeSign`] is an ordinary outcome instead of a corruption
+/// signal.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum GitTimeSign {
     /// A nonnegative offset, including ordinary `+0000` UTC.
@@ -532,6 +539,9 @@ impl GitTimeSign {
 }
 
 /// A raw `git_time.sign` byte that is neither `+` nor `-`.
+///
+/// The common case is `0`, the value a signature parsed without a timezone
+/// field keeps.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InvalidGitTimeSign(core::ffi::c_char);
 
@@ -557,6 +567,10 @@ impl GitTimeRef<'_> {
 
     /// Wraps: git_time.sign
     /// Returns the stored timezone sign after validating the C byte.
+    ///
+    /// Returns `Err` for the zero byte left by a signature parsed without a
+    /// timezone field, and for any other marker libgit2 copied verbatim out of
+    /// a malformed buffer.
     #[inline]
     pub fn sign(&self) -> Result<GitTimeSign, InvalidGitTimeSign> {
         let ptr = self.as_ptr();
@@ -652,6 +666,26 @@ mod time_tests {
         let time = unsafe { GitTimeRef::from_ptr(&raw mut raw) }
             .expect("the address of a stack value is non-null");
         assert_eq!(time.sign().unwrap_err().value(), b'?' as core::ffi::c_char);
+    }
+
+    #[test]
+    fn a_signature_parsed_without_a_timezone_reports_no_sign() {
+        // `git_signature__parse` zeroes the signature before parsing and only
+        // writes `sign` from a timezone field, so this is the state of every
+        // signature whose buffer carried none.
+        let mut raw = ffi::git_time {
+            time: 1_234_567_890,
+            offset: 0,
+            sign: 0,
+        };
+
+        // SAFETY: `raw` is initialized, non-null and live for this handle,
+        // which is the only borrow of it.
+        let time = unsafe { GitTimeRef::from_ptr(&raw mut raw) }
+            .expect("the address of a stack value is non-null");
+        assert_eq!(time.time(), 1_234_567_890);
+        assert_eq!(time.offset(), 0);
+        assert_eq!(time.sign().unwrap_err().value(), 0);
     }
 }
 

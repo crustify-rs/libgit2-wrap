@@ -192,8 +192,13 @@ impl BitAndAssign for Status {
 impl Not for Status {
     type Output = Self;
 
+    /// Complements within the flags published by this version of libgit2.
+    ///
+    /// Bits retained by [`Self::from_bits_retain`] but unknown to these
+    /// headers are cleared rather than preserved, so `self & !self` is always
+    /// empty.
     fn not(self) -> Self::Output {
-        Self(self.0 ^ Self::ALL.0)
+        Self(!self.0 & Self::ALL.0)
     }
 }
 
@@ -259,6 +264,25 @@ mod tests {
         let unknown = Status::ALL.bits() + 1;
         assert_eq!(Status::from_bits(unknown), None);
         assert_eq!(Status::from_bits_retain(unknown).bits(), unknown);
+    }
+
+    #[test]
+    fn status_complement_stays_inside_the_published_flags() {
+        let known = Status::INDEX_NEW | Status::WT_NEW;
+        assert_eq!(
+            !known,
+            Status::from_bits(Status::ALL.bits() & !known.bits()).unwrap()
+        );
+        assert!(!(!known).intersects(known));
+        assert_eq!(!Status::CURRENT, Status::ALL);
+        assert_eq!(!Status::ALL, Status::CURRENT);
+
+        // Bit 5 is unassigned by these headers; a retained unknown bit must not
+        // survive complementation, or `self & !self` would be non-empty.
+        let retained = Status::from_bits_retain(known.bits() | (1 << 5));
+        assert_eq!(Status::from_bits(retained.bits()), None);
+        assert!(!(!retained).intersects(retained));
+        assert_eq!(!retained, !known);
     }
 
     #[test]

@@ -9,7 +9,20 @@ ffibox::define_ctype!(
     /// An opaque transaction that batches reference or configuration updates.
     ///
     /// Owned transactions release outstanding locks and variant-specific
-    /// resources through `git_transaction_free` when dropped.
+    /// resources through `git_transaction_free` when dropped: a reference
+    /// transaction unlocks whatever it still holds, drops its owned refdb
+    /// count and clears the pool its own storage lives in, while a
+    /// configuration transaction hands its owned backend-instance token back
+    /// through `git_config_unlock` and frees the allocation.
+    ///
+    /// Both variants only *borrow* the object they were opened against — the
+    /// repository for a reference transaction, the configuration for a
+    /// configuration transaction. The wrapper carries no lifetime, so keeping
+    /// that object alive for at least as long as the transaction is an
+    /// obligation of whichever constructor seam produces the owner.
+    ///
+    /// Libgit2 publishes no operation for duplicating a transaction or
+    /// acquiring another ownership share, so there is no `CCloned` impl.
     GitTransaction,
     GitTransactionRef,
     GitTransactionMut,
