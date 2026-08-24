@@ -3714,6 +3714,45 @@
    ]
   },
   {
+   "name": "git_stash_save_options",
+   "defined_in": "include/git2/stash.h",
+   "_comment_agent": "The public save-options header owns none of its pointer fields. git_stash_save_with_opts reads the optional message, required stasher and optional string-array entries only during the call; no path stores, clones, mutates or releases them. Callers must keep every configured referent alive for the options value's use.",
+   "fields": [
+    {
+     "name": "message",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed NUL-terminated description; prepare_worktree_commit_message reads it synchronously and retains nothing."
+     }
+    },
+    {
+     "name": "stasher",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed signature read during stash construction and never retained or released. Zero/default options use null, though git_stash_save_with_opts rejects null before use."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_status_list",
    "defined_in": "src/libgit2/status.h",
    "_comment_agent": "Both diff fields start null, are independently populated according to status show options, and are unconditionally released by the list destructor (git_diff_free accepts null).",
@@ -3746,6 +3785,30 @@
       "nullable": true,
       "mutable": true,
       "note": "Owns one optional git_diff reference produced by git_diff_index_to_workdir; git_status_list_free releases it with git_diff_free, and rename analysis may mutate the pointee."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_status_options",
+   "defined_in": "include/git2/status.h",
+   "_comment_agent": "git_status_options is a non-owning configuration header. Its optional baseline aliases a caller-owned tree. git_status_list_new reads the tree during construction, never mutates it, and deliberately does not free it when supplied by the caller.",
+   "fields": [
+    {
+     "name": "baseline",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned comparison tree. git_status_list_new aliases it as head for the synchronous scan and skips git_tree_free when opts->baseline supplied that pointer."
      }
     }
    ]

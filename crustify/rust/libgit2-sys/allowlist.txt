@@ -318,3 +318,7 @@
 ^git_stash_drop$
 ^git_status_(file|list_entrycount|should_ignore)$
 ^git_submodule_(add_finalize|add_setup|add_to_index|branch|head_id|ignore|index_id|init|lookup|name|open|path|reload|repo_init|set_branch|set_ignore)$
+^git_stash_save_options$
+^GIT_STASH_SAVE_OPTIONS_VERSION$
+^git_status_options$
+^GIT_STATUS_OPTIONS_VERSION$

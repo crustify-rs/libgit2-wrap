@@ -1,9 +1,16 @@
 //! Safe wrappers for libgit2 stash APIs.
 
 use core::ffi::CStr;
+use core::marker::PhantomData;
+use core::ptr::{NonNull, addr_of, addr_of_mut};
 
+use ffibox::{CCell, CPtr, CType, CVal, CValued};
+
+use crate::api::types::GitSignatureRef;
+use crate::ffi;
 use crate::oid::OidRef;
 use crate::stash::StashApplyProgress;
+use crate::strarray::GitStrArrayRef;
 
 /// Wraps: git_stash_apply_progress_cb
 /// Safe callable surface for stash-application progress notifications.
@@ -63,5 +70,281 @@ mod tests {
             GitStashCallback::call(&mut entry, 2, c"stash message", oid),
             1
         );
+    }
+}
+
+/// Wraps: git_stash_save_options
+/// Layout-compatible stash-save options whose configured pointers borrow
+/// caller-owned values for the options lifetime.
+#[repr(transparent)]
+pub struct GitStashSaveOptions<'data> {
+    inner: CType<ffi::git_stash_save_options>,
+    _data: PhantomData<&'data ()>,
+}
+
+/// Shared borrow of [`GitStashSaveOptions`].
+#[repr(transparent)]
+pub struct GitStashSaveOptionsRef<'object, 'data>(CPtr<'object, GitStashSaveOptions<'data>>);
+
+impl Clone for GitStashSaveOptionsRef<'_, '_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl Copy for GitStashSaveOptionsRef<'_, '_> {}
+
+/// Exclusive borrow of [`GitStashSaveOptions`].
+#[repr(transparent)]
+pub struct GitStashSaveOptionsMut<'object, 'data>(GitStashSaveOptionsRef<'object, 'data>);
+
+// SAFETY: the layout type is transparent over the matching bindgen struct;
+// both handles are pointer-sized and never form references to C-visible
+// storage, and the shared handle exposes no writes.
+unsafe impl<'data> CCell for GitStashSaveOptions<'data> {
+    type C = ffi::git_stash_save_options;
+    type Ref<'object>
+        = GitStashSaveOptionsRef<'object, 'data>
+    where
+        Self: 'object;
+    type Mut<'object>
+        = GitStashSaveOptionsMut<'object, 'data>
+    where
+        Self: 'object;
+
+    unsafe fn ref_from_raw<'object>(p: NonNull<Self>) -> Self::Ref<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller guarantees that `p` is a live shared object.
+        GitStashSaveOptionsRef(unsafe { CPtr::new(p) })
+    }
+
+    unsafe fn mut_from_raw<'object>(p: NonNull<Self>) -> Self::Mut<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller additionally guarantees exclusive access.
+        GitStashSaveOptionsMut(GitStashSaveOptionsRef(unsafe { CPtr::new(p) }))
+    }
+}
+
+// SAFETY: this header only borrows its pointer fields and owns no resource;
+// disposing inline storage therefore requires no action.
+unsafe impl CValued for GitStashSaveOptions<'_> {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+impl<'data> GitStashSaveOptions<'data> {
+    /// Constructs options equivalent to `GIT_STASH_SAVE_OPTIONS_INIT`.
+    #[must_use]
+    pub fn new() -> CVal<Self> {
+        // SAFETY: every field of the bindgen C struct admits an all-zero bit
+        // pattern; the version is set before the value is returned.
+        let inner = unsafe { CType::zeroed() };
+        let mut options = CVal::new(Self {
+            inner,
+            _data: PhantomData,
+        });
+        options
+            .as_mut()
+            .set_version(ffi::GIT_STASH_SAVE_OPTIONS_VERSION);
+        options
+    }
+}
+
+impl<'object, 'data> GitStashSaveOptionsRef<'object, 'data> {
+    /// Borrows a raw C options pointer, returning `None` for null.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must identify a valid initialized options value that lives for
+    /// `'object`. Every non-null configured pointer must remain valid and
+    /// immutable for `'data`, and `'data` must outlive `'object`.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_stash_save_options) -> Option<Self> {
+        NonNull::new(ptr.cast::<GitStashSaveOptions<'data>>()).map(|ptr| {
+            // SAFETY: the caller supplies the required live shared object.
+            Self(unsafe { CPtr::new(ptr) })
+        })
+    }
+
+    /// Returns the C pointer for read-only FFI calls.
+    #[must_use]
+    pub fn as_ptr(&self) -> *const ffi::git_stash_save_options {
+        self.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Field: git_stash_save_options.message
+    /// Borrows the optional stash description.
+    #[must_use]
+    pub fn message(&self) -> Option<&'object CStr> {
+        // SAFETY: raw-place projection copies the initialized pointer field.
+        let message = unsafe { addr_of!((*self.as_ptr()).message).read() };
+        if message.is_null() {
+            None
+        } else {
+            // SAFETY: safe construction only stores live NUL-terminated
+            // strings, and the type's data borrow outlives this object borrow.
+            Some(unsafe { CStr::from_ptr(message) })
+        }
+    }
+
+    /// Field: git_stash_save_options.flags
+    /// Returns the raw combination of published `GIT_STASH_*` bits.
+    #[must_use]
+    pub fn flags(&self) -> u32 {
+        // SAFETY: raw-place projection copies the initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+    }
+
+    /// Field: git_stash_save_options.version
+    /// Returns the options ABI version.
+    #[must_use]
+    pub fn version(&self) -> core::ffi::c_uint {
+        // SAFETY: raw-place projection copies the initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).version).read() }
+    }
+
+    /// Field: git_stash_save_options.paths
+    /// Borrows the inline path-array header.
+    #[must_use]
+    pub fn paths(&self) -> GitStrArrayRef<'object> {
+        // SAFETY: this projects the initialized inline header without forming
+        // a reference to C-visible storage.
+        let paths = unsafe { addr_of!((*self.as_ptr()).paths).cast_mut() };
+        // SAFETY: the projected header lives for this options borrow.
+        unsafe { GitStrArrayRef::from_ptr(paths) }.expect("an inline field is non-null")
+    }
+
+    /// Field: git_stash_save_options.stasher
+    /// Borrows the optional identity used to create the stash commits.
+    #[must_use]
+    pub fn stasher(&self) -> Option<GitSignatureRef<'object>> {
+        // SAFETY: raw-place projection copies the initialized pointer field.
+        let stasher = unsafe { addr_of!((*self.as_ptr()).stasher).read() };
+        // SAFETY: safe construction stores only a live signature whose data
+        // borrow outlives this options borrow; null remains `None`.
+        unsafe { GitSignatureRef::from_ptr(stasher.cast_mut()) }
+    }
+}
+
+impl<'object, 'data> GitStashSaveOptionsMut<'object, 'data> {
+    /// Exclusively borrows a raw C options pointer, returning `None` for null.
+    ///
+    /// # Safety
+    ///
+    /// The shared-handle requirements apply, and no other access path to the
+    /// options value may be used for `'object`.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_stash_save_options) -> Option<Self> {
+        // SAFETY: the caller supplies a live exclusively accessible object.
+        unsafe { GitStashSaveOptionsRef::from_ptr(ptr) }.map(Self)
+    }
+
+    /// Returns the writable C pointer for FFI calls and raw-place writes.
+    #[must_use]
+    pub fn as_mut_ptr(&mut self) -> *mut ffi::git_stash_save_options {
+        self.0.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Reborrows this exclusive handle as shared.
+    #[must_use]
+    pub fn as_ref(&self) -> GitStashSaveOptionsRef<'_, 'data> {
+        GitStashSaveOptionsRef(self.0.0)
+    }
+
+    /// Stores an optional borrowed stash description.
+    pub fn set_message(&mut self, message: Option<&'data CStr>) {
+        let message = message.map_or(core::ptr::null(), CStr::as_ptr);
+        // SAFETY: this exclusive handle permits the pointer-field write, and
+        // the wrapper lifetime keeps any non-null string alive.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).message).write(message) }
+    }
+
+    /// Replaces the raw combination of published `GIT_STASH_*` bits.
+    pub fn set_flags(&mut self, flags: u32) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+    }
+
+    /// Replaces the options ABI version.
+    pub fn set_version(&mut self, version: core::ffi::c_uint) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+
+    /// Borrows a path-array header and copies its non-owning C view.
+    pub fn set_paths(&mut self, paths: GitStrArrayRef<'data>) {
+        // SAFETY: `paths` identifies a live initialized header. Copying the C
+        // header transfers no ownership; the wrapper lifetime retains the
+        // source allocation while these options may be used.
+        let paths = unsafe { paths.as_ptr().read() };
+        // SAFETY: this exclusive handle permits replacing the inline header.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).paths).write(paths) }
+    }
+
+    /// Stores an optional borrowed stasher identity.
+    pub fn set_stasher(&mut self, stasher: Option<GitSignatureRef<'data>>) {
+        let stasher = stasher.map_or(core::ptr::null(), |value| value.as_ptr());
+        // SAFETY: this exclusive handle permits the pointer-field write, and
+        // the wrapper lifetime keeps any non-null signature alive.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).stasher).write(stasher) }
+    }
+}
+
+#[cfg(test)]
+mod save_options_tests {
+    use core::mem::{align_of, size_of};
+
+    use crate::api::types::{GitSignature, GitSignatureRef};
+    use crate::strarray::GitStrArrayRef;
+
+    use super::*;
+
+    #[test]
+    fn save_options_preserve_layout_and_borrowed_fields() {
+        assert_eq!(
+            size_of::<GitStashSaveOptions<'static>>(),
+            size_of::<ffi::git_stash_save_options>()
+        );
+        assert_eq!(
+            align_of::<GitStashSaveOptions<'static>>(),
+            align_of::<ffi::git_stash_save_options>()
+        );
+        assert_eq!(
+            size_of::<GitStashSaveOptionsRef<'static, 'static>>(),
+            size_of::<*const ffi::git_stash_save_options>()
+        );
+
+        let mut signature = GitSignature::zeroed();
+        let signature_ptr = addr_of_mut!(signature).cast::<ffi::git_signature>();
+        // SAFETY: the layout-compatible stack value remains live while the
+        // options borrow it, and this test never inspects its null fields.
+        let signature = unsafe { GitSignatureRef::from_ptr(signature_ptr) }.unwrap();
+
+        let mut entries = [c"tracked.txt".as_ptr().cast_mut()];
+        let mut paths = ffi::git_strarray {
+            strings: entries.as_mut_ptr(),
+            count: entries.len(),
+        };
+        // SAFETY: the stack header, pointer slot and static string all outlive
+        // the options value and are accessed shared-only.
+        let paths = unsafe { GitStrArrayRef::from_ptr(addr_of_mut!(paths)) }.unwrap();
+
+        let mut options = GitStashSaveOptions::new();
+        {
+            let mut view = options.as_mut();
+            view.set_message(Some(c"save this"));
+            view.set_flags(5);
+            view.set_paths(paths);
+            view.set_stasher(Some(signature));
+        }
+
+        let view = options.as_ref();
+        assert_eq!(view.version(), ffi::GIT_STASH_SAVE_OPTIONS_VERSION);
+        assert_eq!(view.message(), Some(c"save this"));
+        assert_eq!(view.flags(), 5);
+        assert_eq!(view.paths().count(), 1);
+        assert_eq!(view.paths().strings().unwrap().get(0), Some(c"tracked.txt"));
+        assert_eq!(view.stasher().unwrap().as_ptr(), signature_ptr);
     }
 }

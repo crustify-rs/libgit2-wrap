@@ -1,8 +1,15 @@
 //! Safe wrappers for libgit2 status APIs.
 
+use core::marker::PhantomData;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+use core::ptr::{NonNull, addr_of, addr_of_mut};
+
+use ffibox::{CCell, CPtr, CType, CVal, CValued};
 
 use crate::ffi;
+use crate::status::{InvalidStatusShow, StatusShow};
+use crate::strarray::GitStrArrayRef;
+use crate::tree::GitTreeRef;
 
 /// Wraps: git_status_opt_t
 /// A checked set of options controlling status scans.
@@ -204,6 +211,316 @@ mod tests {
         assert_eq!(
             align_of::<GitStatusOptionFlags>(),
             align_of::<ffi::git_status_opt_t>()
+        );
+    }
+}
+
+/// Wraps: git_status_options
+/// Layout-compatible status options whose baseline and pathspec borrow
+/// caller-owned values for the options lifetime.
+#[repr(transparent)]
+pub struct GitStatusOptions<'data> {
+    inner: CType<ffi::git_status_options>,
+    _data: PhantomData<&'data ()>,
+}
+
+/// Shared borrow of [`GitStatusOptions`].
+#[repr(transparent)]
+pub struct GitStatusOptionsRef<'object, 'data>(CPtr<'object, GitStatusOptions<'data>>);
+
+impl Clone for GitStatusOptionsRef<'_, '_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl Copy for GitStatusOptionsRef<'_, '_> {}
+
+/// Exclusive borrow of [`GitStatusOptions`].
+#[repr(transparent)]
+pub struct GitStatusOptionsMut<'object, 'data>(GitStatusOptionsRef<'object, 'data>);
+
+// SAFETY: the layout type is transparent over the matching bindgen struct;
+// both handles are pointer-sized and never form references to C-visible
+// storage, and the shared handle exposes no writes.
+unsafe impl<'data> CCell for GitStatusOptions<'data> {
+    type C = ffi::git_status_options;
+    type Ref<'object>
+        = GitStatusOptionsRef<'object, 'data>
+    where
+        Self: 'object;
+    type Mut<'object>
+        = GitStatusOptionsMut<'object, 'data>
+    where
+        Self: 'object;
+
+    unsafe fn ref_from_raw<'object>(p: NonNull<Self>) -> Self::Ref<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller guarantees that `p` is a live shared object.
+        GitStatusOptionsRef(unsafe { CPtr::new(p) })
+    }
+
+    unsafe fn mut_from_raw<'object>(p: NonNull<Self>) -> Self::Mut<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller additionally guarantees exclusive access.
+        GitStatusOptionsMut(GitStatusOptionsRef(unsafe { CPtr::new(p) }))
+    }
+}
+
+// SAFETY: this header only borrows its pointer fields and owns no resource;
+// disposing inline storage therefore requires no action.
+unsafe impl CValued for GitStatusOptions<'_> {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+impl<'data> GitStatusOptions<'data> {
+    /// Constructs options equivalent to `GIT_STATUS_OPTIONS_INIT`.
+    #[must_use]
+    pub fn new() -> CVal<Self> {
+        // SAFETY: every field of the bindgen C struct admits an all-zero bit
+        // pattern; the version is set before the value is returned.
+        let inner = unsafe { CType::zeroed() };
+        let mut options = CVal::new(Self {
+            inner,
+            _data: PhantomData,
+        });
+        options
+            .as_mut()
+            .set_version(ffi::GIT_STATUS_OPTIONS_VERSION);
+        options
+    }
+}
+
+impl<'object, 'data> GitStatusOptionsRef<'object, 'data> {
+    /// Borrows a raw C options pointer, returning `None` for null.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must identify a valid initialized options value that lives for
+    /// `'object`. Its baseline and every pathspec allocation must remain valid
+    /// for `'data`, and `'data` must outlive `'object`.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_status_options) -> Option<Self> {
+        NonNull::new(ptr.cast::<GitStatusOptions<'data>>()).map(|ptr| {
+            // SAFETY: the caller supplies the required live shared object.
+            Self(unsafe { CPtr::new(ptr) })
+        })
+    }
+
+    /// Returns the C pointer for read-only FFI calls.
+    #[must_use]
+    pub fn as_ptr(&self) -> *const ffi::git_status_options {
+        self.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Field: git_status_options.flags
+    /// Returns the checked set of configured status options.
+    pub fn flags(&self) -> Result<GitStatusOptionFlags, ffi::git_status_opt_t> {
+        // SAFETY: raw-place projection copies the initialized scalar field.
+        let flags = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        GitStatusOptionFlags::try_from(flags)
+    }
+
+    /// Field: git_status_options.version
+    /// Returns the options ABI version.
+    #[must_use]
+    pub fn version(&self) -> core::ffi::c_uint {
+        // SAFETY: raw-place projection copies the initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).version).read() }
+    }
+
+    /// Field: git_status_options.baseline
+    /// Borrows the optional tree used instead of `HEAD`.
+    #[must_use]
+    pub fn baseline(&self) -> Option<GitTreeRef<'object>> {
+        // SAFETY: raw-place projection copies the initialized pointer field.
+        let baseline = unsafe { addr_of!((*self.as_ptr()).baseline).read() };
+        // SAFETY: safe construction stores only a live tree whose data borrow
+        // outlives this options borrow; null remains `None`.
+        unsafe { GitTreeRef::from_ptr(baseline) }
+    }
+
+    /// Field: git_status_options.rename_threshold
+    /// Returns the configured rename-similarity threshold.
+    #[must_use]
+    pub fn rename_threshold(&self) -> u16 {
+        // SAFETY: raw-place projection copies the initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).rename_threshold).read() }
+    }
+
+    /// Field: git_status_options.pathspec
+    /// Borrows the inline pathspec-array header.
+    #[must_use]
+    pub fn pathspec(&self) -> GitStrArrayRef<'object> {
+        // SAFETY: this projects the initialized inline header without forming
+        // a reference to C-visible storage.
+        let pathspec = unsafe { addr_of!((*self.as_ptr()).pathspec).cast_mut() };
+        // SAFETY: the projected header lives for this options borrow.
+        unsafe { GitStrArrayRef::from_ptr(pathspec) }.expect("an inline field is non-null")
+    }
+
+    /// Field: git_status_options.show
+    /// Returns the selected comparison mode, rejecting unpublished values.
+    pub fn show(&self) -> Result<StatusShow, InvalidStatusShow> {
+        // SAFETY: raw-place projection copies the initialized scalar field.
+        let show = unsafe { addr_of!((*self.as_ptr()).show).read() };
+        StatusShow::try_from(show)
+    }
+}
+
+impl<'object, 'data> GitStatusOptionsMut<'object, 'data> {
+    /// Exclusively borrows a raw C options pointer, returning `None` for null.
+    ///
+    /// # Safety
+    ///
+    /// The shared-handle requirements apply, and no other access path to the
+    /// options value may be used for `'object`.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_status_options) -> Option<Self> {
+        // SAFETY: the caller supplies a live exclusively accessible object.
+        unsafe { GitStatusOptionsRef::from_ptr(ptr) }.map(Self)
+    }
+
+    /// Returns the writable C pointer for FFI calls and raw-place writes.
+    #[must_use]
+    pub fn as_mut_ptr(&mut self) -> *mut ffi::git_status_options {
+        self.0.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Reborrows this exclusive handle as shared.
+    #[must_use]
+    pub fn as_ref(&self) -> GitStatusOptionsRef<'_, 'data> {
+        GitStatusOptionsRef(self.0.0)
+    }
+
+    /// Replaces the configured status-option flags.
+    pub fn set_flags(&mut self, flags: GitStatusOptionFlags) {
+        // SAFETY: this exclusive handle permits the scalar write, and the
+        // wrapper contains only published flag bits.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
+    }
+
+    /// Replaces the options ABI version.
+    pub fn set_version(&mut self, version: core::ffi::c_uint) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+
+    /// Stores an optional borrowed baseline tree.
+    pub fn set_baseline(&mut self, baseline: Option<GitTreeRef<'data>>) {
+        let baseline = baseline.map_or(core::ptr::null(), |value| value.as_ptr());
+        // SAFETY: this exclusive handle permits the pointer-field write, and
+        // the wrapper lifetime keeps any non-null tree alive.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).baseline).write(baseline.cast_mut()) }
+    }
+
+    /// Replaces the rename-similarity threshold.
+    pub fn set_rename_threshold(&mut self, threshold: u16) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).rename_threshold).write(threshold) }
+    }
+
+    /// Borrows a pathspec-array header and copies its non-owning C view.
+    pub fn set_pathspec(&mut self, pathspec: GitStrArrayRef<'data>) {
+        // SAFETY: `pathspec` identifies a live initialized header. Copying the
+        // C header transfers no ownership; the wrapper lifetime retains the
+        // source allocation while these options may be used.
+        let pathspec = unsafe { pathspec.as_ptr().read() };
+        // SAFETY: this exclusive handle permits replacing the inline header.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).pathspec).write(pathspec) }
+    }
+
+    /// Selects which comparisons the status scan performs.
+    pub fn set_show(&mut self, show: StatusShow) {
+        // SAFETY: this exclusive handle permits the scalar write, and `show`
+        // is one of the published C enum values.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).show).write(show.into()) }
+    }
+}
+
+#[cfg(test)]
+mod options_tests {
+    use core::mem::{align_of, size_of};
+
+    use crate::strarray::GitStrArrayRef;
+    use crate::tree::{GitTree, GitTreeRef};
+
+    use super::*;
+
+    #[test]
+    fn options_preserve_layout_and_borrowed_fields() {
+        assert_eq!(
+            size_of::<GitStatusOptions<'static>>(),
+            size_of::<ffi::git_status_options>()
+        );
+        assert_eq!(
+            align_of::<GitStatusOptions<'static>>(),
+            align_of::<ffi::git_status_options>()
+        );
+        assert_eq!(
+            size_of::<GitStatusOptionsRef<'static, 'static>>(),
+            size_of::<*const ffi::git_status_options>()
+        );
+
+        let mut tree = GitTree::zeroed();
+        let tree_ptr = addr_of_mut!(tree).cast::<ffi::git_tree>();
+        // SAFETY: the opaque layout-compatible stack value remains live while
+        // the options borrow it; no tree operation is called in this test.
+        let tree = unsafe { GitTreeRef::from_ptr(tree_ptr) }.unwrap();
+
+        let mut entries = [c"src/*.c".as_ptr().cast_mut()];
+        let mut pathspec = ffi::git_strarray {
+            strings: entries.as_mut_ptr(),
+            count: entries.len(),
+        };
+        // SAFETY: the stack header, pointer slot and static string all outlive
+        // the options value and are accessed shared-only.
+        let pathspec = unsafe { GitStrArrayRef::from_ptr(addr_of_mut!(pathspec)) }.unwrap();
+
+        let flags =
+            GitStatusOptionFlags::INCLUDE_UNTRACKED | GitStatusOptionFlags::RECURSE_UNTRACKED_DIRS;
+        let mut options = GitStatusOptions::new();
+        {
+            let mut view = options.as_mut();
+            view.set_flags(flags);
+            view.set_baseline(Some(tree));
+            view.set_rename_threshold(75);
+            view.set_pathspec(pathspec);
+            view.set_show(StatusShow::IndexOnly);
+        }
+
+        let view = options.as_ref();
+        assert_eq!(view.version(), ffi::GIT_STATUS_OPTIONS_VERSION);
+        assert_eq!(view.flags(), Ok(flags));
+        assert_eq!(view.baseline().unwrap().as_ptr(), tree_ptr);
+        assert_eq!(view.rename_threshold(), 75);
+        assert_eq!(view.pathspec().count(), 1);
+        assert_eq!(view.pathspec().strings().unwrap().get(0), Some(c"src/*.c"));
+        assert_eq!(view.show(), Ok(StatusShow::IndexOnly));
+    }
+
+    #[test]
+    fn getters_reject_invalid_status_values() {
+        let mut raw = ffi::git_status_options {
+            version: ffi::GIT_STATUS_OPTIONS_VERSION,
+            show: ffi::git_status_show_t_GIT_STATUS_SHOW_WORKDIR_ONLY + 1,
+            flags: GitStatusOptionFlags::ALL.bits() + 1,
+            pathspec: ffi::git_strarray {
+                strings: core::ptr::null_mut(),
+                count: 0,
+            },
+            baseline: core::ptr::null_mut(),
+            rename_threshold: 0,
+        };
+        // SAFETY: every field is initialized, all pointer fields are null, and
+        // `raw` remains live and unmodified for the shared handle.
+        let options = unsafe { GitStatusOptionsRef::from_ptr(addr_of_mut!(raw)) }.unwrap();
+        assert_eq!(options.flags(), Err(GitStatusOptionFlags::ALL.bits() + 1));
+        assert_eq!(
+            options.show().unwrap_err().value(),
+            ffi::git_status_show_t_GIT_STATUS_SHOW_WORKDIR_ONLY + 1
         );
     }
 }
