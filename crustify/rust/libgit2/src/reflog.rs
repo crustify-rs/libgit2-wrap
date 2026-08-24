@@ -1,8 +1,12 @@
 //! Safe wrappers for libgit2 reflog APIs.
 
+use core::ffi::CStr;
+
 use ffibox::CBox;
 
 use crate::ffi;
+use crate::oid::OidRef;
+use crate::repository::GitRepositoryMut;
 
 ffibox::define_ctype!(
     /// Wraps: git_reflog
@@ -16,7 +20,8 @@ ffibox::define_ctype!(
     ffi::git_reflog
 );
 
-/// An owning handle to a fully formed libgit2 reflog.
+/// Wraps: git_reflog_free
+/// An owning handle that frees a fully formed libgit2 reflog on drop.
 pub type GitReflogOwned = CBox<GitReflog>;
 
 // SAFETY: `git_reflog_free` is the public destructor for a fully formed,
@@ -102,4 +107,135 @@ mod tests {
             assert!(GitReflogEntryMut::from_ptr(ptr::null_mut()).is_none());
         }
     }
+}
+
+/// Wraps: git_reflog_delete
+/// Deletes the persisted reflog named by `name`.
+pub fn git_reflog_delete(repo: &mut GitRepositoryMut<'_>, name: &CStr) -> Result<(), i32> {
+    // SAFETY: the repository is live and exclusively borrowed and `name` is
+    // a live NUL-terminated string retained only for this call.
+    let status = unsafe { ffi::git_reflog_delete(repo.as_mut_ptr(), name.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_reflog_drop
+/// Removes an in-memory entry, optionally repairing the previous entry.
+pub fn git_reflog_drop(
+    reflog: &mut GitReflogMut<'_>,
+    index: usize,
+    rewrite_previous_entry: bool,
+) -> Result<(), i32> {
+    // SAFETY: `reflog` is live and exclusively borrowed; the scalar arguments
+    // carry no additional validity requirements.
+    let status = unsafe {
+        ffi::git_reflog_drop(
+            reflog.as_mut_ptr(),
+            index,
+            i32::from(rewrite_previous_entry),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_reflog_entry_byindex
+/// Borrows the entry at reverse-chronological `index`.
+#[must_use]
+pub fn git_reflog_entry_byindex<'a>(
+    reflog: GitReflogRef<'a>,
+    index: usize,
+) -> Option<GitReflogEntryRef<'a>> {
+    // SAFETY: `reflog` is live and shared; a non-null result remains owned by
+    // that reflog for the returned handle's lifetime.
+    let entry = unsafe { ffi::git_reflog_entry_byindex(reflog.as_ptr(), index) }.cast_mut();
+    // SAFETY: the non-null case is the borrowed entry described above.
+    unsafe { GitReflogEntryRef::from_ptr(entry) }
+}
+
+/// Wraps: git_reflog_entry_id_new
+/// Borrows the entry's new object ID.
+#[must_use]
+pub fn git_reflog_entry_id_new<'a>(entry: GitReflogEntryRef<'a>) -> OidRef<'a> {
+    // SAFETY: `entry` is live and the getter returns its non-null inline OID.
+    let oid = unsafe { ffi::git_reflog_entry_id_new(entry.as_ptr()) }.cast_mut();
+    // SAFETY: a valid entry always contains this inline OID.
+    unsafe { OidRef::from_ptr(oid) }.expect("a reflog entry has an inline new OID")
+}
+
+/// Wraps: git_reflog_entry_id_old
+/// Borrows the entry's previous object ID.
+#[must_use]
+pub fn git_reflog_entry_id_old<'a>(entry: GitReflogEntryRef<'a>) -> OidRef<'a> {
+    // SAFETY: `entry` is live and the getter returns its non-null inline OID.
+    let oid = unsafe { ffi::git_reflog_entry_id_old(entry.as_ptr()) }.cast_mut();
+    // SAFETY: a valid entry always contains this inline OID.
+    unsafe { OidRef::from_ptr(oid) }.expect("a reflog entry has an inline old OID")
+}
+
+/// Wraps: git_reflog_entry_message
+/// Borrows the optional message owned by an entry.
+#[must_use]
+pub fn git_reflog_entry_message<'a>(entry: GitReflogEntryRef<'a>) -> Option<&'a CStr> {
+    // SAFETY: the getter returns null or an entry-owned NUL-terminated string
+    // that remains live for the entry borrow.
+    let message = unsafe { ffi::git_reflog_entry_message(entry.as_ptr()) };
+    if message.is_null() {
+        None
+    } else {
+        // SAFETY: non-null is the live NUL-terminated message described above.
+        Some(unsafe { CStr::from_ptr(message) })
+    }
+}
+
+/// Wraps: git_reflog_entrycount
+/// Returns the number of entries currently held by the reflog.
+#[must_use]
+pub fn git_reflog_entrycount(reflog: GitReflogRef<'_>) -> usize {
+    // SAFETY: source inspection shows this legacy mutable parameter is only
+    // read, so a shared handle is sufficient and no pointer is retained.
+    unsafe { ffi::git_reflog_entrycount(reflog.as_ptr().cast_mut()) }
+}
+
+/// Wraps: git_reflog_read
+/// Loads an independently owned reflog from a repository.
+pub fn git_reflog_read(
+    repo: &mut GitRepositoryMut<'_>,
+    name: &CStr,
+) -> Result<GitReflogOwned, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: `raw` is writable, the repository is live and exclusive, and
+    // `name` is a live string. On success the result owns its refdb count.
+    let status = unsafe { ffi::git_reflog_read(&mut raw, repo.as_mut_ptr(), name.as_ptr()) };
+    if status == 0 {
+        // SAFETY: success transfers a complete reflog allocation.
+        Ok(unsafe { GitReflogOwned::from_raw(raw) }
+            .expect("libgit2 succeeded without returning a reflog"))
+    } else {
+        if !raw.is_null() {
+            // SAFETY: a populated error output remains caller-owned.
+            drop(unsafe { GitReflogOwned::from_raw(raw) });
+        }
+        Err(status)
+    }
+}
+
+/// Wraps: git_reflog_rename
+/// Renames a persisted reflog.
+pub fn git_reflog_rename(
+    repo: &mut GitRepositoryMut<'_>,
+    old_name: &CStr,
+    new_name: &CStr,
+) -> Result<(), i32> {
+    // SAFETY: the repository is live and exclusive and both strings remain
+    // live for the call; none of these pointers is retained.
+    let status =
+        unsafe { ffi::git_reflog_rename(repo.as_mut_ptr(), old_name.as_ptr(), new_name.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_reflog_write
+/// Atomically writes the in-memory reflog back to its backend.
+pub fn git_reflog_write(reflog: &mut GitReflogMut<'_>) -> Result<(), i32> {
+    // SAFETY: `reflog` is live and exclusively borrowed for backend mutation.
+    let status = unsafe { ffi::git_reflog_write(reflog.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

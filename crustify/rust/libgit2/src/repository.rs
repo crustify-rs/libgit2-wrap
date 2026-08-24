@@ -921,3 +921,19 @@ mod symbol_tests {
         );
     }
 }
+
+/// Wraps: git_repository_commondir
+/// Borrows the repository's shared common-directory path.
+#[must_use]
+pub fn git_repository_commondir<'a>(repo: GitRepositoryRef<'a>) -> &'a CStr {
+    // SAFETY: `repo` is live and shared; a valid repository owns a non-null
+    // NUL-terminated common-directory path for its lifetime.
+    let path = unsafe { ffi::git_repository_commondir(repo.as_ptr()) };
+    assert!(
+        !path.is_null(),
+        "a complete repository has a common-directory path"
+    );
+    // SAFETY: the repository invariant and null check establish a live C
+    // string tied to the repository borrow.
+    unsafe { CStr::from_ptr(path) }
+}

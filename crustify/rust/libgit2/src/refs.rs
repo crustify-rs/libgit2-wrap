@@ -7,7 +7,7 @@ use core::ptr::NonNull;
 
 use ffibox::{CBox, CCloned, CDropped};
 
-use crate::api::types::GitObjectType;
+use crate::api::types::{GitObjectType, GitReferenceType, InvalidGitReferenceType};
 use crate::ffi;
 use crate::object::{GitObjectOwned, GitObjectRef};
 use crate::oid::{Oid, OidRef};
@@ -648,4 +648,26 @@ pub fn git_reference_target<'a>(reference: GitReferenceRef<'a>) -> Option<OidRef
     let target = unsafe { ffi::git_reference_target(reference.as_ptr()) };
     // SAFETY: the optional handle is tied to the source reference's `'a`.
     unsafe { OidRef::from_ptr(target.cast_mut()) }
+}
+
+/// Wraps: git_reference_target_peel
+/// Borrows the cached peeled object ID of a direct reference, when present.
+#[must_use]
+pub fn git_reference_target_peel<'a>(reference: GitReferenceRef<'a>) -> Option<OidRef<'a>> {
+    // SAFETY: `reference` is live and libgit2 returns either null or the
+    // address of its inline peeled OID, which remains valid for the same
+    // borrow and is exposed read-only.
+    let oid = unsafe { ffi::git_reference_target_peel(reference.as_ptr()) }.cast_mut();
+    // SAFETY: a non-null result is the live inline OID described above.
+    unsafe { OidRef::from_ptr(oid) }
+}
+
+/// Wraps: git_reference_type
+/// Returns the published kind of a live reference.
+pub fn git_reference_type(
+    reference: GitReferenceRef<'_>,
+) -> Result<GitReferenceType, InvalidGitReferenceType> {
+    // SAFETY: `reference` is a live shared handle and the getter retains no
+    // pointer.
+    GitReferenceType::try_from(unsafe { ffi::git_reference_type(reference.as_ptr()) })
 }
