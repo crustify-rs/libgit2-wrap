@@ -811,8 +811,10 @@ ffibox::define_ctype!(
 /// Wraps: git_diff_free
 /// An owned reference count to a [`Diff`].
 ///
-/// Dropping it calls `git_diff_free`. Libgit2 does not publish an operation
-/// that increments a diff's reference count, so this owner is not `Clone`.
+/// Dropping it calls `git_diff_free`. The only routine that increments a
+/// diff's reference count is `git_diff_addref`, declared in the private
+/// `src/libgit2/diff_generate.h` and used internally by patch construction; it
+/// is not exported, so this owner is not `Clone`.
 pub type DiffOwned = CBox<Diff>;
 
 // SAFETY: `git_diff_free` consumes one reference count to a fully constructed
@@ -888,10 +890,8 @@ mod diff_tests {
         // SAFETY: `raw` is a valid out-slot and the empty input is readable for
         // zero bytes. On success libgit2 initializes `raw` with one owned diff
         // reference count.
-        assert_eq!(
-            unsafe { ffi::git_diff_from_buffer(&mut raw, b"".as_ptr().cast(), 0) },
-            0
-        );
+        let status = unsafe { ffi::git_diff_from_buffer(&mut raw, b"".as_ptr().cast(), 0) };
+        assert_eq!(status, 0);
 
         // SAFETY: the successful constructor transferred one non-null owned
         // count through `raw`, which has not been adopted elsewhere.

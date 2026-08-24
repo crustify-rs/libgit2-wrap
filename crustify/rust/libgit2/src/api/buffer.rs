@@ -88,6 +88,12 @@ impl GitBufRef<'_> {
 
     /// Wraps: git_buf.reserved
     /// Allocation capacity recorded by libgit2.
+    ///
+    /// The public header describes this field as reserved and unused, but the
+    /// implementation records the allocation size in it: `git_buf_fromstr`
+    /// copies `git_str::asize` here and `git_buf_grow` stores the grown
+    /// capacity. Observed behaviour governs, so the exclusive operations on
+    /// [`GitBufMut`] use it as the owned-allocation witness.
     #[inline]
     #[must_use]
     pub fn reserved(&self) -> usize {
@@ -99,36 +105,58 @@ impl GitBufRef<'_> {
 }
 
 impl GitBufMut<'_> {
-    /// Borrow the initialized content bytes exclusively.
-    #[must_use]
-    pub fn contents_mut(&mut self) -> Option<CSliceMut<'_, u8>> {
-        let header = self.as_mut_ptr();
-        // SAFETY: both fields are initialized members of the exclusively
-        // borrowed live header.
-        let (ptr, size) = unsafe {
+    /// Libgit2's own owned-allocation witness for a buffer header.
+    ///
+    /// `git_str_is_allocated` requires a non-null pointer and a non-zero
+    /// `asize`, which `git_buf_fromstr` copies into `reserved`; an allocated
+    /// buffer always reserves room for its trailing NUL, so `reserved > size`.
+    /// The two representations this rejects are not writable: a header
+    /// attached to bytes libgit2 does not own records `reserved == 0` with a
+    /// non-null pointer (`git_str_attach_notowned`, which `git_str_try_grow`
+    /// then refuses as "a borrowed buffer"), and a disposed or sanitized
+    /// buffer points at the shared `git_str__initstr` sentinel with
+    /// `reserved == 0`. Every exclusive operation below is therefore gated on
+    /// this witness rather than on a non-null pointer alone.
+    ///
+    /// Returns the content pointer and the content length.
+    fn allocation(&self) -> Option<(NonNull<u8>, usize)> {
+        let header = self.as_ref().as_ptr();
+        // SAFETY: the three fields are initialized members of the live header
+        // borrowed by this handle; raw-place projection reads them without
+        // forming a reference to C-visible storage.
+        let (ptr, reserved, size) = unsafe {
             (
                 core::ptr::addr_of!((*header).ptr).read().cast::<u8>(),
+                core::ptr::addr_of!((*header).reserved).read(),
                 core::ptr::addr_of!((*header).size).read(),
             )
         };
         let ptr = NonNull::new(ptr)?;
-        // SAFETY: a valid `git_buf` guarantees `size` initialized bytes at the
-        // pointer, and the mutable handle provides exclusive access for the
-        // returned view's lifetime.
+        if reserved > size { Some((ptr, size)) } else { None }
+    }
+
+    /// Borrow the initialized content bytes exclusively.
+    ///
+    /// `None` denotes a header that owns no writable allocation: the null and
+    /// static-sentinel empty representations, and a header merely attached to
+    /// bytes owned elsewhere.
+    #[must_use]
+    pub fn contents_mut(&mut self) -> Option<CSliceMut<'_, u8>> {
+        let (ptr, size) = self.allocation()?;
+        // SAFETY: the owned-allocation witness proves `size` initialized bytes
+        // within a writable allocation at `ptr`, and the mutable handle
+        // provides exclusive access for the returned view's lifetime.
         Some(unsafe { CSliceMut::from_raw_parts(ptr, size) })
     }
 
     /// Shrink the initialized contents and move the trailing NUL terminator.
-    /// Returns `false` if `new_size` would grow the buffer or the header is not
-    /// a valid non-empty representation.
+    /// Returns `false` if `new_size` would grow the buffer, or if the header
+    /// owns no writable allocation and the request is not already satisfied.
     pub fn truncate(&mut self, new_size: usize) -> bool {
-        let header = self.as_mut_ptr();
-        // SAFETY: reads initialized scalar fields through the exclusive handle.
-        let (ptr, old_size) = unsafe {
-            (
-                core::ptr::addr_of!((*header).ptr).read(),
-                core::ptr::addr_of!((*header).size).read(),
-            )
+        let Some((ptr, old_size)) = self.allocation() else {
+            // Without a writable allocation only a no-op truncation succeeds:
+            // there is no terminator to move and nothing to shrink.
+            return new_size == self.as_ref().size();
         };
 
         if new_size > old_size {
@@ -137,16 +165,14 @@ impl GitBufMut<'_> {
         if new_size == old_size {
             return true;
         }
-        if ptr.is_null() {
-            return false;
-        }
 
-        // SAFETY: `new_size < old_size`; a valid buffer has at least
-        // `old_size + 1` writable bytes, and this exclusive handle permits both
-        // writes without forming a reference to C-visible storage.
+        // SAFETY: `new_size < old_size < reserved`, so the terminator write
+        // stays inside the allocation proved by `allocation`, and this
+        // exclusive handle permits both writes without forming a reference to
+        // C-visible storage.
         unsafe {
-            ptr.cast::<u8>().add(new_size).write(0);
-            core::ptr::addr_of_mut!((*header).size).write(new_size);
+            ptr.as_ptr().add(new_size).write(0);
+            core::ptr::addr_of_mut!((*self.as_mut_ptr()).size).write(new_size);
         }
         true
     }
@@ -154,23 +180,15 @@ impl GitBufMut<'_> {
     /// Detach the allocated byte run, leaving this header empty.
     ///
     /// The returned allocation includes the trailing NUL. Static empty
-    /// sentinels and null empty buffers have no detachable allocation.
+    /// sentinels, null empty buffers, and headers attached to bytes owned
+    /// elsewhere have no detachable allocation.
     #[must_use]
     pub fn take_allocation(&mut self) -> Option<GitBufAllocation> {
-        let header = self.as_mut_ptr();
-        // SAFETY: reads initialized fields through the exclusive handle.
-        let (ptr, reserved, size) = unsafe {
-            (
-                core::ptr::addr_of!((*header).ptr).read().cast::<u8>(),
-                core::ptr::addr_of!((*header).reserved).read(),
-                core::ptr::addr_of!((*header).size).read(),
-            )
-        };
+        let (ptr, size) = self.allocation()?;
+        // `reserved > size` bounds the sum, so this cannot overflow.
         let count = size.checked_add(1)?;
-        if ptr.is_null() || reserved == 0 || count > reserved {
-            return None;
-        }
 
+        let header = self.as_mut_ptr();
         // SAFETY: the exclusive handle permits resetting all ownership fields;
         // null/zero is the public `GIT_BUF_INIT` representation.
         unsafe {
@@ -179,10 +197,10 @@ impl GitBufMut<'_> {
             core::ptr::addr_of_mut!((*header).size).write(0);
         }
 
-        // SAFETY: the valid allocated-buffer representation proves `count`
-        // initialized bytes (content plus NUL), unique ownership moved from the
-        // reset header, and compatibility with libgit2's configured allocator.
-        unsafe { GitBufAllocation::from_raw_parts(ptr, count) }
+        // SAFETY: the owned-allocation witness proves `count` initialized
+        // bytes (content plus NUL), unique ownership moved out of the reset
+        // header, and compatibility with libgit2's configured allocator.
+        unsafe { GitBufAllocation::from_raw_parts(ptr.as_ptr(), count) }
     }
 
     /// Replace the current byte run with a detached libgit2 allocation.
@@ -235,6 +253,44 @@ mod tests {
         assert_eq!(view.size(), 0);
         assert_eq!(view.reserved(), 0);
         assert!(view.contents().is_none());
+    }
+
+    #[test]
+    fn a_borrowed_header_exposes_no_writable_allocation() {
+        // The representation `git_str_attach_notowned` produces and
+        // `git_buf_fromstr` forwards: non-null content bytes libgit2 does not
+        // own, recorded with `reserved == 0`.
+        let borrowed = *b"static";
+        let mut raw = ffi::git_buf {
+            ptr: borrowed.as_ptr().cast_mut().cast(),
+            reserved: 0,
+            size: borrowed.len(),
+        };
+
+        // SAFETY: `raw` is a live initialized header for this scope and no
+        // other handle addresses it.
+        let mut header = unsafe { GitBufMut::from_ptr(&raw mut raw) }.unwrap();
+
+        // Reads are still available; writes are refused.
+        assert_eq!(header.as_ref().size(), borrowed.len());
+        assert_eq!(header.as_ref().contents().unwrap().elem(0), Some(b's'));
+        assert!(header.contents_mut().is_none());
+        assert!(header.take_allocation().is_none());
+        assert!(!header.truncate(2));
+        assert!(header.truncate(borrowed.len()));
+
+        // The refused truncation left the borrowed bytes untouched.
+        assert_eq!(&borrowed, b"static");
+        assert_eq!(raw.size, 6);
+    }
+
+    #[test]
+    fn the_empty_sentinel_header_truncates_only_to_zero() {
+        let mut buffer = GitBuf::new();
+        let mut view = buffer.as_mut();
+        assert!(view.truncate(0));
+        assert!(!view.truncate(1));
+        assert!(view.contents_mut().is_none());
     }
 
     #[test]

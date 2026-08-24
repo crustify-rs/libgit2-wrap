@@ -66,9 +66,11 @@ ffibox::define_ctype!(
 
 /// An owned reference count to a [`GitConfig`].
 ///
-/// Dropping it calls `git_config_free`, which releases one count. Libgit2 does
-/// not publish an operation that increments a config's reference count, so
-/// this owner intentionally does not implement `Clone`.
+/// Dropping it calls `git_config_free`, which releases one count. No exported
+/// operation takes a `git_config *` and yields an additional count: the
+/// refcount is incremented only where libgit2 hands out a config it already
+/// holds, such as `git_repository_config`. This owner therefore intentionally
+/// does not implement `Clone`.
 pub type GitConfigOwned = CBox<GitConfig>;
 
 // SAFETY: `git_config_free` consumes exactly one reference to a fully formed
@@ -193,6 +195,9 @@ mod tests {
 
     #[test]
     fn public_scalar_parsers_return_typed_values() {
+        // Libgit2 requires initialization before any entry point; these
+        // parsers reach `git_error_set` on their failure paths.
+        let _init = Libgit2Init::acquire();
         assert_eq!(git_config_parse_bool(Some(c"yes")), Ok(true));
         assert_eq!(git_config_parse_bool(Some(c"off")), Ok(false));
         assert_eq!(git_config_parse_int32(Some(c"2k")), Ok(2048));
@@ -724,8 +729,12 @@ pub fn git_config_set_string(
 pub fn git_config_snapshot(config: GitConfigRef<'_>) -> Result<GitConfigOwned, i32> {
     let mut out = core::ptr::null_mut();
     // SAFETY: `out` is writable and `config` is a live shared handle. The C
-    // declaration predates const-correctness but snapshotting does not mutate
-    // the source config or retain its pointer.
+    // declaration predates const-correctness but snapshotting only reads the
+    // source's reader vector and asks each backend for a snapshot. The
+    // snapshot backend does record the source backend pointer, but consults it
+    // solely in the `open` that `git_config_add_backend` performs inside this
+    // call, and copies out every entry there; the result is independent of the
+    // source once this call returns.
     let status = unsafe { ffi::git_config_snapshot(&mut out, config.as_ptr().cast_mut()) };
     if status != 0 {
         return Err(status);

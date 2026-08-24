@@ -228,6 +228,12 @@ impl<'a> DescribeOptionsRef<'a> {
 
     /// Wraps: git_describe_options.describe_strategy
     /// Returns the raw libgit2 describe strategy value.
+    ///
+    /// The C field is a plain `unsigned int` holding a
+    /// `git_describe_strategy_t`: 0 `GIT_DESCRIBE_DEFAULT`, 1
+    /// `GIT_DESCRIBE_TAGS`, 2 `GIT_DESCRIBE_ALL`. That enum has no Rust
+    /// wrapper yet, so the value is carried raw; libgit2 treats every
+    /// unrecognized value as the default.
     #[must_use]
     pub fn describe_strategy(&self) -> u32 {
         // SAFETY: `self` carries a live shared borrow of the complete C
@@ -299,6 +305,8 @@ impl DescribeOptionsMut<'_> {
     }
 
     /// Sets the raw libgit2 describe strategy value.
+    ///
+    /// See [`DescribeOptionsRef::describe_strategy`] for the accepted values.
     pub fn set_describe_strategy(&mut self, strategy: u32) {
         // SAFETY: this exclusive handle permits mutation, and raw-place
         // projection writes the scalar without forming a reference to

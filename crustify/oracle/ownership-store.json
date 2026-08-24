@@ -327,7 +327,7 @@
   {
    "name": "git_buf",
    "defined_in": "include/git2/buffer.h",
-   "_comment_agent": "Public git_buf owns a counted mutable byte allocation through ptr, except for its NULL initial state and the static empty sentinel. reserved is allocation capacity and size is initialized payload length.",
+   "_comment_agent": "Review wave: refined git_buf.ptr with the runtime owned/borrowed witness libgit2 itself uses, so a wrapper can decide writability and detachability from the header alone.",
    "fields": [
     {
      "name": "ptr",
@@ -343,7 +343,7 @@
       },
       "nullable": true,
       "mutable": true,
-      "note": "Counted mutable byte buffer owned by git_buf when allocated; empty sanitized buffers may instead point at the static git_str__initstr sentinel. NULL is valid in GIT_BUF_INIT. The size excludes a guaranteed trailing NUL, but interior NUL bytes are allowed, so this is modeled as an array rather than a string. git_buf_dispose handles the owned-vs-static runtime gate."
+      "note": "Counted mutable byte buffer. The owned-vs-not gate is decidable from the header: git_buf_fromstr copies git_str::asize into `reserved`, and git_str_is_allocated is `ptr != NULL && asize > 0`, so an owned allocation always has `reserved > size` (a git_str keeps room for the trailing NUL). Two non-owned representations record `reserved == 0`: NULL (GIT_BUF_INIT), and the shared static git_str__initstr sentinel that git_buf_dispose/git_buf_sanitize install for an empty buffer. git_buf_dispose gates on `ptr != git_str__initstr` and frees with git__free; it resets to the sentinel, never to NULL. Corner case: git_str_attach_notowned yields asize==0 with a non-null ptr and size>0 (bytes owned elsewhere, possibly read-only - git_str_try_grow refuses it as 'a borrowed buffer'); git_buf_fromstr would forward that shape, so writes and detachment must require `reserved > size` rather than a non-null pointer. The size excludes the guaranteed trailing NUL but interior NUL bytes are allowed, so this is an array rather than a string."
      }
     }
    ]
