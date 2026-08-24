@@ -1468,6 +1468,12 @@
    ]
   },
   {
+   "name": "git_merge_preference_t",
+   "defined_in": "include/git2/merge.h",
+   "_comment_agent": "git_merge_preference_t is a fieldless C enum with no ownership or lifetime-bearing members. It is declared as a bit set (NONE = 0, NO_FASTFORWARD = 1 << 0, FASTFORWARD_ONLY = 1 << 1) and reaches callers only through the git_merge_analysis/git_merge_analysis_for_ref out-parameter. merge_preference in src/libgit2/merge.c sets at most one bit from mutually exclusive merge.ff branches, so the observed value set is exactly {0, 1, 2}.",
+   "fields": []
+  },
+  {
    "name": "git_message_trailer",
    "defined_in": "include/git2/message.h",
    "_comment_agent": "git_message_trailers stores both pointers into the array-owned extracted trailer block; git_message_trailer_array_free releases that block and the trailer array together.",
@@ -1835,6 +1841,18 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_oid",
+   "defined_in": "include/git2/oid.h",
+   "_comment_agent": "git_oid is a public by-value struct with no pointer members: a one-byte git_oid_t discriminator plus an inline GIT_OID_MAX_SIZE (32) unsigned char digest array. It owns no allocation, has no releaser, disposer or cloner, and is copied with memcpy by git_oid_cpy. Only the first git_oid_size(type) digest bytes are significant (20 for SHA1, 32 for SHA256); the remainder stays zero-filled by git_oid_from_raw/git_oid_from_prefix. A zeroed value carries type 0, which is not a published git_oid_t.",
+   "fields": []
+  },
+  {
+   "name": "git_oid_t",
+   "defined_in": "include/git2/oid.h",
+   "_comment_agent": "git_oid_t is a fieldless C enum with no ownership or lifetime-bearing members. Its published values are GIT_OID_SHA1 = 1 and GIT_OID_SHA256 = 2; 0 is not published, so a zeroed git_oid header does not name a hash algorithm and git_oid_size/git_oid_hexsize return 0 for it.",
+   "fields": []
   },
   {
    "name": "git_oidarray",

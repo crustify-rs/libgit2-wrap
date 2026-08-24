@@ -1,10 +1,19 @@
 //! Safe wrappers for libgit2 oid APIs.
 
+use core::mem::{offset_of, size_of};
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CSlice, CSliceMut};
 
 use crate::ffi;
+
+/// The inline digest capacity of a `git_oid`, matching C's `GIT_OID_MAX_SIZE`.
+///
+/// Derived from the C layout rather than spelled as a literal so that widening
+/// the inline array cannot silently desynchronize the wrapper. `git_oid` is
+/// byte-aligned, so its size less the digest field's offset is exactly the
+/// array length; `wrappers_match_the_c_layout` pins that down.
+pub const RAW_DIGEST_LEN: usize = size_of::<ffi::git_oid>() - offset_of!(ffi::git_oid, id);
 
 /// Wraps: git_oid_t
 /// The hash algorithm identifying an object ID's byte width.
@@ -26,6 +35,29 @@ impl InvalidOidType {
     #[must_use]
     pub const fn value(self) -> ffi::git_oid_t {
         self.0
+    }
+}
+
+impl OidType {
+    /// Returns the significant digest width in bytes.
+    ///
+    /// This mirrors C's `git_oid_size`: only these leading bytes of the inline
+    /// `git_oid.id` array carry the digest, and every C reader bounds itself
+    /// this way. The trailing bytes stay zero-filled by libgit2's parsers.
+    #[must_use]
+    pub const fn digest_len(self) -> usize {
+        match self {
+            Self::Sha1 => 20,
+            Self::Sha256 => 32,
+        }
+    }
+
+    /// Returns the hexadecimal width, mirroring C's `git_oid_hexsize`.
+    ///
+    /// A formatting buffer must hold one more byte for the trailing NUL.
+    #[must_use]
+    pub const fn hex_len(self) -> usize {
+        self.digest_len() * 2
     }
 }
 
@@ -71,10 +103,11 @@ impl<'a> OidRef<'a> {
     }
 
     /// Wraps: git_oid.id
-    /// Returns all 32 bytes of the inline object-ID field.
+    /// Returns the whole inline object-ID field, including unused bytes.
     ///
-    /// For SHA-1 values, only the first 20 bytes carry the digest; libgit2
-    /// leaves the remaining field bytes unused.
+    /// The array is always [`RAW_DIGEST_LEN`] bytes wide, but only
+    /// [`OidType::digest_len`] of them carry the digest. Use [`Self::digest`]
+    /// to borrow exactly the significant run the way C does.
     #[must_use]
     pub fn raw_bytes(&self) -> CSlice<'a, u8> {
         // SAFETY: this live shared handle covers the initialized C value, and
@@ -82,10 +115,29 @@ impl<'a> OidRef<'a> {
         let bytes = unsafe { addr_of!((*self.as_ptr()).id) }
             .cast::<u8>()
             .cast_mut();
-        // SAFETY: `bytes` points to the 32 initialized bytes of the inline
-        // array, which remain live for the handle's `'a` borrow. `CSlice`
-        // exposes copies rather than a reference over C-visible memory.
-        unsafe { CSlice::from_raw_parts(NonNull::new_unchecked(bytes), 32) }
+        // SAFETY: `bytes` points to the `RAW_DIGEST_LEN` initialized bytes of
+        // the inline array, which remain live for the handle's `'a` borrow.
+        // `CSlice` exposes copies rather than a reference over C-visible
+        // memory.
+        unsafe { CSlice::from_raw_parts(NonNull::new_unchecked(bytes), RAW_DIGEST_LEN) }
+    }
+
+    /// Borrows only the digest bytes significant for this object ID's hash
+    /// algorithm.
+    ///
+    /// This is the run every C reader bounds itself to through `git_oid_size`;
+    /// a value whose stored algorithm is not published has no such run and
+    /// returns an error instead of a truncated view.
+    pub fn digest(&self) -> Result<CSlice<'a, u8>, InvalidOidType> {
+        let len = self.oid_type()?.digest_len();
+        debug_assert!(len <= RAW_DIGEST_LEN);
+        // SAFETY: as `raw_bytes`, for the same live inline array.
+        let bytes = unsafe { addr_of!((*self.as_ptr()).id) }
+            .cast::<u8>()
+            .cast_mut();
+        // SAFETY: `len` is at most the inline array's `RAW_DIGEST_LEN` bytes,
+        // all initialized and live for the handle's `'a` borrow.
+        Ok(unsafe { CSlice::from_raw_parts(NonNull::new_unchecked(bytes), len) })
     }
 }
 
@@ -98,15 +150,31 @@ impl OidMut<'_> {
         unsafe { addr_of_mut!((*self.as_mut_ptr()).type_).write(raw) }
     }
 
-    /// Borrows all 32 inline object-ID bytes exclusively.
+    /// Borrows the whole inline object-ID field exclusively.
     #[must_use]
     pub fn raw_bytes_mut(&mut self) -> CSliceMut<'_, u8> {
         // SAFETY: this exclusive handle covers the initialized C value, and
         // raw-place projection does not form a reference to its byte array.
         let bytes = unsafe { addr_of_mut!((*self.as_mut_ptr()).id) }.cast::<u8>();
-        // SAFETY: `bytes` points to the 32 initialized bytes of the inline
-        // array, and the mutable view is bounded by this exclusive reborrow.
-        unsafe { CSliceMut::from_raw_parts(NonNull::new_unchecked(bytes), 32) }
+        // SAFETY: `bytes` points to the `RAW_DIGEST_LEN` initialized bytes of
+        // the inline array, and the mutable view is bounded by this exclusive
+        // reborrow.
+        unsafe { CSliceMut::from_raw_parts(NonNull::new_unchecked(bytes), RAW_DIGEST_LEN) }
+    }
+
+    /// Borrows only the digest bytes significant for the stored hash
+    /// algorithm, exclusively.
+    ///
+    /// Writing through this view cannot disturb the unused trailing bytes that
+    /// libgit2's parsers keep zero-filled.
+    pub fn digest_mut(&mut self) -> Result<CSliceMut<'_, u8>, InvalidOidType> {
+        let len = self.as_ref().oid_type()?.digest_len();
+        debug_assert!(len <= RAW_DIGEST_LEN);
+        // SAFETY: as `raw_bytes_mut`, for the same live inline array.
+        let bytes = unsafe { addr_of_mut!((*self.as_mut_ptr()).id) }.cast::<u8>();
+        // SAFETY: `len` is at most the inline array's `RAW_DIGEST_LEN` bytes,
+        // and the mutable view is bounded by this exclusive reborrow.
+        Ok(unsafe { CSliceMut::from_raw_parts(NonNull::new_unchecked(bytes), len) })
     }
 }
 
@@ -136,6 +204,78 @@ mod tests {
         assert_eq!(align_of::<Oid>(), align_of::<ffi::git_oid>());
         assert_eq!(size_of::<OidRef<'_>>(), size_of::<*const ffi::git_oid>());
         assert_eq!(size_of::<OidMut<'_>>(), size_of::<*mut ffi::git_oid>());
+
+        // `RAW_DIGEST_LEN` is derived from the header size and the digest
+        // offset; this literal only type-checks when it is the inline array's
+        // real length, which C spells `GIT_OID_MAX_SIZE`.
+        let raw = ffi::git_oid {
+            type_: 0,
+            id: [0; RAW_DIGEST_LEN],
+        };
+        assert_eq!(raw.id.len(), RAW_DIGEST_LEN);
+        assert_eq!(RAW_DIGEST_LEN, OidType::Sha256.digest_len());
+    }
+
+    #[test]
+    fn digest_widths_mirror_the_c_size_helpers() {
+        assert_eq!(OidType::Sha1.digest_len(), 20);
+        assert_eq!(OidType::Sha1.hex_len(), 40);
+        assert_eq!(OidType::Sha256.digest_len(), 32);
+        assert_eq!(OidType::Sha256.hex_len(), 64);
+    }
+
+    #[test]
+    fn digest_views_cover_only_the_significant_bytes() {
+        let mut raw = ffi::git_oid {
+            type_: ffi::git_oid_t_GIT_OID_SHA1 as u8,
+            id: core::array::from_fn(|index| index as u8 + 1),
+        };
+
+        // SAFETY: `raw` is initialized, non-null, exclusively borrowed for the
+        // handle's lifetime, and remains live until its last use.
+        let mut oid = unsafe { OidMut::from_ptr(&raw mut raw) }
+            .expect("the address of a stack value is non-null");
+
+        assert_eq!(oid.as_ref().raw_bytes().len(), RAW_DIGEST_LEN);
+        let digest = oid.as_ref().digest().expect("SHA-1 is published");
+        assert_eq!(digest.len(), 20);
+        let mut copied = [0u8; 20];
+        assert!(digest.copy_to_slice(&mut copied));
+        assert_eq!(copied, core::array::from_fn(|index| index as u8 + 1));
+
+        // Writing through the exclusive digest view cannot reach the unused
+        // trailing bytes libgit2 leaves zero-filled for SHA-1.
+        assert!(
+            oid.digest_mut()
+                .expect("SHA-1 is published")
+                .copy_from_slice(&[0xff; 20])
+        );
+        let mut whole = [0u8; RAW_DIGEST_LEN];
+        assert!(oid.as_ref().raw_bytes().copy_to_slice(&mut whole));
+        assert_eq!(&whole[..20], &[0xff; 20]);
+        assert_eq!(whole[20], 21);
+
+        // Widening to SHA-256 makes the trailing bytes significant.
+        oid.set_oid_type(OidType::Sha256);
+        assert_eq!(
+            oid.as_ref().digest().expect("SHA-256 is published").len(),
+            RAW_DIGEST_LEN
+        );
+    }
+
+    #[test]
+    fn digest_views_reject_an_unpublished_algorithm() {
+        let mut oid = Oid::zeroed();
+        let raw = addr_of_mut!(oid).cast::<ffi::git_oid>();
+
+        // SAFETY: `raw` points to the live, initialized, layout-compatible
+        // stack value above and is only borrowed by this handle.
+        let mut oid =
+            unsafe { OidMut::from_ptr(raw) }.expect("the address of a stack value is non-null");
+        assert_eq!(oid.as_ref().digest().err(), Some(InvalidOidType(0)));
+        assert_eq!(oid.digest_mut().err(), Some(InvalidOidType(0)));
+        // The whole inline field stays reachable for a value C has not typed.
+        assert_eq!(oid.as_ref().raw_bytes().len(), RAW_DIGEST_LEN);
     }
 
     #[test]

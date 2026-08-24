@@ -145,6 +145,32 @@ mod tests {
         }
         assert_eq!(git_object_string2type(None), GitObjectType::INVALID);
     }
+
+    #[test]
+    fn object_kind_lookup_matches_libgit2_prefix_semantics() {
+        // The C loop accepts any input the published name is a prefix of, and
+        // rejects an input that merely starts one.
+        assert_eq!(
+            git_object_string2type(Some(c"commitment")),
+            GitObjectType::COMMIT
+        );
+        assert_eq!(git_object_string2type(Some(c"comm")), GitObjectType::INVALID);
+        assert_eq!(git_object_string2type(Some(c"")), GitObjectType::INVALID);
+        assert_eq!(
+            git_object_string2type(Some(c"nonsense")),
+            GitObjectType::INVALID
+        );
+    }
+
+    #[test]
+    fn unnamed_object_kinds_have_an_empty_static_name() {
+        // `git_object_type2string` answers every checked value, returning the
+        // empty static string outside the object table rather than null.
+        assert_eq!(git_object_type2string(GitObjectType::ANY), c"");
+        assert_eq!(git_object_type2string(GitObjectType::INVALID), c"");
+        assert!(!git_object_typeisloose(GitObjectType::ANY));
+        assert!(!git_object_typeisloose(GitObjectType::INVALID));
+    }
 }
 
 /// Wraps: git_object_dup
@@ -268,6 +294,10 @@ pub fn git_object_short_id(object: GitObjectRef<'_>) -> Result<CVal<GitBuf>, i32
 
 /// Wraps: git_object_string2type
 /// Converts an optional object-kind name, returning `INVALID` if unknown.
+///
+/// libgit2 compares with `git__prefixncmp`, so a name matches when a published
+/// kind is a *prefix* of it: `"commit"` and `"commitment"` both resolve to
+/// [`GitObjectType::COMMIT`], while a truncation such as `"comm"` does not.
 pub fn git_object_string2type(name: Option<&CStr>) -> GitObjectType {
     // SAFETY: the pointer is null or a live C string and is not retained.
     let raw = unsafe { ffi::git_object_string2type(name.map_or(core::ptr::null(), CStr::as_ptr)) };
