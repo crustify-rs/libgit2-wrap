@@ -703,22 +703,35 @@ ffibox::define_ctype!(
 /// concrete allocation.
 pub type GitWriteStreamOwned = ffibox::CBox<GitWriteStream>;
 
-impl GitWriteStreamMut<'_> {
+impl GitWriteStream {
     /// Wraps: git_writestream.close
-    /// Flushes or finalizes this stream without releasing its allocation.
-    pub fn close(&mut self) -> Result<(), core::ffi::c_int> {
-        let stream = self.as_mut_ptr();
-        // SAFETY: this exclusive handle addresses a live, fully constructed
+    /// Finalizes `stream` and then releases it through its `free` callback.
+    ///
+    /// The stream is consumed because `close` is a one-way transition: a
+    /// concrete implementation may tear its internal state down there, so no
+    /// further operation stays valid. libgit2's blob stream, for example,
+    /// runs `git_filebuf_cleanup`, which zeroes the file buffer including its
+    /// `write` function pointer; a later write, close or commit would call
+    /// through null. Only `free` remains valid, and it runs here on both the
+    /// success and the failure path.
+    pub fn close(mut stream: GitWriteStreamOwned) -> Result<(), core::ffi::c_int> {
+        let raw = stream.as_mut().as_mut_ptr();
+        // SAFETY: the owning handle addresses a live, fully constructed
         // stream, and raw-place projection reads its initialized callback
         // without forming a reference to C-visible memory.
-        let close = unsafe { core::ptr::addr_of!((*stream).close).read() }
+        let close = unsafe { core::ptr::addr_of!((*raw).close).read() }
             .expect("a valid git_writestream has a close callback");
-        // SAFETY: `close` is the callback installed for this live stream and
-        // the exclusive handle prevents another Rust call during invocation.
-        let error = unsafe { close(stream) };
+        // SAFETY: `close` is the callback installed for this live stream, and
+        // owning it exclusively means no other Rust handle observes the call.
+        let error = unsafe { close(raw) };
+        // Releases the allocation through the `free` callback, the only
+        // operation a closed stream still admits.
+        drop(stream);
         if error < 0 { Err(error) } else { Ok(()) }
     }
+}
 
+impl GitWriteStreamMut<'_> {
     /// Wraps: git_writestream.write
     /// Writes `buffer` synchronously to this stream.
     pub fn write(&mut self, buffer: &[u8]) -> Result<(), core::ffi::c_int> {
@@ -787,9 +800,19 @@ mod writestream_tests {
         0
     }
 
-    unsafe extern "C" fn test_close(_stream: *mut ffi::git_writestream) -> core::ffi::c_int {
+    unsafe extern "C" fn test_close(stream: *mut ffi::git_writestream) -> core::ffi::c_int {
         CLOSES.fetch_add(1, Ordering::SeqCst);
+        // Mirrors `blob_writestream_close`, which zeroes its file buffer and
+        // with it the `write` callback the stream would dispatch through.
+        // SAFETY: the close-callback contract supplies the live stream this
+        // callback was installed on, and no other handle observes the call.
+        unsafe { core::ptr::addr_of_mut!((*stream).write).write(None) }
         0
+    }
+
+    unsafe extern "C" fn failing_close(_stream: *mut ffi::git_writestream) -> core::ffi::c_int {
+        CLOSES.fetch_add(1, Ordering::SeqCst);
+        -9
     }
 
     unsafe extern "C" fn test_free(stream: *mut ffi::git_writestream) {
@@ -841,12 +864,53 @@ mod writestream_tests {
             .expect("Box::into_raw never returns null");
 
         assert_eq!(stream.as_mut().write(b"abc"), Ok(()));
-        assert_eq!(stream.as_mut().close(), Ok(()));
         assert_eq!(WRITTEN_LEN.load(Ordering::SeqCst), 3);
         assert_eq!(FIRST_BYTE.load(Ordering::SeqCst), usize::from(b'a'));
+
+        // Closing consumes the owner, so the torn-down stream this callback
+        // leaves behind is unreachable, and `free` runs before returning.
+        assert_eq!(GitWriteStream::close(stream), Ok(()));
         assert_eq!(CLOSES.load(Ordering::SeqCst), 1);
+        assert_eq!(FREES.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn dropping_an_unclosed_writestream_runs_only_its_destructor() {
+        CLOSES.store(0, Ordering::SeqCst);
+        FREES.store(0, Ordering::SeqCst);
+
+        let raw = Box::into_raw(Box::new(ffi::git_writestream {
+            write: Some(test_write),
+            close: Some(test_close),
+            free: Some(test_free),
+        }));
+        // SAFETY: `raw` is a unique, fully initialized stream allocation and
+        // its installed destructor reclaims the same allocation exactly once.
+        let stream = unsafe { GitWriteStreamOwned::from_raw(raw) }
+            .expect("Box::into_raw never returns null");
 
         drop(stream);
+        assert_eq!(CLOSES.load(Ordering::SeqCst), 0);
+        assert_eq!(FREES.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn a_failing_close_still_releases_the_writestream() {
+        CLOSES.store(0, Ordering::SeqCst);
+        FREES.store(0, Ordering::SeqCst);
+
+        let raw = Box::into_raw(Box::new(ffi::git_writestream {
+            write: Some(test_write),
+            close: Some(failing_close),
+            free: Some(test_free),
+        }));
+        // SAFETY: `raw` is a unique, fully initialized stream allocation and
+        // its installed destructor reclaims the same allocation exactly once.
+        let stream = unsafe { GitWriteStreamOwned::from_raw(raw) }
+            .expect("Box::into_raw never returns null");
+
+        assert_eq!(GitWriteStream::close(stream), Err(-9));
+        assert_eq!(CLOSES.load(Ordering::SeqCst), 1);
         assert_eq!(FREES.load(Ordering::SeqCst), 1);
     }
 }

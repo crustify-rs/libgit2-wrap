@@ -3708,6 +3708,12 @@
    ]
   },
   {
+   "name": "git_tree_update_t",
+   "defined_in": "include/git2/tree.h",
+   "_comment_agent": "Reviewed: a closed public enum with two by-value scalar constants, GIT_TREE_UPDATE_UPSERT (0) and GIT_TREE_UPDATE_REMOVE (1). It carries no pointer slot and no lifecycle role. It appears only as the action field of a caller-owned git_tree_update descriptor, which git_tree_create_updated reads by value; nothing retains or frees it.",
+   "fields": []
+  },
+  {
    "name": "git_treebuilder",
    "defined_in": "src/libgit2/tree.h",
    "_comment_agent": "The repository pointer is a non-null borrowed keepalive dependency installed by git_treebuilder_new; it is never released by git_treebuilder_free.",
@@ -3730,6 +3736,12 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_treewalk_mode",
+   "defined_in": "include/git2/tree.h",
+   "_comment_agent": "Reviewed: a closed public enum with two by-value scalar constants, GIT_TREEWALK_PRE (0) and GIT_TREEWALK_POST (1). It carries no pointer slot and no lifecycle role; it is only passed by value to git_tree_walk, which switches on it and stores nothing. Values outside the two constants are rejected by git_tree_walk rather than reinterpreted, so a Rust wrapper may validate on the way in instead of transmuting.",
+   "fields": []
   },
   {
    "name": "git_worktree",
@@ -3815,6 +3827,12 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_worktree_prune_options",
+   "defined_in": "include/git2/worktree.h",
+   "_comment_agent": "Reviewed: a POD options header with no pointer slots and no lifecycle. version carries GIT_WORKTREE_PRUNE_OPTIONS_VERSION (1) and flags is a git_worktree_prune_t bit set; both are plain scalars the caller owns by value, so the struct has no destructor, no disposer and no cloner. Callers pass it by borrowed reference to git_worktree_prune_options_init and git_worktree_prune, neither of which retains the address.",
+   "fields": []
   },
   {
    "name": "git_writestream",

@@ -10,8 +10,11 @@ ffibox::define_ctype!(
     /// Wraps: git_worktree
     /// An opaque worktree managed by libgit2.
     ///
-    /// An owned handle represents one fully constructed worktree allocation and
-    /// releases it with `git_worktree_free`.
+    /// An owned handle represents one libgit2-allocated worktree and releases
+    /// it with `git_worktree_free`. That destructor frees the six separately
+    /// allocated path and name strings before the header, and tolerates the
+    /// null fields a partially constructed worktree still carries, so a handle
+    /// adopted from a failed constructor is released correctly too.
     GitWorktree,
     GitWorktreeRef,
     GitWorktreeMut,
@@ -21,10 +24,10 @@ ffibox::define_ctype!(
 /// An owned libgit2 worktree allocation.
 pub type GitWorktreeOwned = CBox<GitWorktree>;
 
-// SAFETY: `git_worktree_free` is the public destructor for a fully constructed
-// libgit2-allocated `git_worktree`. It releases all owned strings and the
-// header exactly once. It accepts null, although `CBox` supplies one live,
-// non-null allocation.
+// SAFETY: `git_worktree_free` is the public destructor for a libgit2-allocated
+// `git_worktree`. It releases the six owned strings and the header exactly
+// once, treating a null string field as a no-op. It accepts a null worktree
+// too, although `CBox` supplies one live, non-null allocation.
 ffibox::impl_dropped!(GitWorktree, ffi::git_worktree, ffi::git_worktree_free);
 
 #[cfg(test)]

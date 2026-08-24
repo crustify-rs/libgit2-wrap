@@ -183,15 +183,20 @@ define_ctype!(
     /// Wraps: git_treebuilder
     /// An opaque in-memory tree builder owned by libgit2.
     ///
-    /// The builder borrows the repository supplied during construction without
-    /// retaining it. Any safe constructor must therefore keep that repository
-    /// alive for the lifetime of the builder. Owned pointers are released with
-    /// `git_treebuilder_free`.
+    /// `git_treebuilder_new` stores the repository it is given in the builder
+    /// and every later builder operation dereferences it, but the builder does
+    /// not own it and `git_treebuilder_free` never releases it. Any safe
+    /// constructor must therefore keep that repository alive for the whole
+    /// lifetime of the builder. Owned pointers are released with
+    /// `git_treebuilder_free`, which also frees the entries the builder holds.
     TreeBuilder,
     TreeBuilderRef,
     TreeBuilderMut,
     ffi::git_treebuilder
 );
+
+/// An owned in-memory tree builder.
+pub type TreeBuilderOwned = CBox<TreeBuilder>;
 
 // SAFETY: `git_treebuilder_free` is the public destructor for a complete
 // `git_treebuilder` allocation and accepts null, although `CDropped` supplies
@@ -460,6 +465,24 @@ mod tests {
     fn tree_builder_registers_its_c_destructor() {
         fn assert_dropped<T: CDropped>() {}
         assert_dropped::<TreeBuilder>();
+        assert_eq!(
+            size_of::<Option<TreeBuilderOwned>>(),
+            size_of::<*mut ffi::git_treebuilder>()
+        );
+    }
+
+    #[test]
+    fn null_owning_seams_adopt_no_entry_or_builder() {
+        // SAFETY: these conversions explicitly accept null and return `None`
+        // without adopting an object or scheduling a destructor call.
+        unsafe {
+            assert!(GitTreeEntryOwned::from_raw(ptr::null_mut()).is_none());
+            assert!(TreeBuilderOwned::from_raw(ptr::null_mut()).is_none());
+            assert!(GitTreeEntryRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitTreeEntryMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(TreeBuilderRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(TreeBuilderMut::from_ptr(ptr::null_mut()).is_none());
+        }
     }
 
     #[test]
