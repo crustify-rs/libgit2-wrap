@@ -154,6 +154,7 @@
 ^git_rebase_operation_t$
 ^git_refcount$
 ^git_reset_t$
+^git_status_opt_t$
 ^git_status_show_t$
 ^git_status_t$
 ^git_stash_apply_progress_t$
@@ -184,6 +185,7 @@
 ^git_tree_entry$
 ^git_tree_entry_dup$
 ^git_tree_entry_free$
+^git_worktree_prune_t$
 ^git_worktree_prune_options$
 ^git_writestream$
 ^git_branch_name_is_valid$

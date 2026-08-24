@@ -4,6 +4,7 @@ use core::ptr::{addr_of, addr_of_mut};
 
 use ffibox::CBox;
 
+use crate::api::worktree::GitWorktreePruneFlags;
 use crate::ffi;
 
 ffibox::define_ctype!(
@@ -85,12 +86,12 @@ ffibox::define_ctype!(
 
 impl GitWorktreePruneOptionsRef<'_> {
     /// Field: git_worktree_prune_options.flags
-    /// Returns the bit set of `git_worktree_prune_t` options.
-    #[must_use]
-    pub fn flags(&self) -> u32 {
+    /// Returns the validated worktree-pruning overrides.
+    pub fn flags(&self) -> Result<GitWorktreePruneFlags, ffi::git_worktree_prune_t> {
         // SAFETY: this live shared handle permits a raw-place read of the
         // initialized scalar without forming a reference to C-visible memory.
-        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+        let flags = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        GitWorktreePruneFlags::from_bits(flags).ok_or(flags)
     }
 
     /// Field: git_worktree_prune_options.version
@@ -103,11 +104,11 @@ impl GitWorktreePruneOptionsRef<'_> {
 }
 
 impl GitWorktreePruneOptionsMut<'_> {
-    /// Replaces the bit set of `git_worktree_prune_t` options.
-    pub fn set_flags(&mut self, flags: u32) {
+    /// Sets the worktree-pruning overrides.
+    pub fn set_flags(&mut self, flags: GitWorktreePruneFlags) {
         // SAFETY: this exclusive handle permits a raw-place write of the
         // scalar without forming a reference to C-visible memory.
-        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
     }
 
     /// Sets the ABI version of this options value.
@@ -155,11 +156,27 @@ mod prune_options_tests {
         let mut options = unsafe { GitWorktreePruneOptionsMut::from_ptr(&raw mut raw) }
             .expect("the address of a stack value is non-null");
         assert_eq!(options.as_ref().version(), 1);
-        assert_eq!(options.as_ref().flags(), 0);
+        assert_eq!(options.as_ref().flags(), Ok(GitWorktreePruneFlags::NONE));
 
         options.set_version(2);
-        options.set_flags(0b101);
+        options.set_flags(GitWorktreePruneFlags::VALID | GitWorktreePruneFlags::WORKING_TREE);
         assert_eq!(options.as_ref().version(), 2);
-        assert_eq!(options.as_ref().flags(), 0b101);
+        assert_eq!(
+            options.as_ref().flags(),
+            Ok(GitWorktreePruneFlags::VALID | GitWorktreePruneFlags::WORKING_TREE)
+        );
+    }
+
+    #[test]
+    fn prune_options_reject_unknown_override_bits() {
+        let unknown = GitWorktreePruneFlags::ALL.bits() << 1;
+        let mut raw = ffi::git_worktree_prune_options {
+            version: 1,
+            flags: unknown,
+        };
+
+        // SAFETY: `raw` is initialized and live for the shared handle's use.
+        let options = unsafe { GitWorktreePruneOptionsRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(options.flags(), Err(unknown));
     }
 }
