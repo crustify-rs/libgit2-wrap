@@ -208,6 +208,7 @@
 ^git_feature_t$
 ^git_libgit2_opt_t$
 ^git_error_code$
+^git_email_create_flags_t$
 ^git_blame_options$
 ^git_blob$
 ^git_blob_dup$
