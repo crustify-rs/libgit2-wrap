@@ -369,6 +369,10 @@ mod tests {
     static WRITTEN: AtomicUsize = AtomicUsize::new(0);
     static FINALIZED: AtomicUsize = AtomicUsize::new(0);
     static FREED: AtomicUsize = AtomicUsize::new(0);
+    /// Counts finalizations for the short-stream test alone. Sharing
+    /// `FINALIZED` would race the concurrently scheduled dispatch test, which
+    /// resets and reads the same cell.
+    static SHORT_FINALIZED: AtomicUsize = AtomicUsize::new(0);
 
     unsafe extern "C" fn test_read(
         _stream: *mut ffi::git_odb_stream,
@@ -399,6 +403,17 @@ mod tests {
         // for the duration of this call.
         let first = unsafe { core::ptr::addr_of!((*oid).id).cast::<u8>().read() };
         FINALIZED.store(first.into(), Ordering::SeqCst);
+        0
+    }
+
+    unsafe extern "C" fn test_short_finalize(
+        _stream: *mut ffi::git_odb_stream,
+        oid: *const ffi::git_oid,
+    ) -> core::ffi::c_int {
+        // SAFETY: the finalize-callback contract supplies a complete live OID
+        // for the duration of this call.
+        let first = unsafe { core::ptr::addr_of!((*oid).id).cast::<u8>().read() };
+        SHORT_FINALIZED.store(first.into(), Ordering::SeqCst);
         0
     }
 
@@ -522,8 +537,9 @@ mod tests {
 
     #[test]
     fn finalizing_a_short_stream_is_refused_without_dispatching() {
-        FINALIZED.store(0, Ordering::SeqCst);
+        SHORT_FINALIZED.store(0, Ordering::SeqCst);
         let mut raw = test_stream();
+        raw.finalize_write = Some(test_short_finalize);
         // SAFETY: `raw` is initialized and exclusively borrowed for the
         // handle's lifetime.
         let mut stream = unsafe { GitOdbStreamMut::from_ptr(&raw mut raw) }.unwrap();
@@ -545,11 +561,11 @@ mod tests {
                 declared: 9,
             })
         );
-        assert_eq!(FINALIZED.load(Ordering::SeqCst), 0);
+        assert_eq!(SHORT_FINALIZED.load(Ordering::SeqCst), 0);
 
         stream.set_received_bytes(9);
         assert_eq!(stream.finalize_write(oid), Ok(()));
-        assert_eq!(FINALIZED.load(Ordering::SeqCst), 7);
+        assert_eq!(SHORT_FINALIZED.load(Ordering::SeqCst), 7);
     }
 
     #[test]
