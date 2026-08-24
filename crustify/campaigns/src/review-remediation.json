@@ -1,0 +1,97 @@
+{
+  "schema_version": 2,
+  "oracle_target": "src",
+  "api_headers_only": false,
+  "budgets": {
+    "max_syms": 50,
+    "max_loc": 1000,
+    "max_types": 2,
+    "min_fields": 20
+  },
+  "summary": {
+    "unit_count": 1,
+    "layer_count": 1,
+    "batch_count": 1,
+    "file_count": 1
+  },
+  "plan_items": [
+    {
+      "name": "git_refcount",
+      "defined_in": "src/util/util.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 1,
+      "loc": 2,
+      "deps": {
+        "types": [
+          {
+            "name": "git_atomic32",
+            "defined_in": "src/util/thread.h"
+          }
+        ],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    }
+  ],
+  "dependency_nodes": [
+    {
+      "name": "git_atomic32",
+      "defined_in": "src/util/thread.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 0,
+      "loc": 1,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": [],
+      "in_scope": true
+    }
+  ],
+  "steps": [
+    {
+      "layers": [
+        1
+      ],
+      "unit_count": 1,
+      "batches": [
+        {
+          "kind": "type",
+          "source_file": "src/util/util.h",
+          "items": [
+            {
+              "name": "git_refcount",
+              "defined_in": "src/util/util.h",
+              "kind": "type",
+              "source_kind": "struct",
+              "layer": 1,
+              "loc": 2,
+              "deps": {
+                "types": [
+                  {
+                    "name": "git_atomic32",
+                    "defined_in": "src/util/thread.h"
+                  }
+                ],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": [
+                "refcount",
+                "owner"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

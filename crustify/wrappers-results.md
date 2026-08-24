@@ -14,51 +14,97 @@
 - **`--max-syms`** — `50`
 - **`--max-loc`** — `1000`
 - **`--min-fields`** — `10`
-- **`--parallel-max`** — `8` (reduced to `4` and `2` for audit remediation)
-- **branch** — `crustify/src-gpt-5.6-sol`, tip `456a0e8fc0`
-- **deps** — crustify-cli `8d8c4dff28d8cfe27e65f31b3ff756211a08c465` (`scope-refactor`), ffibox `600399ff11504332db0905cadc397aaeb15ddc02` (`main`)
+- **`--parallel-max`** — `8` (`4` then `2` for the two remediation waves)
+- **branch** — `crustify/src-gpt-5.6-sol`, tip `c5e2ec28d`
+- **deps** — crustify-cli `51d44d1` (`docs/results-template-ub`), ffibox `600399f` (`main`)
 
 ## Review pass
 
-`--objective review`, LLM-as-a-Judge over the landed waves. The user has
-reserved explicit approval for the campaign-end review, so this checkpoint
-records no campaign-end review run.
+`--objective review`, LLM-as-a-Judge over the landed waves.
 
-- **agent backend** — `codex`
-- **model** — `openai/gpt-5.6-sol` (user-directed self-review)
-- **`--billing`** — `api`
-- **`--max-types`** — `2`
-- **`--max-syms`** — `50`
-- **`--max-loc`** — `1000`
-- **`--min-fields`** — `10`
-- **`--parallel-max`** — `8`
-- **branch** — `crustify/src-gpt-5.6-sol`, tip `not run — awaiting approval`
-- **agents** — `0`, over `0` session(s)
+- **agent backend** — `claude`
+- **model** — `anthropic/claude-opus-5`
+- **`--billing`** — `subscription`
+- **`--max-types`** — `15`
+- **`--max-syms`** — `150`
+- **`--max-loc`** — `3000`
+- **`--min-fields`** — `30`
+- **`--parallel-max`** — `16`
+- **branch** — `crustify/src-gpt-5.6-sol`, tip `c5e2ec28d`
+- **agents** — `23`, over `2` session(s)
 
-`rv`-prefixed columns below are reserved for that review pass; `—` means it
-has not been authorized or run.
+`rv`-prefixed columns below carry the review pass; the unprefixed ones remain
+the campaign's.
+
+## UB pass
+
+`crustify-audit ub`, an agentic hunt for undefined behaviour reachable from the
+crate's SAFE APIs.
+
+- **agent backend** — not run
+- **model** — not run
+- **`--billing`** — not run
+- **`--timeout`** — not run
+- **subject** — not run
+- **agents** — `0`, `—` wall, `—`
+- **advisories** — `0`; `crustify/audit/advisories/` does not exist
+- **patch** — none; the pass requires separate explicit approval, which has not been given
+
+`ub`-prefixed columns carry this pass.
 
 ## Legend
 
-- `DAG layer` — the unit's own wrap DAG layer
-- `kind` — `struct` / `union` / `enum` for a type; `callback`; `function` for every symbol
-- `fields` — all declared fields
-- `target fields` / `target ptr` — fields touched by target-section code / pointer subset
-- `wrapped fields` — distinct `type.field` paths carrying a `/// Wraps:` accessor anchor; `—` means opaque
-- `newtypes` — exact `/// Wraps: <tag>` type anchors in the Rust tree
-- `target fns` — distinct target-section functions using the symbol
-- `deps` — type/callback dependencies recorded by the oracle plan
-- `wrappers` — distinct safe functions carrying a `/// Wraps: <symbol>` anchor
-- `batch` — the agent batch; pooled rows use `↖ batched` for its shared accounting
-- `$` / `wall` / `loc` — computed usage cost, agent duration, and Rust insertions in its landing commit
-- `rv $` / `rv wall` / `rv loc` / `verdict` — campaign-end review accounting and judgement
-- Batch `wall (longest)` is the slowest agent in that layer; `serial Σ` sums agent duration
+
+- `objective` — what the batch's agents were told to do: `wrap`, `port`, or
+  `raw lifetime`. The type tables are split by it, so it appears as a column
+  only in `Batches — symbols`, which mixes the two
+- `types` / `symbols` — scheduler units in the batch. Callbacks are scheduled
+  in symbol batches and counted there
+- `fields` — in-scope fields: the field accessors the oracle assigned to that
+  type batch, not the type's full declared field count
+- `lifecycle prims` — deleters, disposers and cloners the ownership store binds
+  to that batch's types; raw-tier primitives that belong to no type are counted
+  in `Raw lifetime discovery` instead
+- `$` / `wall` / `loc` — that agent's computed cost, its elapsed time, and the
+  `.rs` insertions of its landing commit. `wall` is `ended_at − started_at` from
+  the agent's own `usage.json`, so it INCLUDES the per-worktree C rebuild
+- `$/type` / `$/symbol` / `$/field` / `$/loc` — that row's `$` over its units,
+  its in-scope fields, or its `loc`
+- `$/type` / `$/sym` — in the Overview, a sub-campaign's cost over the types or
+  symbols it was scheduled for; `—` where it was scheduled for none
+- `rv $` / `rv wall` / `rv loc` — the REVIEW agent's cost, elapsed time, and net
+  `.rs` line delta (`+ins/-del`) of its landing commit. Under subscription
+  billing `rv $` is an API-equivalent comparison value, not a charged amount
+- `ub $` / `ub wall` — the UB pass's cost and elapsed time; `—` where the
+  optional pass did not run
+
+Every table below is a heading, a model line and the table. All prose belongs
+in Notes.
+
+## Overview
+
+- **Rust LoC** — `7,423`
+- **C LoC** — `171,084`
+- **ported types** — `0`
+- **ported symbols** — `0`
+- **wrapped types** — `115`
+- **wrapped symbols** — `288` (`276` functions + `12` callbacks)
+
+Implementation `openai/gpt-5.6-sol` via `codex`; review `anthropic/claude-opus-5`
+via `claude`. Each row names the model that produced it.
+
+| sub-campaign | objective | nr types | nr symbols | session wall | total | $/type | $/sym | ub wall | ub $ |
+|---|---|---:|---:|---|---:|---:|---:|---|---:|
+| `2-raw-lifetime` | raw lifetime | `0` | `3` | `16m37s` | `$9.85` (`gpt-5.6-sol`) | — | `$3.28` | — | — |
+| `2-raw-lifetime-review` | review | `0` | `3` | `14m32s` | `$7.54` (`gpt-5.6-sol`) | — | `$2.51` | — | — |
+| `6-first-half` | wrap | `115` | `288` | `3h19m28s` | `$365.66` (`gpt-5.6-sol`) | `$2.71` | `$0.19` | — | — |
+| `3-review-first-half` | review | `115` | `288` | `1h15m16s` | `$254.37` (`claude-opus-5`) | `$1.89` | `$0.13` | — | — |
+| orchestrator | orchestration | `—` | `—` | — | `not metered`+ (`claude-opus-5`) | — | — | — | — |
+| **Σ recorded agents** | | **`115`** | **`288`** | **`5h05m53s`** | **`$637.43`** | **`$4.59`** | **`$0.32`** | | **—** |
 
 ## Raw lifetime discovery
 
-Goal: turn untyped lifecycle primitives into Rust lifetime contracts before
-wrappers consume them. The raw void and string passes each received their
-already-authorized immediate review; campaign-end review is separate.
+`openai/gpt-5.6-sol` via `codex`.
 
 | tier | symbols submitted | strategies | CDropped | CCloned | CLenDropped | CLenCloned | $ | wall |
 |---|---|---|---|---|---|---|---|---|
@@ -66,553 +112,357 @@ already-authorized immediate review; campaign-end review is separate.
 | string | `1` | `1` | `1` | `1` | `0` | `0` | `$4.29` | `7m06s` |
 | **Σ** | **`3`** | **`3`** | **`3`** | **`1`** | **`0`** | **`0`** | **`$9.85`** | **`16m36s`** |
 
+### Review, in-model
+
+`openai/gpt-5.6-sol` via `codex`.
+
+| tier | symbols | batches | $ | wall |
+|---|---|---|---|---|
+| void | `2` | `1` | `$3.69` | `0h07m` |
+| string | `1` | `1` | `$3.85` | `0h07m` |
+| **Σ** | **`3`** | **`2`** | **`$7.54`** | **`0h14m`** |
+
+### Review, independent
+
+Not run; the raw lifetime tiers were judged in-model only.
+
+| symbols | rv loc | rv $ | rv wall | rv $/symbol |
+|---|---|---|---|---|
+| `0` | — | — | — | — |
+| **Σ `0`** | **—** | **—** | — | **—** |
+
 ## Target set
 
-Exact first-half topological prefix: `403 / 805` closure units (`115` types,
-`12` callbacks, `276` symbols). The held second half contains `402` units
-and remains unscheduled and untranslated.
+### Batches — types, wrap
 
-### Types and callbacks
+`openai/gpt-5.6-sol` via `codex`. One row per batch, in execution order.
 
-| DAG layer | unit | kind | fields | target fields | target ptr | wrapped fields | newtypes | $ | wall | loc | rv $ | rv wall | rv loc | verdict |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `0` | `git_annotated_commit` | struct | `9` | `9` | `6` | `—` | `1` | `$3.26` | `6m45s` | `168` | — | — | — | pending review |
-| `0` | `git_apply_location_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_attr_value_t` | enum | `—` | `—` | `—` | `—` | `1` | `$2.37` | `4m36s` | `76` | — | — | — | pending review |
-| `0` | `git_blame` | struct | `22` | `22` | `10` | `—` | `1` | `$5.04` | `9m37s` | `75` | — | — | — | pending review |
-| `1` | `git_blame_options` | struct | `7` | `6` | `0` | `7` | `1` | `$5.67` | `12m13s` | `259` | — | — | — | pending review |
-| `1` | `git_blob` | struct | `7` | `6` | `2` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_branch_iterator` | struct | `0` | `0` | `0` | `—` | `1` | `$3.97` | `7m37s` | `168` | — | — | — | pending review |
-| `0` | `git_branch_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_buf` | struct | `3` | `3` | `1` | `3` | `1` | `$5.63` | `10m21s` | `372` | — | — | — | pending review |
-| `1` | `git_cached_obj` | struct | `5` | `5` | `0` | `5` | `1` | `$5.47` | `8m44s` | `320` | — | — | — | pending review |
-| `1` | `git_cert` | struct | `1` | `0` | `0` | `1` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_cert_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_checkout_notify_t` | enum | `—` | `—` | `—` | `—` | `1` | `$2.88` | `5m58s` | `113` | — | — | — | pending review |
-| `0` | `git_checkout_perfdata` | struct | `3` | `3` | `0` | `3` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `1` | `git_checkout_perfdata_cb` | callback | `—` | `—` | `—` | `—` | `1` | `$7.52` | `16m49s` | `938` | — | — | — | pending review |
-| `0` | `git_checkout_progress_cb` | callback | `—` | `—` | `—` | `—` | `1` | `$7.58` | `16m07s` | `811` | — | — | — | pending review |
-| `0` | `git_clone_local_t` | enum | `—` | `—` | `—` | `—` | `1` | `$4.14` | `9m03s` | `131` | — | — | — | pending review |
-| `1` | `git_commit` | struct | `13` | `13` | `8` | `—` | `1` | `$4.56` | `7m52s` | `107` | — | — | — | pending review |
-| `0` | `git_config` | struct | `3` | `3` | `0` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `1` | `git_config_entry` | struct | `6` | `6` | `4` | `6` | `1` | `$3.86` | `8m42s` | `277` | — | — | — | pending review |
-| `0` | `git_config_level_t` | enum | `—` | `—` | `—` | `—` | `1` | `$2.32` | `5m25s` | `223` | — | — | — | pending review |
-| `1` | `git_credential` | struct | `2` | `2` | `1` | `2` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_credential_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_delta_t` | enum | `—` | `—` | `—` | `—` | `1` | `$3.22` | `6m36s` | `76` | — | — | — | pending review |
-| `0` | `git_describe_format_options` | struct | `4` | `4` | `1` | `4` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_describe_options` | struct | `6` | `6` | `1` | `6` | `1` | `$2.81` | `6m04s` | `252` | — | — | — | pending review |
-| `0` | `git_describe_result` | struct | `7` | `7` | `3` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_diff` | struct | `16` | `16` | `7` | `—` | `1` | `$4.37` | `8m43s` | `109` | — | — | — | pending review |
-| `1` | `git_diff_binary_file` | struct | `4` | `4` | `1` | `4` | `1` | `$3.92` | `7m38s` | `407` | — | — | — | pending review |
-| `0` | `git_diff_binary_t` | enum | `—` | `—` | `—` | `—` | `1` | `$2.99` | `6m29s` | `157` | — | — | — | pending review |
-| `1` | `git_diff_file` | struct | `6` | `6` | `1` | `6` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_diff_format_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_diff_hunk` | struct | `6` | `6` | `0` | `6` | `1` | `$3.98` | `8m08s` | `323` | — | — | — | pending review |
-| `0` | `git_diff_line` | struct | `7` | `7` | `1` | `7` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_diff_patchid_options` | struct | `1` | `1` | `0` | `1` | `1` | `$3.94` | `7m10s` | `138` | — | — | — | pending review |
-| `0` | `git_diff_stats` | struct | `8` | `8` | `2` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_diff_stats_format_t` | enum | `—` | `—` | `—` | `—` | `1` | `$2.28` | `4m26s` | `208` | — | — | — | pending review |
-| `0` | `git_direction` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_error` | struct | `2` | `2` | `1` | `2` | `1` | `$3.32` | `7m01s` | `166` | — | — | — | pending review |
-| `0` | `git_fetch_prune_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_filemode_t` | enum | `—` | `—` | `—` | `—` | `1` | `$3.47` | `7m34s` | `149` | — | — | — | pending review |
-| `1` | `git_index` | struct | `24` | `24` | `6` | `—` | `1` | `$3.98` | `6m27s` | `54` | — | — | — | pending review |
-| `0` | `git_index_conflict_iterator` | struct | `2` | `2` | `1` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `1` | `git_index_entry` | struct | `12` | `12` | `1` | `12` | `1` | `$4.65` | `8m00s` | `302` | — | — | — | pending review |
-| `0` | `git_index_matched_path_cb` | callback | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_index_time` | struct | `2` | `2` | `0` | `2` | `1` | `$1.91` | `4m11s` | `96` | — | — | — | pending review |
-| `0` | `git_indexer` | struct | `30` | `30` | `4` | `—` | `1` | `$3.05` | `6m48s` | `74` | — | — | — | pending review |
-| `0` | `git_indexer_progress` | struct | `7` | `7` | `0` | `7` | `1` | `$2.23` | `5m34s` | `214` | — | — | — | pending review |
-| `1` | `git_indexer_progress_cb` | callback | `—` | `—` | `—` | `—` | `1` | `$12.63` | `24m47s` | `807` | — | — | — | pending review |
-| `0` | `git_iterator` | struct | `18` | `18` | `9` | `—` | `1` | `$3.28` | `6m31s` | `67` | — | — | — | pending review |
-| `0` | `git_mailmap` | struct | `1` | `1` | `0` | `—` | `1` | `$3.06` | `5m59s` | `230` | — | — | — | pending review |
-| `0` | `git_merge_analysis_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_merge_file_favor_t` | enum | `—` | `—` | `—` | `—` | `1` | `$3.62` | `6m55s` | `255` | — | — | — | pending review |
-| `0` | `git_merge_file_input` | struct | `5` | `5` | `2` | `5` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `1` | `git_merge_file_options` | struct | `7` | `7` | `3` | `7` | `1` | `$6.66` | `14m20s` | `541` | — | — | — | pending review |
-| `0` | `git_merge_file_result` | struct | `5` | `5` | `2` | `5` | `1` | `$4.56` | `9m25s` | `336` | — | — | — | pending review |
-| `0` | `git_merge_preference_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_message_trailer` | struct | `2` | `2` | `2` | `2` | `1` | `$2.62` | `5m58s` | `187` | — | — | — | pending review |
-| `1` | `git_message_trailer_array` | struct | `3` | `3` | `2` | `3` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_note` | struct | `4` | `4` | `3` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_object` | struct | `2` | `2` | `1` | `—` | `1` | `$3.91` | `7m53s` | `183` | — | — | — | pending review |
-| `0` | `git_object_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `1` | `git_odb` | struct | `7` | `7` | `1` | `—` | `1` | `$3.69` | `10m17s` | `62` | — | — | — | pending review |
-| `1` | `git_odb_foreach_cb` | callback | `—` | `—` | `—` | `—` | `1` | `$6.41` | `19m35s` | `881` | — | — | — | pending review |
-| `1` | `git_odb_stream` | struct | `10` | `10` | `6` | `10` | `1` | `$4.72` | `11m45s` | `463` | — | — | — | pending review |
-| `1` | `git_odb_writepack` | struct | `4` | `4` | `4` | `4` | `1` | `$5.86` | `10m24s` | `428` | — | — | — | pending review |
-| `0` | `git_oid` | struct | `2` | `2` | `0` | `2` | `1` | `$3.92` | `7m34s` | `174` | — | — | — | pending review |
-| `0` | `git_oid_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `1` | `git_oidarray` | struct | `2` | `2` | `1` | `2` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_packbuilder` | struct | `30` | `30` | `6` | `—` | `1` | `$3.15` | `5m57s` | `93` | — | — | — | pending review |
-| `0` | `git_packbuilder_foreach_cb` | callback | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_packbuilder_progress` | callback | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_patch` | struct | `17` | `17` | `5` | `—` | `1` | `$2.59` | `6m27s` | `66` | — | — | — | pending review |
-| `0` | `git_pathspec` | struct | `4` | `4` | `1` | `—` | `1` | `$4.46` | `6m14s` | `122` | — | — | — | pending review |
-| `0` | `git_pathspec_match_list` | struct | `8` | `8` | `2` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_proxy_t` | enum | `—` | `—` | `—` | `—` | `1` | `$1.75` | `4m11s` | `76` | — | — | — | pending review |
-| `0` | `git_push` | struct | `11` | `11` | `3` | `—` | `1` | `$3.78` | `6m44s` | `62` | — | — | — | pending review |
-| `0` | `git_push_transfer_progress_cb` | callback | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `1` | `git_push_update` | struct | `4` | `4` | `2` | `4` | `1` | `$4.19` | `8m37s` | `227` | — | — | — | pending review |
-| `0` | `git_push_update_reference_cb` | callback | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_rebase` | struct | `20` | `20` | `7` | `—` | `1` | `$2.96` | `5m17s` | `97` | — | — | — | pending review |
-| `1` | `git_rebase_operation` | struct | `3` | `3` | `1` | `3` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_rebase_operation_t` | enum | `—` | `—` | `—` | `—` | `1` | `$4.82` | `7m35s` | `143` | — | — | — | pending review |
-| `0` | `git_refcount` | struct | `2` | `2` | `1` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_refdb` | struct | `3` | `3` | `2` | `—` | `1` | `$3.82` | `7m23s` | `127` | — | — | — | pending review |
-| `0` | `git_refdb_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_reference` | struct | `7` | `7` | `2` | `—` | `1` | `$7.07` | `12m55s` | `193` | — | — | — | pending review |
-| `1` | `git_reference_iterator` | struct | `4` | `4` | `4` | `4` | `1` | `$7.18` | `14m40s` | `415` | — | — | — | pending review |
-| `0` | `git_reference_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_reflog` | struct | `4` | `4` | `2` | `—` | `1` | `$4.09` | `8m45s` | `104` | — | — | — | pending review |
-| `0` | `git_reflog_entry` | struct | `4` | `4` | `2` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_refspec` | struct | `7` | `7` | `3` | `—` | `1` | `$3.20` | `7m14s` | `70` | — | — | — | pending review |
-| `0` | `git_remote` | struct | `17` | `17` | `6` | `—` | `1` | `$3.70` | `7m18s` | `154` | — | — | — | pending review |
-| `0` | `git_remote_autotag_option_t` | enum | `—` | `—` | `—` | `—` | `1` | `$1.96` | `4m12s` | `117` | — | — | — | pending review |
-| `0` | `git_remote_completion_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `1` | `git_remote_head` | struct | `5` | `5` | `2` | `5` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_remote_redirect_t` | enum | `—` | `—` | `—` | `—` | `1` | `$2.63` | `5m14s` | `61` | — | — | — | pending review |
-| `0` | `git_repository` | struct | `29` | `28` | `17` | `—` | `1` | `$3.65` | `6m11s` | `74` | — | — | — | pending review |
-| `1` | `git_repository_fetchhead_foreach_cb` | callback | `—` | `—` | `—` | `—` | `1` | `$6.14` | `11m04s` | `497` | — | — | — | pending review |
-| `1` | `git_repository_init_options` | struct | `10` | `10` | `5` | `10` | `1` | `$3.89` | `9m14s` | `355` | — | — | — | pending review |
-| `1` | `git_repository_mergehead_foreach_cb` | callback | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_reset_t` | enum | `—` | `—` | `—` | `—` | `1` | `$1.93` | `3m41s` | `74` | — | — | — | pending review |
-| `1` | `git_revspec` | struct | `3` | `3` | `2` | `3` | `1` | `$4.98` | `12m50s` | `527` | — | — | — | pending review |
-| `0` | `git_revwalk` | struct | `21` | `21` | `11` | `—` | `1` | `$2.87` | `6m22s` | `70` | — | — | — | pending review |
-| `1` | `git_signature` | struct | `3` | `3` | `2` | `3` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_stash_apply_progress_t` | enum | `—` | `—` | `—` | `—` | `1` | `$3.75` | `6m56s` | `187` | — | — | — | pending review |
-| `0` | `git_status_list` | struct | `4` | `4` | `2` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_status_show_t` | enum | `—` | `—` | `—` | `—` | `1` | `$1.94` | `4m13s` | `243` | — | — | — | pending review |
-| `0` | `git_status_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_strarray` | struct | `2` | `2` | `1` | `2` | `1` | `$5.22` | `8m59s` | `203` | — | — | — | pending review |
-| `0` | `git_submodule` | struct | `16` | `16` | `5` | `—` | `1` | `$3.32` | `7m12s` | `106` | — | — | — | pending review |
-| `0` | `git_submodule_ignore_t` | enum | `—` | `—` | `—` | `—` | `1` | `$2.42` | `4m44s` | `162` | — | — | — | pending review |
-| `0` | `git_submodule_update_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `1` | `git_tag` | struct | `6` | `6` | `3` | `—` | `1` | `$3.30` | `5m49s` | `146` | — | — | — | pending review |
-| `0` | `git_time` | struct | `3` | `3` | `0` | `3` | `1` | `$3.76` | `7m43s` | `258` | — | — | — | pending review |
-| `0` | `git_trace_level_t` | enum | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_transaction` | struct | `7` | `7` | `4` | `—` | `1` | `$4.38` | `9m40s` | `194` | — | — | — | pending review |
-| `0` | `git_transport_message_cb` | callback | `—` | `—` | `—` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `1` | `git_tree` | struct | `6` | `6` | `2` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_tree_entry` | struct | `4` | `4` | `1` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `1` | `git_tree_update` | struct | `4` | `4` | `1` | `4` | `1` | `$3.26` | `5m54s` | `167` | — | — | — | pending review |
-| `0` | `git_tree_update_t` | enum | `—` | `—` | `—` | `—` | `1` | `$3.02` | `6m09s` | `146` | — | — | — | pending review |
-| `0` | `git_treebuilder` | struct | `3` | `3` | `1` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_treewalk_mode` | enum | `—` | `—` | `—` | `—` | `1` | `$3.26` | `6m28s` | `138` | — | — | — | pending review |
-| `0` | `git_worktree` | struct | `7` | `7` | `6` | `—` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| `0` | `git_worktree_prune_options` | struct | `2` | `2` | `0` | `2` | `1` | `$4.91` | `11m21s` | `255` | — | — | — | pending review |
-| `0` | `git_writestream` | struct | `3` | `3` | `3` | `3` | `1` | `↖ batched` | `↖ batched` | `↖ batched` | — | — | — | pending review |
-| **Σ `127`** | | | **`580`** | **`576`** | **`215`** | **`170`** | **`127`** | **`$306.65`** | | **`17306`** | **—** | | **—** | **`0`/`127` reviewed** |
+| types | fields | lifecycle prims | $ | wall | $/type | $/field |
+|---|---|---|---|---|---|---|
+| `2` | `0` | `1` | `$3.26` | `6m45s` | `$1.63` | `—` |
+| `1` | `0` | `0` | `$2.37` | `4m37s` | `$2.37` | `—` |
+| `1` | `0` | `1` | `$5.04` | `9m37s` | `$5.04` | `—` |
+| `2` | `0` | `1` | `$3.97` | `7m38s` | `$1.99` | `—` |
+| `2` | `3` | `2` | `$5.63` | `10m22s` | `$2.82` | `$1.88` |
+| `2` | `3` | `0` | `$2.88` | `5m58s` | `$1.44` | `$0.96` |
+| `2` | `0` | `0` | `$4.14` | `9m04s` | `$2.07` | `—` |
+| `2` | `0` | `0` | `$2.32` | `5m26s` | `$1.16` | `—` |
+| `2` | `4` | `0` | `$3.22` | `6m36s` | `$1.61` | `$0.80` |
+| `2` | `6` | `0` | `$3.82` | `8m36s` | `$1.91` | `$0.64` |
+| `1` | `0` | `2` | `$4.25` | `8m04s` | `$4.25` | `—` |
+| `2` | `0` | `0` | `$2.99` | `6m29s` | `$1.49` | `—` |
+| `2` | `13` | `0` | `$2.93` | `6m26s` | `$1.47` | `$0.23` |
+| `2` | `1` | `0` | `$2.58` | `4m59s` | `$1.29` | `$2.58` |
+| `2` | `0` | `0` | `$2.28` | `4m26s` | `$1.14` | `—` |
+| `2` | `2` | `0` | `$1.49` | `3m42s` | `$0.74` | `$0.74` |
+| `2` | `0` | `0` | `$1.03` | `2m51s` | `$0.52` | `—` |
+| `1` | `2` | `0` | `$0.39` | `0m49s` | `$0.39` | `$0.19` |
+| `1` | `0` | `1` | `$0.00` | `0m02s` | `$0.00` | `—` |
+| `1` | `7` | `0` | `$0.00` | `0m02s` | `$0.00` | `$0.00` |
+| `1` | `0` | `1` | `$0.00` | `0m01s` | `$0.00` | `—` |
+| `2` | `0` | `1` | `$0.00` | `0m01s` | `$0.00` | `—` |
+| `2` | `6` | `0` | `$2.81` | `6m05s` | `$1.41` | `$0.47` |
+| `1` | `0` | `2` | `$4.37` | `8m44s` | `$4.37` | `—` |
+| `2` | `13` | `0` | `$3.98` | `8m09s` | `$1.99` | `$0.31` |
+| `2` | `1` | `0` | `$3.94` | `7m11s` | `$1.97` | `$3.94` |
+| `2` | `2` | `0` | `$3.32` | `7m01s` | `$1.66` | `$1.66` |
+| `2` | `0` | `0` | `$3.47` | `7m35s` | `$1.73` | `—` |
+| `1` | `2` | `0` | `$1.91` | `4m12s` | `$1.91` | `$0.95` |
+| `1` | `0` | `1` | `$3.05` | `6m49s` | `$3.05` | `—` |
+| `1` | `7` | `0` | `$2.23` | `5m35s` | `$2.23` | `$0.32` |
+| `1` | `0` | `1` | `$3.28` | `6m31s` | `$3.28` | `—` |
+| `2` | `0` | `1` | `$3.06` | `6m00s` | `$1.53` | `—` |
+| `2` | `5` | `0` | `$3.62` | `6m56s` | `$1.81` | `$0.72` |
+| `2` | `5` | `1` | `$4.56` | `9m26s` | `$2.28` | `$0.91` |
+| `2` | `2` | `0` | `$2.62` | `5m58s` | `$1.31` | `$1.31` |
+| `2` | `0` | `2` | `$3.91` | `7m53s` | `$1.96` | `—` |
+| `2` | `2` | `0` | `$3.92` | `7m35s` | `$1.96` | `$1.96` |
+| `1` | `0` | `1` | `$3.15` | `5m57s` | `$3.15` | `—` |
+| `1` | `0` | `1` | `$2.59` | `6m28s` | `$2.59` | `—` |
+| `2` | `0` | `1` | `$4.46` | `6m14s` | `$2.23` | `—` |
+| `1` | `0` | `0` | `$1.75` | `4m12s` | `$1.75` | `—` |
+| `1` | `0` | `1` | `$3.78` | `6m45s` | `$3.78` | `—` |
+| `1` | `0` | `1` | `$2.96` | `5m18s` | `$2.96` | `—` |
+| `2` | `0` | `0` | `$4.82` | `7m36s` | `$2.41` | `—` |
+| `2` | `0` | `1` | `$3.82` | `7m23s` | `$1.91` | `—` |
+| `2` | `0` | `2` | `$7.07` | `12m56s` | `$3.53` | `—` |
+| `2` | `0` | `1` | `$4.09` | `8m46s` | `$2.04` | `—` |
+| `1` | `0` | `2` | `$3.20` | `7m15s` | `$3.20` | `—` |
+| `1` | `0` | `2` | `$3.70` | `7m18s` | `$3.70` | `—` |
+| `2` | `0` | `0` | `$1.96` | `4m13s` | `$0.98` | `—` |
+| `1` | `0` | `0` | `$2.63` | `5m15s` | `$2.63` | `—` |
+| `1` | `0` | `1` | `$3.65` | `6m11s` | `$3.65` | `—` |
+| `1` | `0` | `0` | `$1.93` | `3m41s` | `$1.93` | `—` |
+| `1` | `0` | `1` | `$2.87` | `6m23s` | `$2.87` | `—` |
+| `2` | `0` | `0` | `$3.75` | `6m56s` | `$1.87` | `—` |
+| `2` | `0` | `0` | `$1.94` | `4m14s` | `$0.97` | `—` |
+| `1` | `2` | `3` | `$5.22` | `9m00s` | `$5.22` | `$2.61` |
+| `1` | `0` | `2` | `$3.32` | `7m12s` | `$3.32` | `—` |
+| `2` | `0` | `0` | `$2.42` | `4m45s` | `$1.21` | `—` |
+| `2` | `3` | `0` | `$3.76` | `7m44s` | `$1.88` | `$1.25` |
+| `2` | `0` | `1` | `$4.38` | `9m41s` | `$2.19` | `—` |
+| `2` | `0` | `0` | `$3.02` | `6m09s` | `$1.51` | `—` |
+| `2` | `0` | `0` | `$3.26` | `6m28s` | `$1.63` | `—` |
+| `2` | `5` | `0` | `$4.91` | `11m22s` | `$2.45` | `$0.98` |
+| `2` | `7` | `0` | `$5.67` | `12m13s` | `$2.83` | `$0.81` |
+| `1` | `1` | `0` | `$2.78` | `5m19s` | `$2.78` | `$2.78` |
+| `1` | `0` | `2` | `$4.56` | `7m52s` | `$4.56` | `—` |
+| `2` | `8` | `1` | `$3.86` | `8m43s` | `$1.93` | `$0.48` |
+| `2` | `10` | `0` | `$3.92` | `7m38s` | `$1.96` | `$0.39` |
+| `1` | `0` | `1` | `$3.98` | `6m27s` | `$3.98` | `—` |
+| `1` | `12` | `0` | `$4.65` | `8m00s` | `$4.65` | `$0.39` |
+| `2` | `10` | `0` | `$6.66` | `14m21s` | `$3.33` | `$0.67` |
+| `1` | `0` | `1` | `$3.69` | `10m17s` | `$3.69` | `—` |
+| `1` | `10` | `1` | `$4.72` | `11m45s` | `$4.72` | `$0.47` |
+| `2` | `6` | `0` | `$5.86` | `10m25s` | `$2.93` | `$0.98` |
+| `2` | `7` | `0` | `$4.19` | `8m37s` | `$2.09` | `$0.60` |
+| `2` | `9` | `1` | `$7.18` | `14m40s` | `$3.59` | `$0.80` |
+| `1` | `10` | `0` | `$3.89` | `9m15s` | `$3.89` | `$0.39` |
+| `2` | `6` | `0` | `$4.98` | `12m50s` | `$2.49` | `$0.83` |
+| `2` | `0` | `2` | `$3.30` | `5m50s` | `$1.65` | `—` |
+| `1` | `4` | `0` | `$3.26` | `5m54s` | `$3.26` | `$0.82` |
+| `1` | `5` | `2` | `$5.47` | `8m45s` | `$5.47` | `$1.09` |
+| `2` | `0` | `1` | `$4.07` | `6m52s` | `$2.04` | `—` |
+| `1` | `0` | `1` | `$2.60` | `3m42s` | `$2.60` | `—` |
+| `1` | `0` | `2` | `$4.49` | `6m16s` | `$4.49` | `—` |
+| `1` | `0` | `1` | `$3.89` | `5m02s` | `$3.89` | `—` |
+| `1` | `0` | `1` | `$4.12` | `7m55s` | `$4.12` | `—` |
+| `1` | `0` | `1` | `$3.47` | `7m22s` | `$3.47` | `—` |
+| `1` | `2` | `0` | `$3.21` | `5m28s` | `$3.21` | `$1.61` |
+| **Σ `140`** | **`203`** | **`57`** | **`$311.48`** | — | **`$2.22`** | **`$1.53`** |
 
-### Batches — types
+### Batches — types, port
 
-| DAG layer | units | loc | $ | wall (longest) | wall (actual) | serial Σ | $/unit | $/loc |
-|---|---|---|---|---|---|---|---|---|
-| `0` | `88` | `8315` | `$186.53` | `12m55s` | **multi-session** | `6h13m56s` (`28.9`x) | `$2.12` | `$0.022` |
-| `1` | `27` | `5057` | `$79.84` | `14m40s` | **multi-session** | `2h43m36s` (`11.1`x) | `$2.96` | `$0.016` |
-| **Σ** | **`115`** | **`13372`** | **`$266.37`** | — | **multi-session** | **`8h57m32s`** | **`$2.32`** | **`$0.020`** |
+No port wave ran; this is a `wrap` campaign.
 
-### Symbols
+| types | fields | lifecycle prims | $ | wall | $/type | $/field |
+|---|---|---|---|---|---|---|
+| `0` | `0` | `0` | — | — | — | — |
+| **Σ `0`** | **`0`** | **`0`** | **—** | — | **—** | **—** |
 
-| DAG layer | symbol | kind | target fns | deps | wrappers | batch | rv batch | verdict |
-|---|---|---|---|---|---|---|---|---|
-| `1` | `git_annotated_commit_free` | function | `8` | `git_annotated_commit` | `0` | `S73` | — | pending review |
-| `1` | `git_annotated_commit_from_fetchhead` | function | `0` | `git_annotated_commit`, `git_oid`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_annotated_commit_from_ref` | function | `3` | `git_annotated_commit`, `git_reference`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_annotated_commit_id` | function | `7` | `git_annotated_commit`, `git_oid` | `1` | `S73` | — | pending review |
-| `1` | `git_annotated_commit_lookup` | function | `2` | `git_annotated_commit`, `git_oid`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_annotated_commit_ref` | function | `0` | `git_annotated_commit` | `1` | `S73` | — | pending review |
-| `1` | `git_attr_get` | function | `1` | `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_attr_value` | function | `5` | `git_attr_value_t` | `1` | `S73` | — | pending review |
-| `1` | `git_blame_buffer` | function | `0` | `git_blame` | `1` | `S73` | — | pending review |
-| `1` | `git_blame_free` | function | `2` | `git_blame` | `0` | `S73` | — | pending review |
-| `1` | `git_blame_get_hunk_count` | function | `0` | `git_blame` | `1` | `S73` | — | pending review |
-| `1` | `git_blob_create_frombuffer` | function | `0` | `git_oid`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_blob_create_fromdisk` | function | `0` | `git_oid`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_blob_create_fromstream` | function | `0` | `git_repository`, `git_writestream` | `1` | `S73` | — | pending review |
-| `1` | `git_blob_create_fromstream_commit` | function | `0` | `git_oid`, `git_writestream` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_create_from_annotated` | function | `0` | `git_annotated_commit`, `git_reference`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_delete` | function | `0` | `git_reference` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_is_head` | function | `2` | `git_reference` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_iterator_free` | function | `0` | `git_branch_iterator` | `0` | `S73` | — | pending review |
-| `1` | `git_branch_iterator_new` | function | `0` | `git_branch_iterator`, `git_branch_t`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_lookup` | function | `3` | `git_branch_t`, `git_reference`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_move` | function | `0` | `git_reference` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_name` | function | `0` | `git_reference` | `1` | `S73` | — | pending review |
-| `0` | `git_branch_name_is_valid` | function | `0` | — | `1` | `S55` | — | pending review |
-| `1` | `git_branch_next` | function | `0` | `git_branch_iterator`, `git_branch_t`, `git_reference` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_remote_name` | function | `0` | `git_buf`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_set_upstream` | function | `0` | `git_reference` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_upstream` | function | `1` | `git_reference` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_upstream_merge` | function | `0` | `git_buf`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_upstream_name` | function | `0` | `git_buf`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_branch_upstream_remote` | function | `0` | `git_buf`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_buf_dispose` | function | `4` | `git_buf` | `0` | `S73` | — | pending review |
-| `1` | `git_commit_create_with_signature` | function | `1` | `git_oid`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_commit_extract_signature` | function | `0` | `git_buf`, `git_oid`, `git_repository` | `1` | `S73` | — | pending review |
-| `1` | `git_config_add_file_ondisk` | function | `4` | `git_config`, `git_config_level_t`, `git_repository` | `2` | `S73` | — | pending review |
-| `1` | `git_config_delete_entry` | function | `8` | `git_config` | `1` | `S73` | — | pending review |
-| `1` | `git_config_delete_multivar` | function | `1` | `git_config` | `1` | `S73` | — | pending review |
-| `1` | `git_config_find_global` | function | `0` | `git_buf` | `1` | `S73` | — | pending review |
-| `1` | `git_config_find_system` | function | `0` | `git_buf` | `1` | `S73` | — | pending review |
-| `1` | `git_config_find_xdg` | function | `0` | `git_buf` | `1` | `S73` | — | pending review |
-| `1` | `git_config_free` | function | `37` | `git_config` | `0` | `S73` | — | pending review |
-| `1` | `git_config_get_bool` | function | `4` | `git_config` | `1` | `S73` | — | pending review |
-| `1` | `git_config_get_int32` | function | `1` | `git_config` | `1` | `S73` | — | pending review |
-| `1` | `git_config_get_int64` | function | `1` | `git_config` | `1` | `S73` | — | pending review |
-| `1` | `git_config_get_path` | function | `0` | `git_buf`, `git_config` | `1` | `S73` | — | pending review |
-| `1` | `git_config_get_string` | function | `8` | `git_config` | `1` | `S73` | — | pending review |
-| `1` | `git_config_get_string_buf` | function | `0` | `git_buf`, `git_config` | `1` | `S73` | — | pending review |
-| `1` | `git_config_new` | function | `5` | `git_config` | `1` | `S73` | — | pending review |
-| `1` | `git_config_open_default` | function | `4` | `git_config` | `1` | `S73` | — | pending review |
-| `1` | `git_config_open_global` | function | `0` | `git_config` | `1` | `S73` | — | pending review |
-| `1` | `git_config_open_level` | function | `2` | `git_config`, `git_config_level_t` | `1` | `S74` | — | pending review |
-| `1` | `git_config_open_ondisk` | function | `3` | `git_config` | `1` | `S74` | — | pending review |
-| `0` | `git_config_parse_bool` | function | `8` | — | `1` | `S55` | — | pending review |
-| `0` | `git_config_parse_int32` | function | `4` | — | `1` | `S55` | — | pending review |
-| `0` | `git_config_parse_int64` | function | `2` | — | `1` | `S55` | — | pending review |
-| `1` | `git_config_set_bool` | function | `4` | `git_config` | `1` | `S74` | — | pending review |
-| `1` | `git_config_set_int32` | function | `2` | `git_config` | `1` | `S74` | — | pending review |
-| `1` | `git_config_set_int64` | function | `1` | `git_config` | `1` | `S74` | — | pending review |
-| `1` | `git_config_set_multivar` | function | `2` | `git_config` | `1` | `S74` | — | pending review |
-| `1` | `git_config_set_string` | function | `13` | `git_config` | `1` | `S74` | — | pending review |
-| `1` | `git_config_snapshot` | function | `2` | `git_config` | `1` | `S74` | — | pending review |
-| `1` | `git_describe_commit` | function | `1` | `git_describe_options`, `git_describe_result`, `git_object` | `1` | `S74` | — | pending review |
-| `1` | `git_describe_format` | function | `0` | `git_buf`, `git_describe_format_options`, `git_describe_result` | `1` | `S74` | — | pending review |
-| `1` | `git_describe_result_free` | function | `2` | `git_describe_result` | `1` | `S74` | — | pending review |
-| `1` | `git_describe_workdir` | function | `0` | `git_describe_options`, `git_describe_result`, `git_repository` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_free` | function | `30` | `git_diff` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_from_buffer` | function | `0` | `git_diff` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_get_stats` | function | `1` | `git_diff`, `git_diff_stats` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_is_sorted_icase` | function | `2` | `git_diff` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_merge` | function | `1` | `git_diff` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_num_deltas` | function | `14` | `git_diff` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_patchid` | function | `0` | `git_diff`, `git_diff_patchid_options`, `git_oid` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_patchid_options_init` | function | `0` | `git_diff_patchid_options` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_stats_deletions` | function | `0` | `git_diff_stats` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_stats_files_changed` | function | `0` | `git_diff_stats` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_stats_free` | function | `2` | `git_diff_stats` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_stats_insertions` | function | `0` | `git_diff_stats` | `1` | `S74` | — | pending review |
-| `1` | `git_diff_stats_to_buf` | function | `0` | `git_buf`, `git_diff_stats`, `git_diff_stats_format_t` | `1` | `S74` | — | pending review |
-| `0` | `git_error_clear` | function | `109` | — | `1` | `S55` | — | pending review |
-| `1` | `git_error_last` | function | `6` | `git_error` | `1` | `S74` | — | pending review |
-| `0` | `git_error_set_str` | function | `5` | — | `1` | `S55` | — | pending review |
-| `1` | `git_graph_ahead_behind` | function | `0` | `git_oid`, `git_repository` | `1` | `S74` | — | pending review |
-| `1` | `git_graph_descendant_of` | function | `1` | `git_oid`, `git_repository` | `1` | `S74` | — | pending review |
-| `1` | `git_ignore_add_rule` | function | `0` | `git_repository` | `1` | `S74` | — | pending review |
-| `1` | `git_ignore_clear_internal_rules` | function | `0` | `git_repository` | `1` | `S74` | — | pending review |
-| `1` | `git_ignore_path_is_ignored` | function | `2` | `git_repository` | `1` | `S74` | — | pending review |
-| `1` | `git_index_conflict_iterator_free` | function | `1` | `git_index_conflict_iterator` | `1` | `S74` | — | pending review |
-| `1` | `git_indexer_append` | function | `3` | `git_indexer`, `git_indexer_progress` | `1` | `S74` | — | pending review |
-| `1` | `git_indexer_commit` | function | `2` | `git_indexer`, `git_indexer_progress` | `1` | `S74` | — | pending review |
-| `1` | `git_indexer_free` | function | `2` | `git_indexer` | `1` | `S74` | — | pending review |
-| `1` | `git_indexer_name` | function | `1` | `git_indexer` | `1` | `S74` | — | pending review |
-| `0` | `git_libgit2_features` | function | `0` | — | `1` | `S55` | — | pending review |
-| `0` | `git_libgit2_opts` | function | `0` | — | `1` | `S55` | — | pending review |
-| `0` | `git_libgit2_version` | function | `0` | — | `1` | `S55` | — | pending review |
-| `1` | `git_mailmap_add_entry` | function | `0` | `git_mailmap` | `1` | `S74` | — | pending review |
-| `1` | `git_mailmap_free` | function | `2` | `git_mailmap` | `1` | `S74` | — | pending review |
-| `1` | `git_mailmap_from_buffer` | function | `0` | `git_mailmap` | `1` | `S74` | — | pending review |
-| `1` | `git_mailmap_from_repository` | function | `1` | `git_mailmap`, `git_repository` | `1` | `S74` | — | pending review |
-| `1` | `git_mailmap_new` | function | `2` | `git_mailmap` | `1` | `S74` | — | pending review |
-| `1` | `git_merge_analysis` | function | `0` | `git_annotated_commit`, `git_merge_analysis_t`, `git_merge_preference_t`, `git_repository` | `1` | `S74` | — | pending review |
-| `1` | `git_merge_analysis_for_ref` | function | `1` | `git_annotated_commit`, `git_merge_analysis_t`, `git_merge_preference_t`, `git_reference`, `git_repository` | `1` | `S74` | — | pending review |
-| `1` | `git_merge_base` | function | `2` | `git_oid`, `git_repository` | `1` | `S75` | — | pending review |
-| `1` | `git_merge_base_many` | function | `1` | `git_oid`, `git_repository` | `1` | `S75` | — | pending review |
-| `1` | `git_merge_base_octopus` | function | `0` | `git_oid`, `git_repository` | `1` | `S75` | — | pending review |
-| `1` | `git_merge_file_input_init` | function | `1` | `git_merge_file_input` | `1` | `S75` | — | pending review |
-| `1` | `git_merge_file_result_free` | function | `4` | `git_merge_file_result` | `1` | `S75` | — | pending review |
-| `1` | `git_message_prettify` | function | `0` | `git_buf` | `1` | `S75` | — | pending review |
-| `1` | `git_note_default_ref` | function | `0` | `git_buf`, `git_repository` | `1` | `S75` | — | pending review |
-| `1` | `git_note_free` | function | `1` | `git_note` | `1` | `S75` | — | pending review |
-| `1` | `git_note_id` | function | `0` | `git_note`, `git_oid` | `1` | `S75` | — | pending review |
-| `1` | `git_note_iterator_free` | function | `1` | `git_iterator` | `1` | `S75` | — | pending review |
-| `1` | `git_note_iterator_new` | function | `1` | `git_iterator`, `git_repository` | `1` | `S75` | — | pending review |
-| `1` | `git_note_message` | function | `1` | `git_note` | `1` | `S75` | — | pending review |
-| `1` | `git_note_next` | function | `1` | `git_iterator`, `git_oid` | `1` | `S75` | — | pending review |
-| `1` | `git_note_read` | function | `1` | `git_note`, `git_oid`, `git_repository` | `1` | `S75` | — | pending review |
-| `1` | `git_object_dup` | function | `7` | `git_object` | `1` | `S75` | — | pending review |
-| `1` | `git_object_free` | function | `39` | `git_object` | `1` | `S75` | — | pending review |
-| `1` | `git_object_id` | function | `22` | `git_object`, `git_oid` | `1` | `S75` | — | pending review |
-| `1` | `git_object_lookup` | function | `22` | `git_object`, `git_object_t`, `git_oid`, `git_repository` | `1` | `S75` | — | pending review |
-| `1` | `git_object_lookup_prefix` | function | `6` | `git_object`, `git_object_t`, `git_oid`, `git_repository` | `1` | `S75` | — | pending review |
-| `1` | `git_object_peel` | function | `15` | `git_object`, `git_object_t` | `1` | `S75` | — | pending review |
-| `1` | `git_object_short_id` | function | `0` | `git_buf`, `git_object` | `1` | `S75` | — | pending review |
-| `1` | `git_object_string2type` | function | `0` | `git_object_t` | `1` | `S75` | — | pending review |
-| `1` | `git_object_type` | function | `11` | `git_object`, `git_object_t` | `1` | `S75` | — | pending review |
-| `1` | `git_object_type2string` | function | `4` | `git_object_t` | `1` | `S75` | — | pending review |
-| `1` | `git_object_typeisloose` | function | `0` | `git_object_t` | `1` | `S75` | — | pending review |
-| `1` | `git_odb_hash` | function | `0` | `git_object_t`, `git_oid` | `1` | `S75` | — | pending review |
-| `1` | `git_odb_hashfile` | function | `0` | `git_object_t`, `git_oid` | `1` | `S75` | — | pending review |
-| `1` | `git_oid_cmp` | function | `16` | `git_oid` | `1` | `S75` | — | pending review |
-| `1` | `git_oid_equal` | function | `54` | `git_oid` | `1` | `S75` | — | pending review |
-| `1` | `git_oid_fromraw` | function | `0` | `git_oid` | `1` | `S75` | — | pending review |
-| `1` | `git_oid_fromstrn` | function | `0` | `git_oid` | `1` | `S75` | — | pending review |
-| `1` | `git_oid_is_zero` | function | `29` | `git_oid` | `1` | `S75` | — | pending review |
-| `1` | `git_oid_tostr` | function | `28` | `git_oid` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_foreach` | function | `3` | `git_packbuilder`, `git_packbuilder_foreach_cb` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_free` | function | `4` | `git_packbuilder` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_hash` | function | `0` | `git_oid`, `git_packbuilder` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_insert` | function | `9` | `git_oid`, `git_packbuilder` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_insert_commit` | function | `2` | `git_oid`, `git_packbuilder` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_insert_recur` | function | `2` | `git_oid`, `git_packbuilder` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_insert_tree` | function | `2` | `git_oid`, `git_packbuilder` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_insert_walk` | function | `2` | `git_packbuilder`, `git_revwalk` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_name` | function | `0` | `git_packbuilder` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_new` | function | `3` | `git_packbuilder`, `git_repository` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_object_count` | function | `1` | `git_packbuilder` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_set_callbacks` | function | `2` | `git_packbuilder`, `git_packbuilder_progress` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_set_threads` | function | `3` | `git_packbuilder` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_write_buf` | function | `0` | `git_buf`, `git_packbuilder` | `1` | `S75` | — | pending review |
-| `1` | `git_packbuilder_written` | function | `0` | `git_packbuilder` | `1` | `S75` | — | pending review |
-| `1` | `git_patch_free` | function | `8` | `git_patch` | `1` | `S75` | — | pending review |
-| `1` | `git_patch_from_diff` | function | `4` | `git_diff`, `git_patch` | `1` | `S76` | — | pending review |
-| `1` | `git_patch_get_hunk` | function | `0` | `git_diff_hunk`, `git_patch` | `1` | `S76` | — | pending review |
-| `1` | `git_patch_get_line_in_hunk` | function | `0` | `git_diff_line`, `git_patch` | `1` | `S76` | — | pending review |
-| `1` | `git_patch_line_stats` | function | `1` | `git_patch` | `1` | `S76` | — | pending review |
-| `1` | `git_patch_num_hunks` | function | `0` | `git_patch` | `1` | `S76` | — | pending review |
-| `1` | `git_patch_num_lines_in_hunk` | function | `0` | `git_patch` | `1` | `S76` | — | pending review |
-| `1` | `git_patch_size` | function | `0` | `git_patch` | `1` | `S76` | — | pending review |
-| `1` | `git_patch_to_buf` | function | `0` | `git_buf`, `git_patch` | `1` | `S76` | — | pending review |
-| `1` | `git_pathspec_free` | function | `1` | `git_pathspec` | `1` | `S76` | — | pending review |
-| `1` | `git_pathspec_match_diff` | function | `0` | `git_diff`, `git_pathspec`, `git_pathspec_match_list` | `1` | `S76` | — | pending review |
-| `1` | `git_pathspec_match_list_entry` | function | `0` | `git_pathspec_match_list` | `1` | `S76` | — | pending review |
-| `1` | `git_pathspec_match_list_entrycount` | function | `0` | `git_pathspec_match_list` | `1` | `S76` | — | pending review |
-| `1` | `git_pathspec_match_list_failed_entry` | function | `0` | `git_pathspec_match_list` | `1` | `S76` | — | pending review |
-| `1` | `git_pathspec_match_list_failed_entrycount` | function | `0` | `git_pathspec_match_list` | `1` | `S76` | — | pending review |
-| `1` | `git_pathspec_match_list_free` | function | `0` | `git_pathspec_match_list` | `1` | `S76` | — | pending review |
-| `1` | `git_pathspec_match_workdir` | function | `0` | `git_pathspec`, `git_pathspec_match_list`, `git_repository` | `1` | `S76` | — | pending review |
-| `1` | `git_pathspec_matches_path` | function | `0` | `git_pathspec` | `1` | `S76` | — | pending review |
-| `1` | `git_pathspec_new` | function | `0` | `git_pathspec`, `git_strarray` | `1` | `S76` | — | pending review |
-| `1` | `git_rebase_abort` | function | `0` | `git_rebase` | `1` | `S76` | — | pending review |
-| `1` | `git_rebase_free` | function | `2` | `git_rebase` | `1` | `S76` | — | pending review |
-| `1` | `git_rebase_operation_current` | function | `0` | `git_rebase` | `1` | `S76` | — | pending review |
-| `1` | `git_rebase_operation_entrycount` | function | `0` | `git_rebase` | `1` | `S76` | — | pending review |
-| `1` | `git_rebase_orig_head_id` | function | `0` | `git_oid`, `git_rebase` | `1` | `S76` | — | pending review |
-| `1` | `git_rebase_orig_head_name` | function | `0` | `git_rebase` | `1` | `S76` | — | pending review |
-| `1` | `git_refdb_compress` | function | `0` | `git_refdb` | `1` | `S76` | — | pending review |
-| `1` | `git_refdb_free` | function | `6` | `git_refdb` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_cmp` | function | `1` | `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_create` | function | `17` | `git_oid`, `git_reference`, `git_repository` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_create_matching` | function | `4` | `git_oid`, `git_reference`, `git_repository` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_delete` | function | `5` | `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_dup` | function | `1` | `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_dwim` | function | `4` | `git_reference`, `git_repository` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_ensure_log` | function | `1` | `git_repository` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_free` | function | `84` | `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_has_log` | function | `0` | `git_repository` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_is_branch` | function | `9` | `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_is_note` | function | `0` | `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_is_remote` | function | `3` | `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_is_tag` | function | `1` | `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_lookup` | function | `28` | `git_reference`, `git_repository` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_name` | function | `18` | `git_reference` | `1` | `S76` | — | pending review |
-| `0` | `git_reference_name_is_valid` | function | `8` | — | `1` | `S55` | — | pending review |
-| `1` | `git_reference_name_to_id` | function | `13` | `git_oid`, `git_repository` | `1` | `S76` | — | pending review |
-| `0` | `git_reference_normalize_name` | function | `1` | — | `1` | `S55` | — | pending review |
-| `1` | `git_reference_peel` | function | `12` | `git_object`, `git_object_t`, `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_rename` | function | `2` | `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_resolve` | function | `4` | `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_set_target` | function | `0` | `git_oid`, `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_shorthand` | function | `0` | `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_symbolic_create` | function | `4` | `git_reference`, `git_repository` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_symbolic_create_matching` | function | `2` | `git_reference`, `git_repository` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_symbolic_set_target` | function | `2` | `git_reference` | `1` | `S76` | — | pending review |
-| `1` | `git_reference_symbolic_target` | function | `13` | `git_reference` | `1` | `S77` | — | pending review |
-| `1` | `git_reference_target` | function | `21` | `git_oid`, `git_reference` | `1` | `S77` | — | pending review |
-| `1` | `git_reference_target_peel` | function | `0` | `git_oid`, `git_reference` | `1` | `S77` | — | pending review |
-| `1` | `git_reference_type` | function | `20` | `git_reference`, `git_reference_t` | `1` | `S77` | — | pending review |
-| `1` | `git_reflog_delete` | function | `0` | `git_repository` | `1` | `S77` | — | pending review |
-| `1` | `git_reflog_drop` | function | `1` | `git_reflog` | `1` | `S77` | — | pending review |
-| `1` | `git_reflog_entry_byindex` | function | `8` | `git_reflog`, `git_reflog_entry` | `1` | `S77` | — | pending review |
-| `1` | `git_reflog_entry_id_new` | function | `3` | `git_oid`, `git_reflog_entry` | `1` | `S77` | — | pending review |
-| `1` | `git_reflog_entry_id_old` | function | `0` | `git_oid`, `git_reflog_entry` | `1` | `S77` | — | pending review |
-| `1` | `git_reflog_entry_message` | function | `2` | `git_reflog_entry` | `1` | `S77` | — | pending review |
-| `1` | `git_reflog_entrycount` | function | `7` | `git_reflog` | `1` | `S77` | — | pending review |
-| `1` | `git_reflog_free` | function | `7` | `git_reflog` | `1` | `S77` | — | pending review |
-| `1` | `git_reflog_read` | function | `5` | `git_reflog`, `git_repository` | `1` | `S77` | — | pending review |
-| `1` | `git_reflog_rename` | function | `0` | `git_repository` | `1` | `S77` | — | pending review |
-| `1` | `git_reflog_write` | function | `0` | `git_reflog` | `1` | `S77` | — | pending review |
-| `1` | `git_refspec_direction` | function | `0` | `git_direction`, `git_refspec` | `1` | `S77` | — | pending review |
-| `1` | `git_refspec_dst` | function | `0` | `git_refspec` | `1` | `S77` | — | pending review |
-| `1` | `git_refspec_dst_matches` | function | `5` | `git_refspec` | `1` | `S77` | — | pending review |
-| `1` | `git_refspec_force` | function | `0` | `git_refspec` | `1` | `S77` | — | pending review |
-| `1` | `git_refspec_rtransform` | function | `0` | `git_buf`, `git_refspec` | `1` | `S77` | — | pending review |
-| `1` | `git_refspec_src` | function | `1` | `git_refspec` | `1` | `S77` | — | pending review |
-| `1` | `git_refspec_src_matches` | function | `7` | `git_refspec` | `1` | `S77` | — | pending review |
-| `1` | `git_refspec_string` | function | `0` | `git_refspec` | `1` | `S77` | — | pending review |
-| `1` | `git_refspec_transform` | function | `0` | `git_buf`, `git_refspec` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_add_fetch` | function | `0` | `git_repository` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_add_push` | function | `0` | `git_repository` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_connected` | function | `3` | `git_remote` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_create` | function | `2` | `git_remote`, `git_repository` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_create_anonymous` | function | `0` | `git_remote`, `git_repository` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_create_detached` | function | `0` | `git_remote` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_create_with_fetchspec` | function | `0` | `git_remote`, `git_repository` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_default_branch` | function | `0` | `git_buf`, `git_remote` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_delete` | function | `0` | `git_repository` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_disconnect` | function | `3` | `git_remote` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_dup` | function | `1` | `git_remote` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_free` | function | `14` | `git_remote` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_get_fetch_refspecs` | function | `0` | `git_remote`, `git_strarray` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_get_push_refspecs` | function | `0` | `git_remote`, `git_strarray` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_get_refspec` | function | `1` | `git_refspec`, `git_remote` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_list` | function | `1` | `git_repository`, `git_strarray` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_lookup` | function | `9` | `git_remote`, `git_repository` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_name` | function | `3` | `git_remote` | `1` | `S77` | — | pending review |
-| `0` | `git_remote_name_is_valid` | function | `2` | — | `1` | `S55` | — | pending review |
-| `1` | `git_remote_oid_type` | function | `2` | `git_oid_t`, `git_remote` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_pushurl` | function | `0` | `git_remote` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_refspec_count` | function | `1` | `git_remote` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_rename` | function | `0` | `git_repository`, `git_strarray` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_set_pushurl` | function | `0` | `git_repository` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_set_url` | function | `0` | `git_repository` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_stats` | function | `0` | `git_indexer_progress`, `git_remote` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_stop` | function | `0` | `git_remote` | `1` | `S77` | — | pending review |
-| `1` | `git_remote_url` | function | `4` | `git_remote` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_commondir` | function | `2` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_config` | function | `4` | `git_config`, `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_discover` | function | `0` | `git_buf` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_free` | function | `17` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_get_namespace` | function | `0` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_head` | function | `16` | `git_reference`, `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_head_detached` | function | `0` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_is_bare` | function | `11` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_is_empty` | function | `3` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_is_shallow` | function | `0` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_is_worktree` | function | `10` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_message` | function | `0` | `git_buf`, `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_message_remove` | function | `0` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_oid_type` | function | `2` | `git_oid_t`, `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_open` | function | `8` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_open_bare` | function | `0` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_open_ext` | function | `2` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_open_from_worktree` | function | `2` | `git_repository`, `git_worktree` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_path` | function | `6` | `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_refdb` | function | `3` | `git_refdb`, `git_repository` | `1` | `S78` | — | pending review |
-| `1` | `git_repository_set_config` | function | `0` | `git_config`, `git_repository` | `1` | `S78` | — | pending review |
-| `0` | `git_tag_name_is_valid` | function | `0` | — | `1` | `S55` | — | pending review |
-| **Σ `276`** | | | | | **`272`** | **`7 batches`** | **`0` batches** | **`0` held · `0` fixed · pending** |
+### Batches — review types
+
+`anthropic/claude-opus-5` via `claude`. One row per batch, in execution order.
+
+| types | rv loc | rv $ | rv wall | rv $/type |
+|---|---|---|---|---|
+| `4` | `+111/-21` | `$9.27` | `15m08s` | `$2.32` |
+| `15` | `+181/-11` | `$18.08` | `24m38s` | `$1.21` |
+| `13` | `+213/-18` | `$20.79` | `24m43s` | `$1.60` |
+| `1` | `+104/-32` | `$8.62` | `14m43s` | `$8.62` |
+| `6` | `+153/-9` | `$16.18` | `22m38s` | `$2.70` |
+| `8` | `+127/-22` | `$14.56` | `26m22s` | `$1.82` |
+| `1` | `+49/-6` | `$9.52` | `16m06s` | `$9.52` |
+| `5` | `+117/-18` | `$10.23` | `16m59s` | `$2.05` |
+| `5` | `+102/-16` | `$10.94` | `17m07s` | `$2.19` |
+| `5` | `+128/-55` | `$13.90` | `19m00s` | `$2.78` |
+| `6` | `+73/-2` | `$12.00` | `16m51s` | `$2.00` |
+| `11` | `+123/-57` | `$9.54` | `15m22s` | `$0.87` |
+| `7` | `+137/-6` | `$10.91` | `16m34s` | `$1.56` |
+| `5` | `+116/-35` | `$6.06` | `13m31s` | `$1.21` |
+| `4` | — | — | `3m41s` | — |
+| `5` | `+19/-3` | `$12.17` | `16m00s` | `$2.43` |
+| `7` | `+162/-4` | `$8.52` | `12m37s` | `$1.22` |
+| `5` | `+169/-20` | `$10.43` | `16m22s` | `$2.09` |
+| `4` | `+103/-19` | `$8.14` | `12m23s` | `$2.04` |
+| `2` | `+195/-9` | `$7.04` | `12m44s` | `$3.52` |
+| **Σ `119`** | **`+2382/-363`** | **`$216.91`** | — | **`$1.82`** |
 
 ### Batches — symbols
 
-| DAG layer | units | loc | $ | wall | $/unit | $/loc |
+`openai/gpt-5.6-sol` via `codex` for `wrap`. One row per batch, in execution order.
+
+| objective | symbols | loc | $ | wall | $/symbol | $/loc |
 |---|---|---|---|---|---|---|
-| `0` | `20` | `811` | `$7.58` | `16m07s` (`1.0`x) | `$0.38` | `$0.009` |
-| `1` | `268` | `4753` | `$46.60` | `24m47s` (`4.1`x) | `$0.17` | `$0.010` |
-| **Σ** | **`288`** | **`5564`** | **`$54.18`** | **`24m47s`** (`4.8`x; `1h57m53s` serial) | **`$0.19`** | **`$0.010`** |
+| wrap | `20` | `811` | `$7.58` | `16m07s` | `$0.38` | `$0.01` |
+| wrap | `50` | `938` | `$7.52` | `16m49s` | `$0.15` | `$0.01` |
+| wrap | `41` | `807` | `$12.63` | `24m47s` | `$0.31` | `$0.02` |
+| wrap | `50` | `881` | `$6.41` | `19m35s` | `$0.13` | `$0.01` |
+| wrap | `50` | `915` | `$7.06` | `14m54s` | `$0.14` | `$0.01` |
+| wrap | `50` | `497` | `$6.84` | `14m36s` | `$0.14` | `$0.01` |
+| wrap | `22` | `715` | `$6.14` | `11m04s` | `$0.28` | `$0.01` |
+| **Σ** | **`283`** | **`5,564`** | **`$54.18`** | | **`$0.19`** | **`$0.01`** |
 
-### Batches — review
+### Batches — review symbols
 
-The campaign-end review is waiting for explicit user approval.
+`anthropic/claude-opus-5` via `claude`. One row per batch, in execution order.
 
-| session | batch | units | rv loc | rv $ | rv wall | $/symbol | $/type |
-|---|---|---|---|---|---|---|---|
-| awaiting approval | — | `0` | — | — | — | — | — |
-| **Σ** | **`0` agents** | **`0` types · `0` symbols** | **—** | **—** | **—** | **—** | **—** |
+| symbols | rv loc | rv $ | rv wall | rv $/symbol |
+|---|---|---|---|---|
+| `20` | `+83/-27` | `$7.02` | `11m03s` | `$0.35` |
+| `150` | — | — | `3m35s` | — |
+| `90` | `+39/-1` | `$10.63` | `13m35s` | `$0.12` |
+| `150` | `+170/-25` | `$19.81` | `19m43s` | `$0.13` |
+| **Σ `410`** | **`+292/-53`** | **`$37.46`** | — | **`$0.09`** |
 
 ## Safety audit
 
-`crustify-audit <repo> unsafe`, unseeded and tree-wide. The first-half
-checkpoint is the pre-review snapshot; the after-review column is reserved
-until the user authorizes the campaign-end review.
+Deterministic `crustify-audit unsafe`; no model.
 
-| | before review (`456a0e8fc0`) | after review (`pending`) |
+### Snapshots
+
+| | before review (`456a0e8fc0`) | after review (`d71102b84`) |
 |---|---|---|
-| unsafe loc | `2153` | — |
-| % of loc | `29.48`% | — |
-| blocks | `1286` | — |
-| % in `impl T` | `71.85`% | — |
-| `unsafe fn` | `494` | — |
-| ...of which not sanctioned | `96` | — |
-| raw-ptr smell | `7` (`0` wrapped-type sites) | — |
-| void-ptr smell | `0` | — |
-| FFI calls | `360` | — |
-| `&`/`&mut` on a wrapper | `0` | — |
-| field proj outside an accessor | `0` | — |
+| unsafe loc | `2153` | `2164` |
+| % of loc | `29.48`% | `29.15`% |
+| blocks | `1286` | `1303` |
+| % in `impl T` | `71.85`% | `71.99`% |
+| `unsafe fn` | `494` | `498` |
+| ...of which not sanctioned | `96` | `100` |
+| raw-ptr smell | `7` | `8` |
+| void-ptr smell | `0` | `0` |
+| FFI calls | `360` | `366` |
+| `&`/`&mut` on a wrapper | `0` | `0` |
+| field proj outside an accessor | `0` | `0` |
 
 ### All metrics
 
 | metric | before | after | Δ | reading |
 |---|---|---|---|---|
-| `code_lines` | `7304` | — | — | union of HIR definition spans (denominator); `cfg`-disabled items excluded |
-| `total_stmts` | `1237` | — | — | statements |
-| `unsafe_blocks` | `1286` | — | — | count of `unsafe { }` blocks, macro-expanded included |
-| `unsafe_block_stmts` | `58` | — | — | statements inside them |
-| `unsafe_block_lines` | `2154` | — | — | their lines, every outermost block |
-| `unsafe_block_code_lines` | `2153` | — | — | **`29.48%`** of compiled code lines |
-| `unsafe_blocks_wrapper_impl` | `924` | — | — | inside `impl <wrapper T>` |
-| `unsafe_blocks_ffi_export` | `3` | — | — | inside the C-ABI gateway |
-| `unsafe_fns` | `494` | — | — | `unsafe fn` declarations, post-expansion |
-| `unsafe_fns_seam` | `398` | — | — | the sanctioned subset |
-| **`unsafe fn` smell** | **`96`** | **—** | **—** | lifecycle hooks, owner seams, and retained-borrow setters; inspected at checkpoint |
-| `unsafe_fns_pub` | `489` | — | — | exported from the crate |
-| `unsafe_impls` / `unsafe_traits` | `149` / `0` | — | — | lifecycle contracts asserted once per type |
-| `ffi_calls` | `360` | — | — | calls to a foreign item |
-| `wrapper_newtypes` | `79` | — | — | structural layout newtypes |
-| `wrapper_newtypes_declared` | `79` | — | — | `CCell`-declared count |
-| `wrapper_declared_nonconformant` | `0` | — | — | declared but structurally nonconformant — **target 0** |
-| `wrapper_newtypes_undeclared` | `0` | — | — | structural but undeclared |
-| `raw_ptr_args` | `248` | — | — | raw-pointer argument positions |
-| `raw_ptr_rets` | `316` | — | — | raw-pointer return positions |
-| **total positions** | **`564`** | **—** | **—** | args + returns |
-| `raw_ptr_seam` | `557` | — | — | sanctioned seam positions |
-| **smell (total − seam)** | **`7`** | **—** | **—** | non-seam remainder; none points to a wrapped C type |
-| `raw_ptr_wrapped` | `0` | — | — | actionable wrapped-pointee defect — **target 0** |
-| `raw_ptr_in_wrapper` | `0` | — | — | non-seam pointer inside wrapper impl — **target 0** |
-| `raw_ptr_derefs` | `342` | — | — | raw dereference volume |
-| `ref_to_type_wrapper` | `0` | — | — | `&`/`&mut` on layout newtype — **target 0** |
-| `field_proj_wrapped` | `340` | — | — | projection volume |
-| `field_proj_outside_impl` | `0` | — | — | projection outside accessors — **target 0** |
-| `field_ref_wrapped` | `0` | — | — | forbidden `&(*p).field` — **target 0** |
-| `void_ptr_sanctioned` | `240` | — | — | sanctioned `*c_void` positions |
-| `void_ptr_smell` | `0` | — | — | `*c_void` elsewhere — **target 0** |
-
-### What the review moved
-
-Campaign-end review has not run. Before review, the categorical targets
-already hold at `0`: nonconformant wrappers, undeclared wrappers, raw pointers
-to wrapped types, raw pointers inside wrapper impls, references to layout
-wrappers, field references, field projections outside accessors, and void-pointer
-smells. The after-review column will record any movement once approved.
+| `code_lines` | `7304` | `7423` | `+119` | union of HIR definition spans (denominator); `cfg`-disabled items excluded |
+| `total_stmts` | `1237` | `1266` | `+29` | statements |
+| `unsafe_blocks` | `1286` | `1303` | `+17` | count of `unsafe { }` blocks, macro-expanded included |
+| `unsafe_block_stmts` | `58` | `62` | `+4` | statements inside them |
+| `unsafe_block_lines` | `2154` | `2165` | `+11` | their lines, every outermost block |
+| `unsafe_block_code_lines` | `2153` | `2164` | `+11` | **`29.48`% → `29.15`%** |
+| `unsafe_blocks_wrapper_impl` | `924` | `938` | `+14` | inside `impl <wrapper T>` |
+| `unsafe_blocks_ffi_export` | `3` | `3` | `0` | inside the C-ABI gateway |
+| `unsafe_fns` | `494` | `498` | `+4` | `unsafe fn` declarations, post-expansion |
+| `unsafe_fns_seam` | `398` | `398` | `0` | ...the sanctioned subset |
+| **`unsafe fn` smell** | **`96`** | **`100`** | **`+4`** | the remainder — read each and accept or fix it |
+| `unsafe_fns_pub` | `489` | `492` | `+3` | ...of `unsafe_fns`, exported from the crate |
+| `unsafe_impls` / `unsafe_traits` | `149` / `0` | `149` / `0` | `0` | lifecycle contracts asserted once per type |
+| `ffi_calls` | `360` | `366` | `+6` | calls to a foreign item — the unsafe-FFI-call surface |
+| `wrapper_newtypes` | `79` | `79` | `0` | LAYOUT newtypes — `repr(transparent)` over a `repr(C)` type by value, detected structurally |
+| `wrapper_newtypes_declared` | `79` | `79` | `0` | the `CCell`-declared count, for comparison |
+| `wrapper_declared_nonconformant` | `0` | `0` | `0` | declared but failing the structural test — **target 0** |
+| `wrapper_newtypes_undeclared` | `0` | `0` | `0` | structural but undeclared — a hand-written layout newtype |
+| `raw_ptr_args` | `248` | `248` | `0` | raw-ptr positions in arguments |
+| `raw_ptr_rets` | `316` | `317` | `+1` | raw-ptr positions in returns |
+| **total positions** | **`564`** | **`565`** | `+1` | args + rets; disjoint, so this is the surface |
+| `raw_ptr_seam` | `557` | `557` | `0` | sanctioned: seam fn / `mod ffi_export` / `extern "C"` / ptr-to-own-`Self` |
+| **smell (total − seam)** | **`7`** | **`8`** | `+1` | the non-seam remainder |
+| `raw_ptr_wrapped` | `0` | `0` | `0` | **of the smell**: pointee is a C type that HAS a wrapper — the actionable defect |
+| `raw_ptr_in_wrapper` | `0` | `0` | `0` | **of the smell**: inside a wrapper impl — the least excusable placement |
+| `raw_ptr_derefs` | `342` | `345` | `+3` | `*p` on a raw pointer (volume) |
+| `ref_to_type_wrapper` | `0` | `0` | `0` | `&`/`&mut` on a layout newtype — **target 0** |
+| `field_proj_wrapped` | `340` | `343` | `+3` | projection VOLUME — shares one HIR shape with `addr_of!`, not a violation |
+| `field_proj_outside_impl` | `0` | `0` | `0` | projections outside any accessor — **target 0** |
+| `field_ref_wrapped` | `0` | `0` | `0` | `&(*p).field` — forbidden by the translator playbook — **target 0** |
+| `void_ptr_sanctioned` | `240` | `240` | `0` | `*c_void` in a seam / `ffi_export` / `extern "C"` signature |
+| `void_ptr_smell` | `0` | `0` | `0` | `*c_void` elsewhere; `void_ptr_sites` names each one |
 
 ## Notes
 
-### Exact half boundary
+### Review is a sub-campaign, not a column
 
-The frozen dependency-ordered closure contains `805` units. This checkpoint
-covers the exact `403`-unit topological prefix; the held `402`-unit suffix has
-not been scheduled, homed, translated, reviewed, or audited as campaign work.
+The oracle re-batches whatever it judges under the review pass's own budgets, so
+review rows never line up with the wave underneath them. The first half was
+emitted by `97` implementation agents under `--max-types 2`; the same units were
+judged by `24` review agents under `--max-types 15 --max-syms 150`. That is why
+`Batches — review types` and `Batches — review symbols` are their own tables
+rather than `rv` columns on the wrap tables, and why no row-for-row mapping
+between them exists.
 
-### Landing recovery
+### What the review schedule dropped
 
-The first parallel session exposed a shared-session ref race after 11 landed
-batches. Those forward commits were preserved, the remaining 377 units were
-rescheduled, and `git_cached_obj` was closed in a final one-item batch. A
-crustify-cli safeguard now requires atomic forward-only landing; the tool fix is
-recorded in crustify-cli `8d8c4dff28`.
+The review wave was seeded with the exact `403` landed first-half units. `28` of
+them are lifecycle primitives — `git_annotated_commit_free`, `git_buf_dispose`,
+`git_config_free` and the like — which the oracle drops from a schedule because
+it emits them through their owning type rather than as standalone units. Their
+Rust is still judged, inside the owning type's batch, but they carry no row of
+their own. A further `2`, `git_cached_obj` and `git_refcount`, are internal types
+that `--api-headers-only` does not publish, so they had no match in the API view
+and were judged by a separate implementation-anchored wave. Total judged: `373`
+in the main pass, `2` in the internal pass, `28` folded into their owners.
 
-### Deterministic audit remediation
+### The 529 retry
 
-The first merged scan found `7` actionable raw-pointer
-sites and `14` total non-seam positions. Two narrow
-translator remediation waves (6 agents, `$22.64`,
-`37m08s` serial agent time) moved those to
-`0` and `7` respectively.
-The two remaining raw dereference sites are C callback trampolines in
-`pack_objects.rs`; each reconstructs the exact callback payload type for the
-synchronous call and carries a local safety proof.
+Two of the main review pass's `21` batches died on `API Error: 529 Overloaded`
+on their first turn, having done no work: the `4`-type `git_credential` batch and
+a `150`-symbol batch. They were rerun verbatim as `review-first-half-retry` and
+both landed clean. Because the rerun re-judged units the main pass had already
+counted, the review batch tables sum to more units than the campaign contains —
+`119` type-batch units and `410` symbol-batch units over `115` distinct types and
+`288` distinct symbols. The Overview divides by the distinct counts.
 
-### Regression gates
+### Reruns inflate the wrap batch tables too
 
-Canonical Rust gates passed: `cargo fmt --check`, workspace `check`, clippy with
-warnings denied, and `293` unit tests (`292` wrapper tests plus one allocator
-test). The retained C sanitizer suite passed; one SSH invocation hit the known
-intermittent ASan startup `DEADLYSIGNAL`, and its immediate verbose rerun passed.
+`first-half-retry-1` rescheduled `377` of the original `403` units after the
+first parallel session hit a shared-session ref race at `11` landed batches. No
+forward work was discarded, but the same unit appears in two batches, so
+`Batches — types, wrap` sums to `140` type-batch units against `115` distinct
+types. Per-batch rows are what the agents were actually paid for; the Overview is
+what the campaign actually contains.
 
-### Review and UB policy
+### Where `loc` is missing
 
-The raw void/string reviews cost `$7.54` over `14m31s` serial agent time and are already landed. The campaign-end
-review has not started and requires explicit user approval. `crustify-audit ub`
-has not run and also requires explicit approval.
+`loc` is the `.rs` insertion count of a batch's landing commit, recovered by
+matching each commit to the agent whose run window contains its author
+timestamp. `105` of `125` agents resolved that way. The rest read `—`: their
+commits could not be attributed unambiguously, mostly in the two sessions where
+per-agent branches were pruned after their commits chained onto the shared
+session ref. No number was inferred for them, and the Σ rows sum only what
+resolved, so a Σ `loc` understates the true total.
+
+### The review moved the tree, then the audit moved it back
+
+The review pass grew the tree — `code_lines` `7304` → `7422`, `unsafe_blocks`
+`1286` → `1303`, and `43` new tests — while holding unsafe density flat at
+`29.2`%. It also broke three gates that the first-half checkpoint had passed:
+`cargo fmt --check` on three files, and `18` clippy errors under `-D warnings`
+(`15` × `items_after_test_module` where agents appended items below `mod tests`,
+`3` × `drop_non_drop`). Those were mechanical and fixed at landing.
+
+More consequential: the final internal-types batch pushed two categorical targets
+off zero — `raw_ptr_in_wrapper` `0` → `1` and `void_ptr_smell` `0` → `1`, both
+the same private helper `GitRefcountRef::owner_ptr` returning `*mut c_void` from
+inside a wrapper impl. `git_refcount` was rescheduled as a one-unit `wrap`
+remediation wave under the implementation model, which contained the pointer
+behind the seam. All eight categorical targets read `0` in the after column.
+
+### The internal review changed C
+
+Judging `git_refcount` required callable entry points for `GIT_REFCOUNT_VAL`,
+`GIT_REFCOUNT_OWNER` and `GIT_REFCOUNT_OWN`, which are macros with no symbol to
+bind. The agent added three `crustify_`-prefixed shims to `src/util/util.c` and
+its header. This is the only C change in the campaign, and it is why the C
+sanitizer suite was rerun for a review wave: it holds at `3` of `3` retained
+CTest targets, matching `build.json`'s recorded baseline.
+
+It also exposed a build-tree split worth recording. `libgit2-sys/build.rs`
+link-searches `build-crustify`, the ASan/UBSan build, while the Rust test
+binaries must *run* against `build-rust`, the unsanitized one — running them
+against `build-crustify` fails with `ASan runtime does not come first`. A C
+change is therefore only visible to the Rust suite once *both* trees are
+rebuilt.
+
+### Cost is not comparable across the two models
+
+The implementation waves ran `openai/gpt-5.6-sol` on `api` billing; the review
+pass ran `anthropic/claude-opus-5` on `subscription`. Every figure here is
+computed from per-request token counts against public rates, never from
+provider-reported dollars, so the review's `$254.37` is an API-equivalent
+comparison value rather than an amount anyone was charged. The orchestrator's own
+supervision is unmetered — it does not write `usage.json` — so the Σ row covers
+recorded agents only and understates the campaign's true total.
+
+### `crustify-log-cost` could not read this campaign
+
+`layout.py` writes agent logs to `crustify/campaigns/<target>/logs/`, but the
+cost reader globbed `crustify/targets/<target>/logs/`, so it matched nothing and
+exited on every campaign. Every figure in this report depends on that reader.
+Fixed on crustify-cli branch `fix/log-cost-campaigns-dir` at `0b85e55`.
+
+### Second half not started
+
+The campaign covers the first `403` units of the industry-surface closure. The
+held remainder is scheduled at `crustify/campaigns/src/second-half.json` — `405`
+units in `42` batches across `8` DAG layers — and has not been homed,
+translated, reviewed or audited. Nothing in this report anticipates it.
+
+### The UB pass has not run
+
+`crustify-audit ub` requires its own explicit approval, which has not been given.
+`crustify/audit/advisories/` does not exist, and every `ub` column reads `—` for
+that reason rather than because a run found nothing.
