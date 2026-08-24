@@ -206,6 +206,9 @@ mod tests {
 
     #[test]
     fn absent_values_follow_each_parser_rather_than_the_pointer() {
+        // These parsers reach `git_error_set` on their failure paths, which
+        // requires an initialized libgit2 just as the successful ones do.
+        let _init = Libgit2Init::acquire();
         // A valueless key is `true` for the boolean parser, ...
         assert_eq!(git_config_parse_bool(None), Ok(true));
         assert_eq!(git_config_parse_bool(Some(c"")), Ok(false));

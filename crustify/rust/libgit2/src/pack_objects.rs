@@ -116,12 +116,24 @@ pub fn git_packbuilder_free(builder: GitPackbuilderOwned) {
 }
 
 /// Wraps: git_packbuilder_hash
-/// Borrows the completed pack hash, when available.
-pub fn git_packbuilder_hash<'a>(builder: GitPackbuilderRef<'a>) -> Option<OidRef<'a>> {
-    // SAFETY: this getter only reads the live builder's completed hash.
+/// Borrows the inline pack hash the builder records when it writes a pack.
+///
+/// The result is never absent: C returns `&pb->pack_oid`, the address of an
+/// inline field, so the borrow is always valid for the builder. Its digest is
+/// all-zero until `git_packbuilder_write` has copied the indexer's hash into
+/// it, which is what distinguishes "not written yet" here -- not a null
+/// pointer, and not a distinct return value.
+///
+/// The C declaration takes a non-const builder, but the body performs no
+/// write, so a shared borrow states the real contract.
+#[must_use]
+pub fn git_packbuilder_hash<'a>(builder: GitPackbuilderRef<'a>) -> OidRef<'a> {
+    // SAFETY: this getter only reads the live builder; restoring mutability at
+    // the seam merely satisfies the C declaration.
     let raw = unsafe { ffi::git_packbuilder_hash(builder.as_ptr().cast_mut()) };
-    // SAFETY: a non-null result points inside `builder` for its lifetime.
-    unsafe { OidRef::from_ptr(raw.cast_mut()) }
+    // SAFETY: the result is the address of an inline field of `builder`, so it
+    // is non-null and live for `'a`.
+    unsafe { OidRef::from_ptr(raw.cast_mut()) }.expect("an inline OID is non-null")
 }
 
 /// Wraps: git_packbuilder_insert
@@ -196,6 +208,11 @@ pub fn git_packbuilder_insert_walk(
 
 /// Wraps: git_packbuilder_name
 /// Borrows the completed pack's NUL-terminated name.
+///
+/// Unlike [`git_packbuilder_hash`], this really is optional: `pack_name` is
+/// null in a freshly calloc'd builder and is only strdup'd once
+/// `git_packbuilder_write` has committed the pack.
+#[must_use]
 pub fn git_packbuilder_name<'a>(builder: GitPackbuilderRef<'a>) -> Option<&'a CStr> {
     // SAFETY: this getter only reads stable storage inside the live builder.
     let raw = unsafe { ffi::git_packbuilder_name(builder.as_ptr().cast_mut()) };
@@ -421,6 +438,81 @@ mod tests {
         assert_eq!(observed.load(Ordering::SeqCst), 15);
 
         drop(stored);
+    }
+
+    /// Holds one libgit2 initialization count for the duration of a test.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and
+            // refcounted; this guard balances the successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard, after every libgit2 owner has been dropped.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// The smallest on-disk bare repository `git_repository_open_bare`
+    /// accepts, so a packbuilder can be built without a `git_repository_init`
+    /// binding this crate does not need otherwise.
+    struct BareRepo(std::path::PathBuf);
+
+    impl BareRepo {
+        fn create(tag: &str) -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("crustify-packbuilder-{}-{tag}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(path.join("objects")).expect("a private temporary directory");
+            std::fs::create_dir_all(path.join("refs/heads")).expect("a refs directory");
+            std::fs::write(path.join("HEAD"), b"ref: refs/heads/main\n").expect("a HEAD file");
+            std::fs::write(
+                path.join("config"),
+                b"[core]\n\trepositoryformatversion = 0\n\tbare = true\n",
+            )
+            .expect("a config file");
+            Self(path)
+        }
+
+        fn c_path(&self) -> std::ffi::CString {
+            std::ffi::CString::new(self.0.to_str().expect("a UTF-8 temporary path"))
+                .expect("a path without interior NUL")
+        }
+    }
+
+    impl Drop for BareRepo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn a_fresh_builder_reports_an_inline_hash_but_no_pack_name() {
+        let _libgit2 = Libgit2Init::acquire();
+        let repo_dir = BareRepo::create("fresh");
+        let repo = crate::repository::git_repository_open_bare(&repo_dir.c_path())
+            .expect("the hand-built directory is a bare repository");
+        let builder = git_packbuilder_new(repo.as_ref()).expect("an empty packbuilder");
+
+        // `git_packbuilder_hash` returns the address of an inline field, so it
+        // is present even before a pack exists -- the "not written yet" state
+        // is the all-zero digest, not an absent borrow.
+        let hash = git_packbuilder_hash(builder.as_ref());
+        assert!(crate::oid::git_oid_is_zero(hash));
+
+        // `git_packbuilder_name`, by contrast, really is absent until
+        // `git_packbuilder_write` strdups it.
+        assert_eq!(git_packbuilder_name(builder.as_ref()), None);
+
+        assert_eq!(git_packbuilder_object_count(builder.as_ref()), 0);
+        assert_eq!(git_packbuilder_written(builder.as_ref()), 0);
     }
 
     #[test]

@@ -10633,7 +10633,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+      "note": "Function pointer invoked by write_pack for the duration of the call only; libgit2 stores it nowhere and requires it non-null."
      }
     },
     {
@@ -10756,8 +10756,8 @@
        "lifetime": "arg:pb"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+      "mutable": false,
+      "note": "Read-only despite the non-const C declaration: the body is a bare field read, so a shared borrow states the real contract."
      }
     }
    ],
@@ -10774,7 +10774,7 @@
      },
      "nullable": false,
      "mutable": false,
-     "note": "Returned borrow is tied to the storage named by its lifetime source and is not owned."
+     "note": "Returns &pb->pack_oid, the address of an inline field: never null, valid for the builder borrow. The digest stays all-zero until git_packbuilder_write copies the indexer hash into it."
     }
    }
   },
@@ -11029,8 +11029,8 @@
        "lifetime": "arg:pb"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+      "mutable": false,
+      "note": "Read-only despite the non-const C declaration: the body is a bare field read, so a shared borrow states the real contract."
      }
     }
    ],
@@ -11045,9 +11045,9 @@
      "borrowed": {
       "lifetime": "arg:pb"
      },
-     "nullable": false,
+     "nullable": true,
      "mutable": false,
-     "note": "Returned borrow is tied to the storage named by its lifetime source and is not owned."
+     "note": "Returns pb->pack_name, which git_packbuilder_new leaves NULL (git__calloc) and only git_packbuilder_write strdups, so the borrow is optional."
     }
    }
   },
@@ -11111,8 +11111,8 @@
        "lifetime": "arg:pb"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+      "mutable": false,
+      "note": "Read-only despite the non-const C declaration: the body is a bare field read, so a shared borrow states the real contract."
      }
     }
    ]
@@ -11277,8 +11277,8 @@
        "lifetime": "arg:pb"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+      "mutable": false,
+      "note": "Read-only despite the non-const C declaration: the body is a bare field read, so a shared borrow states the real contract."
      }
     }
    ]
@@ -12198,8 +12198,8 @@
        "lifetime": "arg:rebase"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+      "mutable": false,
+      "note": "Read-only despite the non-const C declaration: the body is a bare field read, so a shared borrow states the real contract."
      }
     }
    ]
@@ -12221,8 +12221,8 @@
        "lifetime": "arg:rebase"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+      "mutable": false,
+      "note": "Read-only despite the non-const C declaration: the body is a bare field read, so a shared borrow states the real contract."
      }
     }
    ]
@@ -12244,8 +12244,8 @@
        "lifetime": "arg:rebase"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+      "mutable": false,
+      "note": "Read-only despite the non-const C declaration: the body is a bare field read, so a shared borrow states the real contract."
      }
     }
    ],
@@ -12262,7 +12262,7 @@
      },
      "nullable": false,
      "mutable": false,
-     "note": "Borrowed internal result owned by the input object and valid only for that object lifetime."
+     "note": "Returns &rebase->orig_head_id, the address of an inline field: never null and valid for the rebase borrow."
     }
    }
   },
@@ -12283,8 +12283,8 @@
        "lifetime": "arg:rebase"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+      "mutable": false,
+      "note": "Read-only despite the non-const C declaration: the body is a bare field read, so a shared borrow states the real contract."
      }
     }
    ],
@@ -12301,7 +12301,7 @@
      },
      "nullable": true,
      "mutable": false,
-     "note": "Borrowed internal result owned by the input object and valid only for that object lifetime."
+     "note": "Returns rebase->orig_head_name, which stays NULL whenever head_detached is set (rebase_init and rebase_open both skip the strdup for a detached HEAD)."
     }
    }
   },

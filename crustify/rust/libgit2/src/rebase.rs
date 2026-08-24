@@ -190,6 +190,19 @@ mod tests {
     }
 
     #[test]
+    fn read_only_accessors_are_reachable_from_a_shared_handle() {
+        // Each of these C bodies is a bare field read behind a non-const
+        // declaration, so the safe surface must not demand exclusive access.
+        // Naming the function types is what pins that down: a signature taking
+        // `&mut GitRebaseMut` would not coerce here, and the returned borrows
+        // must stay tied to the shared handle they came from.
+        let _: fn(GitRebaseRef<'_>) -> Option<usize> = git_rebase_operation_current;
+        let _: fn(GitRebaseRef<'_>) -> usize = git_rebase_operation_entrycount;
+        let _: fn(GitRebaseRef<'_>) -> OidRef<'_> = git_rebase_orig_head_id;
+        let _: fn(GitRebaseRef<'_>) -> Option<&core::ffi::CStr> = git_rebase_orig_head_name;
+    }
+
+    #[test]
     fn null_rebase_seams_create_no_handle() {
         // SAFETY: each conversion accepts null and returns `None` without
         // borrowing or adopting an object.
@@ -316,49 +329,61 @@ pub fn git_rebase_abort(rebase: &mut GitRebaseMut<'_>) -> Result<(), i32> {
 
 /// Wraps: git_rebase_operation_current
 /// Returns the current operation index, or `None` before the first operation.
+///
+/// The C declaration takes a non-const rebase, but the body only reads
+/// `started` and `current`, so a shared borrow states the real contract; that
+/// is also what lets the index be read while other borrowed views are live.
 #[must_use]
-pub fn git_rebase_operation_current(rebase: &mut GitRebaseMut<'_>) -> Option<usize> {
-    // SAFETY: the exclusive handle satisfies the C signature; the call only
-    // reads rebase state and retains no pointer.
-    let current = unsafe { ffi::git_rebase_operation_current(rebase.as_mut_ptr()) };
+pub fn git_rebase_operation_current(rebase: GitRebaseRef<'_>) -> Option<usize> {
+    // SAFETY: `rebase` is a live shared handle and the call performs no write;
+    // restoring mutability at the seam only satisfies the C declaration.
+    let current = unsafe { ffi::git_rebase_operation_current(rebase.as_ptr().cast_mut()) };
     (current != usize::MAX).then_some(current)
 }
 
 /// Wraps: git_rebase_operation_entrycount
 /// Returns the number of operations in the rebase plan.
+///
+/// Read-only for the same reason as [`git_rebase_operation_current`]: the body
+/// returns `git_array_size(rebase->operations)` and writes nothing.
 #[must_use]
-pub fn git_rebase_operation_entrycount(rebase: &mut GitRebaseMut<'_>) -> usize {
-    // SAFETY: the exclusive handle satisfies the C signature; the call only
-    // reads the initialized operation-array count.
-    unsafe { ffi::git_rebase_operation_entrycount(rebase.as_mut_ptr()) }
+pub fn git_rebase_operation_entrycount(rebase: GitRebaseRef<'_>) -> usize {
+    // SAFETY: `rebase` is a live shared handle and the call performs no write;
+    // restoring mutability at the seam only satisfies the C declaration.
+    unsafe { ffi::git_rebase_operation_entrycount(rebase.as_ptr().cast_mut()) }
 }
 
 /// Wraps: git_rebase_orig_head_id
 /// Borrows the original HEAD object ID from a merge rebase.
+///
+/// The body returns `&rebase->orig_head_id`, the address of an inline field,
+/// so the result is never null and never outlives the rebase borrow it came
+/// from. The non-const C declaration performs no write.
 #[must_use]
-pub fn git_rebase_orig_head_id<'a>(rebase: &'a mut GitRebaseMut<'_>) -> OidRef<'a> {
-    // SAFETY: the exclusive reborrow keeps the rebase and its inline OID live
-    // and prevents mutation while the returned handle is usable.
-    let id = unsafe { ffi::git_rebase_orig_head_id(rebase.as_mut_ptr()) };
+pub fn git_rebase_orig_head_id<'a>(rebase: GitRebaseRef<'a>) -> OidRef<'a> {
+    // SAFETY: `rebase` is a live shared handle and the call performs no write;
+    // restoring mutability at the seam only satisfies the C declaration.
+    let id = unsafe { ffi::git_rebase_orig_head_id(rebase.as_ptr().cast_mut()) };
     // SAFETY: libgit2 returns the non-null address of the initialized inline
-    // `orig_head_id`; its lifetime is bounded by the rebase reborrow.
+    // `orig_head_id`; its lifetime is bounded by the shared rebase borrow.
     unsafe { OidRef::from_ptr(id.cast_mut()) }.expect("an inline OID is non-null")
 }
 
 /// Wraps: git_rebase_orig_head_name
 /// Borrows the optional original HEAD name from a merge rebase.
+///
+/// `orig_head_name` is a rebase-owned string that is null for a rebase started
+/// from a detached HEAD. The non-const C declaration performs no write.
 #[must_use]
-pub fn git_rebase_orig_head_name<'a>(
-    rebase: &'a mut GitRebaseMut<'_>,
-) -> Option<&'a core::ffi::CStr> {
-    // SAFETY: the exclusive reborrow keeps every rebase-owned string live and
-    // prevents mutation for the returned borrow.
-    let name = unsafe { ffi::git_rebase_orig_head_name(rebase.as_mut_ptr()) };
+pub fn git_rebase_orig_head_name<'a>(rebase: GitRebaseRef<'a>) -> Option<&'a core::ffi::CStr> {
+    // SAFETY: `rebase` is a live shared handle and the call performs no write;
+    // restoring mutability at the seam only satisfies the C declaration.
+    let name = unsafe { ffi::git_rebase_orig_head_name(rebase.as_ptr().cast_mut()) };
     if name.is_null() {
         None
     } else {
         // SAFETY: a non-null libgit2 result is NUL-terminated and owned by the
-        // rebase for the duration of this exclusive reborrow.
+        // rebase for the duration of this shared borrow.
         Some(unsafe { core::ffi::CStr::from_ptr(name) })
     }
 }

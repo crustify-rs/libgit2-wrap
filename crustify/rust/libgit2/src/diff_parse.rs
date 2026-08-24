@@ -27,8 +27,33 @@ pub fn git_diff_from_buffer(content: &[u8]) -> Result<DiffOwned, i32> {
 mod tests {
     use super::*;
 
+    /// Holds one libgit2 initialization count for the duration of a test.
+    ///
+    /// Parsing reaches libgit2's allocator and thread-local error state,
+    /// neither of which exists before `git_libgit2_init`; without this guard
+    /// the test only survives when an unrelated test happens to hold a count.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and
+            // refcounted; this guard balances the successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard, after every libgit2 owner has already been dropped.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
     #[test]
     fn parses_a_minimal_patch_into_an_owned_diff() {
+        let _libgit2 = Libgit2Init::acquire();
         let patch = b"diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new\n";
         let mut diff = git_diff_from_buffer(patch).expect("valid patch");
         assert_eq!(crate::diff::git_diff_num_deltas(diff.as_ref()), 1);
