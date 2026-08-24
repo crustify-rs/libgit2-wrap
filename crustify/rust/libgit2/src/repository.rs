@@ -750,18 +750,13 @@ impl BitOrAssign for GitRepositoryOpenFlags {
     }
 }
 
-fn adopt_repository(status: i32, raw: *mut ffi::git_repository) -> Result<GitRepositoryOwned, i32> {
+fn adopt_repository(
+    status: i32,
+    repository: Option<GitRepositoryOwned>,
+) -> Result<GitRepositoryOwned, i32> {
     if status == 0 {
-        // SAFETY: successful open functions transfer one fully constructed
-        // repository allocation to their output slot.
-        Ok(unsafe { GitRepositoryOwned::from_raw(raw) }
-            .expect("repository open succeeded without returning a repository"))
+        Ok(repository.expect("repository open succeeded without returning a repository"))
     } else {
-        if !raw.is_null() {
-            // SAFETY: a populated error output is still an owned complete
-            // repository allocation that the wrapper must release.
-            drop(unsafe { GitRepositoryOwned::from_raw(raw) });
-        }
         Err(status)
     }
 }
@@ -773,7 +768,10 @@ pub fn git_repository_open(path: &CStr) -> Result<GitRepositoryOwned, i32> {
     // SAFETY: the output slot is writable and `path` is a live C string that
     // libgit2 does not retain.
     let status = unsafe { ffi::git_repository_open(&mut output, path.as_ptr()) };
-    adopt_repository(status, output)
+    // SAFETY: `output` is null or a complete caller-owned repository produced
+    // by the open operation, including on a later error path.
+    let repository = unsafe { GitRepositoryOwned::from_raw(output) };
+    adopt_repository(status, repository)
 }
 
 /// Wraps: git_repository_open_bare
@@ -783,7 +781,10 @@ pub fn git_repository_open_bare(path: &CStr) -> Result<GitRepositoryOwned, i32> 
     // SAFETY: the output slot is writable and `path` is a live C string that
     // libgit2 does not retain.
     let status = unsafe { ffi::git_repository_open_bare(&mut output, path.as_ptr()) };
-    adopt_repository(status, output)
+    // SAFETY: `output` is null or a complete caller-owned repository produced
+    // by the open operation, including on a later error path.
+    let repository = unsafe { GitRepositoryOwned::from_raw(output) };
+    adopt_repository(status, repository)
 }
 
 /// Wraps: git_repository_open_ext
@@ -801,7 +802,10 @@ pub fn git_repository_open_ext(
     // the `FROM_ENV` mode and rejected by libgit2 otherwise.
     let status =
         unsafe { ffi::git_repository_open_ext(&mut output, start_path, flags.bits(), ceilings) };
-    adopt_repository(status, output)
+    // SAFETY: `output` is null or a complete caller-owned repository produced
+    // by the open operation, including on a later error path.
+    let repository = unsafe { GitRepositoryOwned::from_raw(output) };
+    adopt_repository(status, repository)
 }
 
 /// Wraps: git_repository_open_from_worktree
@@ -815,7 +819,10 @@ pub fn git_repository_open_from_worktree(
     let status = unsafe {
         ffi::git_repository_open_from_worktree(&mut output, worktree.as_ptr().cast_mut())
     };
-    adopt_repository(status, output)
+    // SAFETY: `output` is null or a complete caller-owned repository produced
+    // by the open operation, including on a later error path.
+    let repository = unsafe { GitRepositoryOwned::from_raw(output) };
+    adopt_repository(status, repository)
 }
 
 /// Wraps: git_repository_path
@@ -893,6 +900,11 @@ mod symbol_tests {
             GitRepositoryOpenFlags::from_bits(GitRepositoryOpenFlags::ALL.bits() << 1),
             None
         );
+    }
+
+    #[test]
+    fn failed_open_result_accepts_an_empty_typed_owner() {
+        assert!(matches!(adopt_repository(-123, None), Err(-123)));
     }
 
     #[test]
