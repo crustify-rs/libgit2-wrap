@@ -1,4 +1,7 @@
 //! Safe wrappers for libgit2 mailmap APIs.
+//!
+//! Every constructor here allocates through libgit2's configured allocator,
+//! which fails each request until `git_libgit2_init` has run.
 
 use core::ffi::CStr;
 
@@ -10,6 +13,13 @@ use crate::repository::GitRepositoryRef;
 ffibox::define_ctype!(
     /// Wraps: git_mailmap
     /// Opaque mailmap state managed by libgit2.
+    ///
+    /// A mailmap owns every entry it holds and borrows nothing once built:
+    /// `git_mailmap_add_entry` duplicates its four strings, and both
+    /// `git_mailmap_from_buffer` and `git_mailmap_from_repository` parse
+    /// borrowed input into copies. A completed mailmap therefore outlives the
+    /// buffer or repository it was built from, which is why
+    /// [`GitMailmapOwned`] carries no lifetime.
     ///
     /// Owned mailmaps are represented by [`GitMailmapOwned`] and released by
     /// `git_mailmap_free`.
@@ -24,8 +34,10 @@ ffibox::define_ctype!(
 pub type GitMailmapOwned = CBox<GitMailmap>;
 
 // SAFETY: `git_mailmap_free` is the public destructor for a fully initialized
-// `git_mailmap`. It releases the entries and the allocation, and accepts null,
-// although `CBox` always supplies a live non-null pointer.
+// `git_mailmap`. It returns on null and otherwise frees each entry and its
+// duplicated strings, disposes the `entries` vector and then frees the header,
+// leaving nothing shared with another owner. `CBox` always supplies one live
+// non-null pointer exactly once.
 ffibox::impl_dropped!(GitMailmap, ffi::git_mailmap, ffi::git_mailmap_free);
 
 #[cfg(test)]
@@ -165,20 +177,70 @@ pub fn git_mailmap_new() -> Result<GitMailmapOwned, i32> {
 mod wrapper_tests {
     use super::*;
 
+    /// Runs `body` with libgit2 initialized.
+    ///
+    /// libgit2 installs `git_failalloc_*` as its allocator until
+    /// `git_libgit2_init` runs, so every constructor in this module fails
+    /// before that call — and its failure path reports through thread-local
+    /// error state that initialization is what creates, so the failure is not
+    /// even observable as an `Err`.
+    fn with_libgit2<R>(body: impl FnOnce() -> R) -> R {
+        // SAFETY: libgit2 initialization is refcounted, and this successful
+        // call is balanced by the shutdown below.
+        let initialized = unsafe { ffi::git_libgit2_init() };
+        assert!(initialized > 0);
+        let result = body();
+        // SAFETY: balances this scope's successful initialization call.
+        let remaining = unsafe { ffi::git_libgit2_shutdown() };
+        assert!(remaining >= 0);
+        result
+    }
+
     #[test]
     fn mailmap_constructors_and_mutation_are_owned() {
-        let mut map = git_mailmap_new().unwrap();
-        git_mailmap_add_entry(
-            &mut map.as_mut(),
-            Some(c"Real Name"),
-            Some(c"real@example.com"),
-            None,
-            c"alias@example.com",
-        )
-        .unwrap();
+        with_libgit2(|| {
+            let mut map = git_mailmap_new().unwrap();
+            git_mailmap_add_entry(
+                &mut map.as_mut(),
+                Some(c"Real Name"),
+                Some(c"real@example.com"),
+                None,
+                c"alias@example.com",
+            )
+            .unwrap();
 
-        let parsed =
-            git_mailmap_from_buffer(b"Real Name <real@example.com> <alias@example.com>\n").unwrap();
-        drop(parsed);
+            let parsed =
+                git_mailmap_from_buffer(b"Real Name <real@example.com> <alias@example.com>\n")
+                    .unwrap();
+            drop(parsed);
+        });
+    }
+
+    #[test]
+    fn every_optional_identity_field_may_be_absent() {
+        with_libgit2(|| {
+            let mut map = git_mailmap_new().unwrap();
+            git_mailmap_add_entry(&mut map.as_mut(), None, None, None, c"alias@example.com")
+                .unwrap();
+        });
+    }
+
+    #[test]
+    fn an_empty_buffer_parses_into_an_owned_mailmap() {
+        with_libgit2(|| {
+            drop(git_mailmap_from_buffer(b"").unwrap());
+        });
+    }
+
+    #[test]
+    fn a_buffer_containing_a_nul_byte_is_rejected() {
+        with_libgit2(|| {
+            // `mailmap_add_buffer` refuses a buffer with an interior NUL and
+            // releases the partially built mailmap before returning.
+            assert!(
+                git_mailmap_from_buffer(b"Real Name <real@example.com> <alias@example.com>\n\0")
+                    .is_err()
+            );
+        });
     }
 }

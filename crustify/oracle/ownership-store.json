@@ -1166,6 +1166,12 @@
    ]
   },
   {
+   "name": "git_indexer_progress",
+   "defined_in": "include/git2/indexer.h",
+   "_comment_agent": "git_indexer_progress is a public POD counter block with no pointer slots: six unsigned int counters plus a size_t received_bytes. Callers own the storage (stack or embedded) and pass it by pointer; git_indexer_append and git_indexer_commit assert it non-null, read and write its fields transiently, and never retain the pointer. The git_indexer_progress_cb callback receives it as const for the duration of one call only. It has no constructor, disposer or cloner; all-zero is the valid initial value.",
+   "fields": []
+  },
+  {
    "name": "git_iterator",
    "defined_in": "src/libgit2/iterator.h",
    "_comment_agent": "git_iterator is an opaque public note-iterator alias with uniquely owned allocation. Internally, start/end are optional duplicated ranges owned by the iterator; cb and comparison callbacks borrow static function tables/functions; repo and index are optional mutable borrowed dependencies that must remain alive while variants use them.",
@@ -1316,6 +1322,24 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_mailmap",
+   "defined_in": "src/libgit2/mailmap.h",
+   "_comment_agent": "git_mailmap is an opaque heap allocation published by include/git2/mailmap.h and defined in src/libgit2/mailmap.h. Its single field is a by-value git_vector of owned git_mailmap_entry pointers; it holds no pointer slot of its own. git_mailmap_new allocates it, git_mailmap_free is its sole destructor (null-tolerant; frees every entry, disposes the vector, then frees the header), and there is no cloner. Every constructor copies its inputs: git_mailmap_add_entry duplicates the four strings, git_mailmap_from_buffer parses a counted borrowed buffer into copies, and git_mailmap_from_repository reads the workdir file, blob and config file into copies. A completed mailmap therefore borrows nothing and outlives the repository and buffers it was built from. Strings returned by git_mailmap_resolve are owned by the mailmap and live as long as it does.",
+   "fields": []
+  },
+  {
+   "name": "git_merge_analysis_t",
+   "defined_in": "include/git2/merge.h",
+   "_comment_agent": "git_merge_analysis_t is a public unsigned-int bit set, not a closed enumeration: git_merge_analysis_for_ref clears the out-slot to GIT_MERGE_ANALYSIS_NONE (0) and then ORs in NORMAL (1), UP_TO_DATE (2), FASTFORWARD (4) and UNBORN (8), producing genuine combinations such as FASTFORWARD|UNBORN and FASTFORWARD|NORMAL. NONE is the empty set and is never returned on success. It is a scalar with no fields, storage or lifecycle, and travels only through caller-owned out-parameters that C writes and never retains.",
+   "fields": []
+  },
+  {
+   "name": "git_merge_file_favor_t",
+   "defined_in": "include/git2/merge.h",
+   "_comment_agent": "git_merge_file_favor_t is a public unsigned-int enumeration of four mutually exclusive, densely numbered values: NORMAL (0), OURS (1), THEIRS (2) and UNION (3). It is not a bit set. It is a scalar with no fields, storage or lifecycle, and appears only as a by-value field of git_merge_file_options.favor and git_merge_options.file_favor, which callers own and libgit2 only reads.",
+   "fields": []
   },
   {
    "name": "git_merge_file_input",

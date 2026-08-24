@@ -740,6 +740,105 @@ mod tests {
             align_of::<ffi::git_merge_preference_t>()
         );
     }
+
+    #[test]
+    fn published_analysis_bits_match_the_c_constants() {
+        for (analysis, raw) in [
+            (
+                GitMergeAnalysis::NONE,
+                ffi::git_merge_analysis_t_GIT_MERGE_ANALYSIS_NONE,
+            ),
+            (
+                GitMergeAnalysis::NORMAL,
+                ffi::git_merge_analysis_t_GIT_MERGE_ANALYSIS_NORMAL,
+            ),
+            (
+                GitMergeAnalysis::UP_TO_DATE,
+                ffi::git_merge_analysis_t_GIT_MERGE_ANALYSIS_UP_TO_DATE,
+            ),
+            (
+                GitMergeAnalysis::FASTFORWARD,
+                ffi::git_merge_analysis_t_GIT_MERGE_ANALYSIS_FASTFORWARD,
+            ),
+            (
+                GitMergeAnalysis::UNBORN,
+                ffi::git_merge_analysis_t_GIT_MERGE_ANALYSIS_UNBORN,
+            ),
+        ] {
+            assert_eq!(analysis.bits(), raw);
+            assert_eq!(GitMergeAnalysis::from_bits(raw), Some(analysis));
+        }
+        assert_eq!(GitMergeAnalysis::default(), GitMergeAnalysis::NONE);
+        assert_eq!(!GitMergeAnalysis::NONE, GitMergeAnalysis::ALL);
+        assert!(GitMergeAnalysis::ALL.contains(GitMergeAnalysis::NONE));
+    }
+
+    #[test]
+    fn every_combination_git_merge_analysis_reports_is_accepted() {
+        // The four results `git_merge_analysis_for_ref` can OR into its
+        // cleared out-slot on success.
+        for reported in [
+            GitMergeAnalysis::UP_TO_DATE,
+            GitMergeAnalysis::NORMAL,
+            GitMergeAnalysis::FASTFORWARD | GitMergeAnalysis::NORMAL,
+            GitMergeAnalysis::FASTFORWARD | GitMergeAnalysis::UNBORN,
+        ] {
+            assert_eq!(GitMergeAnalysis::try_from(reported.bits()), Ok(reported));
+            assert!(!reported.is_empty());
+        }
+    }
+
+    #[test]
+    fn every_favor_value_round_trips_through_the_c_scalar() {
+        for (favor, raw) in [
+            (
+                MergeFileFavor::Normal,
+                ffi::git_merge_file_favor_t_GIT_MERGE_FILE_FAVOR_NORMAL,
+            ),
+            (
+                MergeFileFavor::Ours,
+                ffi::git_merge_file_favor_t_GIT_MERGE_FILE_FAVOR_OURS,
+            ),
+            (
+                MergeFileFavor::Theirs,
+                ffi::git_merge_file_favor_t_GIT_MERGE_FILE_FAVOR_THEIRS,
+            ),
+            (
+                MergeFileFavor::Union,
+                ffi::git_merge_file_favor_t_GIT_MERGE_FILE_FAVOR_UNION,
+            ),
+        ] {
+            assert_eq!(ffi::git_merge_file_favor_t::from(favor), raw);
+            assert_eq!(MergeFileFavor::try_from(raw), Ok(favor));
+        }
+        // The favors are dense and mutually exclusive, so the first
+        // unpublished value is one past the last.
+        assert_eq!(MergeFileFavor::default(), MergeFileFavor::Normal);
+        assert_eq!(
+            MergeFileFavor::try_from(ffi::git_merge_file_favor_t_GIT_MERGE_FILE_FAVOR_UNION + 1),
+            Err(ffi::git_merge_file_favor_t_GIT_MERGE_FILE_FAVOR_UNION + 1)
+        );
+    }
+
+    #[test]
+    fn a_non_null_empty_content_span_is_an_empty_view() {
+        let mut raw = ffi::git_merge_file_input {
+            version: 1,
+            ptr: b"".as_ptr().cast(),
+            size: 0,
+            path: core::ptr::null(),
+            mode: 0,
+        };
+        // SAFETY: `raw` is live initialized stack storage and this shared
+        // handle is its only borrow for the rest of the test.
+        let input = unsafe { MergeFileInputRef::from_ptr(&raw mut raw) }
+            .expect("the address of a stack value is non-null");
+        let contents = input
+            .contents()
+            .expect("a non-null span is a view, not `None`");
+        assert_eq!(contents.len(), 0);
+        assert!(input.path().is_none());
+    }
 }
 
 /// Known `git_merge_file_flag_t` bits accepted by file-level merges.
@@ -1120,6 +1219,24 @@ mod file_options_tests {
         assert_eq!(input.size(), 0);
         assert!(input.contents().is_none());
         assert!(input.path().is_none());
+    }
+
+    #[test]
+    fn file_input_initializer_rejects_an_unsupported_version() {
+        // SAFETY: libgit2 initialization is refcounted and balanced below.
+        // The version check records into thread-local error state, which only
+        // initialization creates.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        // `GIT_MERGE_FILE_INPUT_VERSION` is 1, and the header's check rejects
+        // both zero and anything above the current version.
+        // `MergeFileInput` is a C layout newtype, so match the status rather
+        // than comparing the whole `Result`.
+        assert!(matches!(git_merge_file_input_init(0), Err(-1)));
+        assert!(matches!(git_merge_file_input_init(2), Err(-1)));
+
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
 

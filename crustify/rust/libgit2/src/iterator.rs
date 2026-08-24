@@ -6,7 +6,19 @@ use crate::ffi;
 
 define_ctype!(
     /// Wraps: git_iterator
-    /// The opaque iterator underlying libgit2's public note iterator.
+    /// The uniquely owned iterator libgit2 publishes as `git_note_iterator`.
+    ///
+    /// One header and one allocation serve every variant — empty, tree,
+    /// index, workdir and filesystem. It owns only its optional duplicated
+    /// `start` and `end` range bounds and its pathlist vector; its callback
+    /// table and comparison functions point at statics, and the optional
+    /// repository and index a variant was built from are borrowed and are
+    /// **not** released with the iterator.
+    ///
+    /// Owning an iterator therefore does not keep those dependencies alive.
+    /// A wrapper that hands one out must carry that borrow itself, as
+    /// [`GitNoteIterator`](crate::notes::GitNoteIterator) does for the
+    /// repository its notes are read from.
     ///
     /// Owned pointers use [`ffibox::CBox<GitIterator>`]. Dropping an owner
     /// releases the iterator through `git_note_iterator_free`; borrowed
@@ -18,9 +30,13 @@ define_ctype!(
     ffi::git_iterator
 );
 
-// SAFETY: `git_note_iterator_free` is the public destructor for a complete
-// `git_note_iterator` (an alias of `git_iterator`) and accepts null, although
-// `CDropped` supplies one live non-null allocation exactly once.
+// SAFETY: `git_note_iterator_free` is the published destructor for a complete
+// `git_note_iterator`, a typedef of `git_iterator`. It returns on null and
+// otherwise forwards to `git_iterator_free`, the general destructor for every
+// iterator variant: it dispatches `cb->free`, disposes the pathlist, frees the
+// owned `start` and `end` ranges, then frees the header. It releases neither
+// the borrowed repository nor the borrowed index, so no other owner is
+// disturbed. `CDropped` supplies one live non-null allocation exactly once.
 impl_dropped!(GitIterator, ffi::git_iterator, ffi::git_note_iterator_free);
 
 #[cfg(test)]
