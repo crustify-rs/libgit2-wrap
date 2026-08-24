@@ -133,4 +133,17 @@ mod tests {
         let cert = unsafe { GitCertRef::from_ptr(&raw mut raw) }.unwrap();
         assert_eq!(cert.cert_type().unwrap_err().value(), invalid);
     }
+
+    #[test]
+    fn an_exclusive_certificate_handle_reaches_the_shared_getter() {
+        let mut raw = ffi::git_cert {
+            cert_type: ffi::git_cert_t_GIT_CERT_HOSTKEY_LIBSSH2,
+        };
+
+        // SAFETY: `raw` is initialized, remains live, and this exclusive
+        // handle is the only one addressing it.
+        let mut cert = unsafe { GitCertMut::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(cert.as_mut_ptr().cast_const(), cert.as_ref().as_ptr());
+        assert_eq!(cert.as_ref().cert_type(), Ok(GitCertType::HostkeyLibssh2));
+    }
 }

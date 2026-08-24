@@ -48,7 +48,7 @@ unsafe impl CCloned for GitBlob {
 
 #[cfg(test)]
 mod tests {
-    use core::mem::{align_of, size_of};
+    use core::mem::{MaybeUninit, align_of, size_of};
     use core::ptr;
 
     use ffibox::{CCell, CDropped};
@@ -81,6 +81,31 @@ mod tests {
             assert!(GitBlobMut::from_ptr(ptr::null_mut()).is_none());
             assert!(GitBlobOwned::from_raw(ptr::null_mut()).is_none());
         }
+    }
+
+    #[test]
+    fn borrowed_handles_preserve_the_blob_pointer() {
+        let storage = Box::new(MaybeUninit::<ffi::git_blob>::zeroed());
+        let raw = Box::into_raw(storage).cast::<ffi::git_blob>();
+
+        {
+            // SAFETY: `raw` addresses live, suitably aligned storage for the
+            // bindgen opaque type, and the shared handle stays in this scope.
+            let shared = unsafe { GitBlobRef::from_ptr(raw) }.unwrap();
+            assert_eq!(shared.as_ptr(), raw.cast_const());
+        }
+
+        {
+            // SAFETY: the shared handle is gone, the storage remains live, and
+            // this scope has exclusive access to it.
+            let mut exclusive = unsafe { GitBlobMut::from_ptr(raw) }.unwrap();
+            assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
+            assert_eq!(exclusive.as_mut_ptr(), raw);
+        }
+
+        // SAFETY: `raw` came from this `Box::into_raw`, no handle remains, and
+        // the cast recovers the allocation's original type.
+        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_blob>>()) });
     }
 }
 
