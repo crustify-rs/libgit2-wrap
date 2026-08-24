@@ -7,6 +7,7 @@
 ^git_commit$
 ^git_commit_dup$
 ^git_commit_free$
+^git_apply_flags_t$
 ^git_apply_location_t$
 ^git_attr_value_t$
 ^git_delta_t$
@@ -97,6 +98,7 @@
 ^git_cert$
 ^git_cert_t$
 ^git_cert_ssh_t$
+^git_cert_ssh_raw_type_t$
 ^GIT_CERT_(NONE|X509|HOSTKEY_LIBSSH2|STRARRAY)$
 ^git_checkout_strategy_t$
 ^git_filemode_t$

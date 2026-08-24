@@ -286,3 +286,101 @@ mod ssh_tests {
         assert_eq!(align_of::<GitCertSsh>(), align_of::<ffi::git_cert_ssh_t>());
     }
 }
+
+/// Wraps: git_cert_ssh_raw_type_t
+/// The algorithm used by a raw SSH host key.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum GitCertSshRawType {
+    /// The host-key algorithm is unknown.
+    Unknown = ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_UNKNOWN,
+    /// RSA.
+    Rsa = ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_RSA,
+    /// DSS.
+    Dss = ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_DSS,
+    /// ECDSA over the NIST P-256 curve.
+    Ecdsa256 = ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ECDSA_256,
+    /// ECDSA over the NIST P-384 curve.
+    Ecdsa384 = ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ECDSA_384,
+    /// ECDSA over the NIST P-521 curve.
+    Ecdsa521 = ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ECDSA_521,
+    /// Ed25519.
+    Ed25519 = ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ED25519,
+}
+
+/// A raw SSH host-key type not published by libgit2.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidGitCertSshRawType(ffi::git_cert_ssh_raw_type_t);
+
+impl InvalidGitCertSshRawType {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_cert_ssh_raw_type_t {
+        self.0
+    }
+}
+
+impl From<GitCertSshRawType> for ffi::git_cert_ssh_raw_type_t {
+    fn from(value: GitCertSshRawType) -> Self {
+        value as Self
+    }
+}
+
+impl TryFrom<ffi::git_cert_ssh_raw_type_t> for GitCertSshRawType {
+    type Error = InvalidGitCertSshRawType;
+
+    fn try_from(value: ffi::git_cert_ssh_raw_type_t) -> Result<Self, Self::Error> {
+        match value {
+            ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_UNKNOWN => Ok(Self::Unknown),
+            ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_RSA => Ok(Self::Rsa),
+            ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_DSS => Ok(Self::Dss),
+            ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ECDSA_256 => Ok(Self::Ecdsa256),
+            ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ECDSA_384 => Ok(Self::Ecdsa384),
+            ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ECDSA_521 => Ok(Self::Ecdsa521),
+            ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ED25519 => Ok(Self::Ed25519),
+            value => Err(InvalidGitCertSshRawType(value)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod ssh_raw_type_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn published_ssh_raw_types_round_trip() {
+        for raw_type in [
+            GitCertSshRawType::Unknown,
+            GitCertSshRawType::Rsa,
+            GitCertSshRawType::Dss,
+            GitCertSshRawType::Ecdsa256,
+            GitCertSshRawType::Ecdsa384,
+            GitCertSshRawType::Ecdsa521,
+            GitCertSshRawType::Ed25519,
+        ] {
+            let raw = ffi::git_cert_ssh_raw_type_t::from(raw_type);
+            assert_eq!(GitCertSshRawType::try_from(raw), Ok(raw_type));
+        }
+    }
+
+    #[test]
+    fn unknown_ssh_raw_type_is_rejected() {
+        let unknown = ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ED25519 + 1;
+        let error = GitCertSshRawType::try_from(unknown).unwrap_err();
+        assert_eq!(error.value(), unknown);
+    }
+
+    #[test]
+    fn ssh_raw_type_preserves_the_c_enum_layout() {
+        assert_eq!(
+            size_of::<GitCertSshRawType>(),
+            size_of::<ffi::git_cert_ssh_raw_type_t>()
+        );
+        assert_eq!(
+            align_of::<GitCertSshRawType>(),
+            align_of::<ffi::git_cert_ssh_raw_type_t>()
+        );
+    }
+}
