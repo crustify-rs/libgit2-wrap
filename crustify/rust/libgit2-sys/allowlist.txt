@@ -122,6 +122,7 @@
 ^git_object_t$
 ^git_odb$
 ^git_odb_free$
+^git_odb_options$
 ^git_oid$
 ^git_oid_t$
 ^git_oidarray$
@@ -294,4 +295,5 @@
 ^git_repository_commondir$
 ^git_repository_new$
 ^git_smart_service_t$
+^git_smart_subtransport$
 ^git_smart_subtransport_stream$

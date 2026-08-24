@@ -3416,6 +3416,64 @@
    ]
   },
   {
+   "name": "git_smart_subtransport",
+   "defined_in": "include/git2/sys/transport.h",
+   "_comment_agent": "All three vtable slots are installed from static functions before each concrete subtransport is published. They are required for a fully constructed object; action and close borrow the object synchronously, while free is its one final release.",
+   "fields": [
+    {
+     "name": "action",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "A fully constructed subtransport stores a required, immutable code pointer installed from a static function; every implementation assigns it before publishing the object. The callback synchronously borrows its arguments. Its stream out-pointer is separately handled by the wrapper because stateful continuations may return an existing stream while RPC actions return new storage."
+     }
+    },
+    {
+     "name": "close",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "A fully constructed subtransport stores a required, immutable code pointer installed from a static function and invokes it synchronously with a borrowed self pointer."
+     }
+    },
+    {
+     "name": "free",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "A fully constructed subtransport stores a required, immutable static destructor callback. The callback consumes the concrete allocation reached through the embedded interface header."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_smart_subtransport_stream",
    "defined_in": "include/git2/sys/transport.h",
    "_comment_agent": "A stream is a polymorphic header embedded at offset zero in a concrete allocation. Its three callbacks are required static code pointers. The stream borrows its owning subtransport, which outlives it, while ownership of the concrete stream allocation is released through the installed free callback.",

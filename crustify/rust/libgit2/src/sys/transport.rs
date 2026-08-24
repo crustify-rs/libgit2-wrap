@@ -54,6 +54,104 @@ impl TryFrom<ffi::git_smart_service_t> for GitSmartService {
 }
 
 ffibox::define_ctype!(
+    /// Wraps: git_smart_subtransport
+    /// A polymorphic transport that creates streams for Git protocol actions.
+    GitSmartSubtransport,
+    GitSmartSubtransportRef,
+    GitSmartSubtransportMut,
+    ffi::git_smart_subtransport
+);
+
+/// An exclusively owned smart subtransport.
+pub type GitSmartSubtransportOwned = CBox<GitSmartSubtransport>;
+
+/// Failure returned while dispatching a smart-subtransport callback.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GitSmartSubtransportError {
+    /// The concrete callback returned a libgit2 error code.
+    Libgit2(core::ffi::c_int),
+    /// A successful action did not publish its required stream.
+    MissingStream,
+}
+
+impl GitSmartSubtransportMut<'_> {
+    /// Field: git_smart_subtransport.action
+    /// Dispatches an action and borrows the stream it publishes.
+    ///
+    /// This method deliberately does not adopt the returned allocation:
+    /// stateless subtransports return a newly owned stream, while stateful
+    /// continuations may return the stream from the preceding action. The
+    /// borrowed result safely represents both contracts without manufacturing
+    /// a second owner. Its borrow also prevents another Rust action or close
+    /// call through this handle while the stream is in use.
+    pub fn action<'a>(
+        &'a mut self,
+        url: &core::ffi::CStr,
+        service: GitSmartService,
+    ) -> Result<GitSmartSubtransportStreamMut<'a>, GitSmartSubtransportError> {
+        let transport = self.as_mut_ptr();
+        // SAFETY: this exclusive handle addresses a live, fully constructed
+        // subtransport; raw-place projection reads its initialized callback
+        // without forming a reference to C-visible storage.
+        let action = unsafe { core::ptr::addr_of!((*transport).action).read() }
+            .expect("a valid smart subtransport has an action callback");
+        let mut stream = core::ptr::null_mut();
+        // SAFETY: `action` is installed for this live subtransport; `url` is a
+        // readable NUL-terminated string, the output slot is writable, and the
+        // callback retains neither of those two pointers.
+        let result = unsafe { action(&raw mut stream, transport, url.as_ptr(), service.into()) };
+        if result < 0 {
+            return Err(GitSmartSubtransportError::Libgit2(result));
+        }
+        // SAFETY: a successful action publishes a live stream associated with
+        // `transport`. The returned exclusive handle is bounded by this
+        // subtransport's exclusive reborrow, preventing another safe callback
+        // dispatch until it expires. Ownership is intentionally not adopted.
+        unsafe { GitSmartSubtransportStreamMut::from_ptr(stream) }
+            .ok_or(GitSmartSubtransportError::MissingStream)
+    }
+
+    /// Field: git_smart_subtransport.close
+    /// Closes the current subtransport session.
+    pub fn close(&mut self) -> Result<(), GitSmartSubtransportError> {
+        let transport = self.as_mut_ptr();
+        // SAFETY: this exclusive handle addresses a live, fully constructed
+        // subtransport; raw-place projection reads its initialized callback
+        // without forming a reference to C-visible storage.
+        let close = unsafe { core::ptr::addr_of!((*transport).close).read() }
+            .expect("a valid smart subtransport has a close callback");
+        // SAFETY: `close` is installed for this live subtransport and the
+        // exclusive handle prevents another Rust callback invocation during
+        // this synchronous call.
+        let result = unsafe { close(transport) };
+        if result < 0 {
+            Err(GitSmartSubtransportError::Libgit2(result))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+/// Field: git_smart_subtransport.free
+// SAFETY: adopting `GitSmartSubtransportOwned` requires a fully constructed
+// concrete subtransport allocation with its required destructor callback
+// installed. `CBox` invokes that callback exactly once and never touches the
+// allocation afterward.
+unsafe impl CDropped for GitSmartSubtransport {
+    unsafe fn c_drop(transport: NonNull<Self>) {
+        let transport = transport.as_ptr().cast::<ffi::git_smart_subtransport>();
+        // SAFETY: the `CDropped` contract supplies a live, fully constructed
+        // subtransport; raw-place projection reads its callback without
+        // forming a reference to C-visible storage.
+        let free = unsafe { core::ptr::addr_of!((*transport).free).read() }
+            .expect("a valid smart subtransport has a free callback");
+        // SAFETY: `free` is the concrete destructor installed for this owned
+        // subtransport and the `CDropped` contract grants its final call.
+        unsafe { free(transport) }
+    }
+}
+
+ffibox::define_ctype!(
     /// Wraps: git_smart_subtransport_stream
     /// A polymorphic stream supplied by a smart subtransport.
     ///
@@ -80,19 +178,20 @@ pub enum GitSmartSubtransportStreamError {
     InvalidReadCount(usize),
 }
 
-impl GitSmartSubtransportStreamRef<'_> {
+impl<'a> GitSmartSubtransportStreamRef<'a> {
     /// Field: git_smart_subtransport_stream.subtransport
-    /// Returns whether the stream has its required borrowed subtransport link.
-    ///
-    /// The subtransport type is an explicitly cut higher-layer dependency and
-    /// has not yet been wrapped, so this does not expose its temporary raw
-    /// pointer.
+    /// Borrows the subtransport that owns this stream's session.
     #[must_use]
-    pub fn has_subtransport(&self) -> bool {
+    pub fn subtransport(&self) -> GitSmartSubtransportRef<'a> {
         let stream = self.as_ptr();
         // SAFETY: `stream` comes from this live shared handle; raw-place
         // projection reads the initialized pointer without dereferencing it.
-        !unsafe { core::ptr::addr_of!((*stream).subtransport).read() }.is_null()
+        let subtransport = unsafe { core::ptr::addr_of!((*stream).subtransport).read() };
+        // SAFETY: every fully constructed stream stores its non-null
+        // originating subtransport, which remains live until after the stream
+        // is destroyed. The shared view cannot dispatch mutating callbacks.
+        unsafe { GitSmartSubtransportRef::from_ptr(subtransport) }
+            .expect("a valid smart-subtransport stream has an owner")
     }
 }
 
@@ -105,12 +204,12 @@ impl GitSmartSubtransportStreamMut<'_> {
     /// `subtransport` must designate the subtransport that installed this
     /// stream's callbacks. It must remain live at a stable address until the
     /// stream is destroyed and must not be mutably accessed concurrently.
-    pub unsafe fn set_subtransport(&mut self, subtransport: NonNull<ffi::git_smart_subtransport>) {
+    pub unsafe fn set_subtransport(&mut self, mut subtransport: GitSmartSubtransportMut<'_>) {
         let stream = self.as_mut_ptr();
         // SAFETY: the caller supplies the unexpressible referent lifetime and
         // identity guarantees; this exclusive handle permits the field write.
         unsafe {
-            core::ptr::addr_of_mut!((*stream).subtransport).write(subtransport.as_ptr());
+            core::ptr::addr_of_mut!((*stream).subtransport).write(subtransport.as_mut_ptr());
         }
     }
 
@@ -197,7 +296,7 @@ unsafe impl CDropped for GitSmartSubtransportStream {
 
 #[cfg(test)]
 mod tests {
-    use core::mem::{MaybeUninit, align_of, size_of};
+    use core::mem::{align_of, size_of};
     use core::sync::atomic::{AtomicUsize, Ordering};
 
     use ffibox::CCell;
@@ -207,6 +306,10 @@ mod tests {
     static WRITTEN_LEN: AtomicUsize = AtomicUsize::new(0);
     static FIRST_BYTE: AtomicUsize = AtomicUsize::new(0);
     static FREES: AtomicUsize = AtomicUsize::new(0);
+    static ACTIONS: AtomicUsize = AtomicUsize::new(0);
+    static CLOSES: AtomicUsize = AtomicUsize::new(0);
+    static SUBTRANSPORT_FREES: AtomicUsize = AtomicUsize::new(0);
+    static LAST_SERVICE: AtomicUsize = AtomicUsize::new(0);
 
     unsafe extern "C" fn test_read(
         _stream: *mut ffi::git_smart_subtransport_stream,
@@ -262,6 +365,78 @@ mod tests {
     }
 
     unsafe extern "C" fn no_free(_stream: *mut ffi::git_smart_subtransport_stream) {}
+
+    unsafe extern "C" fn action_stream_free(stream: *mut ffi::git_smart_subtransport_stream) {
+        // SAFETY: `test_action` transfers one fresh `Box` allocation and this
+        // callback performs its only final release.
+        drop(unsafe { Box::from_raw(stream) });
+    }
+
+    unsafe extern "C" fn test_action(
+        out: *mut *mut ffi::git_smart_subtransport_stream,
+        transport: *mut ffi::git_smart_subtransport,
+        url: *const core::ffi::c_char,
+        service: ffi::git_smart_service_t,
+    ) -> core::ffi::c_int {
+        // SAFETY: the callback contract supplies a readable NUL-terminated
+        // URL for the duration of this call.
+        assert_eq!(unsafe { core::ffi::CStr::from_ptr(url) }, c"git://example");
+        ACTIONS.fetch_add(1, Ordering::SeqCst);
+        LAST_SERVICE.store(service as usize, Ordering::SeqCst);
+        let stream = Box::into_raw(Box::new(ffi::git_smart_subtransport_stream {
+            subtransport: transport,
+            read: Some(test_read),
+            write: Some(test_write),
+            free: Some(action_stream_free),
+        }));
+        // SAFETY: the callback contract supplies a writable output slot and
+        // ownership of this new stream allocation passes to its caller.
+        unsafe { out.write(stream) };
+        0
+    }
+
+    unsafe extern "C" fn missing_stream_action(
+        out: *mut *mut ffi::git_smart_subtransport_stream,
+        _transport: *mut ffi::git_smart_subtransport,
+        _url: *const core::ffi::c_char,
+        _service: ffi::git_smart_service_t,
+    ) -> core::ffi::c_int {
+        // SAFETY: the callback contract supplies a writable output slot; null
+        // deliberately violates the success contract for wrapper validation.
+        unsafe { out.write(core::ptr::null_mut()) };
+        0
+    }
+
+    unsafe extern "C" fn test_close(
+        _transport: *mut ffi::git_smart_subtransport,
+    ) -> core::ffi::c_int {
+        CLOSES.fetch_add(1, Ordering::SeqCst);
+        0
+    }
+
+    unsafe extern "C" fn no_subtransport_free(_transport: *mut ffi::git_smart_subtransport) {}
+
+    unsafe extern "C" fn test_subtransport_free(transport: *mut ffi::git_smart_subtransport) {
+        SUBTRANSPORT_FREES.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: the lifecycle test transfers one `Box` allocation to the
+        // owning subtransport and this callback is its only final release.
+        drop(unsafe { Box::from_raw(transport) });
+    }
+
+    fn raw_subtransport(
+        action: unsafe extern "C" fn(
+            *mut *mut ffi::git_smart_subtransport_stream,
+            *mut ffi::git_smart_subtransport,
+            *const core::ffi::c_char,
+            ffi::git_smart_service_t,
+        ) -> core::ffi::c_int,
+    ) -> ffi::git_smart_subtransport {
+        ffi::git_smart_subtransport {
+            action: Some(action),
+            close: Some(test_close),
+            free: Some(no_subtransport_free),
+        }
+    }
 
     fn raw_stream(
         read: unsafe extern "C" fn(
@@ -367,15 +542,19 @@ mod tests {
     #[test]
     fn subtransport_link_can_be_initialized_without_becoming_publicly_raw() {
         let mut raw = raw_stream(test_read);
-        let mut subtransport = MaybeUninit::<ffi::git_smart_subtransport>::zeroed();
+        let mut subtransport = raw_subtransport(test_action);
         // SAFETY: `raw` remains live and is exclusively borrowed for this
         // scope; `subtransport` also remains live at a stable address.
         let mut stream = unsafe { GitSmartSubtransportStreamMut::from_ptr(&raw mut raw) }.unwrap();
-        assert!(!stream.as_ref().has_subtransport());
+        // SAFETY: `subtransport` remains live and this is its only active
+        // handle while it is transferred into the stream's lifetime contract.
+        let subtransport =
+            unsafe { GitSmartSubtransportMut::from_ptr(&raw mut subtransport) }.unwrap();
         // SAFETY: the referenced storage remains live and stable through the
-        // handle, and no operation dereferences it in this test.
-        unsafe { stream.set_subtransport(NonNull::new(subtransport.as_mut_ptr()).unwrap()) };
-        assert!(stream.as_ref().has_subtransport());
+        // stream handle, and no competing access occurs in this test.
+        unsafe { stream.set_subtransport(subtransport) };
+        let owner = stream.as_ref().subtransport();
+        assert_eq!(owner.as_ptr(), raw.subtransport.cast_const());
     }
 
     #[test]
@@ -392,5 +571,90 @@ mod tests {
         let stream = unsafe { GitSmartSubtransportStreamOwned::from_raw(raw) }.unwrap();
         drop(stream);
         assert_eq!(FREES.load(Ordering::SeqCst), before + 1);
+    }
+
+    #[test]
+    fn subtransport_wrapper_matches_the_c_layout() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<GitSmartSubtransport>();
+        assert_dropped::<GitSmartSubtransport>();
+        assert_eq!(
+            size_of::<GitSmartSubtransport>(),
+            size_of::<ffi::git_smart_subtransport>()
+        );
+        assert_eq!(
+            align_of::<GitSmartSubtransport>(),
+            align_of::<ffi::git_smart_subtransport>()
+        );
+        assert_eq!(
+            size_of::<GitSmartSubtransportRef<'_>>(),
+            size_of::<*const ffi::git_smart_subtransport>()
+        );
+        assert_eq!(
+            size_of::<GitSmartSubtransportMut<'_>>(),
+            size_of::<*mut ffi::git_smart_subtransport>()
+        );
+        assert_eq!(
+            size_of::<Option<GitSmartSubtransportOwned>>(),
+            size_of::<*mut ffi::git_smart_subtransport>()
+        );
+    }
+
+    #[test]
+    fn subtransport_dispatches_action_and_close_callbacks() {
+        let before_actions = ACTIONS.load(Ordering::SeqCst);
+        let before_closes = CLOSES.load(Ordering::SeqCst);
+        let mut raw = raw_subtransport(test_action);
+        // SAFETY: `raw` remains live and this handle is its only access path
+        // for the scope; all required callbacks are installed.
+        let mut subtransport = unsafe { GitSmartSubtransportMut::from_ptr(&raw mut raw) }.unwrap();
+
+        let stream_ptr = {
+            let mut stream = subtransport
+                .action(c"git://example", GitSmartService::UploadPackLs)
+                .unwrap();
+            assert_eq!(stream.write(b"request"), Ok(()));
+            stream.as_mut_ptr()
+        };
+        // SAFETY: `test_action` returned a fresh allocation and no handle to it
+        // remains; its installed destructor performs the one final release.
+        unsafe { action_stream_free(stream_ptr) };
+
+        assert_eq!(ACTIONS.load(Ordering::SeqCst), before_actions + 1);
+        assert_eq!(
+            LAST_SERVICE.load(Ordering::SeqCst),
+            ffi::git_smart_service_t_GIT_SERVICE_UPLOADPACK_LS as usize
+        );
+        assert_eq!(subtransport.close(), Ok(()));
+        assert_eq!(CLOSES.load(Ordering::SeqCst), before_closes + 1);
+    }
+
+    #[test]
+    fn subtransport_rejects_a_missing_success_stream() {
+        let mut raw = raw_subtransport(missing_stream_action);
+        // SAFETY: `raw` remains live and exclusively borrowed, with compatible
+        // callbacks installed; the action's bad output is validated safely.
+        let mut subtransport = unsafe { GitSmartSubtransportMut::from_ptr(&raw mut raw) }.unwrap();
+        assert!(matches!(
+            subtransport.action(c"git://example", GitSmartService::UploadPackLs),
+            Err(GitSmartSubtransportError::MissingStream)
+        ));
+    }
+
+    #[test]
+    fn owned_subtransport_invokes_its_concrete_destructor_once() {
+        let before = SUBTRANSPORT_FREES.load(Ordering::SeqCst);
+        let raw = Box::into_raw(Box::new(ffi::git_smart_subtransport {
+            action: Some(test_action),
+            close: Some(test_close),
+            free: Some(test_subtransport_free),
+        }));
+        // SAFETY: `raw` is a unique, fully initialized heap allocation whose
+        // installed callback reclaims that exact allocation.
+        let subtransport = unsafe { GitSmartSubtransportOwned::from_raw(raw) }.unwrap();
+        drop(subtransport);
+        assert_eq!(SUBTRANSPORT_FREES.load(Ordering::SeqCst), before + 1);
     }
 }
