@@ -1103,6 +1103,50 @@
    ]
   },
   {
+   "name": "git_fetch_negotiation",
+   "defined_in": "include/git2/sys/transport.h",
+   "_comment_agent": "git_fetch_negotiation has no whole-value destructor. refs is a borrowed pointer container; shallow_roots is a temporary owned counted buffer whose enclosing fetch path explicitly releases it.",
+   "fields": [
+    {
+     "name": "refs",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "other"
+        }
+       }
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed pointer array over remote->refs.contents for the synchronous negotiate_fetch callback; each const remote head is also borrowed from the remote's refs vector. NULL is valid when refs_len is zero."
+     }
+    },
+    {
+     "name": "shallow_roots",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Counted git_oid allocation installed by git_repository__shallow_roots, owned temporarily by the negotiation state, read synchronously by the transport and freed with git__free after negotiate_fetch returns; NULL is valid at length zero."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_index",
    "defined_in": "src/libgit2/index.h",
    "_comment_agent": "git_index is publicly opaque but internally refcounted. tree points into the sibling tree_pool arena; comparator slots always borrow static functions; index_file_path owns an optional strdup allocation.",
@@ -1326,6 +1370,64 @@
       "nullable": true,
       "mutable": true,
       "note": "Opaque optional application payload copied from the options and passed to progress_cb without transfer or release; the callback may mutate the pointee and the caller must keep it alive."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_indexer_options",
+   "defined_in": "include/git2/indexer.h",
+   "_comment_agent": "git_indexer_options owns no pointer field. git_indexer_new copies odb and the callback pair without retaining or releasing them, so their external lifetimes extend through the constructed indexer.",
+   "fields": [
+    {
+     "name": "odb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional borrowed object database. indexer_new copies the pointer without up-ref and thin-pack repair uses it after options return, so it must outlive every indexer built from these options."
+     }
+    },
+    {
+     "name": "progress_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied into the indexer and invoked later; code has static lifetime while its paired payload is externally borrowed."
+     }
+    },
+    {
+     "name": "progress_cb_payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional type-erased callback state copied into the indexer and passed back on later progress notifications; the callback may mutate it."
      }
     }
    ]

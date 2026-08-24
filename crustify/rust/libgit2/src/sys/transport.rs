@@ -658,3 +658,275 @@ mod tests {
         assert_eq!(SUBTRANSPORT_FREES.load(Ordering::SeqCst), before + 1);
     }
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_fetch_negotiation
+    /// Layout-compatible state passed to a fetch-negotiation callback.
+    GitFetchNegotiation,
+    GitFetchNegotiationRef,
+    GitFetchNegotiationMut,
+    ffi::git_fetch_negotiation
+);
+
+/// A borrowed pointer array of advertised remote heads.
+#[derive(Clone, Copy)]
+pub struct GitFetchNegotiationRefs<'a> {
+    ptr: *const *const ffi::git_remote_head,
+    len: usize,
+    _borrow: core::marker::PhantomData<crate::util::net::RemoteHeadRef<'a>>,
+}
+
+impl<'a> GitFetchNegotiationRefs<'a> {
+    /// Returns the number of pointer slots.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns whether there are no pointer slots.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Borrows advertised head `index`, or `None` for an out-of-range or null pointer.
+    #[must_use]
+    pub fn get(&self, index: usize) -> Option<crate::util::net::RemoteHeadRef<'a>> {
+        if index >= self.len || self.ptr.is_null() {
+            return None;
+        }
+        // SAFETY: `index < len`; a valid negotiation supplies that many
+        // initialized pointer slots. Reading one forms no reference.
+        let head = unsafe { self.ptr.add(index).read() };
+        // SAFETY: a non-null advertised head remains live with the remote for
+        // the lifetime of the negotiation view.
+        unsafe { crate::util::net::RemoteHeadRef::from_ptr(head.cast_mut()) }
+    }
+
+    /// Iterates over the non-null advertised heads.
+    pub fn iter(&self) -> impl Iterator<Item = crate::util::net::RemoteHeadRef<'a>> + use<'a> {
+        let view = *self;
+        (0..view.len).filter_map(move |index| view.get(index))
+    }
+}
+
+impl<'a> GitFetchNegotiationRef<'a> {
+    /// Field: git_fetch_negotiation.depth
+    /// Returns the requested shallow-fetch depth, or zero for full history.
+    #[must_use]
+    pub fn depth(&self) -> i32 {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).depth).read() }
+    }
+
+    /// Field: git_fetch_negotiation.refs_len
+    /// Returns the number of advertised-head pointer slots.
+    #[must_use]
+    pub fn refs_len(&self) -> usize {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).refs_len).read() }
+    }
+
+    /// Field: git_fetch_negotiation.refs
+    /// Borrows the counted advertised-head pointer array.
+    #[must_use]
+    pub fn refs(&self) -> GitFetchNegotiationRefs<'a> {
+        let p = self.as_ptr();
+        // SAFETY: both initialized fields are copied by raw-place projection.
+        let (ptr, len) = unsafe {
+            (
+                core::ptr::addr_of!((*p).refs).read(),
+                core::ptr::addr_of!((*p).refs_len).read(),
+            )
+        };
+        GitFetchNegotiationRefs {
+            ptr,
+            len,
+            _borrow: core::marker::PhantomData,
+        }
+    }
+
+    /// Field: git_fetch_negotiation.shallow_roots_len
+    /// Returns the number of shallow-root object IDs.
+    #[must_use]
+    pub fn shallow_roots_len(&self) -> usize {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).shallow_roots_len).read() }
+    }
+
+    /// Field: git_fetch_negotiation.shallow_roots
+    /// Borrows the owned shallow-root run without exposing its pointer.
+    #[must_use]
+    pub fn shallow_roots(&self) -> Option<ffibox::CSlice<'a, crate::oid::Oid>> {
+        let p = self.as_ptr();
+        // SAFETY: both initialized fields are copied by raw-place projection.
+        let (roots, len) = unsafe {
+            (
+                core::ptr::addr_of!((*p).shallow_roots).read(),
+                core::ptr::addr_of!((*p).shallow_roots_len).read(),
+            )
+        };
+        let roots = NonNull::new(roots.cast::<crate::oid::Oid>())?;
+        // SAFETY: a valid non-null run contains `len` initialized OIDs and
+        // remains live for this handle's lifetime.
+        Some(unsafe { ffibox::CSlice::from_raw_parts(roots, len) })
+    }
+}
+
+impl GitFetchNegotiationMut<'_> {
+    /// Sets the requested shallow-fetch depth.
+    pub fn set_depth(&mut self, depth: i32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).depth).write(depth) }
+    }
+
+    /// Stores a borrowed pointer array of advertised remote heads.
+    ///
+    /// # Safety
+    /// The pointer array and every head must remain live and immutable until
+    /// no C code can inspect this negotiation.
+    pub unsafe fn set_refs<'a>(&mut self, refs: &'a [crate::util::net::RemoteHeadRef<'a>]) {
+        let p = self.as_mut_ptr();
+        // SAFETY: caller supplies the referent lifetime; transparent handles
+        // have the same one-pointer representation as the C array elements.
+        unsafe {
+            core::ptr::addr_of_mut!((*p).refs).write(refs.as_ptr().cast());
+            core::ptr::addr_of_mut!((*p).refs_len).write(refs.len());
+        }
+    }
+
+    /// Borrows the shallow-root run exclusively.
+    #[must_use]
+    pub fn shallow_roots_mut(&mut self) -> Option<ffibox::CSliceMut<'_, crate::oid::Oid>> {
+        let p = self.as_mut_ptr();
+        // SAFETY: both initialized fields are copied while access is exclusive.
+        let (roots, len) = unsafe {
+            (
+                core::ptr::addr_of!((*p).shallow_roots).read(),
+                core::ptr::addr_of!((*p).shallow_roots_len).read(),
+            )
+        };
+        let roots = NonNull::new(roots.cast::<crate::oid::Oid>())?;
+        // SAFETY: this handle excludes other Rust views and the valid run has
+        // `len` initialized elements.
+        Some(unsafe { ffibox::CSliceMut::from_raw_parts(roots, len) })
+    }
+
+    /// Detaches and returns the owned shallow-root allocation.
+    #[must_use]
+    pub fn take_shallow_roots(&mut self) -> Option<crate::oidarray::OidArrayIds> {
+        let p = self.as_mut_ptr();
+        // SAFETY: exclusive access permits moving out the pair and restoring
+        // the canonical empty state immediately.
+        let (roots, len) = unsafe {
+            let roots = core::ptr::addr_of!((*p).shallow_roots).read();
+            let len = core::ptr::addr_of!((*p).shallow_roots_len).read();
+            core::ptr::addr_of_mut!((*p).shallow_roots).write(core::ptr::null_mut());
+            core::ptr::addr_of_mut!((*p).shallow_roots_len).write(0);
+            (roots, len)
+        };
+        // SAFETY: the field transfers its unique configured-allocator run.
+        unsafe { crate::oidarray::OidArrayIds::from_raw_parts(roots.cast(), len) }
+    }
+
+    /// Replaces the owned shallow-root allocation, returning the old one.
+    pub fn replace_shallow_roots(
+        &mut self,
+        roots: Option<crate::oidarray::OidArrayIds>,
+    ) -> Option<crate::oidarray::OidArrayIds> {
+        let old = self.take_shallow_roots();
+        let (roots, len) = roots.map_or((core::ptr::null_mut(), 0), |v| v.into_raw_parts());
+        let p = self.as_mut_ptr();
+        // SAFETY: the new owner was consumed and this handle has exclusive access.
+        unsafe {
+            core::ptr::addr_of_mut!((*p).shallow_roots).write(roots.cast());
+            core::ptr::addr_of_mut!((*p).shallow_roots_len).write(len);
+        }
+        old
+    }
+}
+
+#[cfg(test)]
+mod fetch_negotiation_tests {
+    use super::*;
+    use core::mem::{align_of, size_of};
+    use ffibox::CCell;
+
+    #[test]
+    fn wrapper_and_handles_match_the_c_seam() {
+        fn assert_cell<T: CCell>() {}
+        assert_cell::<GitFetchNegotiation>();
+        assert_eq!(
+            size_of::<GitFetchNegotiation>(),
+            size_of::<ffi::git_fetch_negotiation>()
+        );
+        assert_eq!(
+            align_of::<GitFetchNegotiation>(),
+            align_of::<ffi::git_fetch_negotiation>()
+        );
+        assert_eq!(
+            size_of::<GitFetchNegotiationRef<'_>>(),
+            size_of::<*const ffi::git_fetch_negotiation>()
+        );
+        assert_eq!(
+            size_of::<GitFetchNegotiationMut<'_>>(),
+            size_of::<*mut ffi::git_fetch_negotiation>()
+        );
+    }
+
+    #[test]
+    fn getters_preserve_counts_and_typed_elements() {
+        let mut head = crate::util::net::RemoteHead::zeroed();
+        // SAFETY: the initialized head remains live throughout the test.
+        let head = unsafe {
+            crate::util::net::RemoteHeadRef::from_ptr(core::ptr::addr_of_mut!(head).cast()).unwrap()
+        };
+        let heads = [head];
+        let mut roots = [crate::oid::Oid::zeroed()];
+        let mut raw = ffi::git_fetch_negotiation {
+            refs: heads.as_ptr().cast(),
+            refs_len: 1,
+            shallow_roots: roots.as_mut_ptr().cast(),
+            shallow_roots_len: 1,
+            depth: 3,
+        };
+        // SAFETY: raw and all its borrowed referents remain live and immutable.
+        let view = unsafe { GitFetchNegotiationRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(view.depth(), 3);
+        assert_eq!(view.refs_len(), 1);
+        assert_eq!(view.refs().get(0).unwrap().as_ptr(), head.as_ptr());
+        assert_eq!(view.shallow_roots_len(), 1);
+        assert_eq!(view.shallow_roots().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn owned_shallow_roots_detach_into_a_single_raii_owner() {
+        // SAFETY: process-global initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        // SAFETY: libgit2 is initialized, so its configured allocator is live.
+        let roots =
+            unsafe { ffi::crustify_git__malloc(size_of::<ffi::git_oid>()) }.cast::<ffi::git_oid>();
+        assert!(!roots.is_null());
+        // SAFETY: the fresh allocation has room for one object ID; zero is a
+        // valid initialized C object-ID representation.
+        unsafe { roots.write(core::mem::zeroed()) };
+        let mut raw = ffi::git_fetch_negotiation {
+            refs: core::ptr::null(),
+            refs_len: 0,
+            shallow_roots: roots,
+            shallow_roots_len: 1,
+            depth: 0,
+        };
+        // SAFETY: `raw` is initialized, live, and exclusively accessed here.
+        let mut negotiation = unsafe { GitFetchNegotiationMut::from_ptr(&raw mut raw) }.unwrap();
+        let owned = negotiation
+            .take_shallow_roots()
+            .expect("the non-null allocation transfers");
+        assert_eq!(owned.count(), 1);
+        assert!(negotiation.as_ref().shallow_roots().is_none());
+        assert_eq!(negotiation.as_ref().shallow_roots_len(), 0);
+        drop(owned);
+        // SAFETY: balances this test's successful initialization.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+}

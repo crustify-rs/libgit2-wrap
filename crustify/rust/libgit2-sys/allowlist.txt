@@ -93,6 +93,7 @@
 ^git_index_time$
 ^git_index_entry$
 ^git_indexer_progress$
+^git_indexer_options$
 ^git_config$
 ^git_config_free$
 ^git_config_new$
@@ -299,6 +300,7 @@
 ^git_repository_commondir$
 ^git_repository_new$
 ^git_smart_service_t$
+^git_fetch_negotiation$
 ^git_smart_subtransport$
 ^git_smart_subtransport_stream$
 ^git_submodule_(set_update|set_url|status|sync|update_strategy|url|wd_id)$
