@@ -3031,6 +3031,58 @@
    ]
   },
   {
+   "name": "git_tag",
+   "defined_in": "src/libgit2/tag.h",
+   "_comment_agent": "The public type is opaque. Internal parsing allocates and initializes its three pointer fields; git_tag__free releases each before the tag storage.",
+   "fields": [
+    {
+     "name": "message",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optionally owns a NUL-terminated message allocation; parsing initializes its bytes and git_tag__free releases it."
+     }
+    },
+    {
+     "name": "tag_name",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "Owns the mandatory NUL-terminated tag name allocation; parsing initializes its bytes and successful tags always have one."
+     }
+    },
+    {
+     "name": "tagger",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optionally owns one heap git_signature, initialized during parsing and released by git_signature_free."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_transaction",
    "defined_in": "src/libgit2/transaction.c",
    "_comment_agent": "The public API keeps transactions opaque. Reference transactions borrow their repository, own one refdb count, and keep lock/pool state inline; config transactions borrow the config and own the type-erased backend-instance count released indirectly by git_config_unlock. The variant discriminator makes the inactive pointer fields null.",
@@ -3097,6 +3149,43 @@
       "nullable": true,
       "mutable": true,
       "note": "Borrowed repository for the reference-transaction variant; the caller must keep it alive. Null for config transactions."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_tree",
+   "defined_in": "src/libgit2/tree.h",
+   "_comment_agent": "The public type is opaque. Its internal ODB reference and entry array are owned by the tree and released by git_tree__free.",
+   "fields": [
+    {
+     "name": "entries.ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owns the contiguous tree-entry array governed by entries.size/asize; construction fills and sorts it, and git_array_clear releases it. Empty or unallocated arrays may be null."
+     }
+    },
+    {
+     "name": "odb_obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Owns one ODB-object reference when parsed from an ODB object; raw-parsed trees leave it null. git_tree__free releases the reference."
      }
     }
    ]
@@ -5765,6 +5854,85 @@
    ]
   },
   {
+   "name": "git_tag_dup",
+   "defined_in": "src/libgit2/object_api.c",
+   "lifetime": {
+    "for": "obj",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": false,
+     "upref": true
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed live tag whose underlying git_object cache refcount is incremented; the original remains valid."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed non-null output slot receives a newly owned reference to the same tag."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_tag_free",
+   "defined_in": "src/libgit2/object_api.c",
+   "lifetime": {
+    "for": "obj",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one reference to a complete tag through git_object_free; null is accepted as a no-op. The allocation is released when the shared cache refcount reaches zero."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_tag_name_is_valid",
    "defined_in": "src/libgit2/tag.c",
    "ptr_args": [
@@ -5872,6 +6040,58 @@
    ]
   },
   {
+   "name": "git_tree_dup",
+   "defined_in": "src/libgit2/object_api.c",
+   "lifetime": {
+    "for": "obj",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": false,
+     "upref": true
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed live tree whose underlying git_object cache refcount is incremented; the original remains valid."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed non-null output slot receives a newly owned reference to the same tree."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_tree_entry_dup",
    "defined_in": "src/libgit2/tree.c",
    "lifetime": {
@@ -5946,6 +6166,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a user-owned self-contained tree entry and accepts NULL as a no-op; tree-owned borrowed entries must not be passed here."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_tree_free",
+   "defined_in": "src/libgit2/object_api.c",
+   "lifetime": {
+    "for": "obj",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one reference to a complete tree through git_object_free; null is accepted as a no-op. The allocation is released when the shared cache refcount reaches zero."
      }
     }
    ]

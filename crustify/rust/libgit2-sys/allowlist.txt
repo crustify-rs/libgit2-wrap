@@ -179,6 +179,12 @@
 ^git_reference_normalize_name$
 ^git_remote_name_is_valid$
 ^git_tag_name_is_valid$
+^git_tag$
+^git_tag_dup$
+^git_tag_free$
+^git_tree$
+^git_tree_dup$
+^git_tree_free$
 ^git_transport_message_cb$
 ^git_feature_t$
 ^git_libgit2_opt_t$

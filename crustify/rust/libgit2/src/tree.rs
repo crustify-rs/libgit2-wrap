@@ -6,6 +6,47 @@ use ffibox::{CBox, CCloned, define_ctype, impl_dropped};
 
 use crate::ffi;
 
+define_ctype!(
+    /// Wraps: git_tree
+    /// An opaque, reference-counted Git tree.
+    ///
+    /// Owned handles release one cache reference with `git_tree_free`, while
+    /// cloning acquires another reference with `git_tree_dup`. Repository-backed
+    /// trees borrow their repository, which must remain alive while they are used.
+    GitTree,
+    GitTreeRef,
+    GitTreeMut,
+    ffi::git_tree
+);
+
+/// An owned reference to a Git tree.
+pub type GitTreeOwned = CBox<GitTree>;
+
+// SAFETY: `git_tree_free` consumes one reference to a complete tree and
+// releases the allocation only when its underlying object cache refcount
+// reaches zero. `GitTree` is transparent over the corresponding bindgen type.
+impl_dropped!(GitTree, ffi::git_tree, ffi::git_tree_free);
+
+// SAFETY: `git_tree_dup` increments the live tree's underlying object refcount
+// and writes the same pointer to its non-null output slot. The new reference is
+// independently released by the `CDropped` implementation above.
+unsafe impl CCloned for GitTree {
+    unsafe fn c_clone(obj: NonNull<Self>) -> Option<NonNull<Self>> {
+        let mut duplicate = core::ptr::null_mut();
+        // SAFETY: the `CCloned` caller supplies a live tree; `duplicate` is a
+        // valid output slot, and the wrapper is layout-compatible with
+        // `ffi::git_tree`.
+        let result = unsafe {
+            ffi::git_tree_dup(
+                core::ptr::addr_of_mut!(duplicate),
+                obj.as_ptr().cast::<ffi::git_tree>(),
+            )
+        };
+        debug_assert_eq!(result, 0);
+        NonNull::new(duplicate.cast::<Self>())
+    }
+}
+
 /// Wraps: git_treewalk_mode
 /// Selects whether a tree walk visits each entry before or after its children.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -158,10 +199,39 @@ impl_dropped!(TreeBuilder, ffi::git_treebuilder, ffi::git_treebuilder_free);
 #[cfg(test)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
+    use core::ptr;
 
-    use ffibox::{CCloned, CDropped};
+    use ffibox::{CCell, CCloned, CDropped};
 
     use super::*;
+
+    #[test]
+    fn opaque_tree_preserves_layout_and_refcount_contracts() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_refcounted<T: CDropped + CCloned>() {}
+
+        assert_cell::<GitTree>();
+        assert_refcounted::<GitTree>();
+        assert_eq!(size_of::<GitTree>(), size_of::<ffi::git_tree>());
+        assert_eq!(align_of::<GitTree>(), align_of::<ffi::git_tree>());
+        assert_eq!(
+            size_of::<GitTreeRef<'_>>(),
+            size_of::<*const ffi::git_tree>()
+        );
+        assert_eq!(size_of::<GitTreeMut<'_>>(), size_of::<*mut ffi::git_tree>());
+        assert_eq!(size_of::<GitTreeOwned>(), size_of::<*mut ffi::git_tree>());
+    }
+
+    #[test]
+    fn null_tree_seams_create_no_handle() {
+        // SAFETY: these conversions explicitly accept null and return `None`
+        // without borrowing or adopting an object.
+        unsafe {
+            assert!(GitTreeRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitTreeMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitTreeOwned::from_raw(ptr::null_mut()).is_none());
+        }
+    }
 
     #[test]
     fn tree_update_types_round_trip_through_the_c_type() {
