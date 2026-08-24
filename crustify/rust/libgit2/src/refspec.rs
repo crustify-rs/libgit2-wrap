@@ -62,6 +62,64 @@ mod tests {
         );
     }
 
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and refcounted;
+            // `Drop` below balances this successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard. Refspec owners are dropped before the guard.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    #[test]
+    fn parsed_refspec_owns_its_strings_until_drop() {
+        let _init = Libgit2Init::acquire();
+        let spec = git_refspec_parse(c"+refs/heads/*:refs/remotes/origin/*", true)
+            .expect("a well-formed fetch refspec parses");
+
+        let shared = spec.as_ref();
+        assert_eq!(
+            git_refspec_string(shared),
+            c"+refs/heads/*:refs/remotes/origin/*"
+        );
+        assert_eq!(git_refspec_src(shared), Some(c"refs/heads/*"));
+        assert_eq!(git_refspec_dst(shared), Some(c"refs/remotes/origin/*"));
+        assert!(git_refspec_force(shared));
+        assert_eq!(git_refspec_direction(shared), Ok(Direction::Fetch));
+        assert!(git_refspec_src_matches(shared, c"refs/heads/main"));
+        assert!(git_refspec_dst_matches(shared, c"refs/remotes/origin/main"));
+        assert!(!git_refspec_src_matches(shared, c"refs/tags/v1"));
+
+        // `git_refspec_free` releases the three strings and the header here.
+        drop(spec);
+    }
+
+    #[test]
+    fn a_push_refspec_reports_the_push_direction() {
+        let _init = Libgit2Init::acquire();
+        let spec = git_refspec_parse(c"refs/heads/main:refs/heads/main", false)
+            .expect("a well-formed push refspec parses");
+
+        assert_eq!(git_refspec_direction(spec.as_ref()), Ok(Direction::Push));
+        assert!(!git_refspec_force(spec.as_ref()));
+    }
+
+    #[test]
+    fn an_invalid_refspec_transfers_no_owner() {
+        let _init = Libgit2Init::acquire();
+        assert!(git_refspec_parse(c"refs/heads/*", true).is_err());
+    }
+
     #[test]
     fn null_seams_create_no_refspec_handles() {
         // SAFETY: these conversion seams explicitly accept null and return
@@ -110,6 +168,27 @@ pub fn git_refspec_dst_matches(refspec: GitRefspecRef<'_>, refname: &CStr) -> bo
 pub fn git_refspec_force(refspec: GitRefspecRef<'_>) -> bool {
     // SAFETY: `refspec` is live and shared and the getter retains no pointer.
     unsafe { ffi::git_refspec_force(refspec.as_ptr()) != 0 }
+}
+
+/// Wraps: git_refspec_parse
+/// Parses `input` into an independently owned refspec.
+///
+/// `is_fetch` selects the fetch grammar; `false` parses a push refspec.
+pub fn git_refspec_parse(input: &CStr, is_fetch: bool) -> Result<GitRefspecOwned, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: `raw` is a writable output slot and `input` is a live
+    // NUL-terminated string that libgit2 only reads, copying whatever the
+    // result keeps. libgit2 clears the slot on entry and frees its allocation
+    // on every failure path, so the slot is null unless the call succeeds.
+    let status = unsafe { ffi::git_refspec_parse(&mut raw, input.as_ptr(), i32::from(is_fetch)) };
+    if status == 0 {
+        // SAFETY: success transfers one complete refspec allocation, released
+        // exactly once by the `CDropped` implementation above.
+        Ok(unsafe { GitRefspecOwned::from_raw(raw) }
+            .expect("libgit2 succeeded without returning a refspec"))
+    } else {
+        Err(status)
+    }
 }
 
 /// Wraps: git_refspec_rtransform

@@ -269,7 +269,7 @@
 ^git_repository_(config|discover|get_namespace|head|head_detached|is_bare|is_empty|is_shallow|is_worktree|message|message_remove|oid_type|open|open_bare|open_ext|open_from_worktree|path|refdb|set_config)$
 ^git_reference_(target_peel|type)$
 ^git_reflog_(delete|drop|entry_byindex|entry_id_new|entry_id_old|entry_message|entrycount|read|rename|write)$
-^git_refspec_(direction|dst|dst_matches|force|rtransform|src|src_matches|string|transform)$
+^git_refspec_(direction|dst|dst_matches|force|parse|rtransform|src|src_matches|string|transform)$
 ^git_remote_(add_fetch|add_push|connected|create|create_anonymous|create_with_fetchspec|default_branch|delete|disconnect|get_fetch_refspecs|get_push_refspecs|get_refspec|list|lookup|name|oid_type|pushurl|refspec_count|rename|set_pushurl|set_url|stats|stop|url)$
 ^git_repository_commondir$
 ^git_repository_new$

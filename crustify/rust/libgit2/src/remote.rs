@@ -332,9 +332,12 @@ ffibox::define_ctype!(
     /// Opaque remote configuration and connection state managed by libgit2.
     ///
     /// Repository-backed remotes borrow their repository, which must remain
-    /// alive while the remote is used. Detached remotes have no repository.
-    /// Owned handles release the remote with `git_remote_free`; cloning makes
-    /// an independent deep copy with `git_remote_dup`.
+    /// alive while the remote is used; [`GitRemoteWithRepository`] carries that
+    /// borrow. Detached remotes have no repository, so
+    /// [`git_remote_create_detached`] hands back a bare [`GitRemoteOwned`].
+    /// Owned handles release the remote with `git_remote_free`; cloning
+    /// duplicates the remote's own storage with `git_remote_dup` while keeping
+    /// the source's repository borrow.
     GitRemote,
     GitRemoteRef,
     GitRemoteMut,
@@ -350,9 +353,19 @@ pub type GitRemoteOwned = CBox<GitRemote>;
 ffibox::impl_dropped!(GitRemote, ffi::git_remote, ffi::git_remote_free);
 
 /// Wraps: git_remote_dup
-// SAFETY: `git_remote_dup` deep-copies the source's owned strings and refspecs
-// into a fresh allocation. A successful result is independent of the source
-// and is released by the `CDropped` implementation above.
+// SAFETY: `git_remote_dup` deep-copies the source's owned storage — name, URL,
+// push URL and the textual refspecs, which it re-parses into fresh vectors —
+// into a separate allocation released by the `CDropped` implementation above.
+// It copies no transport, push, local head, negotiation or transfer state, so
+// the result starts disconnected and frees nothing the source still owns.
+//
+// It does copy `source->repo` verbatim. That pointer is a borrow libgit2 never
+// owns or releases, so the duplicate is tethered to exactly the same
+// repository as its source and is only as long-lived. `CCloned` is therefore
+// bound to `CBox<GitRemote>`, which safe code reaches only for the detached
+// remotes built by `git_remote_create_detached` (`repo` null); a
+// repository-backed remote is cloned through
+// `GitRemoteWithRepository::try_clone`, which preserves the borrow.
 unsafe impl CCloned for GitRemote {
     unsafe fn c_clone(obj: NonNull<Self>) -> Option<NonNull<Self>> {
         let mut duplicate = core::ptr::null_mut();
@@ -434,6 +447,31 @@ mod remote_type_tests {
 
         let duplicate = remote.try_clone().expect("git_remote_dup failed");
         assert_ne!(remote.as_ptr(), duplicate.as_ptr());
+
+        // `git_remote_dup` re-duplicates the URL rather than aliasing it, so
+        // both owners may run `git_remote_free` over their own storage.
+        let source_url = git_remote_url(remote.as_ref()).expect("a detached remote has a URL");
+        let copied_url = git_remote_url(duplicate.as_ref()).expect("the copy keeps the URL");
+        assert_eq!(source_url, copied_url);
+        assert!(!core::ptr::eq(source_url.as_ptr(), copied_url.as_ptr()));
+    }
+
+    #[test]
+    fn a_repository_backed_duplicate_keeps_the_repository_borrow() {
+        let _init = Libgit2Init::acquire();
+        // A detached remote carries a null `repo`, which is the same borrow
+        // shape `git_remote_dup` copies for a repository-backed one; tethering
+        // it here exercises the wrapper without a repository fixture.
+        let tethered =
+            repository_remote_result(git_remote_create_detached(c"https://example.invalid/repo"))
+                .expect("detached remote creation succeeds");
+
+        let duplicate = tethered.try_clone().expect("git_remote_dup failed");
+        assert_ne!(tethered.as_ref().as_ptr(), duplicate.as_ref().as_ptr());
+        assert_eq!(
+            git_remote_url(duplicate.as_ref()),
+            Some(c"https://example.invalid/repo")
+        );
     }
 
     #[test]
@@ -679,6 +717,20 @@ impl GitRemoteWithRepository<'_> {
     #[must_use]
     pub fn as_mut(&mut self) -> GitRemoteMut<'_> {
         self.remote.as_mut()
+    }
+
+    /// Wraps: git_remote_dup
+    /// Duplicates the remote, keeping its repository borrow.
+    ///
+    /// `git_remote_dup` copies the source's repository pointer, so the
+    /// duplicate depends on the same repository and keeps the same `'repo`.
+    /// Returns `None` when libgit2 could not allocate the copy.
+    #[must_use]
+    pub fn try_clone(&self) -> Option<Self> {
+        Some(Self {
+            remote: self.remote.try_clone()?,
+            _repository: PhantomData,
+        })
     }
 }
 
