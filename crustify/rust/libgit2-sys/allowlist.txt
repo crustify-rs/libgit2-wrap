@@ -97,10 +97,12 @@
 ^git_config_free$
 ^git_config_new$
 ^git_blame$
+^git_blame_hunk$
 ^git_blame_free$
 ^git_buf$
 ^git_buf_dispose$
 ^git_cert$
+^git_cert_hostkey$
 ^git_cert_x509$
 ^git_cert_t$
 ^git_cert_ssh_t$

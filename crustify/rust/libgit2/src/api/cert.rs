@@ -506,3 +506,241 @@ mod x509_tests {
         assert_eq!(cert.parent_mut().as_mut_ptr(), addr_of_mut!(raw.parent));
     }
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_cert_hostkey
+    /// Layout-compatible SSH host-key information borrowed for a certificate callback.
+    ///
+    /// The raw key bytes are owned by the SSH backend and remain valid only for
+    /// the callback invocation that supplied this value.
+    GitCertHostkey,
+    GitCertHostkeyRef,
+    GitCertHostkeyMut,
+    ffi::git_cert_hostkey
+);
+
+impl<'a> GitCertHostkeyRef<'a> {
+    /// Field: git_cert_hostkey.type
+    /// Returns the bit set describing which host-key representations are available.
+    #[must_use]
+    pub fn available(&self) -> GitCertSsh {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        let bits = unsafe { core::ptr::addr_of!((*self.as_ptr()).type_).read() };
+        GitCertSsh::from(bits)
+    }
+
+    /// Field: git_cert_hostkey.parent
+    /// Borrows the inline base certificate.
+    #[must_use]
+    pub fn parent(&self) -> GitCertRef<'a> {
+        // SAFETY: raw-place projection obtains the initialized inline field's
+        // address without forming a reference to C-visible memory.
+        let parent = unsafe { core::ptr::addr_of!((*self.as_ptr()).parent) }.cast_mut();
+        // SAFETY: the inline parent is non-null and remains live for this
+        // host-key handle's full `'a` borrow.
+        unsafe { GitCertRef::from_ptr(parent) }.expect("an inline field is non-null")
+    }
+
+    /// Field: git_cert_hostkey.hostkey_len
+    /// Returns the raw host key's byte length.
+    ///
+    /// The value is meaningful when [`GitCertSsh::RAW`] is available.
+    #[must_use]
+    pub fn hostkey_len(&self) -> usize {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).hostkey_len).read() }
+    }
+
+    /// Field: git_cert_hostkey.hostkey
+    /// Borrows the length-delimited raw host key when it is available.
+    #[must_use]
+    pub fn hostkey(&self) -> Option<ffibox::CSlice<'a, u8>> {
+        if !self.available().contains(GitCertSsh::RAW) {
+            return None;
+        }
+        // SAFETY: this live shared handle permits reading the initialized
+        // pointer field without forming a reference to the host-key header.
+        let bytes = unsafe { core::ptr::addr_of!((*self.as_ptr()).hostkey).read() }
+            .cast::<u8>()
+            .cast_mut();
+        let bytes = core::ptr::NonNull::new(bytes)?;
+        // SAFETY: with RAW set, libgit2 supplies `hostkey_len` initialized bytes
+        // borrowed from the SSH session for this handle's `'a` lifetime.
+        Some(unsafe { ffibox::CSlice::from_raw_parts(bytes, self.hostkey_len()) })
+    }
+
+    /// Field: git_cert_hostkey.raw_type
+    /// Returns the raw host-key algorithm when the raw key is available.
+    pub fn raw_type(&self) -> Result<Option<GitCertSshRawType>, InvalidGitCertSshRawType> {
+        if !self.available().contains(GitCertSsh::RAW) {
+            return Ok(None);
+        }
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        let raw_type = unsafe { core::ptr::addr_of!((*self.as_ptr()).raw_type).read() };
+        GitCertSshRawType::try_from(raw_type).map(Some)
+    }
+
+    /// Field: git_cert_hostkey.hash_sha256
+    /// Borrows the SHA-256 fingerprint when it is available.
+    #[must_use]
+    pub fn hash_sha256(&self) -> Option<ffibox::CSlice<'a, u8>> {
+        if !self.available().contains(GitCertSsh::SHA256) {
+            return None;
+        }
+        // SAFETY: raw-place projection obtains the initialized inline array's
+        // address without forming a reference to C-visible memory.
+        let hash = unsafe { core::ptr::addr_of!((*self.as_ptr()).hash_sha256) }
+            .cast::<u8>()
+            .cast_mut();
+        // SAFETY: an inline field address is non-null; all 32 bytes are
+        // initialized and live for this handle's `'a` borrow.
+        Some(unsafe { ffibox::CSlice::from_raw_parts(core::ptr::NonNull::new_unchecked(hash), 32) })
+    }
+
+    /// Field: git_cert_hostkey.hash_sha1
+    /// Borrows the SHA-1 fingerprint when it is available.
+    #[must_use]
+    pub fn hash_sha1(&self) -> Option<ffibox::CSlice<'a, u8>> {
+        if !self.available().contains(GitCertSsh::SHA1) {
+            return None;
+        }
+        // SAFETY: raw-place projection obtains the initialized inline array's
+        // address without forming a reference to C-visible memory.
+        let hash = unsafe { core::ptr::addr_of!((*self.as_ptr()).hash_sha1) }
+            .cast::<u8>()
+            .cast_mut();
+        // SAFETY: an inline field address is non-null; all 20 bytes are
+        // initialized and live for this handle's `'a` borrow.
+        Some(unsafe { ffibox::CSlice::from_raw_parts(core::ptr::NonNull::new_unchecked(hash), 20) })
+    }
+
+    /// Field: git_cert_hostkey.hash_md5
+    /// Borrows the MD5 fingerprint when it is available.
+    #[must_use]
+    pub fn hash_md5(&self) -> Option<ffibox::CSlice<'a, u8>> {
+        if !self.available().contains(GitCertSsh::MD5) {
+            return None;
+        }
+        // SAFETY: raw-place projection obtains the initialized inline array's
+        // address without forming a reference to C-visible memory.
+        let hash = unsafe { core::ptr::addr_of!((*self.as_ptr()).hash_md5) }
+            .cast::<u8>()
+            .cast_mut();
+        // SAFETY: an inline field address is non-null; all 16 bytes are
+        // initialized and live for this handle's `'a` borrow.
+        Some(unsafe { ffibox::CSlice::from_raw_parts(core::ptr::NonNull::new_unchecked(hash), 16) })
+    }
+}
+
+#[cfg(test)]
+mod hostkey_tests {
+    use core::mem::{align_of, size_of};
+    use core::ptr;
+
+    use super::*;
+
+    #[test]
+    fn hostkey_wrapper_preserves_layout_and_handle_shape() {
+        assert_eq!(
+            size_of::<GitCertHostkey>(),
+            size_of::<ffi::git_cert_hostkey>()
+        );
+        assert_eq!(
+            align_of::<GitCertHostkey>(),
+            align_of::<ffi::git_cert_hostkey>()
+        );
+        assert_eq!(
+            size_of::<GitCertHostkeyRef<'_>>(),
+            size_of::<*mut ffi::git_cert_hostkey>()
+        );
+        assert_eq!(
+            size_of::<GitCertHostkeyMut<'_>>(),
+            size_of::<*mut ffi::git_cert_hostkey>()
+        );
+    }
+
+    #[test]
+    fn available_hostkey_views_are_length_delimited_and_flag_gated() {
+        let key = [0x41_u8, 0, 0x42, 0x43];
+        let mut raw = ffi::git_cert_hostkey {
+            parent: ffi::git_cert {
+                cert_type: ffi::git_cert_t_GIT_CERT_HOSTKEY_LIBSSH2,
+            },
+            type_: (GitCertSsh::RAW | GitCertSsh::SHA256).bits(),
+            hash_md5: [0x11; 16],
+            hash_sha1: [0x22; 20],
+            hash_sha256: [0x33; 32],
+            raw_type: ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ED25519,
+            hostkey: key.as_ptr().cast(),
+            hostkey_len: key.len(),
+        };
+
+        // SAFETY: `raw` and the borrowed `key` bytes remain live and are not
+        // mutated while this shared handle and its views are used.
+        let hostkey = unsafe { GitCertHostkeyRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(
+            hostkey.parent().cert_type(),
+            Ok(GitCertType::HostkeyLibssh2)
+        );
+        assert!(hostkey.available().contains(GitCertSsh::RAW));
+        assert_eq!(hostkey.hostkey_len(), 4);
+        let bytes = hostkey.hostkey().unwrap();
+        assert_eq!(bytes.len(), 4);
+        assert_eq!(bytes.elem(0), Some(0x41));
+        assert_eq!(bytes.elem(1), Some(0));
+        assert_eq!(hostkey.raw_type(), Ok(Some(GitCertSshRawType::Ed25519)));
+        assert_eq!(hostkey.hash_sha256().unwrap().elem(0), Some(0x33));
+        assert!(hostkey.hash_sha1().is_none());
+        assert!(hostkey.hash_md5().is_none());
+    }
+
+    #[test]
+    fn absent_representations_do_not_expose_zero_initialized_storage() {
+        let mut raw = ffi::git_cert_hostkey {
+            parent: ffi::git_cert {
+                cert_type: ffi::git_cert_t_GIT_CERT_HOSTKEY_LIBSSH2,
+            },
+            type_: GitCertSsh::EMPTY.bits(),
+            hash_md5: [0; 16],
+            hash_sha1: [0; 20],
+            hash_sha256: [0; 32],
+            raw_type: ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ED25519 + 1,
+            hostkey: ptr::null(),
+            hostkey_len: 0,
+        };
+
+        // SAFETY: `raw` is initialized and exclusively borrowed by this handle.
+        let hostkey = unsafe { GitCertHostkeyMut::from_ptr(&raw mut raw) }.unwrap();
+        let hostkey = hostkey.as_ref();
+        assert!(hostkey.hostkey().is_none());
+        assert_eq!(hostkey.raw_type(), Ok(None));
+        assert!(hostkey.hash_sha256().is_none());
+        assert!(hostkey.hash_sha1().is_none());
+        assert!(hostkey.hash_md5().is_none());
+    }
+
+    #[test]
+    fn invalid_available_raw_type_is_rejected() {
+        let mut raw = ffi::git_cert_hostkey {
+            parent: ffi::git_cert {
+                cert_type: ffi::git_cert_t_GIT_CERT_HOSTKEY_LIBSSH2,
+            },
+            type_: GitCertSsh::RAW.bits(),
+            hash_md5: [0; 16],
+            hash_sha1: [0; 20],
+            hash_sha256: [0; 32],
+            raw_type: ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ED25519 + 1,
+            hostkey: ptr::null(),
+            hostkey_len: 0,
+        };
+
+        // SAFETY: `raw` is initialized and remains live for this shared handle.
+        let hostkey = unsafe { GitCertHostkeyRef::from_ptr(&raw mut raw) }.unwrap();
+        let error = hostkey.raw_type().unwrap_err();
+        assert_eq!(
+            error.value(),
+            ffi::git_cert_ssh_raw_type_t_GIT_CERT_SSH_RAW_TYPE_KEY_ED25519 + 1
+        );
+        assert!(hostkey.hostkey().is_none());
+    }
+}

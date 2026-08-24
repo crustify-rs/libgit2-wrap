@@ -268,6 +268,99 @@
    ]
   },
   {
+   "name": "git_blame_hunk",
+   "defined_in": "include/git2/blame.h",
+   "_comment_agent": "All six pointers are per-hunk allocations released by free_hunk. Buffer-only hunks are zero-initialized and can publish null signatures and summary; getters must therefore retain nullability. Published hunks are returned const, so their pointees are exposed shared-only.",
+   "fields": [
+    {
+     "name": "final_committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional owned signature; null on synthetic buffer hunks and released by free_hunk."
+     }
+    },
+    {
+     "name": "final_signature",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional owned signature; tests explicitly observe null on a buffer-added hunk; free_hunk releases it."
+     }
+    },
+    {
+     "name": "orig_committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional owned signature; null on synthetic buffer hunks and released by free_hunk."
+     }
+    },
+    {
+     "name": "orig_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional duplicated NUL path; new_hunk accepts null and free_hunk releases it."
+     }
+    },
+    {
+     "name": "orig_signature",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional owned signature; null on synthetic buffer hunks and released by free_hunk."
+     }
+    },
+    {
+     "name": "summary",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional duplicated NUL string; free_hunk releases it with git__free."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_blame_options",
    "defined_in": "include/git2/blame.h",
    "_comment_agent": "All published fields are by-value scalars or embedded git_oid values; the options struct owns no pointer fields and has no lifecycle primitive.",
@@ -364,6 +457,30 @@
    "defined_in": "include/git2/cert.h",
    "_comment_agent": "Public git_cert is a one-field by-value base record. cert_type is a scalar git_cert_t discriminant initialized by the concrete certificate producer and thereafter read through public callbacks; the type has no pointer fields, refcount, or independent lifecycle operation.",
    "fields": []
+  },
+  {
+   "name": "git_cert_hostkey",
+   "defined_in": "include/git2/cert.h",
+   "_comment_agent": "hostkey is a transient length-delimited byte run borrowed from libssh2 for the synchronous certificate callback. It is meaningful and non-null only with the RAW availability bit; a zero-initialized hostkey record can otherwise hold null.",
+   "fields": [
+    {
+     "name": "hostkey",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed libssh2 host-key bytes of hostkey_len, valid during the certificate callback; not NUL-terminated."
+     }
+    }
+   ]
   },
   {
    "name": "git_cert_x509",
