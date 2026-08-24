@@ -1,11 +1,10 @@
 //! Safe wrappers for libgit2 patch APIs.
 
-use core::marker::PhantomData;
 use core::ptr::NonNull;
 
 use ffibox::{CBox, CDropped};
 
-use crate::diff::{DiffHunkRef, DiffLineRef, DiffRef};
+use crate::diff::{DiffHunkRef, DiffLineRef, DiffMut};
 use crate::ffi;
 
 ffibox::define_ctype!(
@@ -23,24 +22,6 @@ ffibox::define_ctype!(
 
 /// An owning reference to a fully formed libgit2 patch.
 pub type GitPatchOwned = CBox<GitPatch>;
-
-/// An owned patch tied to the diff storage from which it was created.
-pub struct DiffPatch<'diff> {
-    inner: GitPatchOwned,
-    _diff: PhantomData<DiffRef<'diff>>,
-}
-
-impl DiffPatch<'_> {
-    /// Borrows the patch.
-    pub fn as_ref(&self) -> GitPatchRef<'_> {
-        self.inner.as_ref()
-    }
-
-    /// Borrows the patch exclusively.
-    pub fn as_mut(&mut self) -> GitPatchMut<'_> {
-        self.inner.as_mut()
-    }
-}
 
 /// Wraps: git_patch_free
 // SAFETY: `git_patch_free` consumes one owning reference to a fully formed
@@ -83,6 +64,52 @@ mod tests {
         assert_eq!(size_of::<GitPatchOwned>(), size_of::<*mut ffi::git_patch>());
     }
 
+    /// The C side proves this: `patch_generated_init_common` calls
+    /// `git_diff_addref`, and `git_patch_parsed_from_diff` hands back a
+    /// counted reference to a patch that owns copies of its delta, paths and
+    /// line contents. Neither borrows the `git_diff` header, so the wrapper
+    /// must not tie the patch to the diff's Rust lifetime.
+    #[test]
+    fn a_patch_taken_from_a_diff_outlives_that_diff() {
+        // SAFETY: libgit2 initialization is refcounted and balanced below,
+        // after every allocation this test made has been released.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        let source = b"diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new\n";
+        let mut diff = crate::diff_parse::git_diff_from_buffer(source).expect("valid patch");
+        let patch = git_patch_from_diff(&mut diff.as_mut(), 0)
+            .expect("delta 0 exists")
+            .expect("a parsed delta is never skipped");
+
+        drop(diff);
+
+        assert_eq!(git_patch_num_hunks(patch.as_ref()), 1);
+        let (hunk, lines) = git_patch_get_hunk(patch.as_ref(), 0).expect("hunk 0 exists");
+        assert_eq!(lines, 2);
+        assert_eq!(hunk.new_lines(), 1);
+        assert_eq!(
+            git_patch_line_stats(patch.as_ref()).expect("line stats are available"),
+            PatchLineStats {
+                context: 0,
+                additions: 1,
+                deletions: 1,
+            }
+        );
+        // A parsed patch leaves the cached size counters at zero, so only the
+        // formatted file header contributes. Repeating the call shows the
+        // shared borrow observes no lazily populated state.
+        assert_eq!(git_patch_size(patch.as_ref(), true, true, false), 0);
+        let with_header = git_patch_size(patch.as_ref(), true, true, true);
+        assert!(with_header > 0);
+        assert_eq!(git_patch_size(patch.as_ref(), true, true, true), with_header);
+        assert!(git_patch_get_line_in_hunk(patch.as_ref(), 0, 0).is_ok());
+        assert!(git_patch_get_line_in_hunk(patch.as_ref(), 0, 99).is_err());
+        drop(patch);
+
+        // SAFETY: balances the successful initialization above.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
     #[test]
     fn null_patch_seams_create_no_handle() {
         // SAFETY: all conversions explicitly accept null and return `None`
@@ -98,6 +125,9 @@ mod tests {
 /// Wraps: git_patch_get_line_in_hunk
 /// Borrows a line stored in `patch`, returning the libgit2 error code when an
 /// index is out of range.
+///
+/// The C declaration is non-const, but the body only indexes the patch's
+/// cached hunk and line arrays, so a shared borrow states the real contract.
 pub fn git_patch_get_line_in_hunk<'a>(
     patch: GitPatchRef<'a>,
     hunk_index: usize,
@@ -105,8 +135,8 @@ pub fn git_patch_get_line_in_hunk<'a>(
 ) -> Result<DiffLineRef<'a>, i32> {
     let mut line = core::ptr::null();
     // SAFETY: `line` is a writable output slot and `patch` is a live borrowed
-    // patch. Libgit2 retains no new pointer and returns an internal line whose
-    // storage remains valid for the patch borrow.
+    // patch that libgit2 neither writes through nor retains. It returns an
+    // internal line whose storage remains valid for the patch borrow.
     let status = unsafe {
         ffi::git_patch_get_line_in_hunk(
             core::ptr::addr_of_mut!(line),
@@ -120,7 +150,8 @@ pub fn git_patch_get_line_in_hunk<'a>(
     }
     // SAFETY: success initializes `line` to a live line embedded in `patch`;
     // the returned handle inherits the patch's `'a` lifetime.
-    unsafe { DiffLineRef::from_ptr(line.cast_mut()) }.ok_or(status)
+    Ok(unsafe { DiffLineRef::from_ptr(line.cast_mut()) }
+        .expect("a successful line lookup returns non-null"))
 }
 
 /// Counts each kind of line in a patch.
@@ -175,20 +206,27 @@ pub fn git_patch_num_lines_in_hunk(
 }
 
 /// Wraps: git_patch_size
-/// Computes the selected serialized size. Libgit2 may lazily populate patch
-/// header state, so this operation requires exclusive access.
+/// Computes the selected serialized size.
+///
+/// The C declaration takes a non-const patch, but the body only reads the
+/// cached `content_size`, `context_size` and `header_size` counters and
+/// formats a header from a `const git_diff_delta` into its own scratch
+/// buffer. It populates nothing lazily, so a shared borrow states the real
+/// contract.
 #[must_use]
 pub fn git_patch_size(
-    patch: &mut GitPatchMut<'_>,
+    patch: GitPatchRef<'_>,
     include_context: bool,
     include_hunk_headers: bool,
     include_file_headers: bool,
 ) -> usize {
-    // SAFETY: the mutable handle provides exclusive access for any lazy state
-    // updates and each boolean is converted to the C zero/nonzero convention.
+    // SAFETY: `patch` is a live shared input. `git_patch_size` writes nothing
+    // through the pointer and retains none of it, so restoring mutability at
+    // the seam only satisfies the C declaration. Each boolean is converted to
+    // the C zero/nonzero convention.
     unsafe {
         ffi::git_patch_size(
-            patch.as_mut_ptr(),
+            patch.as_ptr().cast_mut(),
             i32::from(include_context),
             i32::from(include_hunk_headers),
             i32::from(include_file_headers),
@@ -197,47 +235,54 @@ pub fn git_patch_size(
 }
 
 /// Wraps: git_patch_from_diff
-/// Creates a patch tied to the diff that supplies its backing data.
-pub fn git_patch_from_diff<'diff>(
-    diff: DiffRef<'diff>,
+/// Creates an independently owned patch for one delta of `diff`.
+///
+/// The result outlives `diff`: a generated patch takes its own `git_diff`
+/// reference in `patch_generated_init_common`, and a parsed patch owns copies
+/// of its delta, paths and line contents while holding a count on its parse
+/// context. Only the transient call needs `diff`, which it borrows exclusively
+/// because the generated path bumps the diff's reference count.
+///
+/// Returns `Ok(None)` for a delta libgit2 declines to expand. C documents that
+/// case — an unchanged or binary file — as a successful call whose output slot
+/// is left null.
+pub fn git_patch_from_diff(
+    diff: &mut DiffMut<'_>,
     index: usize,
-) -> Result<DiffPatch<'diff>, i32> {
+) -> Result<Option<GitPatchOwned>, i32> {
     let mut raw = core::ptr::null_mut();
-    // SAFETY: `raw` is writable and `diff` remains live for the lifetime
-    // attached to the resulting wrapper.
-    let status = unsafe {
-        ffi::git_patch_from_diff(
-            core::ptr::addr_of_mut!(raw),
-            diff.as_ptr().cast_mut(),
-            index,
-        )
-    };
+    // SAFETY: `raw` is a writable owner slot and `diff` supplies the exclusive
+    // access the call needs to acquire its own diff reference.
+    let status =
+        unsafe { ffi::git_patch_from_diff(core::ptr::addr_of_mut!(raw), diff.as_mut_ptr(), index) };
     if status != 0 {
         return Err(status);
     }
-    // SAFETY: success writes one complete owned patch reference.
-    let inner = unsafe { GitPatchOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
-    Ok(DiffPatch {
-        inner,
-        _diff: PhantomData,
-    })
+    // SAFETY: on success `raw` is either null, meaning the delta was skipped,
+    // or one complete owned patch reference this wrapper adopts.
+    Ok(unsafe { GitPatchOwned::from_raw(raw) })
 }
 
 /// Wraps: git_patch_get_hunk
 /// Borrows one hunk and returns its line count.
+///
+/// As with [`git_patch_get_line_in_hunk`], the C declaration is non-const but
+/// the body only indexes the patch's cached hunk array, so a shared borrow is
+/// enough and it carries the returned hunk's lifetime.
 pub fn git_patch_get_hunk<'a>(
-    patch: &'a mut GitPatchMut<'_>,
+    patch: GitPatchRef<'a>,
     index: usize,
 ) -> Result<(DiffHunkRef<'a>, usize), i32> {
     let mut raw = core::ptr::null();
     let mut lines = 0;
-    // SAFETY: both outputs are writable and the patch is exclusively borrowed
-    // for the lifetime assigned to its returned interior hunk.
+    // SAFETY: both outputs are writable and `patch` is a live shared input
+    // that libgit2 neither writes through nor retains; the returned hunk lives
+    // inside it for `'a`.
     let status = unsafe {
         ffi::git_patch_get_hunk(
             core::ptr::addr_of_mut!(raw),
             core::ptr::addr_of_mut!(lines),
-            patch.as_mut_ptr(),
+            patch.as_ptr().cast_mut(),
             index,
         )
     };

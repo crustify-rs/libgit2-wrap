@@ -71,6 +71,13 @@ unsafe impl CDropped for GitPathspecMatchList {
 
 /// A diff-backed match list whose internal delta pointers cannot outlive the
 /// diff that produced them.
+///
+/// [`git_pathspec_match_list_entrycount`] counts its entries, but
+/// [`git_pathspec_match_list_entry`] always yields `None`: C gates that
+/// accessor on `datatype == PATHSPEC_DATATYPE_STRINGS`. The matching accessor
+/// is `git_pathspec_match_list_diff_entry`, still unwrapped because it hands
+/// back a `const git_diff_delta *` and `git_diff_delta` has no safe wrapper
+/// yet. Failure entries are pool-owned strings and read back normally.
 pub struct GitPathspecDiffMatchListOwned<'a> {
     inner: GitPathspecMatchListOwned,
     _diff: PhantomData<DiffRef<'a>>,

@@ -11285,8 +11285,8 @@
        "lifetime": "arg:diff"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+      "mutable": true,
+      "note": "The callee does not consume the caller's reference, but it does write through the pointer: the generated path reaches patch_generated_init_common, which calls git_diff_addref and so acquires a SECOND count that the patch retains until patch_generated_free releases it. The resulting patch therefore keeps the diff alive itself and does not borrow it; the parsed path instead bumps the stored patch's own refcount and hands back a patch owning copies of its delta, paths and line contents. Only the call itself needs the diff."
      }
     },
     {
@@ -11306,7 +11306,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required borrowed output slot written with a newly owned allocation on success."
+      "note": "Required borrowed output slot. On success it receives either a newly owned patch reference the caller must release with git_patch_free, or NULL: git_patch_generated_from_diff clears the slot up front and returns 0 without allocating when git_diff_delta__should_skip rejects the delta, which the public header documents for unchanged and binary files. The parsed path always writes a non-null reference."
      }
     }
    ]
@@ -11367,8 +11367,8 @@
        "lifetime": "arg:patch"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Borrowed patch queried during the call; ownership is retained by the caller."
+      "mutable": false,
+      "note": "Required transient borrowed input. Despite the non-const declaration the body only indexes the patch's cached hunks array and reads the selected hunk, writing nothing through the pointer and retaining none of it; the borrowed const hunk handed back through `out` lives inside this patch."
      }
     }
    ]
@@ -11555,8 +11555,8 @@
        "lifetime": "arg:patch"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+      "mutable": false,
+      "note": "Required transient borrowed input. The body only reads the cached content_size/context_size/header_size counters and formats a header from a const git_diff_delta into its own git_str, so it writes nothing through the pointer and retains none of it despite the non-const declaration."
      }
     }
    ]
