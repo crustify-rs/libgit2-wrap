@@ -1,6 +1,36 @@
 //! Safe wrappers for libgit2 api APIs.
 
+pub mod apply;
+pub mod blame;
 pub mod buffer;
 pub mod cert;
+pub mod checkout;
+pub mod cherrypick;
+pub mod clone;
+pub mod commit;
+pub mod credential;
+pub mod deprecated;
+pub mod diff;
+pub mod email;
+pub mod errors;
+pub mod index;
+pub mod indexer;
+pub mod merge;
+pub mod odb;
 pub mod odb_backend;
+pub mod pack;
+pub mod proxy;
+pub mod rebase;
+pub mod remote;
+pub mod repository;
+pub mod revert;
+pub mod revwalk;
+pub mod stash;
+pub mod status;
+pub mod submodule;
+pub mod tag;
+pub mod trace;
+pub mod transport;
+pub mod tree;
 pub mod types;
+pub mod worktree;
