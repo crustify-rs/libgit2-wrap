@@ -2,6 +2,7 @@
 #include <git2/sys/credential.h>
 #include <git2/sys/refdb_backend.h>
 #include <git2/sys/repository.h>
+#include <git2/sys/transport.h>
 #include "util.h"
 #include "cache.h"
 
