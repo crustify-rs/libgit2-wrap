@@ -67,111 +67,6 @@ ffibox::impl_dropped!(
     ffi::git_packbuilder_free
 );
 
-#[cfg(test)]
-mod tests {
-    use core::mem::{MaybeUninit, align_of, size_of};
-
-    use ffibox::{CCell, CDropped};
-
-    use super::*;
-
-    #[test]
-    fn opaque_representation_and_handles_match_the_c_seam() {
-        fn assert_cell<T: CCell>() {}
-        fn assert_dropped<T: CDropped>() {}
-
-        assert_cell::<GitPackbuilder>();
-        assert_dropped::<GitPackbuilder>();
-        assert_eq!(
-            size_of::<GitPackbuilder>(),
-            size_of::<ffi::git_packbuilder>()
-        );
-        assert_eq!(
-            align_of::<GitPackbuilder>(),
-            align_of::<ffi::git_packbuilder>()
-        );
-        assert_eq!(
-            size_of::<GitPackbuilderRef<'_>>(),
-            size_of::<*const ffi::git_packbuilder>()
-        );
-        assert_eq!(
-            size_of::<GitPackbuilderMut<'_>>(),
-            size_of::<*mut ffi::git_packbuilder>()
-        );
-        assert_eq!(
-            size_of::<Option<GitPackbuilderOwned>>(),
-            size_of::<*mut ffi::git_packbuilder>()
-        );
-    }
-
-    #[test]
-    fn borrowed_handles_preserve_the_packbuilder_pointer() {
-        let storage = Box::new(MaybeUninit::<ffi::git_packbuilder>::zeroed());
-        let raw = Box::into_raw(storage).cast::<ffi::git_packbuilder>();
-
-        {
-            // SAFETY: `raw` addresses live, suitably aligned opaque storage,
-            // and the shared handle remains within this scope.
-            let shared = unsafe { GitPackbuilderRef::from_ptr(raw) }.unwrap();
-            assert_eq!(shared.as_ptr(), raw.cast_const());
-        }
-
-        {
-            // SAFETY: the shared handle is gone, the storage remains live, and
-            // this scope has exclusive access to it.
-            let mut exclusive = unsafe { GitPackbuilderMut::from_ptr(raw) }.unwrap();
-            assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
-            assert_eq!(exclusive.as_mut_ptr(), raw);
-        }
-
-        // SAFETY: `raw` came from this `Box::into_raw`, no handle remains, and
-        // the cast recovers the allocation's original type.
-        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_packbuilder>>()) });
-    }
-
-    #[test]
-    fn progress_payload_dispatches_through_the_owned_callback() {
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicI32, Ordering};
-
-        let observed = Arc::new(AtomicI32::new(0));
-        let sink = Arc::clone(&observed);
-        let callback: ProgressPayload = Box::new(move |stage: i32, current: u32, total: u32| {
-            sink.store(stage + current as i32 + total as i32, Ordering::SeqCst);
-            0
-        });
-        let mut stored = Some(Box::new(callback));
-
-        let payload = progress_payload(stored.as_mut());
-        assert!(!payload.is_null());
-
-        // SAFETY: `payload` was derived from `stored`, which is live and not
-        // borrowed elsewhere for this call — the contract the wrapper upholds
-        // for libgit2 by owning the box for as long as the registration lasts.
-        let status = unsafe { progress_trampoline(1, 2, 3, payload.cast()) };
-        assert_eq!(status, 0);
-        assert_eq!(observed.load(Ordering::SeqCst), 6);
-
-        // The pointer stays usable across calls: the box has not moved.
-        // SAFETY: as above.
-        let status = unsafe { progress_trampoline(4, 5, 6, payload.cast()) };
-        assert_eq!(status, 0);
-        assert_eq!(observed.load(Ordering::SeqCst), 15);
-
-        drop(stored);
-    }
-
-    #[test]
-    fn a_cleared_progress_callback_registers_no_payload() {
-        assert!(progress_payload(None).is_null());
-
-        // SAFETY: a null payload is what a cleared registration installs; the
-        // trampoline must reject it instead of dereferencing it.
-        let status = unsafe { progress_trampoline(0, 0, 0, core::ptr::null_mut()) };
-        assert_eq!(status, -1);
-    }
-}
-
 /// Wraps: git_packbuilder_foreach
 /// Streams the completed pack through a synchronous callback.
 pub fn git_packbuilder_foreach<C>(
@@ -432,4 +327,109 @@ pub fn git_packbuilder_write_buf(
 pub fn git_packbuilder_written(builder: GitPackbuilderRef<'_>) -> usize {
     // SAFETY: this scalar getter does not mutate the live builder.
     unsafe { ffi::git_packbuilder_written(builder.as_ptr().cast_mut()) }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::mem::{MaybeUninit, align_of, size_of};
+
+    use ffibox::{CCell, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn opaque_representation_and_handles_match_the_c_seam() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<GitPackbuilder>();
+        assert_dropped::<GitPackbuilder>();
+        assert_eq!(
+            size_of::<GitPackbuilder>(),
+            size_of::<ffi::git_packbuilder>()
+        );
+        assert_eq!(
+            align_of::<GitPackbuilder>(),
+            align_of::<ffi::git_packbuilder>()
+        );
+        assert_eq!(
+            size_of::<GitPackbuilderRef<'_>>(),
+            size_of::<*const ffi::git_packbuilder>()
+        );
+        assert_eq!(
+            size_of::<GitPackbuilderMut<'_>>(),
+            size_of::<*mut ffi::git_packbuilder>()
+        );
+        assert_eq!(
+            size_of::<Option<GitPackbuilderOwned>>(),
+            size_of::<*mut ffi::git_packbuilder>()
+        );
+    }
+
+    #[test]
+    fn borrowed_handles_preserve_the_packbuilder_pointer() {
+        let storage = Box::new(MaybeUninit::<ffi::git_packbuilder>::zeroed());
+        let raw = Box::into_raw(storage).cast::<ffi::git_packbuilder>();
+
+        {
+            // SAFETY: `raw` addresses live, suitably aligned opaque storage,
+            // and the shared handle remains within this scope.
+            let shared = unsafe { GitPackbuilderRef::from_ptr(raw) }.unwrap();
+            assert_eq!(shared.as_ptr(), raw.cast_const());
+        }
+
+        {
+            // SAFETY: the shared handle is gone, the storage remains live, and
+            // this scope has exclusive access to it.
+            let mut exclusive = unsafe { GitPackbuilderMut::from_ptr(raw) }.unwrap();
+            assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
+            assert_eq!(exclusive.as_mut_ptr(), raw);
+        }
+
+        // SAFETY: `raw` came from this `Box::into_raw`, no handle remains, and
+        // the cast recovers the allocation's original type.
+        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_packbuilder>>()) });
+    }
+
+    #[test]
+    fn progress_payload_dispatches_through_the_owned_callback() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicI32, Ordering};
+
+        let observed = Arc::new(AtomicI32::new(0));
+        let sink = Arc::clone(&observed);
+        let callback: ProgressPayload = Box::new(move |stage: i32, current: u32, total: u32| {
+            sink.store(stage + current as i32 + total as i32, Ordering::SeqCst);
+            0
+        });
+        let mut stored = Some(Box::new(callback));
+
+        let payload = progress_payload(stored.as_mut());
+        assert!(!payload.is_null());
+
+        // SAFETY: `payload` was derived from `stored`, which is live and not
+        // borrowed elsewhere for this call — the contract the wrapper upholds
+        // for libgit2 by owning the box for as long as the registration lasts.
+        let status = unsafe { progress_trampoline(1, 2, 3, payload.cast()) };
+        assert_eq!(status, 0);
+        assert_eq!(observed.load(Ordering::SeqCst), 6);
+
+        // The pointer stays usable across calls: the box has not moved.
+        // SAFETY: as above.
+        let status = unsafe { progress_trampoline(4, 5, 6, payload.cast()) };
+        assert_eq!(status, 0);
+        assert_eq!(observed.load(Ordering::SeqCst), 15);
+
+        drop(stored);
+    }
+
+    #[test]
+    fn a_cleared_progress_callback_registers_no_payload() {
+        assert!(progress_payload(None).is_null());
+
+        // SAFETY: a null payload is what a cleared registration installs; the
+        // trampoline must reject it instead of dereferencing it.
+        let status = unsafe { progress_trampoline(0, 0, 0, core::ptr::null_mut()) };
+        assert_eq!(status, -1);
+    }
 }

@@ -46,69 +46,6 @@ unsafe impl CCloned for GitBlob {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use core::mem::{MaybeUninit, align_of, size_of};
-    use core::ptr;
-
-    use ffibox::{CCell, CDropped};
-
-    use super::*;
-
-    #[test]
-    fn opaque_blob_preserves_layout_and_refcount_contracts() {
-        fn assert_cell<T: CCell>() {}
-        fn assert_refcounted<T: CDropped + CCloned>() {}
-
-        assert_cell::<GitBlob>();
-        assert_refcounted::<GitBlob>();
-        assert_eq!(size_of::<GitBlob>(), size_of::<ffi::git_blob>());
-        assert_eq!(align_of::<GitBlob>(), align_of::<ffi::git_blob>());
-        assert_eq!(
-            size_of::<GitBlobRef<'_>>(),
-            size_of::<*const ffi::git_blob>()
-        );
-        assert_eq!(size_of::<GitBlobMut<'_>>(), size_of::<*mut ffi::git_blob>());
-        assert_eq!(size_of::<GitBlobOwned>(), size_of::<*mut ffi::git_blob>());
-    }
-
-    #[test]
-    fn null_blob_seams_create_no_handle() {
-        // SAFETY: these conversions explicitly accept null and return `None`
-        // without borrowing or adopting an object.
-        unsafe {
-            assert!(GitBlobRef::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitBlobMut::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitBlobOwned::from_raw(ptr::null_mut()).is_none());
-        }
-    }
-
-    #[test]
-    fn borrowed_handles_preserve_the_blob_pointer() {
-        let storage = Box::new(MaybeUninit::<ffi::git_blob>::zeroed());
-        let raw = Box::into_raw(storage).cast::<ffi::git_blob>();
-
-        {
-            // SAFETY: `raw` addresses live, suitably aligned storage for the
-            // bindgen opaque type, and the shared handle stays in this scope.
-            let shared = unsafe { GitBlobRef::from_ptr(raw) }.unwrap();
-            assert_eq!(shared.as_ptr(), raw.cast_const());
-        }
-
-        {
-            // SAFETY: the shared handle is gone, the storage remains live, and
-            // this scope has exclusive access to it.
-            let mut exclusive = unsafe { GitBlobMut::from_ptr(raw) }.unwrap();
-            assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
-            assert_eq!(exclusive.as_mut_ptr(), raw);
-        }
-
-        // SAFETY: `raw` came from this `Box::into_raw`, no handle remains, and
-        // the cast recovers the allocation's original type.
-        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_blob>>()) });
-    }
-}
-
 /// A blob write stream tied to the repository pointer retained by libgit2.
 pub struct GitBlobWriteStream<'repo> {
     inner: crate::api::types::GitWriteStreamOwned,
@@ -192,4 +129,67 @@ pub fn git_blob_create_fromstream_commit(
     // implementation frees it on every return path; `id` is writable.
     let status = unsafe { ffi::git_blob_create_fromstream_commit(id.as_mut_ptr(), raw) };
     if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::mem::{MaybeUninit, align_of, size_of};
+    use core::ptr;
+
+    use ffibox::{CCell, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn opaque_blob_preserves_layout_and_refcount_contracts() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_refcounted<T: CDropped + CCloned>() {}
+
+        assert_cell::<GitBlob>();
+        assert_refcounted::<GitBlob>();
+        assert_eq!(size_of::<GitBlob>(), size_of::<ffi::git_blob>());
+        assert_eq!(align_of::<GitBlob>(), align_of::<ffi::git_blob>());
+        assert_eq!(
+            size_of::<GitBlobRef<'_>>(),
+            size_of::<*const ffi::git_blob>()
+        );
+        assert_eq!(size_of::<GitBlobMut<'_>>(), size_of::<*mut ffi::git_blob>());
+        assert_eq!(size_of::<GitBlobOwned>(), size_of::<*mut ffi::git_blob>());
+    }
+
+    #[test]
+    fn null_blob_seams_create_no_handle() {
+        // SAFETY: these conversions explicitly accept null and return `None`
+        // without borrowing or adopting an object.
+        unsafe {
+            assert!(GitBlobRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitBlobMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitBlobOwned::from_raw(ptr::null_mut()).is_none());
+        }
+    }
+
+    #[test]
+    fn borrowed_handles_preserve_the_blob_pointer() {
+        let storage = Box::new(MaybeUninit::<ffi::git_blob>::zeroed());
+        let raw = Box::into_raw(storage).cast::<ffi::git_blob>();
+
+        {
+            // SAFETY: `raw` addresses live, suitably aligned storage for the
+            // bindgen opaque type, and the shared handle stays in this scope.
+            let shared = unsafe { GitBlobRef::from_ptr(raw) }.unwrap();
+            assert_eq!(shared.as_ptr(), raw.cast_const());
+        }
+
+        {
+            // SAFETY: the shared handle is gone, the storage remains live, and
+            // this scope has exclusive access to it.
+            let mut exclusive = unsafe { GitBlobMut::from_ptr(raw) }.unwrap();
+            assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
+            assert_eq!(exclusive.as_mut_ptr(), raw);
+        }
+
+        // SAFETY: `raw` came from this `Box::into_raw`, no handle remains, and
+        // the cast recovers the allocation's original type.
+        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_blob>>()) });
+    }
 }

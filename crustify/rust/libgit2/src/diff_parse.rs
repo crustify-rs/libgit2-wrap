@@ -33,7 +33,6 @@ mod tests {
         let mut diff = git_diff_from_buffer(patch).expect("valid patch");
         assert_eq!(crate::diff::git_diff_num_deltas(diff.as_ref()), 1);
         let options = crate::diff::git_diff_patchid_options_init().unwrap();
-        let oid = crate::diff::git_diff_patchid(&mut diff.as_mut(), Some(options)).unwrap();
-        drop(oid);
+        let _oid = crate::diff::git_diff_patchid(&mut diff.as_mut(), Some(options)).unwrap();
     }
 }

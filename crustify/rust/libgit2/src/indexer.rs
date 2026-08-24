@@ -55,7 +55,7 @@ ffibox::define_ctype!(
 );
 
 impl IndexerProgressRef<'_> {
-    /// Wraps: git_indexer_progress.received_bytes
+    /// Field: git_indexer_progress.received_bytes
     /// Returns the number of packfile bytes received so far.
     #[inline]
     #[must_use]
@@ -66,7 +66,7 @@ impl IndexerProgressRef<'_> {
         unsafe { core::ptr::addr_of!((*ptr).received_bytes).read() }
     }
 
-    /// Wraps: git_indexer_progress.indexed_deltas
+    /// Field: git_indexer_progress.indexed_deltas
     /// Returns the number of received deltas that have been indexed.
     #[inline]
     #[must_use]
@@ -77,7 +77,7 @@ impl IndexerProgressRef<'_> {
         unsafe { core::ptr::addr_of!((*ptr).indexed_deltas).read() }
     }
 
-    /// Wraps: git_indexer_progress.total_deltas
+    /// Field: git_indexer_progress.total_deltas
     /// Returns the number of deltas in the packfile.
     #[inline]
     #[must_use]
@@ -88,7 +88,7 @@ impl IndexerProgressRef<'_> {
         unsafe { core::ptr::addr_of!((*ptr).total_deltas).read() }
     }
 
-    /// Wraps: git_indexer_progress.local_objects
+    /// Field: git_indexer_progress.local_objects
     /// Returns the number of local objects injected to repair a thin pack.
     #[inline]
     #[must_use]
@@ -99,7 +99,7 @@ impl IndexerProgressRef<'_> {
         unsafe { core::ptr::addr_of!((*ptr).local_objects).read() }
     }
 
-    /// Wraps: git_indexer_progress.received_objects
+    /// Field: git_indexer_progress.received_objects
     /// Returns the number of objects downloaded so far.
     #[inline]
     #[must_use]
@@ -110,7 +110,7 @@ impl IndexerProgressRef<'_> {
         unsafe { core::ptr::addr_of!((*ptr).received_objects).read() }
     }
 
-    /// Wraps: git_indexer_progress.indexed_objects
+    /// Field: git_indexer_progress.indexed_objects
     /// Returns the number of received objects that have been hashed.
     #[inline]
     #[must_use]
@@ -121,7 +121,7 @@ impl IndexerProgressRef<'_> {
         unsafe { core::ptr::addr_of!((*ptr).indexed_objects).read() }
     }
 
-    /// Wraps: git_indexer_progress.total_objects
+    /// Field: git_indexer_progress.total_objects
     /// Returns the number of objects in the packfile.
     #[inline]
     #[must_use]

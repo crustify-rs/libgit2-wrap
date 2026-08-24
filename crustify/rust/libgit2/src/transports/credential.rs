@@ -160,7 +160,7 @@ pub type GitCredentialOwned = CBox<GitCredential>;
 ffibox::impl_dropped!(GitCredential, ffi::git_credential, ffi::git_credential_free);
 
 impl GitCredentialRef<'_> {
-    /// Wraps: git_credential.free
+    /// Field: git_credential.free
     /// Returns whether the credential header contains its required finalizer.
     #[must_use]
     pub fn has_deallocator(&self) -> bool {
@@ -169,7 +169,7 @@ impl GitCredentialRef<'_> {
         unsafe { addr_of!((*self.as_ptr()).free).read().is_some() }
     }
 
-    /// Wraps: git_credential.credtype
+    /// Field: git_credential.credtype
     /// Returns the credential kind when its bit set is published by libgit2.
     #[must_use]
     pub fn credential_type(&self) -> Option<GitCredentialType> {

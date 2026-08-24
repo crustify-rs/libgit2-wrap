@@ -18,7 +18,7 @@ ffibox::define_ctype!(
 );
 
 impl<'a> GitErrorRef<'a> {
-    /// Wraps: git_error.message
+    /// Field: git_error.message
     /// Copies the optional NUL-terminated error message.
     ///
     /// libgit2 may replace its thread-local message during a later call, so
@@ -42,7 +42,7 @@ impl<'a> GitErrorRef<'a> {
         }
     }
 
-    /// Wraps: git_error.klass
+    /// Field: git_error.klass
     /// Returns the raw libgit2 error class value.
     #[must_use]
     pub fn klass(&self) -> i32 {

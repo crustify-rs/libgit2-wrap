@@ -21,7 +21,7 @@ define_ctype!(
 );
 
 impl<'a> DescribeFormatOptionsRef<'a> {
-    /// Wraps: git_describe_format_options.version
+    /// Field: git_describe_format_options.version
     /// Returns the ABI version of this options value.
     #[must_use]
     pub fn version(&self) -> u32 {
@@ -31,7 +31,7 @@ impl<'a> DescribeFormatOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).version).read() }
     }
 
-    /// Wraps: git_describe_format_options.dirty_suffix
+    /// Field: git_describe_format_options.dirty_suffix
     /// Returns the optional suffix borrowed by this options value.
     #[must_use]
     pub fn dirty_suffix(&self) -> Option<&'a CStr> {
@@ -51,7 +51,7 @@ impl<'a> DescribeFormatOptionsRef<'a> {
         }
     }
 
-    /// Wraps: git_describe_format_options.always_use_long_format
+    /// Field: git_describe_format_options.always_use_long_format
     /// Returns whether the long form is requested for exact matches.
     #[must_use]
     pub fn always_use_long_format(&self) -> bool {
@@ -61,7 +61,7 @@ impl<'a> DescribeFormatOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).always_use_long_format).read() != 0 }
     }
 
-    /// Wraps: git_describe_format_options.abbreviated_size
+    /// Field: git_describe_format_options.abbreviated_size
     /// Returns the lower bound for abbreviated object identifiers.
     #[must_use]
     pub fn abbreviated_size(&self) -> u32 {
@@ -177,7 +177,7 @@ define_ctype!(
 );
 
 impl<'a> DescribeOptionsRef<'a> {
-    /// Wraps: git_describe_options.version
+    /// Field: git_describe_options.version
     /// Returns the ABI version of this options value.
     #[must_use]
     pub fn version(&self) -> u32 {
@@ -187,7 +187,7 @@ impl<'a> DescribeOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).version).read() }
     }
 
-    /// Wraps: git_describe_options.show_commit_oid_as_fallback
+    /// Field: git_describe_options.show_commit_oid_as_fallback
     /// Returns whether a full object ID should be used when no reference matches.
     #[must_use]
     pub fn show_commit_oid_as_fallback(&self) -> bool {
@@ -197,7 +197,7 @@ impl<'a> DescribeOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).show_commit_oid_as_fallback).read() != 0 }
     }
 
-    /// Wraps: git_describe_options.only_follow_first_parent
+    /// Field: git_describe_options.only_follow_first_parent
     /// Returns whether traversal follows only first-parent ancestry.
     #[must_use]
     pub fn only_follow_first_parent(&self) -> bool {
@@ -207,7 +207,7 @@ impl<'a> DescribeOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).only_follow_first_parent).read() != 0 }
     }
 
-    /// Wraps: git_describe_options.pattern
+    /// Field: git_describe_options.pattern
     /// Returns the optional caller-owned match pattern.
     #[must_use]
     pub fn pattern(&self) -> Option<&'a CStr> {
@@ -226,7 +226,7 @@ impl<'a> DescribeOptionsRef<'a> {
         }
     }
 
-    /// Wraps: git_describe_options.describe_strategy
+    /// Field: git_describe_options.describe_strategy
     /// Returns the raw libgit2 describe strategy value.
     ///
     /// The C field is a plain `unsigned int` holding a
@@ -242,7 +242,7 @@ impl<'a> DescribeOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).describe_strategy).read() }
     }
 
-    /// Wraps: git_describe_options.max_candidates_tags
+    /// Field: git_describe_options.max_candidates_tags
     /// Returns the maximum number of candidate tags to consider.
     #[must_use]
     pub fn max_candidates_tags(&self) -> u32 {

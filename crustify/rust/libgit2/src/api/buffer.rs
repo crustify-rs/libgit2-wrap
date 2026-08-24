@@ -54,7 +54,7 @@ impl GitBuf {
 }
 
 impl GitBufRef<'_> {
-    /// Wraps: git_buf.size
+    /// Field: git_buf.size
     /// Number of initialized content bytes, excluding the trailing NUL.
     #[inline]
     #[must_use]
@@ -65,7 +65,7 @@ impl GitBufRef<'_> {
         unsafe { core::ptr::addr_of!((*ptr).size).read() }
     }
 
-    /// Wraps: git_buf.ptr
+    /// Field: git_buf.ptr
     /// Borrow the initialized content bytes without exposing the owned pointer.
     ///
     /// `None` denotes the valid null representation of an empty buffer. A
@@ -86,7 +86,7 @@ impl GitBufRef<'_> {
         Some(unsafe { CSlice::from_raw_parts(ptr, size) })
     }
 
-    /// Wraps: git_buf.reserved
+    /// Field: git_buf.reserved
     /// Allocation capacity recorded by libgit2.
     ///
     /// The public header describes this field as reserved and unused, but the
@@ -132,7 +132,11 @@ impl GitBufMut<'_> {
             )
         };
         let ptr = NonNull::new(ptr)?;
-        if reserved > size { Some((ptr, size)) } else { None }
+        if reserved > size {
+            Some((ptr, size))
+        } else {
+            None
+        }
     }
 
     /// Borrow the initialized content bytes exclusively.

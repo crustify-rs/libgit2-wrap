@@ -59,7 +59,7 @@ ffibox::define_ctype!(
 );
 
 impl GitCertRef<'_> {
-    /// Wraps: git_cert.cert_type
+    /// Field: git_cert.cert_type
     /// Returns the certificate kind after validating the value supplied by C.
     #[inline]
     pub fn cert_type(&self) -> Result<GitCertType, InvalidGitCertType> {

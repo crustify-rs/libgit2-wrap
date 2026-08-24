@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "oracle_target": "src",
   "api_headers_only": true,
   "budgets": {
@@ -92,7 +92,7 @@
     }
   ],
   "dependency_nodes": [],
-  "waves": [
+  "steps": [
     {
       "layers": [
         0

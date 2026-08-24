@@ -410,7 +410,7 @@ ffibox::define_ctype!(
 );
 
 impl DiffPatchIdOptionsRef<'_> {
-    /// Wraps: git_diff_patchid_options.version
+    /// Field: git_diff_patchid_options.version
     /// Returns the ABI version of this options value.
     #[must_use]
     pub fn version(&self) -> u32 {
@@ -482,7 +482,7 @@ ffibox::define_ctype!(
 );
 
 impl<'a> DiffHunkRef<'a> {
-    /// Wraps: git_diff_hunk.header
+    /// Field: git_diff_hunk.header
     /// Returns the initialized header bytes, excluding the trailing NUL.
     ///
     /// Returns `None` when a malformed C value has no room for its required
@@ -506,7 +506,7 @@ impl<'a> DiffHunkRef<'a> {
         })
     }
 
-    /// Wraps: git_diff_hunk.header_len
+    /// Field: git_diff_hunk.header_len
     /// Returns the number of header bytes before the trailing NUL.
     #[must_use]
     pub fn header_len(&self) -> usize {
@@ -515,7 +515,7 @@ impl<'a> DiffHunkRef<'a> {
         unsafe { core::ptr::addr_of!((*self.as_ptr()).header_len).read() }
     }
 
-    /// Wraps: git_diff_hunk.new_lines
+    /// Field: git_diff_hunk.new_lines
     /// Returns the number of lines in the new file.
     #[must_use]
     pub fn new_lines(&self) -> i32 {
@@ -523,7 +523,7 @@ impl<'a> DiffHunkRef<'a> {
         unsafe { core::ptr::addr_of!((*self.as_ptr()).new_lines).read() }
     }
 
-    /// Wraps: git_diff_hunk.new_start
+    /// Field: git_diff_hunk.new_start
     /// Returns the starting line number in the new file.
     #[must_use]
     pub fn new_start(&self) -> i32 {
@@ -531,7 +531,7 @@ impl<'a> DiffHunkRef<'a> {
         unsafe { core::ptr::addr_of!((*self.as_ptr()).new_start).read() }
     }
 
-    /// Wraps: git_diff_hunk.old_lines
+    /// Field: git_diff_hunk.old_lines
     /// Returns the number of lines in the old file.
     #[must_use]
     pub fn old_lines(&self) -> i32 {
@@ -539,7 +539,7 @@ impl<'a> DiffHunkRef<'a> {
         unsafe { core::ptr::addr_of!((*self.as_ptr()).old_lines).read() }
     }
 
-    /// Wraps: git_diff_hunk.old_start
+    /// Field: git_diff_hunk.old_start
     /// Returns the starting line number in the old file.
     #[must_use]
     pub fn old_start(&self) -> i32 {
@@ -606,7 +606,7 @@ ffibox::define_ctype!(
 );
 
 impl<'a> DiffLineRef<'a> {
-    /// Wraps: git_diff_line.content_len
+    /// Field: git_diff_line.content_len
     /// Returns the number of bytes in the content span.
     #[must_use]
     pub fn content_len(&self) -> usize {
@@ -615,7 +615,7 @@ impl<'a> DiffLineRef<'a> {
         unsafe { core::ptr::addr_of!((*self.as_ptr()).content_len).read() }
     }
 
-    /// Wraps: git_diff_line.content
+    /// Field: git_diff_line.content
     /// Returns the non-NUL-terminated content as a borrowed counted view.
     ///
     /// An empty C value whose pointer is null is represented by `None`.
@@ -631,7 +631,7 @@ impl<'a> DiffLineRef<'a> {
         Some(unsafe { ffibox::CSlice::from_raw_parts(content, self.content_len()) })
     }
 
-    /// Wraps: git_diff_line.origin
+    /// Field: git_diff_line.origin
     /// Returns the raw `git_diff_line_t` character code.
     #[must_use]
     pub fn origin(&self) -> core::ffi::c_char {
@@ -639,7 +639,7 @@ impl<'a> DiffLineRef<'a> {
         unsafe { core::ptr::addr_of!((*self.as_ptr()).origin).read() }
     }
 
-    /// Wraps: git_diff_line.new_lineno
+    /// Field: git_diff_line.new_lineno
     /// Returns the new-file line number, or `-1` for a deleted line.
     #[must_use]
     pub fn new_lineno(&self) -> i32 {
@@ -647,7 +647,7 @@ impl<'a> DiffLineRef<'a> {
         unsafe { core::ptr::addr_of!((*self.as_ptr()).new_lineno).read() }
     }
 
-    /// Wraps: git_diff_line.old_lineno
+    /// Field: git_diff_line.old_lineno
     /// Returns the old-file line number, or `-1` for an added line.
     #[must_use]
     pub fn old_lineno(&self) -> i32 {
@@ -655,7 +655,7 @@ impl<'a> DiffLineRef<'a> {
         unsafe { core::ptr::addr_of!((*self.as_ptr()).old_lineno).read() }
     }
 
-    /// Wraps: git_diff_line.content_offset
+    /// Field: git_diff_line.content_offset
     /// Returns the byte offset of the content in the original file.
     #[must_use]
     pub fn content_offset(&self) -> ffi::git_off_t {
@@ -663,7 +663,7 @@ impl<'a> DiffLineRef<'a> {
         unsafe { core::ptr::addr_of!((*self.as_ptr()).content_offset).read() }
     }
 
-    /// Wraps: git_diff_line.num_lines
+    /// Field: git_diff_line.num_lines
     /// Returns the number of newline characters in the content.
     #[must_use]
     pub fn num_lines(&self) -> i32 {
@@ -987,7 +987,7 @@ unsafe impl ffibox::CLenDropped for DiffBinaryDataFree {
 pub type DiffBinaryData = ffibox::CVec<u8, DiffBinaryDataFree>;
 
 impl<'a> DiffBinaryFileRef<'a> {
-    /// Wraps: git_diff_binary_file.data
+    /// Field: git_diff_binary_file.data
     /// Borrows the compressed binary data.
     ///
     /// A null pointer is represented by `None`, including a side for which no
@@ -1009,7 +1009,7 @@ impl<'a> DiffBinaryFileRef<'a> {
         Some(unsafe { ffibox::CSlice::from_raw_parts(data, len) })
     }
 
-    /// Wraps: git_diff_binary_file.type
+    /// Field: git_diff_binary_file.type
     /// Returns the binary representation kind, rejecting unknown C values.
     pub fn kind(&self) -> Result<DiffBinaryKind, InvalidDiffBinaryKind> {
         // SAFETY: this live shared handle permits a raw-place scalar read.
@@ -1017,7 +1017,7 @@ impl<'a> DiffBinaryFileRef<'a> {
         DiffBinaryKind::try_from(kind)
     }
 
-    /// Wraps: git_diff_binary_file.datalen
+    /// Field: git_diff_binary_file.datalen
     /// Returns the compressed byte count.
     #[must_use]
     pub fn data_len(&self) -> usize {
@@ -1025,7 +1025,7 @@ impl<'a> DiffBinaryFileRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).datalen).read() }
     }
 
-    /// Wraps: git_diff_binary_file.inflatedlen
+    /// Field: git_diff_binary_file.inflatedlen
     /// Returns the byte count after inflation.
     #[must_use]
     pub fn inflated_len(&self) -> usize {
@@ -1091,7 +1091,7 @@ ffibox::define_ctype!(
 );
 
 impl<'a> DiffFileRef<'a> {
-    /// Wraps: git_diff_file.size
+    /// Field: git_diff_file.size
     /// Returns the entry size in bytes.
     #[must_use]
     pub fn size(&self) -> u64 {
@@ -1099,7 +1099,7 @@ impl<'a> DiffFileRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).size).read() }
     }
 
-    /// Wraps: git_diff_file.path
+    /// Field: git_diff_file.path
     /// Borrows the optional NUL-terminated repository-relative path.
     #[must_use]
     pub fn path(&self) -> Option<&'a core::ffi::CStr> {
@@ -1114,7 +1114,7 @@ impl<'a> DiffFileRef<'a> {
         Some(unsafe { core::ffi::CStr::from_ptr(path) })
     }
 
-    /// Wraps: git_diff_file.mode
+    /// Field: git_diff_file.mode
     /// Returns the published file mode, or `None` for a malformed C value.
     #[must_use]
     pub fn mode(&self) -> Option<crate::api::types::GitFileMode> {
@@ -1123,7 +1123,7 @@ impl<'a> DiffFileRef<'a> {
         crate::api::types::GitFileMode::from_raw(mode.into())
     }
 
-    /// Wraps: git_diff_file.flags
+    /// Field: git_diff_file.flags
     /// Returns the raw combination of `git_diff_flag_t` bits.
     #[must_use]
     pub fn flags(&self) -> u32 {
@@ -1131,7 +1131,7 @@ impl<'a> DiffFileRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).flags).read() }
     }
 
-    /// Wraps: git_diff_file.id
+    /// Field: git_diff_file.id
     /// Borrows the inline object identifier.
     #[must_use]
     pub fn id(&self) -> crate::oid::OidRef<'a> {
@@ -1143,7 +1143,7 @@ impl<'a> DiffFileRef<'a> {
         unsafe { crate::oid::OidRef::from_ptr(id) }.expect("an inline field is non-null")
     }
 
-    /// Wraps: git_diff_file.id_abbrev
+    /// Field: git_diff_file.id_abbrev
     /// Returns the known hexadecimal object-ID width.
     #[must_use]
     pub fn id_abbrev(&self) -> u16 {

@@ -36,70 +36,6 @@ pub fn git_branch_name_is_valid(name: Option<&core::ffi::CStr>) -> Result<bool, 
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use core::mem::{align_of, size_of};
-
-    #[test]
-    fn branch_names_are_checked_without_exposing_out_slots() {
-        // SAFETY: initialization is refcounted and balanced below.
-        assert!(unsafe { ffi::git_libgit2_init() } > 0);
-        assert_eq!(git_branch_name_is_valid(Some(c"main")), Ok(true));
-        assert_eq!(git_branch_name_is_valid(Some(c"-bad")), Ok(false));
-        assert_eq!(git_branch_name_is_valid(None), Ok(false));
-        // SAFETY: balances this test's successful initialization.
-        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
-    }
-
-    #[test]
-    fn branch_iterator_preserves_the_ffi_layout() {
-        assert_eq!(
-            size_of::<GitBranchIterator>(),
-            size_of::<ffi::git_branch_iterator>()
-        );
-        assert_eq!(
-            align_of::<GitBranchIterator>(),
-            align_of::<ffi::git_branch_iterator>()
-        );
-        assert_eq!(
-            size_of::<GitBranchIteratorRef<'_>>(),
-            size_of::<*mut ffi::git_branch_iterator>()
-        );
-        assert_eq!(
-            size_of::<GitBranchIteratorMut<'_>>(),
-            size_of::<*mut ffi::git_branch_iterator>()
-        );
-        assert_eq!(
-            size_of::<Option<ffibox::CBox<GitBranchIterator>>>(),
-            size_of::<*mut ffi::git_branch_iterator>()
-        );
-    }
-
-    #[test]
-    fn branch_iterator_handles_preserve_the_borrowed_pointer() {
-        let mut storage = GitBranchIterator::zeroed();
-        let ptr = core::ptr::addr_of_mut!(storage).cast::<ffi::git_branch_iterator>();
-
-        // SAFETY: `ptr` addresses the live opaque storage above and the handle
-        // does not escape its scope.
-        let shared = unsafe { GitBranchIteratorRef::from_ptr(ptr) }.unwrap();
-        assert_eq!(shared.as_ptr(), ptr.cast_const());
-
-        // The shared handle is no longer used, so this test can exclusively
-        // borrow the same live storage for the remainder of the scope.
-        // SAFETY: `ptr` remains live and no other handle is subsequently used.
-        let mut exclusive = unsafe { GitBranchIteratorMut::from_ptr(ptr) }.unwrap();
-        assert_eq!(exclusive.as_mut_ptr(), ptr);
-        assert_eq!(exclusive.as_ref().as_ptr(), ptr.cast_const());
-    }
-
-    #[test]
-    fn failed_reference_result_accepts_an_empty_typed_owner() {
-        assert!(matches!(reference_result(-123, None), Err(-123)));
-    }
-}
-
 fn reference_result(
     status: i32,
     reference: Option<crate::refs::GitReferenceOwned>,
@@ -344,4 +280,68 @@ pub fn git_branch_upstream_remote(
     refname: &core::ffi::CStr,
 ) -> Result<(), i32> {
     branch_name_to_buffer(out, repo, refname, ffi::git_branch_upstream_remote)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::mem::{align_of, size_of};
+
+    #[test]
+    fn branch_names_are_checked_without_exposing_out_slots() {
+        // SAFETY: initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        assert_eq!(git_branch_name_is_valid(Some(c"main")), Ok(true));
+        assert_eq!(git_branch_name_is_valid(Some(c"-bad")), Ok(false));
+        assert_eq!(git_branch_name_is_valid(None), Ok(false));
+        // SAFETY: balances this test's successful initialization.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
+    fn branch_iterator_preserves_the_ffi_layout() {
+        assert_eq!(
+            size_of::<GitBranchIterator>(),
+            size_of::<ffi::git_branch_iterator>()
+        );
+        assert_eq!(
+            align_of::<GitBranchIterator>(),
+            align_of::<ffi::git_branch_iterator>()
+        );
+        assert_eq!(
+            size_of::<GitBranchIteratorRef<'_>>(),
+            size_of::<*mut ffi::git_branch_iterator>()
+        );
+        assert_eq!(
+            size_of::<GitBranchIteratorMut<'_>>(),
+            size_of::<*mut ffi::git_branch_iterator>()
+        );
+        assert_eq!(
+            size_of::<Option<ffibox::CBox<GitBranchIterator>>>(),
+            size_of::<*mut ffi::git_branch_iterator>()
+        );
+    }
+
+    #[test]
+    fn branch_iterator_handles_preserve_the_borrowed_pointer() {
+        let mut storage = GitBranchIterator::zeroed();
+        let ptr = core::ptr::addr_of_mut!(storage).cast::<ffi::git_branch_iterator>();
+
+        // SAFETY: `ptr` addresses the live opaque storage above and the handle
+        // does not escape its scope.
+        let shared = unsafe { GitBranchIteratorRef::from_ptr(ptr) }.unwrap();
+        assert_eq!(shared.as_ptr(), ptr.cast_const());
+
+        // The shared handle is no longer used, so this test can exclusively
+        // borrow the same live storage for the remainder of the scope.
+        // SAFETY: `ptr` remains live and no other handle is subsequently used.
+        let mut exclusive = unsafe { GitBranchIteratorMut::from_ptr(ptr) }.unwrap();
+        assert_eq!(exclusive.as_mut_ptr(), ptr);
+        assert_eq!(exclusive.as_ref().as_ptr(), ptr.cast_const());
+    }
+
+    #[test]
+    fn failed_reference_result_accepts_an_empty_typed_owner() {
+        assert!(matches!(reference_result(-123, None), Err(-123)));
+    }
 }

@@ -84,7 +84,7 @@ ffibox::define_ctype!(
 );
 
 impl GitWorktreePruneOptionsRef<'_> {
-    /// Wraps: git_worktree_prune_options.flags
+    /// Field: git_worktree_prune_options.flags
     /// Returns the bit set of `git_worktree_prune_t` options.
     #[must_use]
     pub fn flags(&self) -> u32 {
@@ -93,7 +93,7 @@ impl GitWorktreePruneOptionsRef<'_> {
         unsafe { addr_of!((*self.as_ptr()).flags).read() }
     }
 
-    /// Wraps: git_worktree_prune_options.version
+    /// Field: git_worktree_prune_options.version
     /// Returns the ABI version of this options value.
     #[must_use]
     pub fn version(&self) -> core::ffi::c_uint {

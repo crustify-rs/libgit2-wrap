@@ -17,7 +17,7 @@ ffibox::define_ctype!(
 );
 
 impl IndexTimeRef<'_> {
-    /// Wraps: git_index_time.seconds
+    /// Field: git_index_time.seconds
     /// Returns the whole-second component of this timestamp.
     #[inline]
     #[must_use]
@@ -28,7 +28,7 @@ impl IndexTimeRef<'_> {
         unsafe { core::ptr::addr_of!((*ptr).seconds).read() }
     }
 
-    /// Wraps: git_index_time.nanoseconds
+    /// Field: git_index_time.nanoseconds
     /// Returns the subsecond nanosecond component of this timestamp.
     #[inline]
     #[must_use]
@@ -113,175 +113,6 @@ where
 }
 
 #[cfg(test)]
-mod tests {
-    use core::mem::{align_of, size_of};
-    use core::ptr;
-
-    use ffibox::{CCell, CDropped};
-
-    use super::*;
-
-    #[test]
-    fn opaque_index_preserves_the_c_seam_and_lifecycle_contract() {
-        fn assert_cell<T: CCell>() {}
-        fn assert_dropped<T: CDropped>() {}
-
-        assert_cell::<GitIndex>();
-        assert_dropped::<GitIndex>();
-        assert_eq!(size_of::<GitIndex>(), size_of::<ffi::git_index>());
-        assert_eq!(align_of::<GitIndex>(), align_of::<ffi::git_index>());
-        assert_eq!(
-            size_of::<GitIndexRef<'_>>(),
-            size_of::<*const ffi::git_index>()
-        );
-        assert_eq!(
-            size_of::<GitIndexMut<'_>>(),
-            size_of::<*mut ffi::git_index>()
-        );
-        assert_eq!(size_of::<GitIndexOwned>(), size_of::<*mut ffi::git_index>());
-    }
-
-    #[test]
-    fn null_index_seams_create_no_handles() {
-        // SAFETY: these conversion seams explicitly accept null and return
-        // `None` without borrowing or adopting an object.
-        unsafe {
-            assert!(GitIndexRef::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitIndexMut::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitIndexOwned::from_raw(ptr::null_mut()).is_none());
-        }
-    }
-
-    #[test]
-    fn index_time_wrapper_preserves_the_c_layout() {
-        assert_eq!(size_of::<IndexTime>(), size_of::<ffi::git_index_time>());
-        assert_eq!(align_of::<IndexTime>(), align_of::<ffi::git_index_time>());
-        assert_eq!(
-            size_of::<IndexTimeRef<'_>>(),
-            size_of::<*const ffi::git_index_time>()
-        );
-        assert_eq!(
-            size_of::<IndexTimeMut<'_>>(),
-            size_of::<*mut ffi::git_index_time>()
-        );
-    }
-
-    #[test]
-    fn borrowed_handles_read_and_write_both_components() {
-        let mut raw = ffi::git_index_time {
-            seconds: -2,
-            nanoseconds: 3,
-        };
-
-        // SAFETY: `raw` is initialized, non-null, exclusively borrowed for the
-        // handle's lifetime, and remains live until the handle is last used.
-        let mut time = unsafe { IndexTimeMut::from_ptr(&raw mut raw) }
-            .expect("the address of a stack value is non-null");
-        assert_eq!(time.as_ref().seconds(), -2);
-        assert_eq!(time.as_ref().nanoseconds(), 3);
-
-        time.set_seconds(4);
-        time.set_nanoseconds(5);
-        assert_eq!(time.as_ref().seconds(), 4);
-        assert_eq!(time.as_ref().nanoseconds(), 5);
-    }
-
-    #[test]
-    fn conflict_iterator_preserves_the_ffi_layout_and_lifecycle_contract() {
-        fn assert_cell<T: CCell>() {}
-        fn assert_dropped<T: CDropped>() {}
-
-        assert_cell::<GitIndexConflictIterator>();
-        assert_dropped::<GitIndexConflictIterator>();
-        assert_eq!(
-            size_of::<GitIndexConflictIterator>(),
-            size_of::<ffi::git_index_conflict_iterator>()
-        );
-        assert_eq!(
-            align_of::<GitIndexConflictIterator>(),
-            align_of::<ffi::git_index_conflict_iterator>()
-        );
-        assert_eq!(
-            size_of::<GitIndexConflictIteratorRef<'_>>(),
-            size_of::<*const ffi::git_index_conflict_iterator>()
-        );
-        assert_eq!(
-            size_of::<GitIndexConflictIteratorMut<'_>>(),
-            size_of::<*mut ffi::git_index_conflict_iterator>()
-        );
-        assert_eq!(
-            size_of::<GitIndexConflictIteratorOwned>(),
-            size_of::<*mut ffi::git_index_conflict_iterator>()
-        );
-    }
-
-    #[test]
-    fn null_conflict_iterator_seams_create_no_handle() {
-        // SAFETY: each conversion accepts null and returns `None` without
-        // borrowing or adopting an object.
-        unsafe {
-            assert!(GitIndexConflictIteratorRef::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitIndexConflictIteratorMut::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitIndexConflictIteratorOwned::from_raw(ptr::null_mut()).is_none());
-        }
-    }
-
-    /// Holds one libgit2 initialization count for the duration of a test.
-    struct Libgit2Init;
-
-    impl Libgit2Init {
-        fn acquire() -> Self {
-            // SAFETY: libgit2 initialization is process-global and
-            // refcounted; this guard balances the successful acquisition.
-            assert!(unsafe { ffi::git_libgit2_init() } > 0);
-            Self
-        }
-    }
-
-    impl Drop for Libgit2Init {
-        fn drop(&mut self) {
-            // SAFETY: balances the successful initialization represented by
-            // this guard, after every libgit2 owner has already been dropped.
-            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
-        }
-    }
-
-    #[test]
-    fn conflict_iterator_owner_releases_its_allocation() {
-        let _libgit2 = Libgit2Init::acquire();
-
-        let mut raw_index = ptr::null_mut();
-        // SAFETY: `raw_index` is a writable out-slot; on success libgit2
-        // transfers one owned in-memory index reference through it.
-        let status = unsafe { ffi::git_index_new(&raw mut raw_index) };
-        assert_eq!(status, 0);
-        // SAFETY: the successful constructor produced one non-null owned
-        // index count that has not been adopted elsewhere.
-        let mut index = unsafe { GitIndexOwned::from_raw(raw_index) }.expect("a new index");
-
-        let mut raw_iterator = ptr::null_mut();
-        // SAFETY: `raw_iterator` is a writable out-slot and the index stays
-        // exclusively borrowed for as long as the iterator below lives. The
-        // constructor stores the index pointer without retaining a count.
-        let status = unsafe {
-            ffi::git_index_conflict_iterator_new(&raw mut raw_iterator, index.as_mut().as_mut_ptr())
-        };
-        assert_eq!(status, 0);
-        // SAFETY: the successful constructor produced one non-null owned
-        // iterator allocation that has not been adopted elsewhere.
-        let mut iterator =
-            unsafe { GitIndexConflictIteratorOwned::from_raw(raw_iterator) }.expect("an iterator");
-        assert_eq!(iterator.as_ref().as_ptr(), raw_iterator.cast_const());
-        assert_eq!(iterator.as_mut().as_mut_ptr(), raw_iterator);
-
-        // `git_index_conflict_iterator_free` runs here and must not touch the
-        // borrowed index, which outlives it.
-        drop(iterator);
-        drop(index);
-    }
-}
-
-#[cfg(test)]
 mod callback_tests {
     use super::*;
 
@@ -310,7 +141,6 @@ mod callback_tests {
             GitIndexMatchedPathCallback::call(&mut callback, c"src/lib.rs", None),
             0
         );
-        drop(callback);
         assert_eq!(seen, Some(true));
     }
 }
@@ -356,7 +186,7 @@ ffibox::define_ctype!(
 );
 
 impl<'a> IndexEntryRef<'a> {
-    /// Wraps: git_index_entry.path
+    /// Field: git_index_entry.path
     /// Returns the optional NUL-terminated path borrowed by this entry.
     #[must_use]
     pub fn path(&self) -> Option<&'a CStr> {
@@ -373,7 +203,7 @@ impl<'a> IndexEntryRef<'a> {
         }
     }
 
-    /// Wraps: git_index_entry.mode
+    /// Field: git_index_entry.mode
     /// Returns the entry's file mode.
     #[must_use]
     pub fn mode(&self) -> u32 {
@@ -382,7 +212,7 @@ impl<'a> IndexEntryRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).mode).read() }
     }
 
-    /// Wraps: git_index_entry.flags
+    /// Field: git_index_entry.flags
     /// Returns the entry's on-disk flag bits.
     #[must_use]
     pub fn flags(&self) -> u16 {
@@ -391,7 +221,7 @@ impl<'a> IndexEntryRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).flags).read() }
     }
 
-    /// Wraps: git_index_entry.file_size
+    /// Field: git_index_entry.file_size
     /// Returns the cached, truncated file size.
     #[must_use]
     pub fn file_size(&self) -> u32 {
@@ -399,7 +229,7 @@ impl<'a> IndexEntryRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).file_size).read() }
     }
 
-    /// Wraps: git_index_entry.id
+    /// Field: git_index_entry.id
     /// Borrows the inline object identifier.
     #[must_use]
     pub fn id(&self) -> crate::oid::OidRef<'a> {
@@ -409,7 +239,7 @@ impl<'a> IndexEntryRef<'a> {
             .expect("an inline field address is non-null")
     }
 
-    /// Wraps: git_index_entry.mtime
+    /// Field: git_index_entry.mtime
     /// Borrows the inline modification timestamp.
     #[must_use]
     pub fn mtime(&self) -> IndexTimeRef<'a> {
@@ -419,7 +249,7 @@ impl<'a> IndexEntryRef<'a> {
             .expect("an inline field address is non-null")
     }
 
-    /// Wraps: git_index_entry.ctime
+    /// Field: git_index_entry.ctime
     /// Borrows the inline creation/change timestamp.
     #[must_use]
     pub fn ctime(&self) -> IndexTimeRef<'a> {
@@ -429,7 +259,7 @@ impl<'a> IndexEntryRef<'a> {
             .expect("an inline field address is non-null")
     }
 
-    /// Wraps: git_index_entry.uid
+    /// Field: git_index_entry.uid
     /// Returns the cached owner user ID.
     #[must_use]
     pub fn uid(&self) -> u32 {
@@ -437,7 +267,7 @@ impl<'a> IndexEntryRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).uid).read() }
     }
 
-    /// Wraps: git_index_entry.flags_extended
+    /// Field: git_index_entry.flags_extended
     /// Returns the entry's extended flag bits.
     #[must_use]
     pub fn flags_extended(&self) -> u16 {
@@ -446,7 +276,7 @@ impl<'a> IndexEntryRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).flags_extended).read() }
     }
 
-    /// Wraps: git_index_entry.gid
+    /// Field: git_index_entry.gid
     /// Returns the cached owner group ID.
     #[must_use]
     pub fn gid(&self) -> u32 {
@@ -454,7 +284,7 @@ impl<'a> IndexEntryRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).gid).read() }
     }
 
-    /// Wraps: git_index_entry.ino
+    /// Field: git_index_entry.ino
     /// Returns the cached inode number.
     #[must_use]
     pub fn ino(&self) -> u32 {
@@ -462,7 +292,7 @@ impl<'a> IndexEntryRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).ino).read() }
     }
 
-    /// Wraps: git_index_entry.dev
+    /// Field: git_index_entry.dev
     /// Returns the cached device number.
     #[must_use]
     pub fn dev(&self) -> u32 {
@@ -642,5 +472,174 @@ mod entry_tests {
         unsafe { entry.set_borrowed_path(Some(c"temporary")) };
         entry.clear_path();
         assert_eq!(entry.as_ref().path(), None);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::mem::{align_of, size_of};
+    use core::ptr;
+
+    use ffibox::{CCell, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn opaque_index_preserves_the_c_seam_and_lifecycle_contract() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<GitIndex>();
+        assert_dropped::<GitIndex>();
+        assert_eq!(size_of::<GitIndex>(), size_of::<ffi::git_index>());
+        assert_eq!(align_of::<GitIndex>(), align_of::<ffi::git_index>());
+        assert_eq!(
+            size_of::<GitIndexRef<'_>>(),
+            size_of::<*const ffi::git_index>()
+        );
+        assert_eq!(
+            size_of::<GitIndexMut<'_>>(),
+            size_of::<*mut ffi::git_index>()
+        );
+        assert_eq!(size_of::<GitIndexOwned>(), size_of::<*mut ffi::git_index>());
+    }
+
+    #[test]
+    fn null_index_seams_create_no_handles() {
+        // SAFETY: these conversion seams explicitly accept null and return
+        // `None` without borrowing or adopting an object.
+        unsafe {
+            assert!(GitIndexRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitIndexMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitIndexOwned::from_raw(ptr::null_mut()).is_none());
+        }
+    }
+
+    #[test]
+    fn index_time_wrapper_preserves_the_c_layout() {
+        assert_eq!(size_of::<IndexTime>(), size_of::<ffi::git_index_time>());
+        assert_eq!(align_of::<IndexTime>(), align_of::<ffi::git_index_time>());
+        assert_eq!(
+            size_of::<IndexTimeRef<'_>>(),
+            size_of::<*const ffi::git_index_time>()
+        );
+        assert_eq!(
+            size_of::<IndexTimeMut<'_>>(),
+            size_of::<*mut ffi::git_index_time>()
+        );
+    }
+
+    #[test]
+    fn borrowed_handles_read_and_write_both_components() {
+        let mut raw = ffi::git_index_time {
+            seconds: -2,
+            nanoseconds: 3,
+        };
+
+        // SAFETY: `raw` is initialized, non-null, exclusively borrowed for the
+        // handle's lifetime, and remains live until the handle is last used.
+        let mut time = unsafe { IndexTimeMut::from_ptr(&raw mut raw) }
+            .expect("the address of a stack value is non-null");
+        assert_eq!(time.as_ref().seconds(), -2);
+        assert_eq!(time.as_ref().nanoseconds(), 3);
+
+        time.set_seconds(4);
+        time.set_nanoseconds(5);
+        assert_eq!(time.as_ref().seconds(), 4);
+        assert_eq!(time.as_ref().nanoseconds(), 5);
+    }
+
+    #[test]
+    fn conflict_iterator_preserves_the_ffi_layout_and_lifecycle_contract() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<GitIndexConflictIterator>();
+        assert_dropped::<GitIndexConflictIterator>();
+        assert_eq!(
+            size_of::<GitIndexConflictIterator>(),
+            size_of::<ffi::git_index_conflict_iterator>()
+        );
+        assert_eq!(
+            align_of::<GitIndexConflictIterator>(),
+            align_of::<ffi::git_index_conflict_iterator>()
+        );
+        assert_eq!(
+            size_of::<GitIndexConflictIteratorRef<'_>>(),
+            size_of::<*const ffi::git_index_conflict_iterator>()
+        );
+        assert_eq!(
+            size_of::<GitIndexConflictIteratorMut<'_>>(),
+            size_of::<*mut ffi::git_index_conflict_iterator>()
+        );
+        assert_eq!(
+            size_of::<GitIndexConflictIteratorOwned>(),
+            size_of::<*mut ffi::git_index_conflict_iterator>()
+        );
+    }
+
+    #[test]
+    fn null_conflict_iterator_seams_create_no_handle() {
+        // SAFETY: each conversion accepts null and returns `None` without
+        // borrowing or adopting an object.
+        unsafe {
+            assert!(GitIndexConflictIteratorRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitIndexConflictIteratorMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitIndexConflictIteratorOwned::from_raw(ptr::null_mut()).is_none());
+        }
+    }
+
+    /// Holds one libgit2 initialization count for the duration of a test.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and
+            // refcounted; this guard balances the successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard, after every libgit2 owner has already been dropped.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    #[test]
+    fn conflict_iterator_owner_releases_its_allocation() {
+        let _libgit2 = Libgit2Init::acquire();
+
+        let mut raw_index = ptr::null_mut();
+        // SAFETY: `raw_index` is a writable out-slot; on success libgit2
+        // transfers one owned in-memory index reference through it.
+        let status = unsafe { ffi::git_index_new(&raw mut raw_index) };
+        assert_eq!(status, 0);
+        // SAFETY: the successful constructor produced one non-null owned
+        // index count that has not been adopted elsewhere.
+        let mut index = unsafe { GitIndexOwned::from_raw(raw_index) }.expect("a new index");
+
+        let mut raw_iterator = ptr::null_mut();
+        // SAFETY: `raw_iterator` is a writable out-slot and the index stays
+        // exclusively borrowed for as long as the iterator below lives. The
+        // constructor stores the index pointer without retaining a count.
+        let status = unsafe {
+            ffi::git_index_conflict_iterator_new(&raw mut raw_iterator, index.as_mut().as_mut_ptr())
+        };
+        assert_eq!(status, 0);
+        // SAFETY: the successful constructor produced one non-null owned
+        // iterator allocation that has not been adopted elsewhere.
+        let mut iterator =
+            unsafe { GitIndexConflictIteratorOwned::from_raw(raw_iterator) }.expect("an iterator");
+        assert_eq!(iterator.as_ref().as_ptr(), raw_iterator.cast_const());
+        assert_eq!(iterator.as_mut().as_mut_ptr(), raw_iterator);
+
+        // `git_index_conflict_iterator_free` runs here and must not touch the
+        // borrowed index, which outlives it.
+        drop(iterator);
+        drop(index);
     }
 }

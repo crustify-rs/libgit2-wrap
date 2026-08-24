@@ -20,7 +20,7 @@ ffibox::define_ctype!(
 /// A by-value revision parse result whose object fields are released on drop.
 pub type GitRevspecOwned = CVal<GitRevspec>;
 
-/// Wraps: git_revspec.flags
+/// Field: git_revspec.flags
 /// The intent and range semantics reported for a parsed revision expression.
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
@@ -111,7 +111,7 @@ impl<'a> GitRevspecRef<'a> {
         GitRevspecFlags::from_bits(bits).ok_or(InvalidGitRevspecFlags(bits))
     }
 
-    /// Wraps: git_revspec.from
+    /// Field: git_revspec.from
     /// Borrows the owned left-hand object, when one is present.
     #[must_use]
     pub fn from(&self) -> Option<GitObjectRef<'a>> {
@@ -123,7 +123,7 @@ impl<'a> GitRevspecRef<'a> {
         unsafe { GitObjectRef::from_ptr(object) }
     }
 
-    /// Wraps: git_revspec.to
+    /// Field: git_revspec.to
     /// Borrows the owned right-hand object, when the expression is a range.
     #[must_use]
     pub fn to(&self) -> Option<GitObjectRef<'a>> {

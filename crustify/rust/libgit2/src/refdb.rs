@@ -78,6 +78,15 @@ impl TryFrom<ffi::git_refdb_t> for GitRefdbType {
     }
 }
 
+/// Wraps: git_refdb_compress
+/// Asks the selected reference backend to compact its storage.
+pub fn git_refdb_compress(refdb: &mut GitRefdbMut<'_>) -> Result<(), i32> {
+    // SAFETY: the exclusive handle provides live backend state for the call;
+    // the backend retains no new pointer to the handle.
+    let status = unsafe { ffi::git_refdb_compress(refdb.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
@@ -138,13 +147,4 @@ mod tests {
         assert_eq!(size_of::<GitRefdbType>(), size_of::<ffi::git_refdb_t>());
         assert_eq!(align_of::<GitRefdbType>(), align_of::<ffi::git_refdb_t>());
     }
-}
-
-/// Wraps: git_refdb_compress
-/// Asks the selected reference backend to compact its storage.
-pub fn git_refdb_compress(refdb: &mut GitRefdbMut<'_>) -> Result<(), i32> {
-    // SAFETY: the exclusive handle provides live backend state for the call;
-    // the backend retains no new pointer to the handle.
-    let status = unsafe { ffi::git_refdb_compress(refdb.as_mut_ptr()) };
-    if status == 0 { Ok(()) } else { Err(status) }
 }

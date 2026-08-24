@@ -271,7 +271,7 @@ ffibox::impl_dropped!(
 );
 
 impl<'a> GitConfigEntryRef<'a> {
-    /// Wraps: git_config_entry.name
+    /// Field: git_config_entry.name
     /// Returns the normalized configuration name.
     #[must_use]
     pub fn name(&self) -> &'a CStr {
@@ -281,7 +281,7 @@ impl<'a> GitConfigEntryRef<'a> {
         unsafe { CStr::from_ptr(addr_of!((*self.as_ptr()).name).read()) }
     }
 
-    /// Wraps: git_config_entry.value
+    /// Field: git_config_entry.value
     /// Returns the literal value, or `None` for a valueless entry.
     #[must_use]
     pub fn value(&self) -> Option<&'a CStr> {
@@ -297,7 +297,7 @@ impl<'a> GitConfigEntryRef<'a> {
         }
     }
 
-    /// Wraps: git_config_entry.level
+    /// Field: git_config_entry.level
     /// Returns the validated source level of this entry.
     #[must_use]
     pub fn level(&self) -> Option<GitConfigLevel> {
@@ -307,7 +307,7 @@ impl<'a> GitConfigEntryRef<'a> {
         GitConfigLevel::from_raw(level)
     }
 
-    /// Wraps: git_config_entry.include_depth
+    /// Field: git_config_entry.include_depth
     /// Returns the include nesting depth at which this entry was read.
     #[must_use]
     pub fn include_depth(&self) -> u32 {
@@ -316,7 +316,7 @@ impl<'a> GitConfigEntryRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).include_depth).read() }
     }
 
-    /// Wraps: git_config_entry.origin_path
+    /// Field: git_config_entry.origin_path
     /// Returns the optional path from which this entry was read.
     #[must_use]
     pub fn origin_path(&self) -> Option<&'a CStr> {
@@ -332,7 +332,7 @@ impl<'a> GitConfigEntryRef<'a> {
         }
     }
 
-    /// Wraps: git_config_entry.backend_type
+    /// Field: git_config_entry.backend_type
     /// Returns the backend kind that supplied this entry.
     #[must_use]
     pub fn backend_type(&self) -> &'a CStr {

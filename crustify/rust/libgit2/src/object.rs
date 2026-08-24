@@ -74,105 +74,6 @@ unsafe impl CCloned for GitObject {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use core::mem::{MaybeUninit, align_of, size_of};
-
-    use ffibox::{CCloned, CDropped};
-
-    use super::*;
-
-    #[test]
-    fn opaque_representation_and_handles_match_the_c_seam() {
-        assert_eq!(size_of::<GitObject>(), size_of::<ffi::git_object>());
-        assert_eq!(align_of::<GitObject>(), align_of::<ffi::git_object>());
-        assert_eq!(
-            size_of::<GitObjectRef<'_>>(),
-            size_of::<*const ffi::git_object>()
-        );
-        assert_eq!(
-            size_of::<GitObjectMut<'_>>(),
-            size_of::<*mut ffi::git_object>()
-        );
-        assert_eq!(
-            size_of::<Option<GitObjectOwned>>(),
-            size_of::<*mut ffi::git_object>()
-        );
-    }
-
-    #[test]
-    fn object_registers_refcount_lifecycle() {
-        fn assert_refcounted<T: CDropped + CCloned>() {}
-        assert_refcounted::<GitObject>();
-    }
-
-    #[test]
-    fn borrowed_handles_preserve_the_object_pointer() {
-        let storage = Box::new(MaybeUninit::<ffi::git_object>::zeroed());
-        let raw = Box::into_raw(storage).cast::<ffi::git_object>();
-
-        {
-            // SAFETY: `raw` addresses live, suitably aligned opaque storage,
-            // and the shared handle remains within this scope.
-            let shared = unsafe { GitObjectRef::from_ptr(raw) }.unwrap();
-            assert_eq!(shared.as_ptr(), raw.cast_const());
-        }
-
-        {
-            // SAFETY: the shared handle is gone, the storage remains live, and
-            // this scope has exclusive access to it.
-            let mut exclusive = unsafe { GitObjectMut::from_ptr(raw) }.unwrap();
-            assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
-            assert_eq!(exclusive.as_mut_ptr(), raw);
-        }
-
-        // SAFETY: `raw` came from this `Box::into_raw`, no handle remains, and
-        // the cast recovers the allocation's original type.
-        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_object>>()) });
-    }
-
-    #[test]
-    fn object_kind_names_round_trip_through_safe_functions() {
-        for kind in [
-            GitObjectType::COMMIT,
-            GitObjectType::TREE,
-            GitObjectType::BLOB,
-            GitObjectType::TAG,
-        ] {
-            let name = git_object_type2string(kind);
-            assert_eq!(git_object_string2type(Some(name)), kind);
-            assert!(git_object_typeisloose(kind));
-        }
-        assert_eq!(git_object_string2type(None), GitObjectType::INVALID);
-    }
-
-    #[test]
-    fn object_kind_lookup_matches_libgit2_prefix_semantics() {
-        // The C loop accepts any input the published name is a prefix of, and
-        // rejects an input that merely starts one.
-        assert_eq!(
-            git_object_string2type(Some(c"commitment")),
-            GitObjectType::COMMIT
-        );
-        assert_eq!(git_object_string2type(Some(c"comm")), GitObjectType::INVALID);
-        assert_eq!(git_object_string2type(Some(c"")), GitObjectType::INVALID);
-        assert_eq!(
-            git_object_string2type(Some(c"nonsense")),
-            GitObjectType::INVALID
-        );
-    }
-
-    #[test]
-    fn unnamed_object_kinds_have_an_empty_static_name() {
-        // `git_object_type2string` answers every checked value, returning the
-        // empty static string outside the object table rather than null.
-        assert_eq!(git_object_type2string(GitObjectType::ANY), c"");
-        assert_eq!(git_object_type2string(GitObjectType::INVALID), c"");
-        assert!(!git_object_typeisloose(GitObjectType::ANY));
-        assert!(!git_object_typeisloose(GitObjectType::INVALID));
-    }
-}
-
 /// Wraps: git_object_dup
 /// Acquires another owned reference to the same repository-backed object.
 pub fn git_object_dup<'repo>(source: &RepositoryObject<'repo>) -> RepositoryObject<'repo> {
@@ -324,4 +225,106 @@ pub fn git_object_type2string(kind: GitObjectType) -> &'static CStr {
 pub fn git_object_typeisloose(kind: GitObjectType) -> bool {
     // SAFETY: this pure query accepts every checked object-kind value.
     unsafe { ffi::git_object_typeisloose(kind.as_raw()) != 0 }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::mem::{MaybeUninit, align_of, size_of};
+
+    use ffibox::{CCloned, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn opaque_representation_and_handles_match_the_c_seam() {
+        assert_eq!(size_of::<GitObject>(), size_of::<ffi::git_object>());
+        assert_eq!(align_of::<GitObject>(), align_of::<ffi::git_object>());
+        assert_eq!(
+            size_of::<GitObjectRef<'_>>(),
+            size_of::<*const ffi::git_object>()
+        );
+        assert_eq!(
+            size_of::<GitObjectMut<'_>>(),
+            size_of::<*mut ffi::git_object>()
+        );
+        assert_eq!(
+            size_of::<Option<GitObjectOwned>>(),
+            size_of::<*mut ffi::git_object>()
+        );
+    }
+
+    #[test]
+    fn object_registers_refcount_lifecycle() {
+        fn assert_refcounted<T: CDropped + CCloned>() {}
+        assert_refcounted::<GitObject>();
+    }
+
+    #[test]
+    fn borrowed_handles_preserve_the_object_pointer() {
+        let storage = Box::new(MaybeUninit::<ffi::git_object>::zeroed());
+        let raw = Box::into_raw(storage).cast::<ffi::git_object>();
+
+        {
+            // SAFETY: `raw` addresses live, suitably aligned opaque storage,
+            // and the shared handle remains within this scope.
+            let shared = unsafe { GitObjectRef::from_ptr(raw) }.unwrap();
+            assert_eq!(shared.as_ptr(), raw.cast_const());
+        }
+
+        {
+            // SAFETY: the shared handle is gone, the storage remains live, and
+            // this scope has exclusive access to it.
+            let mut exclusive = unsafe { GitObjectMut::from_ptr(raw) }.unwrap();
+            assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
+            assert_eq!(exclusive.as_mut_ptr(), raw);
+        }
+
+        // SAFETY: `raw` came from this `Box::into_raw`, no handle remains, and
+        // the cast recovers the allocation's original type.
+        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_object>>()) });
+    }
+
+    #[test]
+    fn object_kind_names_round_trip_through_safe_functions() {
+        for kind in [
+            GitObjectType::COMMIT,
+            GitObjectType::TREE,
+            GitObjectType::BLOB,
+            GitObjectType::TAG,
+        ] {
+            let name = git_object_type2string(kind);
+            assert_eq!(git_object_string2type(Some(name)), kind);
+            assert!(git_object_typeisloose(kind));
+        }
+        assert_eq!(git_object_string2type(None), GitObjectType::INVALID);
+    }
+
+    #[test]
+    fn object_kind_lookup_matches_libgit2_prefix_semantics() {
+        // The C loop accepts any input the published name is a prefix of, and
+        // rejects an input that merely starts one.
+        assert_eq!(
+            git_object_string2type(Some(c"commitment")),
+            GitObjectType::COMMIT
+        );
+        assert_eq!(
+            git_object_string2type(Some(c"comm")),
+            GitObjectType::INVALID
+        );
+        assert_eq!(git_object_string2type(Some(c"")), GitObjectType::INVALID);
+        assert_eq!(
+            git_object_string2type(Some(c"nonsense")),
+            GitObjectType::INVALID
+        );
+    }
+
+    #[test]
+    fn unnamed_object_kinds_have_an_empty_static_name() {
+        // `git_object_type2string` answers every checked value, returning the
+        // empty static string outside the object table rather than null.
+        assert_eq!(git_object_type2string(GitObjectType::ANY), c"");
+        assert_eq!(git_object_type2string(GitObjectType::INVALID), c"");
+        assert!(!git_object_typeisloose(GitObjectType::ANY));
+        assert!(!git_object_typeisloose(GitObjectType::INVALID));
+    }
 }

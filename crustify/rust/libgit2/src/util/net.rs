@@ -106,7 +106,7 @@ ffibox::define_ctype!(
 pub type RemoteHeadString = CrustifyStr<GitStrdupFree>;
 
 impl<'a> RemoteHeadRef<'a> {
-    /// Wraps: git_remote_head.oid
+    /// Field: git_remote_head.oid
     /// Borrows the remote object ID embedded in this head.
     #[must_use]
     pub fn oid(&self) -> OidRef<'a> {
@@ -118,7 +118,7 @@ impl<'a> RemoteHeadRef<'a> {
         unsafe { OidRef::from_ptr(oid) }.expect("an inline oid field is non-null")
     }
 
-    /// Wraps: git_remote_head.name
+    /// Field: git_remote_head.name
     /// Borrows the advertised reference name, when present.
     #[must_use]
     pub fn name(&self) -> Option<&'a CStr> {
@@ -135,7 +135,7 @@ impl<'a> RemoteHeadRef<'a> {
         }
     }
 
-    /// Wraps: git_remote_head.local
+    /// Field: git_remote_head.local
     /// Reports whether the advertised object is available locally.
     #[must_use]
     pub fn is_local(&self) -> bool {
@@ -144,7 +144,7 @@ impl<'a> RemoteHeadRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).local).read() != 0 }
     }
 
-    /// Wraps: git_remote_head.loid
+    /// Field: git_remote_head.loid
     /// Borrows the local object ID embedded in this head.
     #[must_use]
     pub fn local_oid(&self) -> OidRef<'a> {
@@ -156,7 +156,7 @@ impl<'a> RemoteHeadRef<'a> {
         unsafe { OidRef::from_ptr(oid) }.expect("an inline oid field is non-null")
     }
 
-    /// Wraps: git_remote_head.symref_target
+    /// Field: git_remote_head.symref_target
     /// Borrows the symbolic-reference target, when the server advertised one.
     #[must_use]
     pub fn symref_target(&self) -> Option<&'a CStr> {

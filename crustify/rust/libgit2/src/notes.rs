@@ -45,44 +45,6 @@ impl GitNoteIterator<'_> {
 // allocation exactly once, and releases all owned fields before the header.
 ffibox::impl_dropped!(GitNote, ffi::git_note, ffi::git_note_free);
 
-#[cfg(test)]
-mod tests {
-    use core::mem::{align_of, size_of};
-    use core::ptr;
-
-    use ffibox::{CCell, CDropped};
-
-    use super::*;
-
-    #[test]
-    fn note_wrapper_preserves_the_opaque_seam_and_lifecycle_contract() {
-        fn assert_cell<T: CCell>() {}
-        fn assert_dropped<T: CDropped>() {}
-
-        assert_cell::<GitNote>();
-        assert_dropped::<GitNote>();
-        assert_eq!(size_of::<GitNote>(), size_of::<ffi::git_note>());
-        assert_eq!(align_of::<GitNote>(), align_of::<ffi::git_note>());
-        assert_eq!(
-            size_of::<GitNoteRef<'_>>(),
-            size_of::<*const ffi::git_note>()
-        );
-        assert_eq!(size_of::<GitNoteMut<'_>>(), size_of::<*mut ffi::git_note>());
-        assert_eq!(size_of::<GitNoteOwned>(), size_of::<*mut ffi::git_note>());
-    }
-
-    #[test]
-    fn null_note_seams_create_no_handle() {
-        // SAFETY: all conversions explicitly accept null and return `None`
-        // without borrowing or adopting an object.
-        unsafe {
-            assert!(GitNoteRef::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitNoteMut::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitNoteOwned::from_raw(ptr::null_mut()).is_none());
-        }
-    }
-}
-
 /// Wraps: git_note_default_ref
 /// Resolves the configured default notes reference into an owned buffer.
 pub fn git_note_default_ref(repo: GitRepositoryRef<'_>) -> Result<CVal<GitBuf>, i32> {
@@ -198,4 +160,42 @@ pub fn git_note_read(
     }
     // SAFETY: success yields one fully formed owned note.
     unsafe { GitNoteOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+#[cfg(test)]
+mod tests {
+    use core::mem::{align_of, size_of};
+    use core::ptr;
+
+    use ffibox::{CCell, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn note_wrapper_preserves_the_opaque_seam_and_lifecycle_contract() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<GitNote>();
+        assert_dropped::<GitNote>();
+        assert_eq!(size_of::<GitNote>(), size_of::<ffi::git_note>());
+        assert_eq!(align_of::<GitNote>(), align_of::<ffi::git_note>());
+        assert_eq!(
+            size_of::<GitNoteRef<'_>>(),
+            size_of::<*const ffi::git_note>()
+        );
+        assert_eq!(size_of::<GitNoteMut<'_>>(), size_of::<*mut ffi::git_note>());
+        assert_eq!(size_of::<GitNoteOwned>(), size_of::<*mut ffi::git_note>());
+    }
+
+    #[test]
+    fn null_note_seams_create_no_handle() {
+        // SAFETY: all conversions explicitly accept null and return `None`
+        // without borrowing or adopting an object.
+        unsafe {
+            assert!(GitNoteRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitNoteMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitNoteOwned::from_raw(ptr::null_mut()).is_none());
+        }
+    }
 }

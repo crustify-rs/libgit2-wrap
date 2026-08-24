@@ -103,7 +103,7 @@ pub enum GitOdbStreamError {
 }
 
 impl GitOdbStreamRef<'_> {
-    /// Wraps: git_odb_stream.mode
+    /// Field: git_odb_stream.mode
     /// Returns the stream's published capability bits, or `None` if C stored
     /// an unknown or empty mode.
     ///
@@ -120,7 +120,7 @@ impl GitOdbStreamRef<'_> {
         GitOdbStreamMode::from_bits(bits)
     }
 
-    /// Wraps: git_odb_stream.oid_type
+    /// Field: git_odb_stream.oid_type
     /// Returns the object-ID algorithm after validating the C value.
     ///
     /// An error is the normal answer for a read stream: `git_oid_t` has no
@@ -134,7 +134,7 @@ impl GitOdbStreamRef<'_> {
         OidType::try_from(raw)
     }
 
-    /// Wraps: git_odb_stream.backend
+    /// Field: git_odb_stream.backend
     /// Returns whether the stream has its required borrowed backend link.
     ///
     /// The backend type has not yet been wrapped, so this intentionally does
@@ -147,7 +147,7 @@ impl GitOdbStreamRef<'_> {
         !unsafe { core::ptr::addr_of!((*stream).backend).read() }.is_null()
     }
 
-    /// Wraps: git_odb_stream.received_bytes
+    /// Field: git_odb_stream.received_bytes
     /// Returns the number of bytes accepted by this stream so far.
     ///
     /// The frontend `git_odb_stream_write` maintains this count. Dispatching
@@ -162,7 +162,7 @@ impl GitOdbStreamRef<'_> {
         unsafe { core::ptr::addr_of!((*stream).received_bytes).read() }
     }
 
-    /// Wraps: git_odb_stream.hash_ctx
+    /// Field: git_odb_stream.hash_ctx
     /// Returns whether the frontend installed its owned hashing context.
     ///
     /// The erased context is owned by the stream and is deliberately not
@@ -175,7 +175,7 @@ impl GitOdbStreamRef<'_> {
         !unsafe { core::ptr::addr_of!((*stream).hash_ctx).read() }.is_null()
     }
 
-    /// Wraps: git_odb_stream.declared_size
+    /// Field: git_odb_stream.declared_size
     /// Returns the byte count promised when the write stream was opened.
     ///
     /// Zero on a read stream, which never has a promised size.
@@ -219,7 +219,7 @@ impl GitOdbStreamMut<'_> {
         unsafe { core::ptr::addr_of_mut!((*stream).backend).write(backend.as_ptr()) }
     }
 
-    /// Wraps: git_odb_stream.write
+    /// Field: git_odb_stream.write
     /// Dispatches the concrete stream's synchronous write callback.
     ///
     /// This is the backend callback alone. The frontend `git_odb_stream_write`
@@ -253,7 +253,7 @@ impl GitOdbStreamMut<'_> {
         }
     }
 
-    /// Wraps: git_odb_stream.read
+    /// Field: git_odb_stream.read
     /// Dispatches the concrete stream's synchronous read callback.
     ///
     /// Returns the number of bytes the callback reported writing into
@@ -287,7 +287,7 @@ impl GitOdbStreamMut<'_> {
         }
     }
 
-    /// Wraps: git_odb_stream.finalize_write
+    /// Field: git_odb_stream.finalize_write
     /// Dispatches the concrete stream's synchronous finalization callback
     /// once the stream has received the byte count it declared.
     ///
@@ -343,7 +343,7 @@ impl GitOdbStreamMut<'_> {
     }
 }
 
-/// Wraps: git_odb_stream.free
+/// Field: git_odb_stream.free
 // SAFETY: adopting `GitOdbStreamOwned` requires a fully constructed stream
 // allocation with a non-null concrete destructor installed, which
 // `git_odb_stream_free` invokes unconditionally, and with `hash_ctx` either
@@ -626,7 +626,7 @@ ffibox::define_ctype!(
 pub type OdbWritepackOwned = CBox<OdbWritepack>;
 
 impl OdbWritepackRef<'_> {
-    /// Wraps: git_odb_writepack.backend
+    /// Field: git_odb_writepack.backend
     /// Reports whether the writepack records its originating backend.
     ///
     /// The backend itself remains a temporary lower-layer FFI dependency until
@@ -641,7 +641,7 @@ impl OdbWritepackRef<'_> {
 }
 
 impl OdbWritepackMut<'_> {
-    /// Wraps: git_odb_writepack.append
+    /// Field: git_odb_writepack.append
     /// Synchronously appends a chunk of packfile bytes and updates `stats`.
     pub fn append(
         &mut self,
@@ -668,7 +668,7 @@ impl OdbWritepackMut<'_> {
         if status < 0 { Err(status) } else { Ok(()) }
     }
 
-    /// Wraps: git_odb_writepack.commit
+    /// Field: git_odb_writepack.commit
     /// Finalizes the packfile and updates `stats`.
     pub fn commit(&mut self, stats: &mut IndexerProgressMut<'_>) -> Result<(), core::ffi::c_int> {
         let writepack = self.as_mut_ptr();
@@ -683,7 +683,7 @@ impl OdbWritepackMut<'_> {
     }
 }
 
-/// Wraps: git_odb_writepack.free
+/// Field: git_odb_writepack.free
 // SAFETY: adopting `OdbWritepackOwned` requires a unique, fully constructed
 // concrete allocation whose installed callback releases that allocation.
 // `CBox` invokes the callback exactly once and never accesses the pointer again.

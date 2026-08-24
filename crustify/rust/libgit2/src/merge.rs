@@ -166,7 +166,7 @@ ffibox::define_ctype!(
 );
 
 impl<'a> MergeFileInputRef<'a> {
-    /// Wraps: git_merge_file_input.size
+    /// Field: git_merge_file_input.size
     /// Returns the number of bytes in the input contents.
     #[must_use]
     pub fn size(&self) -> usize {
@@ -176,7 +176,7 @@ impl<'a> MergeFileInputRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).size).read() }
     }
 
-    /// Wraps: git_merge_file_input.path
+    /// Field: git_merge_file_input.path
     /// Returns the optional NUL-terminated file name borrowed by this input.
     #[must_use]
     pub fn path(&self) -> Option<&'a CStr> {
@@ -193,7 +193,7 @@ impl<'a> MergeFileInputRef<'a> {
         }
     }
 
-    /// Wraps: git_merge_file_input.mode
+    /// Field: git_merge_file_input.mode
     /// Returns the file mode, or zero when no mode should be merged.
     #[must_use]
     pub fn mode(&self) -> u32 {
@@ -201,7 +201,7 @@ impl<'a> MergeFileInputRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).mode).read() }
     }
 
-    /// Wraps: git_merge_file_input.version
+    /// Field: git_merge_file_input.version
     /// Returns the ABI version of this input descriptor.
     #[must_use]
     pub fn version(&self) -> u32 {
@@ -209,7 +209,7 @@ impl<'a> MergeFileInputRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).version).read() }
     }
 
-    /// Wraps: git_merge_file_input.ptr
+    /// Field: git_merge_file_input.ptr
     /// Returns the counted, non-NUL-terminated input contents.
     ///
     /// `None` denotes the initialized empty representation with a null
@@ -348,7 +348,7 @@ impl MergeFileResult {
 }
 
 impl<'a> MergeFileResultRef<'a> {
-    /// Wraps: git_merge_file_result.automergeable
+    /// Field: git_merge_file_result.automergeable
     /// Reports whether the output was merged without conflict markers.
     #[must_use]
     pub fn is_automergeable(&self) -> bool {
@@ -357,7 +357,7 @@ impl<'a> MergeFileResultRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).automergeable).read() != 0 }
     }
 
-    /// Wraps: git_merge_file_result.path
+    /// Field: git_merge_file_result.path
     /// Borrows the selected result path, or returns `None` for a path conflict.
     #[must_use]
     pub fn path(&self) -> Option<&'a CStr> {
@@ -373,7 +373,7 @@ impl<'a> MergeFileResultRef<'a> {
         Some(unsafe { CStr::from_ptr(path) })
     }
 
-    /// Wraps: git_merge_file_result.mode
+    /// Field: git_merge_file_result.mode
     /// Returns the file mode selected for the merged result.
     #[must_use]
     pub fn mode(&self) -> u32 {
@@ -381,7 +381,7 @@ impl<'a> MergeFileResultRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).mode).read() }
     }
 
-    /// Wraps: git_merge_file_result.ptr
+    /// Field: git_merge_file_result.ptr
     /// Borrows the counted merged bytes.
     ///
     /// A null pointer is represented by `None`, including the empty result.
@@ -404,7 +404,7 @@ impl<'a> MergeFileResultRef<'a> {
         Some(unsafe { CSlice::from_raw_parts(ptr, len) })
     }
 
-    /// Wraps: git_merge_file_result.len
+    /// Field: git_merge_file_result.len
     /// Returns the number of initialized merged bytes.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -968,7 +968,7 @@ ffibox::define_ctype!(
 );
 
 impl<'a> MergeFileOptionsRef<'a> {
-    /// Wraps: git_merge_file_options.flags
+    /// Field: git_merge_file_options.flags
     /// Returns the validated file-merge behavior flags.
     pub fn flags(&self) -> Result<MergeFileFlags, ffi::git_merge_file_flag_t> {
         // SAFETY: this live shared handle permits a raw-place scalar read
@@ -977,7 +977,7 @@ impl<'a> MergeFileOptionsRef<'a> {
         MergeFileFlags::from_bits(flags).ok_or(flags)
     }
 
-    /// Wraps: git_merge_file_options.version
+    /// Field: git_merge_file_options.version
     /// Returns the ABI version of this options value.
     #[must_use]
     pub fn version(&self) -> u32 {
@@ -985,7 +985,7 @@ impl<'a> MergeFileOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).version).read() }
     }
 
-    /// Wraps: git_merge_file_options.favor
+    /// Field: git_merge_file_options.favor
     /// Returns the validated conflict-side preference.
     pub fn favor(&self) -> Result<MergeFileFavor, ffi::git_merge_file_favor_t> {
         // SAFETY: as `flags`, for this initialized scalar field.
@@ -993,7 +993,7 @@ impl<'a> MergeFileOptionsRef<'a> {
         MergeFileFavor::try_from(favor)
     }
 
-    /// Wraps: git_merge_file_options.marker_size
+    /// Field: git_merge_file_options.marker_size
     /// Returns the requested conflict-marker width, or zero for the default.
     #[must_use]
     pub fn marker_size(&self) -> u16 {
@@ -1001,7 +1001,7 @@ impl<'a> MergeFileOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).marker_size).read() }
     }
 
-    /// Wraps: git_merge_file_options.their_label
+    /// Field: git_merge_file_options.their_label
     /// Returns the optional label borrowed for the "theirs" side.
     #[must_use]
     pub fn their_label(&self) -> Option<&'a CStr> {
@@ -1013,7 +1013,7 @@ impl<'a> MergeFileOptionsRef<'a> {
         unsafe { optional_borrowed_label(label) }
     }
 
-    /// Wraps: git_merge_file_options.our_label
+    /// Field: git_merge_file_options.our_label
     /// Returns the optional label borrowed for the "ours" side.
     #[must_use]
     pub fn our_label(&self) -> Option<&'a CStr> {
@@ -1023,7 +1023,7 @@ impl<'a> MergeFileOptionsRef<'a> {
         unsafe { optional_borrowed_label(label) }
     }
 
-    /// Wraps: git_merge_file_options.ancestor_label
+    /// Field: git_merge_file_options.ancestor_label
     /// Returns the optional label borrowed for the common ancestor.
     #[must_use]
     pub fn ancestor_label(&self) -> Option<&'a CStr> {

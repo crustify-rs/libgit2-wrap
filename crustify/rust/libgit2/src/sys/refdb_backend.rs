@@ -25,7 +25,7 @@ define_ctype!(
 /// An owned reference iterator.
 pub type GitReferenceIteratorOwned = CBox<GitReferenceIterator>;
 
-/// Wraps: git_reference_iterator.free
+/// Field: git_reference_iterator.free
 // SAFETY: `git_reference_iterator_free` is the public destructor for a fully
 // constructed iterator. It releases the iterator's database reference and
 // invokes the backend's destructor exactly once. It accepts null, although
@@ -40,7 +40,7 @@ unsafe impl CDropped for GitReferenceIterator {
 }
 
 impl<'a> GitReferenceIteratorRef<'a> {
-    /// Wraps: git_reference_iterator.db
+    /// Field: git_reference_iterator.db
     /// Borrows the reference database retained by this iterator.
     #[must_use]
     pub fn db(&self) -> GitRefdbRef<'a> {
@@ -56,7 +56,7 @@ impl<'a> GitReferenceIteratorRef<'a> {
 }
 
 impl GitReferenceIteratorMut<'_> {
-    /// Wraps: git_reference_iterator.next
+    /// Field: git_reference_iterator.next
     /// Advances the iterator and returns the next independently owned
     /// reference.
     pub fn next_reference(&mut self) -> Result<GitReferenceOwned, i32> {
@@ -74,7 +74,7 @@ impl GitReferenceIteratorMut<'_> {
         unsafe { CBox::<GitReference>::from_raw(reference) }.ok_or(-1)
     }
 
-    /// Wraps: git_reference_iterator.next_name
+    /// Field: git_reference_iterator.next_name
     /// Advances the iterator and borrows the next reference name.
     ///
     /// The returned name keeps this mutable handle borrowed, so the iterator

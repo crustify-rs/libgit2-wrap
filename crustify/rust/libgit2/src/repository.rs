@@ -96,7 +96,7 @@ ffibox::define_ctype!(
 );
 
 impl<'a> GitRepositoryInitOptionsRef<'a> {
-    /// Wraps: git_repository_init_options.mode
+    /// Field: git_repository_init_options.mode
     /// Returns the requested repository directory mode.
     #[must_use]
     pub fn mode(&self) -> u32 {
@@ -105,7 +105,7 @@ impl<'a> GitRepositoryInitOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).mode).read() }
     }
 
-    /// Wraps: git_repository_init_options.flags
+    /// Field: git_repository_init_options.flags
     /// Returns the raw `git_repository_init_flag_t` bit set.
     #[must_use]
     pub fn flags(&self) -> u32 {
@@ -113,7 +113,7 @@ impl<'a> GitRepositoryInitOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).flags).read() }
     }
 
-    /// Wraps: git_repository_init_options.version
+    /// Field: git_repository_init_options.version
     /// Returns the ABI version of this options value.
     #[must_use]
     pub fn version(&self) -> c_uint {
@@ -121,7 +121,7 @@ impl<'a> GitRepositoryInitOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).version).read() }
     }
 
-    /// Wraps: git_repository_init_options.oid_type
+    /// Field: git_repository_init_options.oid_type
     /// Returns the selected object-ID algorithm, or `None` for libgit2's default.
     pub fn oid_type(&self) -> Result<Option<OidType>, InvalidOidType> {
         // SAFETY: as `mode`, for this initialized scalar field.
@@ -133,7 +133,7 @@ impl<'a> GitRepositoryInitOptionsRef<'a> {
         }
     }
 
-    /// Wraps: git_repository_init_options.refdb_type
+    /// Field: git_repository_init_options.refdb_type
     /// Returns the selected reference database, or `None` for libgit2's default.
     pub fn refdb_type(&self) -> Result<Option<GitRefdbType>, InvalidGitRefdbType> {
         // SAFETY: as `mode`, for this initialized scalar field.
@@ -145,7 +145,7 @@ impl<'a> GitRepositoryInitOptionsRef<'a> {
         }
     }
 
-    /// Wraps: git_repository_init_options.description
+    /// Field: git_repository_init_options.description
     /// Returns the optional caller-owned repository description.
     #[must_use]
     pub fn description(&self) -> Option<&'a CStr> {
@@ -157,7 +157,7 @@ impl<'a> GitRepositoryInitOptionsRef<'a> {
         unsafe { optional_borrowed_string(value) }
     }
 
-    /// Wraps: git_repository_init_options.initial_head
+    /// Field: git_repository_init_options.initial_head
     /// Returns the optional caller-owned initial HEAD name.
     #[must_use]
     pub fn initial_head(&self) -> Option<&'a CStr> {
@@ -167,7 +167,7 @@ impl<'a> GitRepositoryInitOptionsRef<'a> {
         unsafe { optional_borrowed_string(value) }
     }
 
-    /// Wraps: git_repository_init_options.template_path
+    /// Field: git_repository_init_options.template_path
     /// Returns the optional caller-owned template directory path.
     #[must_use]
     pub fn template_path(&self) -> Option<&'a CStr> {
@@ -177,7 +177,7 @@ impl<'a> GitRepositoryInitOptionsRef<'a> {
         unsafe { optional_borrowed_string(value) }
     }
 
-    /// Wraps: git_repository_init_options.origin_url
+    /// Field: git_repository_init_options.origin_url
     /// Returns the optional caller-owned origin URL.
     #[must_use]
     pub fn origin_url(&self) -> Option<&'a CStr> {
@@ -187,7 +187,7 @@ impl<'a> GitRepositoryInitOptionsRef<'a> {
         unsafe { optional_borrowed_string(value) }
     }
 
-    /// Wraps: git_repository_init_options.workdir_path
+    /// Field: git_repository_init_options.workdir_path
     /// Returns the optional caller-owned working-directory path.
     #[must_use]
     pub fn workdir_path(&self) -> Option<&'a CStr> {

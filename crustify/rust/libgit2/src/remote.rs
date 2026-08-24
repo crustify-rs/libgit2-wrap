@@ -595,7 +595,7 @@ ffibox::define_ctype!(
 );
 
 impl<'a> GitPushUpdateRef<'a> {
-    /// Wraps: git_push_update.src
+    /// Field: git_push_update.src
     /// Borrows the current target of the source reference.
     #[must_use]
     pub fn src(&self) -> OidRef<'a> {
@@ -608,7 +608,7 @@ impl<'a> GitPushUpdateRef<'a> {
         unsafe { OidRef::from_ptr(ptr) }.expect("an inline field is non-null")
     }
 
-    /// Wraps: git_push_update.dst
+    /// Field: git_push_update.dst
     /// Borrows the new target of the destination reference.
     #[must_use]
     pub fn dst(&self) -> OidRef<'a> {
@@ -621,7 +621,7 @@ impl<'a> GitPushUpdateRef<'a> {
         unsafe { OidRef::from_ptr(ptr) }.expect("an inline field is non-null")
     }
 
-    /// Wraps: git_push_update.dst_refname
+    /// Field: git_push_update.dst_refname
     /// Borrows the destination reference name.
     #[must_use]
     pub fn dst_refname(&self) -> &'a core::ffi::CStr {
@@ -637,7 +637,7 @@ impl<'a> GitPushUpdateRef<'a> {
         unsafe { core::ffi::CStr::from_ptr(ptr) }
     }
 
-    /// Wraps: git_push_update.src_refname
+    /// Field: git_push_update.src_refname
     /// Borrows the source reference name.
     #[must_use]
     pub fn src_refname(&self) -> &'a core::ffi::CStr {

@@ -97,109 +97,6 @@ impl GitPathspecDiffMatchListOwned<'_> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use core::mem::{align_of, size_of};
-    use core::ptr;
-
-    use ffibox::{CCell, CDropped};
-
-    use super::*;
-
-    #[test]
-    fn opaque_types_preserve_the_c_seam_and_lifecycle_contracts() {
-        fn assert_cell<T: CCell>() {}
-        fn assert_dropped<T: CDropped>() {}
-
-        assert_cell::<GitPathspec>();
-        assert_dropped::<GitPathspec>();
-        assert_eq!(size_of::<GitPathspec>(), size_of::<ffi::git_pathspec>());
-        assert_eq!(align_of::<GitPathspec>(), align_of::<ffi::git_pathspec>());
-        assert_eq!(
-            size_of::<GitPathspecRef<'_>>(),
-            size_of::<*const ffi::git_pathspec>()
-        );
-        assert_eq!(
-            size_of::<GitPathspecMut<'_>>(),
-            size_of::<*mut ffi::git_pathspec>()
-        );
-        assert_eq!(
-            size_of::<GitPathspecOwned>(),
-            size_of::<*mut ffi::git_pathspec>()
-        );
-
-        assert_cell::<GitPathspecMatchList>();
-        assert_dropped::<GitPathspecMatchList>();
-        assert_eq!(
-            size_of::<GitPathspecMatchList>(),
-            size_of::<ffi::git_pathspec_match_list>()
-        );
-        assert_eq!(
-            align_of::<GitPathspecMatchList>(),
-            align_of::<ffi::git_pathspec_match_list>()
-        );
-        assert_eq!(
-            size_of::<GitPathspecMatchListRef<'_>>(),
-            size_of::<*const ffi::git_pathspec_match_list>()
-        );
-        assert_eq!(
-            size_of::<GitPathspecMatchListMut<'_>>(),
-            size_of::<*mut ffi::git_pathspec_match_list>()
-        );
-        assert_eq!(
-            size_of::<GitPathspecMatchListOwned>(),
-            size_of::<*mut ffi::git_pathspec_match_list>()
-        );
-    }
-
-    #[test]
-    fn null_seams_create_no_pathspec_handles() {
-        // SAFETY: these conversion seams explicitly accept null and return
-        // `None` without borrowing or adopting any object.
-        unsafe {
-            assert!(GitPathspecRef::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitPathspecMut::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitPathspecOwned::from_raw(ptr::null_mut()).is_none());
-            assert!(GitPathspecMatchListRef::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitPathspecMatchListMut::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitPathspecMatchListOwned::from_raw(ptr::null_mut()).is_none());
-        }
-    }
-
-    #[test]
-    fn compiled_pathspec_matches_borrowed_paths_and_drops_cleanly() {
-        // SAFETY: libgit2 initialization is refcounted and balanced after the
-        // compiled pathspec has released its allocation.
-        assert!(unsafe { ffi::git_libgit2_init() } > 0);
-
-        let mut strings = [c"src/*.c".as_ptr().cast_mut()];
-        let mut raw = ffi::git_strarray {
-            strings: strings.as_mut_ptr(),
-            count: strings.len(),
-        };
-        // SAFETY: the stack header, pointer run, and static C string remain
-        // live and unchanged while the compiler copies their contents.
-        let source = unsafe { GitStrArrayRef::from_ptr(core::ptr::addr_of_mut!(raw)) }.unwrap();
-        let compiled = git_pathspec_new(source).expect("the pattern should compile");
-
-        assert!(git_pathspec_matches_path(
-            compiled.as_ref(),
-            0,
-            c"src/main.c"
-        ));
-        assert!(!git_pathspec_matches_path(
-            compiled.as_ref(),
-            0,
-            c"README.md"
-        ));
-        drop(compiled);
-
-        // SAFETY: balances the successful initialization after all libgit2
-        // allocations created by this test have been released.
-        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
-    }
-}
-
 /// Wraps: git_pathspec_match_diff
 /// Builds a match list tied to the diff whose internal deltas it may borrow.
 pub fn git_pathspec_match_diff<'a>(
@@ -333,4 +230,107 @@ pub fn git_pathspec_new(pathspec: GitStrArrayRef<'_>) -> Result<GitPathspecOwned
     }
     // SAFETY: success transfers one complete owned pathspec count.
     unsafe { GitPathspecOwned::from_raw(output) }.ok_or(status)
+}
+
+#[cfg(test)]
+mod tests {
+    use core::mem::{align_of, size_of};
+    use core::ptr;
+
+    use ffibox::{CCell, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn opaque_types_preserve_the_c_seam_and_lifecycle_contracts() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<GitPathspec>();
+        assert_dropped::<GitPathspec>();
+        assert_eq!(size_of::<GitPathspec>(), size_of::<ffi::git_pathspec>());
+        assert_eq!(align_of::<GitPathspec>(), align_of::<ffi::git_pathspec>());
+        assert_eq!(
+            size_of::<GitPathspecRef<'_>>(),
+            size_of::<*const ffi::git_pathspec>()
+        );
+        assert_eq!(
+            size_of::<GitPathspecMut<'_>>(),
+            size_of::<*mut ffi::git_pathspec>()
+        );
+        assert_eq!(
+            size_of::<GitPathspecOwned>(),
+            size_of::<*mut ffi::git_pathspec>()
+        );
+
+        assert_cell::<GitPathspecMatchList>();
+        assert_dropped::<GitPathspecMatchList>();
+        assert_eq!(
+            size_of::<GitPathspecMatchList>(),
+            size_of::<ffi::git_pathspec_match_list>()
+        );
+        assert_eq!(
+            align_of::<GitPathspecMatchList>(),
+            align_of::<ffi::git_pathspec_match_list>()
+        );
+        assert_eq!(
+            size_of::<GitPathspecMatchListRef<'_>>(),
+            size_of::<*const ffi::git_pathspec_match_list>()
+        );
+        assert_eq!(
+            size_of::<GitPathspecMatchListMut<'_>>(),
+            size_of::<*mut ffi::git_pathspec_match_list>()
+        );
+        assert_eq!(
+            size_of::<GitPathspecMatchListOwned>(),
+            size_of::<*mut ffi::git_pathspec_match_list>()
+        );
+    }
+
+    #[test]
+    fn null_seams_create_no_pathspec_handles() {
+        // SAFETY: these conversion seams explicitly accept null and return
+        // `None` without borrowing or adopting any object.
+        unsafe {
+            assert!(GitPathspecRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitPathspecMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitPathspecOwned::from_raw(ptr::null_mut()).is_none());
+            assert!(GitPathspecMatchListRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitPathspecMatchListMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitPathspecMatchListOwned::from_raw(ptr::null_mut()).is_none());
+        }
+    }
+
+    #[test]
+    fn compiled_pathspec_matches_borrowed_paths_and_drops_cleanly() {
+        // SAFETY: libgit2 initialization is refcounted and balanced after the
+        // compiled pathspec has released its allocation.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        let mut strings = [c"src/*.c".as_ptr().cast_mut()];
+        let mut raw = ffi::git_strarray {
+            strings: strings.as_mut_ptr(),
+            count: strings.len(),
+        };
+        // SAFETY: the stack header, pointer run, and static C string remain
+        // live and unchanged while the compiler copies their contents.
+        let source = unsafe { GitStrArrayRef::from_ptr(core::ptr::addr_of_mut!(raw)) }.unwrap();
+        let compiled = git_pathspec_new(source).expect("the pattern should compile");
+
+        assert!(git_pathspec_matches_path(
+            compiled.as_ref(),
+            0,
+            c"src/main.c"
+        ));
+        assert!(!git_pathspec_matches_path(
+            compiled.as_ref(),
+            0,
+            c"README.md"
+        ));
+        drop(compiled);
+
+        // SAFETY: balances the successful initialization after all libgit2
+        // allocations created by this test have been released.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
 }

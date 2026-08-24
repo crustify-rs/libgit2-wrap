@@ -128,7 +128,7 @@ ffibox::define_ctype!(
 );
 
 impl CheckoutPerfDataRef<'_> {
-    /// Wraps: git_checkout_perfdata.stat_calls
+    /// Field: git_checkout_perfdata.stat_calls
     #[inline]
     #[must_use]
     pub fn stat_calls(&self) -> usize {
@@ -138,7 +138,7 @@ impl CheckoutPerfDataRef<'_> {
         unsafe { core::ptr::addr_of!((*ptr).stat_calls).read() }
     }
 
-    /// Wraps: git_checkout_perfdata.chmod_calls
+    /// Field: git_checkout_perfdata.chmod_calls
     #[inline]
     #[must_use]
     pub fn chmod_calls(&self) -> usize {
@@ -148,7 +148,7 @@ impl CheckoutPerfDataRef<'_> {
         unsafe { core::ptr::addr_of!((*ptr).chmod_calls).read() }
     }
 
-    /// Wraps: git_checkout_perfdata.mkdir_calls
+    /// Field: git_checkout_perfdata.mkdir_calls
     #[inline]
     #[must_use]
     pub fn mkdir_calls(&self) -> usize {
@@ -201,6 +201,22 @@ where
 {
     fn call(&mut self, path: Option<&core::ffi::CStr>, completed: usize, total: usize) {
         self(path, completed, total)
+    }
+}
+
+/// Wraps: git_checkout_perfdata_cb
+/// Safe callable surface for checkout performance reports.
+pub trait GitCheckoutPerfDataCallback {
+    /// Receives one transient shared view of the checkout counters.
+    fn call(&mut self, perfdata: CheckoutPerfDataRef<'_>);
+}
+
+impl<F> GitCheckoutPerfDataCallback for F
+where
+    F: for<'a> FnMut(CheckoutPerfDataRef<'a>),
+{
+    fn call(&mut self, perfdata: CheckoutPerfDataRef<'_>) {
+        self(perfdata)
     }
 }
 
@@ -280,21 +296,5 @@ mod tests {
             core::mem::align_of::<CheckoutPerfData>(),
             core::mem::align_of::<ffi::git_checkout_perfdata>()
         );
-    }
-}
-
-/// Wraps: git_checkout_perfdata_cb
-/// Safe callable surface for checkout performance reports.
-pub trait GitCheckoutPerfDataCallback {
-    /// Receives one transient shared view of the checkout counters.
-    fn call(&mut self, perfdata: CheckoutPerfDataRef<'_>);
-}
-
-impl<F> GitCheckoutPerfDataCallback for F
-where
-    F: for<'a> FnMut(CheckoutPerfDataRef<'a>),
-{
-    fn call(&mut self, perfdata: CheckoutPerfDataRef<'_>) {
-        self(perfdata)
     }
 }

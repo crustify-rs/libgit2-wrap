@@ -77,88 +77,6 @@ ffibox::define_ctype!(
     ffi::git_reflog_entry
 );
 
-#[cfg(test)]
-mod tests {
-    use core::mem::{align_of, size_of};
-    use core::ptr;
-
-    use ffibox::{CCell, CDropped};
-
-    use super::*;
-
-    #[test]
-    fn wrappers_preserve_the_opaque_ffi_seams() {
-        fn assert_cell<T: CCell>() {}
-        fn assert_dropped<T: CDropped>() {}
-        fn assert_copy<T: Copy>() {}
-
-        assert_cell::<GitReflog>();
-        assert_cell::<GitReflogEntry>();
-        assert_dropped::<GitReflog>();
-        assert_copy::<GitReflogRef<'_>>();
-        assert_copy::<GitReflogEntryRef<'_>>();
-
-        assert_eq!(size_of::<GitReflog>(), size_of::<ffi::git_reflog>());
-        assert_eq!(align_of::<GitReflog>(), align_of::<ffi::git_reflog>());
-        assert_eq!(
-            size_of::<GitReflogRef<'_>>(),
-            size_of::<*const ffi::git_reflog>()
-        );
-        assert_eq!(
-            size_of::<GitReflogMut<'_>>(),
-            size_of::<*mut ffi::git_reflog>()
-        );
-        assert_eq!(
-            size_of::<GitReflogOwned>(),
-            size_of::<*mut ffi::git_reflog>()
-        );
-
-        assert_eq!(
-            size_of::<GitReflogEntry>(),
-            size_of::<ffi::git_reflog_entry>()
-        );
-        assert_eq!(
-            align_of::<GitReflogEntry>(),
-            align_of::<ffi::git_reflog_entry>()
-        );
-        assert_eq!(
-            size_of::<GitReflogEntryRef<'_>>(),
-            size_of::<*const ffi::git_reflog_entry>()
-        );
-        assert_eq!(
-            size_of::<GitReflogEntryMut<'_>>(),
-            size_of::<*mut ffi::git_reflog_entry>()
-        );
-    }
-
-    #[test]
-    fn tethered_owner_is_covariant_in_its_repository_borrow() {
-        fn shrink<'short, 'long: 'short>(
-            owner: GitReflogTetheredOwned<'long>,
-        ) -> GitReflogTetheredOwned<'short> {
-            owner
-        }
-
-        // A keepalive marker may only narrow: `shrink` compiling proves the
-        // tether cannot be widened past the repository borrow that produced
-        // the reflog's reference-database count.
-        let _ = shrink::<'_, 'static>;
-    }
-
-    #[test]
-    fn null_reflog_seams_create_no_handle() {
-        // SAFETY: all conversions explicitly accept null and return `None`
-        // without borrowing or adopting an object.
-        unsafe {
-            assert!(GitReflogRef::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitReflogMut::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitReflogOwned::from_raw(ptr::null_mut()).is_none());
-            assert!(GitReflogEntryRef::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitReflogEntryMut::from_ptr(ptr::null_mut()).is_none());
-        }
-    }
-}
-
 /// Wraps: git_reflog_delete
 /// Deletes the persisted reflog named by `name`.
 pub fn git_reflog_delete(repo: &mut GitRepositoryMut<'_>, name: &CStr) -> Result<(), i32> {
@@ -292,4 +210,86 @@ pub fn git_reflog_write(reflog: &mut GitReflogMut<'_>) -> Result<(), i32> {
     // SAFETY: `reflog` is live and exclusively borrowed for backend mutation.
     let status = unsafe { ffi::git_reflog_write(reflog.as_mut_ptr()) };
     if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::mem::{align_of, size_of};
+    use core::ptr;
+
+    use ffibox::{CCell, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn wrappers_preserve_the_opaque_ffi_seams() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+        fn assert_copy<T: Copy>() {}
+
+        assert_cell::<GitReflog>();
+        assert_cell::<GitReflogEntry>();
+        assert_dropped::<GitReflog>();
+        assert_copy::<GitReflogRef<'_>>();
+        assert_copy::<GitReflogEntryRef<'_>>();
+
+        assert_eq!(size_of::<GitReflog>(), size_of::<ffi::git_reflog>());
+        assert_eq!(align_of::<GitReflog>(), align_of::<ffi::git_reflog>());
+        assert_eq!(
+            size_of::<GitReflogRef<'_>>(),
+            size_of::<*const ffi::git_reflog>()
+        );
+        assert_eq!(
+            size_of::<GitReflogMut<'_>>(),
+            size_of::<*mut ffi::git_reflog>()
+        );
+        assert_eq!(
+            size_of::<GitReflogOwned>(),
+            size_of::<*mut ffi::git_reflog>()
+        );
+
+        assert_eq!(
+            size_of::<GitReflogEntry>(),
+            size_of::<ffi::git_reflog_entry>()
+        );
+        assert_eq!(
+            align_of::<GitReflogEntry>(),
+            align_of::<ffi::git_reflog_entry>()
+        );
+        assert_eq!(
+            size_of::<GitReflogEntryRef<'_>>(),
+            size_of::<*const ffi::git_reflog_entry>()
+        );
+        assert_eq!(
+            size_of::<GitReflogEntryMut<'_>>(),
+            size_of::<*mut ffi::git_reflog_entry>()
+        );
+    }
+
+    #[test]
+    fn tethered_owner_is_covariant_in_its_repository_borrow() {
+        fn shrink<'short, 'long: 'short>(
+            owner: GitReflogTetheredOwned<'long>,
+        ) -> GitReflogTetheredOwned<'short> {
+            owner
+        }
+
+        // A keepalive marker may only narrow: `shrink` compiling proves the
+        // tether cannot be widened past the repository borrow that produced
+        // the reflog's reference-database count.
+        let _ = shrink::<'_, 'static>;
+    }
+
+    #[test]
+    fn null_reflog_seams_create_no_handle() {
+        // SAFETY: all conversions explicitly accept null and return `None`
+        // without borrowing or adopting an object.
+        unsafe {
+            assert!(GitReflogRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitReflogMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitReflogOwned::from_raw(ptr::null_mut()).is_none());
+            assert!(GitReflogEntryRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitReflogEntryMut::from_ptr(ptr::null_mut()).is_none());
+        }
+    }
 }

@@ -53,7 +53,6 @@ mod tests {
             chunk.len() as i32
         };
         assert_eq!(GitPackbuilderForeachCallback::call(&mut chunks, &bytes), 3);
-        drop(chunks);
         assert_eq!(seen, vec![1, 2, 3]);
 
         let mut progress = |stage, current, total| stage + current as i32 + total as i32;

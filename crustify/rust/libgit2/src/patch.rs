@@ -101,7 +101,10 @@ mod tests {
         assert_eq!(git_patch_size(patch.as_ref(), true, true, false), 0);
         let with_header = git_patch_size(patch.as_ref(), true, true, true);
         assert!(with_header > 0);
-        assert_eq!(git_patch_size(patch.as_ref(), true, true, true), with_header);
+        assert_eq!(
+            git_patch_size(patch.as_ref(), true, true, true),
+            with_header
+        );
         assert!(git_patch_get_line_in_hunk(patch.as_ref(), 0, 0).is_ok());
         assert!(git_patch_get_line_in_hunk(patch.as_ref(), 0, 99).is_err());
         drop(patch);

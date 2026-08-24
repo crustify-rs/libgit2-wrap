@@ -174,104 +174,6 @@ pub fn git_reference_normalize_name<'a>(
     core::ffi::CStr::from_bytes_until_nul(buffer).map_err(|_| ffi::git_error_code_GIT_EBUFS)
 }
 
-#[cfg(test)]
-mod tests {
-    use core::mem::{MaybeUninit, align_of, size_of};
-
-    use ffibox::{CCloned, CDropped};
-
-    use super::*;
-
-    #[test]
-    fn opaque_representation_and_handles_match_the_c_seam() {
-        // `struct git_reference` is defined in the private `src/libgit2/refs.h`
-        // and ends in a flexible array member, so the binding is an opaque
-        // marker: no field is reachable and the object is heap-only.
-        assert_eq!(size_of::<ffi::git_reference>(), 0);
-        assert_eq!(size_of::<GitReference>(), size_of::<ffi::git_reference>());
-        assert_eq!(align_of::<GitReference>(), align_of::<ffi::git_reference>());
-        assert_eq!(
-            size_of::<GitReferenceRef<'_>>(),
-            size_of::<*const ffi::git_reference>()
-        );
-        assert_eq!(
-            size_of::<GitReferenceMut<'_>>(),
-            size_of::<*mut ffi::git_reference>()
-        );
-        assert_eq!(
-            size_of::<Option<GitReferenceOwned>>(),
-            size_of::<*mut ffi::git_reference>()
-        );
-    }
-
-    #[test]
-    fn reference_names_validate_and_normalize_into_rust_storage() {
-        // SAFETY: initialization is refcounted and balanced below.
-        assert!(unsafe { ffi::git_libgit2_init() } > 0);
-        assert_eq!(git_reference_name_is_valid(c"refs/heads/main"), Ok(true));
-        let mut buffer = [0; 64];
-        assert_eq!(
-            git_reference_normalize_name(&mut buffer, c"refs//heads/main", 0),
-            Ok(c"refs/heads/main")
-        );
-        assert_eq!(
-            git_reference_normalize_name(&mut [], c"refs/heads/main", 0),
-            Err(ffi::git_error_code_GIT_EBUFS)
-        );
-        // SAFETY: balances this test's successful initialization.
-        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
-    }
-
-    #[test]
-    fn reference_registers_deep_copy_lifecycle() {
-        fn assert_lifecycle<T: CDropped + CCloned>() {}
-        assert_lifecycle::<GitReference>();
-    }
-
-    #[test]
-    fn borrowed_handles_preserve_the_reference_pointer() {
-        let storage = Box::new(MaybeUninit::<ffi::git_reference>::zeroed());
-        let raw = Box::into_raw(storage).cast::<ffi::git_reference>();
-
-        {
-            // SAFETY: `raw` addresses live, suitably aligned opaque storage,
-            // and the shared handle remains within this scope.
-            let shared = unsafe { GitReferenceRef::from_ptr(raw) }.unwrap();
-            assert_eq!(shared.as_ptr(), raw.cast_const());
-        }
-
-        {
-            // SAFETY: the shared handle is gone, the storage remains live, and
-            // this scope has exclusive access to it.
-            let mut exclusive = unsafe { GitReferenceMut::from_ptr(raw) }.unwrap();
-            assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
-            assert_eq!(exclusive.as_mut_ptr(), raw);
-        }
-
-        // SAFETY: `raw` came from `Box::into_raw`, no handle remains, and this
-        // cast recovers the allocation's original type.
-        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_reference>>()) });
-    }
-
-    #[test]
-    fn tethered_owner_is_covariant_in_its_repository_borrow() {
-        fn shrink<'short, 'long: 'short>(
-            owner: GitReferenceTetheredOwned<'long>,
-        ) -> GitReferenceTetheredOwned<'short> {
-            owner
-        }
-
-        // A keepalive marker may only narrow: `shrink` compiling proves the
-        // tether cannot be widened past the repository borrow it records.
-        let _ = shrink::<'_, 'static>;
-    }
-
-    #[test]
-    fn failed_result_accepts_an_empty_typed_owner() {
-        assert!(matches!(adopt_reference(-123, None), Err(-123)));
-    }
-}
-
 /// Adopts a successful constructor result as a repository-tethered owner.
 ///
 /// `'a` is constrained by no argument: every caller must bind it to the borrow
@@ -746,4 +648,102 @@ pub fn git_reference_type(
     // SAFETY: `reference` is a live shared handle and the getter retains no
     // pointer.
     GitReferenceType::try_from(unsafe { ffi::git_reference_type(reference.as_ptr()) })
+}
+
+#[cfg(test)]
+mod tests {
+    use core::mem::{MaybeUninit, align_of, size_of};
+
+    use ffibox::{CCloned, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn opaque_representation_and_handles_match_the_c_seam() {
+        // `struct git_reference` is defined in the private `src/libgit2/refs.h`
+        // and ends in a flexible array member, so the binding is an opaque
+        // marker: no field is reachable and the object is heap-only.
+        assert_eq!(size_of::<ffi::git_reference>(), 0);
+        assert_eq!(size_of::<GitReference>(), size_of::<ffi::git_reference>());
+        assert_eq!(align_of::<GitReference>(), align_of::<ffi::git_reference>());
+        assert_eq!(
+            size_of::<GitReferenceRef<'_>>(),
+            size_of::<*const ffi::git_reference>()
+        );
+        assert_eq!(
+            size_of::<GitReferenceMut<'_>>(),
+            size_of::<*mut ffi::git_reference>()
+        );
+        assert_eq!(
+            size_of::<Option<GitReferenceOwned>>(),
+            size_of::<*mut ffi::git_reference>()
+        );
+    }
+
+    #[test]
+    fn reference_names_validate_and_normalize_into_rust_storage() {
+        // SAFETY: initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        assert_eq!(git_reference_name_is_valid(c"refs/heads/main"), Ok(true));
+        let mut buffer = [0; 64];
+        assert_eq!(
+            git_reference_normalize_name(&mut buffer, c"refs//heads/main", 0),
+            Ok(c"refs/heads/main")
+        );
+        assert_eq!(
+            git_reference_normalize_name(&mut [], c"refs/heads/main", 0),
+            Err(ffi::git_error_code_GIT_EBUFS)
+        );
+        // SAFETY: balances this test's successful initialization.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
+    fn reference_registers_deep_copy_lifecycle() {
+        fn assert_lifecycle<T: CDropped + CCloned>() {}
+        assert_lifecycle::<GitReference>();
+    }
+
+    #[test]
+    fn borrowed_handles_preserve_the_reference_pointer() {
+        let storage = Box::new(MaybeUninit::<ffi::git_reference>::zeroed());
+        let raw = Box::into_raw(storage).cast::<ffi::git_reference>();
+
+        {
+            // SAFETY: `raw` addresses live, suitably aligned opaque storage,
+            // and the shared handle remains within this scope.
+            let shared = unsafe { GitReferenceRef::from_ptr(raw) }.unwrap();
+            assert_eq!(shared.as_ptr(), raw.cast_const());
+        }
+
+        {
+            // SAFETY: the shared handle is gone, the storage remains live, and
+            // this scope has exclusive access to it.
+            let mut exclusive = unsafe { GitReferenceMut::from_ptr(raw) }.unwrap();
+            assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
+            assert_eq!(exclusive.as_mut_ptr(), raw);
+        }
+
+        // SAFETY: `raw` came from `Box::into_raw`, no handle remains, and this
+        // cast recovers the allocation's original type.
+        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_reference>>()) });
+    }
+
+    #[test]
+    fn tethered_owner_is_covariant_in_its_repository_borrow() {
+        fn shrink<'short, 'long: 'short>(
+            owner: GitReferenceTetheredOwned<'long>,
+        ) -> GitReferenceTetheredOwned<'short> {
+            owner
+        }
+
+        // A keepalive marker may only narrow: `shrink` compiling proves the
+        // tether cannot be widened past the repository borrow it records.
+        let _ = shrink::<'_, 'static>;
+    }
+
+    #[test]
+    fn failed_result_accepts_an_empty_typed_owner() {
+        assert!(matches!(adopt_reference(-123, None), Err(-123)));
+    }
 }

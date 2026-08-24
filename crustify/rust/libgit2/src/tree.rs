@@ -218,7 +218,7 @@ define_ctype!(
 );
 
 impl<'a> TreeUpdateRef<'a> {
-    /// Wraps: git_tree_update.action
+    /// Field: git_tree_update.action
     /// Returns the requested update action.
     ///
     /// A malformed C value is reported instead of being converted into an
@@ -231,7 +231,7 @@ impl<'a> TreeUpdateRef<'a> {
         TreeUpdateType::try_from(action)
     }
 
-    /// Wraps: git_tree_update.path
+    /// Field: git_tree_update.path
     /// Borrows the non-null, NUL-terminated path from the descriptor.
     #[must_use]
     pub fn path(&self) -> &'a CStr {
@@ -245,7 +245,7 @@ impl<'a> TreeUpdateRef<'a> {
         unsafe { CStr::from_ptr(path) }
     }
 
-    /// Wraps: git_tree_update.id
+    /// Field: git_tree_update.id
     /// Borrows the inline object identifier.
     #[must_use]
     pub fn id(&self) -> OidRef<'a> {
@@ -255,7 +255,7 @@ impl<'a> TreeUpdateRef<'a> {
             .expect("an inline field is non-null")
     }
 
-    /// Wraps: git_tree_update.filemode
+    /// Field: git_tree_update.filemode
     /// Returns the entry's file mode when C supplied a published value.
     #[must_use]
     pub fn filemode(&self) -> Option<GitFileMode> {

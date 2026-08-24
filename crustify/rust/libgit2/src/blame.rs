@@ -108,7 +108,7 @@ define_ctype!(
 );
 
 impl<'a> GitBlameOptionsRef<'a> {
-    /// Wraps: git_blame_options.flags
+    /// Field: git_blame_options.flags
     /// Returns the raw bit set of `git_blame_flag_t` options.
     #[must_use]
     pub fn flags(&self) -> core::ffi::c_uint {
@@ -117,7 +117,7 @@ impl<'a> GitBlameOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).flags).read() }
     }
 
-    /// Wraps: git_blame_options.version
+    /// Field: git_blame_options.version
     /// Returns the ABI version of this options value.
     #[must_use]
     pub fn version(&self) -> core::ffi::c_uint {
@@ -125,7 +125,7 @@ impl<'a> GitBlameOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).version).read() }
     }
 
-    /// Wraps: git_blame_options.max_line
+    /// Field: git_blame_options.max_line
     /// Returns the inclusive last line to blame, or zero for the file's end.
     #[must_use]
     pub fn max_line(&self) -> usize {
@@ -133,7 +133,7 @@ impl<'a> GitBlameOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).max_line).read() }
     }
 
-    /// Wraps: git_blame_options.min_line
+    /// Field: git_blame_options.min_line
     /// Returns the inclusive first line to blame.
     #[must_use]
     pub fn min_line(&self) -> usize {
@@ -141,7 +141,7 @@ impl<'a> GitBlameOptionsRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).min_line).read() }
     }
 
-    /// Wraps: git_blame_options.oldest_commit
+    /// Field: git_blame_options.oldest_commit
     /// Borrows the oldest commit boundary embedded in this options value.
     #[must_use]
     pub fn oldest_commit(&self) -> OidRef<'a> {
@@ -151,7 +151,7 @@ impl<'a> GitBlameOptionsRef<'a> {
             .expect("an embedded field has a non-null address")
     }
 
-    /// Wraps: git_blame_options.newest_commit
+    /// Field: git_blame_options.newest_commit
     /// Borrows the newest commit boundary embedded in this options value.
     #[must_use]
     pub fn newest_commit(&self) -> OidRef<'a> {
@@ -161,7 +161,7 @@ impl<'a> GitBlameOptionsRef<'a> {
             .expect("an embedded field has a non-null address")
     }
 
-    /// Wraps: git_blame_options.min_match_characters
+    /// Field: git_blame_options.min_match_characters
     /// Returns the copy-tracking match threshold.
     #[must_use]
     pub fn min_match_characters(&self) -> u16 {

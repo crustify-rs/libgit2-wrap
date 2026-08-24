@@ -257,7 +257,7 @@ ffibox::define_ctype!(
 );
 
 impl<'a> GitRebaseOperationRef<'a> {
-    /// Wraps: git_rebase_operation.type
+    /// Field: git_rebase_operation.type
     /// Returns the instruction kind after validating the C discriminant.
     pub fn operation_type(&self) -> Result<RebaseOperationType, InvalidRebaseOperationType> {
         // SAFETY: this live shared handle permits a raw-place scalar read
@@ -266,7 +266,7 @@ impl<'a> GitRebaseOperationRef<'a> {
         RebaseOperationType::try_from(raw)
     }
 
-    /// Wraps: git_rebase_operation.id
+    /// Field: git_rebase_operation.id
     /// Borrows the commit ID, or returns `None` for an `Exec` instruction.
     pub fn id(&self) -> Result<Option<OidRef<'a>>, InvalidRebaseOperationType> {
         if self.operation_type()? == RebaseOperationType::Exec {
@@ -284,7 +284,7 @@ impl<'a> GitRebaseOperationRef<'a> {
         ))
     }
 
-    /// Wraps: git_rebase_operation.exec
+    /// Field: git_rebase_operation.exec
     /// Borrows the command for an `Exec` instruction, if present.
     pub fn exec(&self) -> Result<Option<&'a core::ffi::CStr>, InvalidRebaseOperationType> {
         if self.operation_type()? != RebaseOperationType::Exec {

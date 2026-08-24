@@ -554,7 +554,7 @@ impl InvalidGitTimeSign {
 }
 
 impl GitTimeRef<'_> {
-    /// Wraps: git_time.offset
+    /// Field: git_time.offset
     /// Returns the timezone offset from UTC in minutes.
     #[inline]
     #[must_use]
@@ -565,7 +565,7 @@ impl GitTimeRef<'_> {
         unsafe { core::ptr::addr_of!((*ptr).offset).read() }
     }
 
-    /// Wraps: git_time.sign
+    /// Field: git_time.sign
     /// Returns the stored timezone sign after validating the C byte.
     ///
     /// Returns `Err` for the zero byte left by a signature parsed without a
@@ -580,7 +580,7 @@ impl GitTimeRef<'_> {
         GitTimeSign::from_raw(raw).ok_or(InvalidGitTimeSign(raw))
     }
 
-    /// Wraps: git_time.time
+    /// Field: git_time.time
     /// Returns the number of seconds since the Unix epoch.
     #[inline]
     #[must_use]
@@ -704,7 +704,7 @@ ffibox::define_ctype!(
 pub type GitWriteStreamOwned = ffibox::CBox<GitWriteStream>;
 
 impl GitWriteStream {
-    /// Wraps: git_writestream.close
+    /// Field: git_writestream.close
     /// Finalizes `stream` and then releases it through its `free` callback.
     ///
     /// The stream is consumed because `close` is a one-way transition: a
@@ -732,7 +732,7 @@ impl GitWriteStream {
 }
 
 impl GitWriteStreamMut<'_> {
-    /// Wraps: git_writestream.write
+    /// Field: git_writestream.write
     /// Writes `buffer` synchronously to this stream.
     pub fn write(&mut self, buffer: &[u8]) -> Result<(), core::ffi::c_int> {
         let stream = self.as_mut_ptr();
@@ -755,7 +755,7 @@ impl GitWriteStreamMut<'_> {
     }
 }
 
-/// Wraps: git_writestream.free
+/// Field: git_writestream.free
 // SAFETY: adopting `GitWriteStreamOwned` requires an owning pointer whose
 // installed callback finalizes and releases that concrete allocation; borrowed
 // stack-backed streams use handles instead. `CBox` invokes this callback once
@@ -958,7 +958,7 @@ unsafe impl ffibox::CCloned for GitSignature {
 }
 
 impl<'a> GitSignatureRef<'a> {
-    /// Wraps: git_signature.name
+    /// Field: git_signature.name
     /// Borrows the nonempty, NUL-terminated actor name.
     #[must_use]
     pub fn name(&self) -> &'a CStr {
@@ -975,7 +975,7 @@ impl<'a> GitSignatureRef<'a> {
         clone_signature_string(self.name())
     }
 
-    /// Wraps: git_signature.when
+    /// Field: git_signature.when
     /// Borrows the signature timestamp stored by value.
     #[must_use]
     pub fn when(&self) -> GitTimeRef<'a> {
@@ -987,7 +987,7 @@ impl<'a> GitSignatureRef<'a> {
         unsafe { GitTimeRef::from_ptr(when) }.expect("an inline field is non-null")
     }
 
-    /// Wraps: git_signature.email
+    /// Field: git_signature.email
     /// Borrows the nonempty, NUL-terminated actor email address.
     #[must_use]
     pub fn email(&self) -> &'a CStr {

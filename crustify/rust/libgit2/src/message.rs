@@ -25,7 +25,7 @@ ffibox::define_ctype!(
 );
 
 impl<'a> GitMessageTrailerRef<'a> {
-    /// Wraps: git_message_trailer.key
+    /// Field: git_message_trailer.key
     /// Returns the trailer key borrowed from the containing trailer array.
     #[must_use]
     pub fn key(&self) -> &'a CStr {
@@ -37,7 +37,7 @@ impl<'a> GitMessageTrailerRef<'a> {
         unsafe { CStr::from_ptr(core::ptr::addr_of!((*trailer).key).read()) }
     }
 
-    /// Wraps: git_message_trailer.value
+    /// Field: git_message_trailer.value
     /// Returns the trailer value borrowed from the containing trailer array.
     #[must_use]
     pub fn value(&self) -> &'a CStr {
@@ -165,7 +165,7 @@ impl GitMessageTrailerArray {
 }
 
 impl<'a> GitMessageTrailerArrayRef<'a> {
-    /// Wraps: git_message_trailer_array.count
+    /// Field: git_message_trailer_array.count
     /// Returns the number of initialized trailer descriptors.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -180,7 +180,7 @@ impl<'a> GitMessageTrailerArrayRef<'a> {
         self.len() == 0
     }
 
-    /// Wraps: git_message_trailer_array._trailer_block
+    /// Field: git_message_trailer_array._trailer_block
     /// Reports whether the private backing string allocation is installed.
     ///
     /// Its bytes are intentionally not exposed: trailer keys and values are
@@ -192,7 +192,7 @@ impl<'a> GitMessageTrailerArrayRef<'a> {
         !unsafe { addr_of!((*self.as_ptr())._trailer_block).read() }.is_null()
     }
 
-    /// Wraps: git_message_trailer_array.trailers
+    /// Field: git_message_trailer_array.trailers
     /// Borrows the initialized trailer descriptors with their owner lifetime.
     ///
     /// `None` is the valid null representation used by an empty array.

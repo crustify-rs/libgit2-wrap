@@ -18,7 +18,7 @@ ffibox::define_ctype!(
     ffi::git_cached_obj
 );
 
-/// Wraps: git_cached_obj.refcount
+/// Field: git_cached_obj.refcount
 /// An independently owned reference to cached object storage.
 ///
 /// Cloning atomically acquires another reference. Dropping dispatches the
@@ -72,7 +72,7 @@ impl InvalidCachedObjectType {
 }
 
 impl<'a> GitCachedObjRef<'a> {
-    /// Wraps: git_cached_obj.size
+    /// Field: git_cached_obj.size
     /// Returns the memory size charged to the cache for this object.
     #[must_use]
     pub fn size(&self) -> usize {
@@ -81,7 +81,7 @@ impl<'a> GitCachedObjRef<'a> {
         unsafe { addr_of!((*self.as_ptr()).size).read() }
     }
 
-    /// Wraps: git_cached_obj.oid
+    /// Field: git_cached_obj.oid
     /// Borrows the object identifier embedded in this cache prefix.
     #[must_use]
     pub fn oid(&self) -> OidRef<'a> {
@@ -91,7 +91,7 @@ impl<'a> GitCachedObjRef<'a> {
             .expect("an embedded field has a non-null address")
     }
 
-    /// Wraps: git_cached_obj.flags
+    /// Field: git_cached_obj.flags
     /// Returns the checked representation stored in the cache.
     pub fn store_kind(&self) -> Result<CacheStoreKind, InvalidCacheStoreKind> {
         // SAFETY: as `size`, for the initialized discriminator field.
@@ -99,7 +99,7 @@ impl<'a> GitCachedObjRef<'a> {
         CacheStoreKind::try_from(raw)
     }
 
-    /// Wraps: git_cached_obj.type
+    /// Field: git_cached_obj.type
     /// Returns the checked Git object kind stored in this cache prefix.
     pub fn object_type(&self) -> Result<GitObjectType, InvalidCachedObjectType> {
         // SAFETY: as `size`, for the initialized object-kind field.

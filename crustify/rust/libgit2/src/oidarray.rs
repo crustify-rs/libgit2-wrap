@@ -46,7 +46,7 @@ impl OidArray {
 }
 
 impl<'a> OidArrayRef<'a> {
-    /// Wraps: git_oidarray.count
+    /// Field: git_oidarray.count
     /// Returns the number of object IDs in the array.
     #[must_use]
     pub fn count(&self) -> usize {
@@ -55,7 +55,7 @@ impl<'a> OidArrayRef<'a> {
         unsafe { core::ptr::addr_of!((*self.as_ptr()).count).read() }
     }
 
-    /// Wraps: git_oidarray.ids
+    /// Field: git_oidarray.ids
     /// Borrows the counted object-ID run without exposing its owned pointer.
     ///
     /// `None` is the canonical empty state with a null pointer. A non-null

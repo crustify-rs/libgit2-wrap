@@ -82,7 +82,7 @@ impl GitStrArray {
 }
 
 impl<'a> GitStrArrayRef<'a> {
-    /// Wraps: git_strarray.strings
+    /// Field: git_strarray.strings
     /// Borrow the counted pointer run without exposing its raw pointer.
     ///
     /// `None` denotes a null outer pointer. This includes the canonical empty
@@ -107,7 +107,7 @@ impl<'a> GitStrArrayRef<'a> {
         })
     }
 
-    /// Wraps: git_strarray.count
+    /// Field: git_strarray.count
     /// Number of string-pointer slots recorded by the header.
     #[inline]
     #[must_use]

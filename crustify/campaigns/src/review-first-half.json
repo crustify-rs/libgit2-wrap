@@ -1,20 +1,35 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "oracle_target": "src",
   "api_headers_only": true,
   "budgets": {
-    "max_syms": 50,
-    "max_loc": 1000,
-    "max_types": 2,
-    "min_fields": 10
+    "max_syms": 150,
+    "max_loc": 3000,
+    "max_types": 15,
+    "min_fields": 30
   },
   "summary": {
-    "unit_count": 377,
+    "unit_count": 373,
     "layer_count": 2,
-    "batch_count": 67,
-    "file_count": 49
+    "batch_count": 21,
+    "file_count": 19
   },
   "plan_items": [
+    {
+      "name": "git_annotated_commit",
+      "defined_in": "src/libgit2/annotated_commit.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 0,
+      "loc": 9,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
     {
       "name": "git_annotated_commit_from_fetchhead",
       "defined_in": "src/libgit2/annotated_commit.c",
@@ -144,6 +159,21 @@
       "generates": []
     },
     {
+      "name": "git_apply_location_t",
+      "defined_in": "include/git2/apply.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
       "name": "git_attr_get",
       "defined_in": "src/libgit2/attr.c",
       "kind": "symbol",
@@ -177,6 +207,36 @@
             "defined_in": "include/git2/attr.h"
           }
         ],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
+      "name": "git_attr_value_t",
+      "defined_in": "include/git2/attr.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
+      "name": "git_blame",
+      "defined_in": "src/libgit2/blame.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 0,
+      "loc": 22,
+      "deps": {
+        "types": [],
         "symbols": []
       },
       "fallback": [],
@@ -428,6 +488,21 @@
       "generates": []
     },
     {
+      "name": "git_branch_iterator",
+      "defined_in": "include/git2/branch.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
       "name": "git_branch_iterator_new",
       "defined_in": "src/libgit2/branch.c",
       "kind": "symbol",
@@ -611,6 +686,21 @@
       "generates": []
     },
     {
+      "name": "git_branch_t",
+      "defined_in": "include/git2/types.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
       "name": "git_branch_upstream",
       "defined_in": "src/libgit2/branch.c",
       "kind": "symbol",
@@ -703,6 +793,21 @@
       "generates": []
     },
     {
+      "name": "git_buf",
+      "defined_in": "include/git2/buffer.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 0,
+      "loc": 3,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
       "name": "git_cert",
       "defined_in": "include/git2/cert.h",
       "kind": "type",
@@ -716,6 +821,51 @@
             "defined_in": "include/git2/cert.h"
           }
         ],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
+      "name": "git_cert_t",
+      "defined_in": "include/git2/cert.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
+      "name": "git_checkout_notify_t",
+      "defined_in": "include/git2/checkout.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
+      "name": "git_checkout_perfdata",
+      "defined_in": "include/git2/checkout.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 0,
+      "loc": 3,
+      "deps": {
+        "types": [],
         "symbols": []
       },
       "fallback": [],
@@ -747,6 +897,21 @@
       "defined_in": "include/git2/checkout.h",
       "kind": "callback",
       "source_kind": "callback",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
+      "name": "git_clone_local_t",
+      "defined_in": "include/git2/clone.h",
+      "kind": "type",
+      "source_kind": "enum",
       "layer": 0,
       "loc": 0,
       "deps": {
@@ -823,6 +988,21 @@
             "defined_in": "src/libgit2/repository.h"
           }
         ],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
+      "name": "git_config",
+      "defined_in": "src/libgit2/config.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 0,
+      "loc": 3,
+      "deps": {
+        "types": [],
         "symbols": []
       },
       "fallback": [],
@@ -1104,6 +1284,21 @@
             "defined_in": "src/libgit2/config.h"
           }
         ],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
+      "name": "git_config_level_t",
+      "defined_in": "include/git2/config.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
         "symbols": []
       },
       "fallback": [],
@@ -1400,6 +1595,36 @@
       "generates": []
     },
     {
+      "name": "git_credential_t",
+      "defined_in": "include/git2/credential.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
+      "name": "git_delta_t",
+      "defined_in": "include/git2/diff.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
       "name": "git_describe_commit",
       "defined_in": "src/libgit2/describe.c",
       "kind": "symbol",
@@ -1456,6 +1681,21 @@
       "generates": []
     },
     {
+      "name": "git_describe_format_options",
+      "defined_in": "include/git2/describe.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 0,
+      "loc": 4,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
       "name": "git_describe_options",
       "defined_in": "include/git2/describe.h",
       "kind": "type",
@@ -1479,26 +1719,6 @@
       "loc": 7,
       "deps": {
         "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
-      "name": "git_describe_result_free",
-      "defined_in": "src/libgit2/describe.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 19,
-      "deps": {
-        "types": [
-          {
-            "name": "git_describe_result",
-            "defined_in": "src/libgit2/describe.c"
-          }
-        ],
         "symbols": []
       },
       "fallback": [],
@@ -1569,6 +1789,21 @@
       "generates": []
     },
     {
+      "name": "git_diff_binary_t",
+      "defined_in": "include/git2/diff.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
       "name": "git_diff_file",
       "defined_in": "include/git2/diff.h",
       "kind": "type",
@@ -1589,19 +1824,14 @@
       "generates": []
     },
     {
-      "name": "git_diff_free",
-      "defined_in": "src/libgit2/diff.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 6,
+      "name": "git_diff_format_t",
+      "defined_in": "include/git2/diff.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
       "deps": {
-        "types": [
-          {
-            "name": "git_diff",
-            "defined_in": "src/libgit2/diff.h"
-          }
-        ],
+        "types": [],
         "symbols": []
       },
       "fallback": [],
@@ -1861,19 +2091,14 @@
       "generates": []
     },
     {
-      "name": "git_diff_stats_free",
-      "defined_in": "src/libgit2/diff_stats.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 8,
+      "name": "git_diff_stats_format_t",
+      "defined_in": "include/git2/diff.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
       "deps": {
-        "types": [
-          {
-            "name": "git_diff_stats",
-            "defined_in": "src/libgit2/diff_stats.c"
-          }
-        ],
+        "types": [],
         "symbols": []
       },
       "fallback": [],
@@ -1922,6 +2147,21 @@
             "defined_in": "include/git2/diff.h"
           }
         ],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
+      "name": "git_direction",
+      "defined_in": "include/git2/net.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
         "symbols": []
       },
       "fallback": [],
@@ -2167,26 +2407,6 @@
       "generates": []
     },
     {
-      "name": "git_index_conflict_iterator_free",
-      "defined_in": "src/libgit2/index.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 6,
-      "deps": {
-        "types": [
-          {
-            "name": "git_index_conflict_iterator",
-            "defined_in": "src/libgit2/index.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
       "name": "git_index_entry",
       "defined_in": "include/git2/index.h",
       "kind": "type",
@@ -2295,26 +2515,6 @@
           {
             "name": "git_indexer_progress",
             "defined_in": "include/git2/indexer.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
-      "name": "git_indexer_free",
-      "defined_in": "src/libgit2/indexer.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 32,
-      "deps": {
-        "types": [
-          {
-            "name": "git_indexer",
-            "defined_in": "src/libgit2/indexer.c"
           }
         ],
         "symbols": []
@@ -2460,26 +2660,6 @@
       "source_kind": "function_exported",
       "layer": 1,
       "loc": 8,
-      "deps": {
-        "types": [
-          {
-            "name": "git_mailmap",
-            "defined_in": "src/libgit2/mailmap.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
-      "name": "git_mailmap_free",
-      "defined_in": "src/libgit2/mailmap.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 12,
       "deps": {
         "types": [
           {
@@ -2798,26 +2978,6 @@
       "generates": []
     },
     {
-      "name": "git_merge_file_result_free",
-      "defined_in": "src/libgit2/merge_file.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 7,
-      "deps": {
-        "types": [
-          {
-            "name": "git_merge_file_result",
-            "defined_in": "include/git2/merge.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
       "name": "git_merge_preference_t",
       "defined_in": "include/git2/merge.h",
       "kind": "type",
@@ -2927,26 +3087,6 @@
       "generates": []
     },
     {
-      "name": "git_note_free",
-      "defined_in": "src/libgit2/notes.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 9,
-      "deps": {
-        "types": [
-          {
-            "name": "git_note",
-            "defined_in": "src/libgit2/notes.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
       "name": "git_note_id",
       "defined_in": "src/libgit2/notes.c",
       "kind": "symbol",
@@ -2962,26 +3102,6 @@
           {
             "name": "git_oid",
             "defined_in": "include/git2/oid.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
-      "name": "git_note_iterator_free",
-      "defined_in": "src/libgit2/notes.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 6,
-      "deps": {
-        "types": [
-          {
-            "name": "git_iterator",
-            "defined_in": "src/libgit2/iterator.h"
           }
         ],
         "symbols": []
@@ -3095,46 +3215,6 @@
       "loc": 2,
       "deps": {
         "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
-      "name": "git_object_dup",
-      "defined_in": "src/libgit2/object.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 5,
-      "deps": {
-        "types": [
-          {
-            "name": "git_object",
-            "defined_in": "src/libgit2/object.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
-      "name": "git_object_free",
-      "defined_in": "src/libgit2/object.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 6,
-      "deps": {
-        "types": [
-          {
-            "name": "git_object",
-            "defined_in": "src/libgit2/object.h"
-          }
-        ],
         "symbols": []
       },
       "fallback": [],
@@ -3744,26 +3824,6 @@
       "generates": []
     },
     {
-      "name": "git_packbuilder_free",
-      "defined_in": "src/libgit2/pack-objects.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 30,
-      "deps": {
-        "types": [
-          {
-            "name": "git_packbuilder",
-            "defined_in": "src/libgit2/pack-objects.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
       "name": "git_packbuilder_hash",
       "defined_in": "src/libgit2/pack-objects.c",
       "kind": "symbol",
@@ -4091,26 +4151,6 @@
       "generates": []
     },
     {
-      "name": "git_patch_free",
-      "defined_in": "src/libgit2/patch.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 4,
-      "deps": {
-        "types": [
-          {
-            "name": "git_patch",
-            "defined_in": "src/libgit2/patch.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
       "name": "git_patch_from_diff",
       "defined_in": "src/libgit2/patch.c",
       "kind": "symbol",
@@ -4302,26 +4342,6 @@
       "generates": []
     },
     {
-      "name": "git_pathspec_free",
-      "defined_in": "src/libgit2/pathspec.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 5,
-      "deps": {
-        "types": [
-          {
-            "name": "git_pathspec",
-            "defined_in": "src/libgit2/pathspec.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
       "name": "git_pathspec_match_diff",
       "defined_in": "src/libgit2/pathspec.c",
       "kind": "symbol",
@@ -4431,26 +4451,6 @@
       "source_kind": "function_exported",
       "layer": 1,
       "loc": 3,
-      "deps": {
-        "types": [
-          {
-            "name": "git_pathspec_match_list",
-            "defined_in": "src/libgit2/pathspec.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
-      "name": "git_pathspec_match_list_free",
-      "defined_in": "src/libgit2/pathspec.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 4,
       "deps": {
         "types": [
           {
@@ -4652,26 +4652,6 @@
       "generates": []
     },
     {
-      "name": "git_rebase_free",
-      "defined_in": "src/libgit2/rebase.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 21,
-      "deps": {
-        "types": [
-          {
-            "name": "git_rebase",
-            "defined_in": "src/libgit2/rebase.c"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
       "name": "git_rebase_operation",
       "defined_in": "include/git2/rebase.h",
       "kind": "type",
@@ -4795,21 +4775,6 @@
       "generates": []
     },
     {
-      "name": "git_refcount",
-      "defined_in": "src/util/util.h",
-      "kind": "type",
-      "source_kind": "struct",
-      "layer": 0,
-      "loc": 2,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
       "name": "git_refdb",
       "defined_in": "src/libgit2/refdb.h",
       "kind": "type",
@@ -4831,26 +4796,6 @@
       "source_kind": "function_exported",
       "layer": 1,
       "loc": 8,
-      "deps": {
-        "types": [
-          {
-            "name": "git_refdb",
-            "defined_in": "src/libgit2/refdb.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
-      "name": "git_refdb_free",
-      "defined_in": "src/libgit2/refdb.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 6,
       "deps": {
         "types": [
           {
@@ -4991,26 +4936,6 @@
       "generates": []
     },
     {
-      "name": "git_reference_dup",
-      "defined_in": "src/libgit2/refs.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 13,
-      "deps": {
-        "types": [
-          {
-            "name": "git_reference",
-            "defined_in": "src/libgit2/refs.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
       "name": "git_reference_dwim",
       "defined_in": "src/libgit2/refs.c",
       "kind": "symbol",
@@ -5046,26 +4971,6 @@
           {
             "name": "git_repository",
             "defined_in": "src/libgit2/repository.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
-      "name": "git_reference_free",
-      "defined_in": "src/libgit2/refs.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 12,
-      "deps": {
-        "types": [
-          {
-            "name": "git_reference",
-            "defined_in": "src/libgit2/refs.h"
           }
         ],
         "symbols": []
@@ -5766,26 +5671,6 @@
       "generates": []
     },
     {
-      "name": "git_reflog_free",
-      "defined_in": "src/libgit2/reflog.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 20,
-      "deps": {
-        "types": [
-          {
-            "name": "git_reflog",
-            "defined_in": "src/libgit2/reflog.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
       "name": "git_reflog_read",
       "defined_in": "src/libgit2/reflog.c",
       "kind": "symbol",
@@ -6318,46 +6203,6 @@
       "generates": []
     },
     {
-      "name": "git_remote_dup",
-      "defined_in": "src/libgit2/remote.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 47,
-      "deps": {
-        "types": [
-          {
-            "name": "git_remote",
-            "defined_in": "src/libgit2/remote.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
-      "name": "git_remote_free",
-      "defined_in": "src/libgit2/remote.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 31,
-      "deps": {
-        "types": [
-          {
-            "name": "git_remote",
-            "defined_in": "src/libgit2/remote.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
       "name": "git_remote_get_fetch_refspecs",
       "defined_in": "src/libgit2/remote.c",
       "kind": "symbol",
@@ -6830,26 +6675,6 @@
           {
             "name": "git_oid",
             "defined_in": "include/git2/oid.h"
-          }
-        ],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": []
-    },
-    {
-      "name": "git_repository_free",
-      "defined_in": "src/libgit2/repository.c",
-      "kind": "symbol",
-      "source_kind": "function_exported",
-      "layer": 1,
-      "loc": 28,
-      "deps": {
-        "types": [
-          {
-            "name": "git_repository",
-            "defined_in": "src/libgit2/repository.h"
           }
         ],
         "symbols": []
@@ -7707,236 +7532,12 @@
   ],
   "dependency_nodes": [
     {
-      "name": "git_annotated_commit",
-      "defined_in": "src/libgit2/annotated_commit.h",
+      "name": "git_refcount",
+      "defined_in": "src/util/util.h",
       "kind": "type",
       "source_kind": "struct",
       "layer": 0,
-      "loc": 9,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_attr_value_t",
-      "defined_in": "include/git2/attr.h",
-      "kind": "type",
-      "source_kind": "enum",
-      "layer": 0,
-      "loc": 0,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_blame",
-      "defined_in": "src/libgit2/blame.h",
-      "kind": "type",
-      "source_kind": "struct",
-      "layer": 0,
-      "loc": 22,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_branch_iterator",
-      "defined_in": "include/git2/branch.h",
-      "kind": "type",
-      "source_kind": "struct",
-      "layer": 0,
-      "loc": 0,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_branch_t",
-      "defined_in": "include/git2/types.h",
-      "kind": "type",
-      "source_kind": "enum",
-      "layer": 0,
-      "loc": 0,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_buf",
-      "defined_in": "include/git2/buffer.h",
-      "kind": "type",
-      "source_kind": "struct",
-      "layer": 0,
-      "loc": 3,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_cert_t",
-      "defined_in": "include/git2/cert.h",
-      "kind": "type",
-      "source_kind": "enum",
-      "layer": 0,
-      "loc": 0,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_checkout_perfdata",
-      "defined_in": "include/git2/checkout.h",
-      "kind": "type",
-      "source_kind": "struct",
-      "layer": 0,
-      "loc": 3,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_config",
-      "defined_in": "src/libgit2/config.h",
-      "kind": "type",
-      "source_kind": "struct",
-      "layer": 0,
-      "loc": 3,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_config_level_t",
-      "defined_in": "include/git2/config.h",
-      "kind": "type",
-      "source_kind": "enum",
-      "layer": 0,
-      "loc": 0,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_credential_t",
-      "defined_in": "include/git2/credential.h",
-      "kind": "type",
-      "source_kind": "enum",
-      "layer": 0,
-      "loc": 0,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_describe_format_options",
-      "defined_in": "include/git2/describe.h",
-      "kind": "type",
-      "source_kind": "struct",
-      "layer": 0,
-      "loc": 4,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_diff_binary_t",
-      "defined_in": "include/git2/diff.h",
-      "kind": "type",
-      "source_kind": "enum",
-      "layer": 0,
-      "loc": 0,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_diff_stats_format_t",
-      "defined_in": "include/git2/diff.h",
-      "kind": "type",
-      "source_kind": "enum",
-      "layer": 0,
-      "loc": 0,
-      "deps": {
-        "types": [],
-        "symbols": []
-      },
-      "fallback": [],
-      "back_fill": [],
-      "generates": [],
-      "in_scope": true
-    },
-    {
-      "name": "git_direction",
-      "defined_in": "include/git2/net.h",
-      "kind": "type",
-      "source_kind": "enum",
-      "layer": 0,
-      "loc": 0,
+      "loc": 2,
       "deps": {
         "types": [],
         "symbols": []
@@ -7947,17 +7548,292 @@
       "in_scope": true
     }
   ],
-  "waves": [
+  "steps": [
     {
       "layers": [
         0
       ],
-      "unit_count": 88,
+      "unit_count": 107,
       "batches": [
         {
           "kind": "type",
-          "source_file": "include/git2/describe.h",
+          "source_file": "src/libgit2/annotated_commit.h",
           "items": [
+            {
+              "name": "git_annotated_commit",
+              "defined_in": "src/libgit2/annotated_commit.h",
+              "kind": "type",
+              "source_kind": "struct",
+              "layer": 0,
+              "loc": 9,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_apply_location_t",
+              "defined_in": "include/git2/apply.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_attr_value_t",
+              "defined_in": "include/git2/attr.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_blame",
+              "defined_in": "src/libgit2/blame.h",
+              "kind": "type",
+              "source_kind": "struct",
+              "layer": 0,
+              "loc": 22,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            }
+          ]
+        },
+        {
+          "kind": "type",
+          "source_file": "include/git2/branch.h",
+          "items": [
+            {
+              "name": "git_branch_iterator",
+              "defined_in": "include/git2/branch.h",
+              "kind": "type",
+              "source_kind": "struct",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_branch_t",
+              "defined_in": "include/git2/types.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_buf",
+              "defined_in": "include/git2/buffer.h",
+              "kind": "type",
+              "source_kind": "struct",
+              "layer": 0,
+              "loc": 3,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": [
+                "size",
+                "ptr",
+                "reserved"
+              ]
+            },
+            {
+              "name": "git_cert_t",
+              "defined_in": "include/git2/cert.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_checkout_notify_t",
+              "defined_in": "include/git2/checkout.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_checkout_perfdata",
+              "defined_in": "include/git2/checkout.h",
+              "kind": "type",
+              "source_kind": "struct",
+              "layer": 0,
+              "loc": 3,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": [
+                "stat_calls",
+                "chmod_calls",
+                "mkdir_calls"
+              ]
+            },
+            {
+              "name": "git_clone_local_t",
+              "defined_in": "include/git2/clone.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_config",
+              "defined_in": "src/libgit2/config.h",
+              "kind": "type",
+              "source_kind": "struct",
+              "layer": 0,
+              "loc": 3,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_config_level_t",
+              "defined_in": "include/git2/config.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_credential_t",
+              "defined_in": "include/git2/credential.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_delta_t",
+              "defined_in": "include/git2/diff.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_describe_format_options",
+              "defined_in": "include/git2/describe.h",
+              "kind": "type",
+              "source_kind": "struct",
+              "layer": 0,
+              "loc": 4,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": [
+                "version",
+                "dirty_suffix",
+                "always_use_long_format",
+                "abbreviated_size"
+              ]
+            },
             {
               "name": "git_describe_options",
               "defined_in": "include/git2/describe.h",
@@ -7996,13 +7872,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/diff.h",
-          "items": [
+            },
             {
               "name": "git_diff",
               "defined_in": "src/libgit2/diff.h",
@@ -8025,6 +7895,38 @@
           "kind": "type",
           "source_file": "include/git2/diff.h",
           "items": [
+            {
+              "name": "git_diff_binary_t",
+              "defined_in": "include/git2/diff.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_diff_format_t",
+              "defined_in": "include/git2/diff.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
             {
               "name": "git_diff_hunk",
               "defined_in": "include/git2/diff.h",
@@ -8071,13 +7973,7 @@
                 "content_offset",
                 "num_lines"
               ]
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/diff.h",
-          "items": [
+            },
             {
               "name": "git_diff_patchid_options",
               "defined_in": "include/git2/diff.h",
@@ -8111,13 +8007,39 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/errors.h",
-          "items": [
+            },
+            {
+              "name": "git_diff_stats_format_t",
+              "defined_in": "include/git2/diff.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
+            {
+              "name": "git_direction",
+              "defined_in": "include/git2/net.h",
+              "kind": "type",
+              "source_kind": "enum",
+              "layer": 0,
+              "loc": 0,
+              "deps": {
+                "types": [],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            },
             {
               "name": "git_error",
               "defined_in": "include/git2/errors.h",
@@ -8152,13 +8074,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/types.h",
-          "items": [
+            },
             {
               "name": "git_filemode_t",
               "defined_in": "include/git2/types.h",
@@ -8190,13 +8106,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/index.h",
-          "items": [
+            },
             {
               "name": "git_index_time",
               "defined_in": "include/git2/index.h",
@@ -8267,13 +8177,7 @@
                 "indexed_objects",
                 "total_objects"
               ]
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/iterator.h",
-          "items": [
+            },
             {
               "name": "git_iterator",
               "defined_in": "src/libgit2/iterator.h",
@@ -8289,13 +8193,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/mailmap.h",
-          "items": [
+            },
             {
               "name": "git_mailmap",
               "defined_in": "src/libgit2/mailmap.h",
@@ -8327,13 +8225,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/merge.h",
-          "items": [
+            },
             {
               "name": "git_merge_file_favor_t",
               "defined_in": "include/git2/merge.h",
@@ -8415,13 +8307,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/message.h",
-          "items": [
+            },
             {
               "name": "git_message_trailer",
               "defined_in": "include/git2/message.h",
@@ -8456,13 +8342,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/object.h",
-          "items": [
+            },
             {
               "name": "git_object",
               "defined_in": "src/libgit2/object.h",
@@ -8494,13 +8374,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/oid.h",
-          "items": [
+            },
             {
               "name": "git_oid",
               "defined_in": "include/git2/oid.h",
@@ -8579,13 +8453,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/pathspec.h",
-          "items": [
+            },
             {
               "name": "git_pathspec",
               "defined_in": "src/libgit2/pathspec.h",
@@ -8617,13 +8485,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/proxy.h",
-          "items": [
+            },
             {
               "name": "git_proxy_t",
               "defined_in": "include/git2/proxy.h",
@@ -8639,13 +8501,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/push.h",
-          "items": [
+            },
             {
               "name": "git_push",
               "defined_in": "src/libgit2/push.h",
@@ -8683,13 +8539,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/rebase.h",
-          "items": [
+            },
             {
               "name": "git_rebase_operation_t",
               "defined_in": "include/git2/rebase.h",
@@ -8706,28 +8556,6 @@
               "generates": [],
               "field_anchors": []
             },
-            {
-              "name": "git_refcount",
-              "defined_in": "src/util/util.h",
-              "kind": "type",
-              "source_kind": "struct",
-              "layer": 0,
-              "loc": 2,
-              "deps": {
-                "types": [],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/refdb.h",
-          "items": [
             {
               "name": "git_refdb",
               "defined_in": "src/libgit2/refdb.h",
@@ -8759,13 +8587,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/refs.h",
-          "items": [
+            },
             {
               "name": "git_reference",
               "defined_in": "src/libgit2/refs.h",
@@ -8781,7 +8603,13 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            },
+            }
+          ]
+        },
+        {
+          "kind": "type",
+          "source_file": "include/git2/types.h",
+          "items": [
             {
               "name": "git_reference_t",
               "defined_in": "include/git2/types.h",
@@ -8797,13 +8625,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/reflog.h",
-          "items": [
+            },
             {
               "name": "git_reflog",
               "defined_in": "src/libgit2/reflog.h",
@@ -8835,13 +8657,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/refspec.h",
-          "items": [
+            },
             {
               "name": "git_refspec",
               "defined_in": "src/libgit2/refspec.h",
@@ -8857,13 +8673,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/remote.h",
-          "items": [
+            },
             {
               "name": "git_remote",
               "defined_in": "src/libgit2/remote.h",
@@ -8917,13 +8727,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/remote.h",
-          "items": [
+            },
             {
               "name": "git_remote_redirect_t",
               "defined_in": "include/git2/remote.h",
@@ -8939,13 +8743,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/repository.h",
-          "items": [
+            },
             {
               "name": "git_repository",
               "defined_in": "src/libgit2/repository.h",
@@ -8961,13 +8759,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/reset.h",
-          "items": [
+            },
             {
               "name": "git_reset_t",
               "defined_in": "include/git2/reset.h",
@@ -8983,13 +8775,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/revwalk.h",
-          "items": [
+            },
             {
               "name": "git_revwalk",
               "defined_in": "src/libgit2/revwalk.h",
@@ -9043,13 +8829,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/status.h",
-          "items": [
+            },
             {
               "name": "git_status_show_t",
               "defined_in": "include/git2/status.h",
@@ -9081,13 +8861,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/strarray.h",
-          "items": [
+            },
             {
               "name": "git_strarray",
               "defined_in": "include/git2/strarray.h",
@@ -9106,13 +8880,7 @@
                 "strings",
                 "count"
               ]
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/submodule.h",
-          "items": [
+            },
             {
               "name": "git_submodule",
               "defined_in": "src/libgit2/submodule.h",
@@ -9128,13 +8896,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/types.h",
-          "items": [
+            },
             {
               "name": "git_submodule_ignore_t",
               "defined_in": "include/git2/types.h",
@@ -9166,13 +8928,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/types.h",
-          "items": [
+            },
             {
               "name": "git_time",
               "defined_in": "include/git2/types.h",
@@ -9208,13 +8964,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/transaction.c",
-          "items": [
+            },
             {
               "name": "git_transaction",
               "defined_in": "src/libgit2/transaction.c",
@@ -9230,7 +8980,13 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            },
+            }
+          ]
+        },
+        {
+          "kind": "type",
+          "source_file": "src/libgit2/tree.h",
+          "items": [
             {
               "name": "git_tree_entry",
               "defined_in": "src/libgit2/tree.h",
@@ -9246,13 +9002,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/tree.h",
-          "items": [
+            },
             {
               "name": "git_tree_update_t",
               "defined_in": "include/git2/tree.h",
@@ -9284,13 +9034,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/tree.h",
-          "items": [
+            },
             {
               "name": "git_treewalk_mode",
               "defined_in": "include/git2/tree.h",
@@ -9322,13 +9066,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/worktree.h",
-          "items": [
+            },
             {
               "name": "git_worktree_prune_options",
               "defined_in": "include/git2/worktree.h",
@@ -9702,7 +9440,7 @@
       "layers": [
         1
       ],
-      "unit_count": 289,
+      "unit_count": 266,
       "batches": [
         {
           "kind": "type",
@@ -9757,13 +9495,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/cert.h",
-          "items": [
+            },
             {
               "name": "git_cert",
               "defined_in": "include/git2/cert.h",
@@ -9786,13 +9518,7 @@
               "field_anchors": [
                 "cert_type"
               ]
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/commit.h",
-          "items": [
+            },
             {
               "name": "git_commit",
               "defined_in": "src/libgit2/commit.h",
@@ -9813,13 +9539,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/config.h",
-          "items": [
+            },
             {
               "name": "git_config_entry",
               "defined_in": "include/git2/config.h",
@@ -9852,7 +9572,13 @@
                 "origin_path",
                 "backend_type"
               ]
-            },
+            }
+          ]
+        },
+        {
+          "kind": "type",
+          "source_file": "include/git2/sys/credential.h",
+          "items": [
             {
               "name": "git_credential",
               "defined_in": "include/git2/sys/credential.h",
@@ -9876,13 +9602,7 @@
                 "free",
                 "credtype"
               ]
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/diff.h",
-          "items": [
+            },
             {
               "name": "git_diff_binary_file",
               "defined_in": "include/git2/diff.h",
@@ -9936,13 +9656,7 @@
                 "id",
                 "id_abbrev"
               ]
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/index.h",
-          "items": [
+            },
             {
               "name": "git_index",
               "defined_in": "src/libgit2/index.h",
@@ -10007,13 +9721,7 @@
                 "ino",
                 "dev"
               ]
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/merge.h",
-          "items": [
+            },
             {
               "name": "git_merge_file_options",
               "defined_in": "include/git2/merge.h",
@@ -10067,13 +9775,7 @@
                 "_trailer_block",
                 "trailers"
               ]
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/odb.h",
-          "items": [
+            },
             {
               "name": "git_odb",
               "defined_in": "src/libgit2/odb.h",
@@ -10094,13 +9796,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/odb_backend.h",
-          "items": [
+            },
             {
               "name": "git_odb_stream",
               "defined_in": "include/git2/odb_backend.h",
@@ -10202,13 +9898,7 @@
                 "count",
                 "ids"
               ]
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/remote.h",
-          "items": [
+            },
             {
               "name": "git_push_update",
               "defined_in": "include/git2/remote.h",
@@ -10263,13 +9953,7 @@
                 "id",
                 "exec"
               ]
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/sys/refdb_backend.h",
-          "items": [
+            },
             {
               "name": "git_reference_iterator",
               "defined_in": "include/git2/sys/refdb_backend.h",
@@ -10326,13 +10010,7 @@
                 "loid",
                 "symref_target"
               ]
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/repository.h",
-          "items": [
+            },
             {
               "name": "git_repository_init_options",
               "defined_in": "include/git2/repository.h",
@@ -10424,13 +10102,7 @@
                 "when",
                 "email"
               ]
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "src/libgit2/tag.h",
-          "items": [
+            },
             {
               "name": "git_tag",
               "defined_in": "src/libgit2/tag.h",
@@ -10472,13 +10144,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "type",
-          "source_file": "include/git2/tree.h",
-          "items": [
+            },
             {
               "name": "git_tree_update",
               "defined_in": "include/git2/tree.h",
@@ -11692,13 +11358,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "symbol",
-          "source_file": null,
-          "items": [
+            },
             {
               "name": "git_config_set_multivar",
               "defined_in": "src/libgit2/config.c",
@@ -11821,27 +11481,6 @@
               "field_anchors": []
             },
             {
-              "name": "git_describe_result_free",
-              "defined_in": "src/libgit2/describe.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 19,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_describe_result",
-                    "defined_in": "src/libgit2/describe.c"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
               "name": "git_describe_workdir",
               "defined_in": "src/libgit2/describe.c",
               "kind": "symbol",
@@ -11861,27 +11500,6 @@
                   {
                     "name": "git_repository",
                     "defined_in": "src/libgit2/repository.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
-              "name": "git_diff_free",
-              "defined_in": "src/libgit2/diff.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 6,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_diff",
-                    "defined_in": "src/libgit2/diff.h"
                   }
                 ],
                 "symbols": []
@@ -12093,27 +11711,6 @@
               "field_anchors": []
             },
             {
-              "name": "git_diff_stats_free",
-              "defined_in": "src/libgit2/diff_stats.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 8,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_diff_stats",
-                    "defined_in": "src/libgit2/diff_stats.c"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
               "name": "git_diff_stats_insertions",
               "defined_in": "src/libgit2/diff_stats.c",
               "kind": "symbol",
@@ -12298,27 +11895,6 @@
               "field_anchors": []
             },
             {
-              "name": "git_index_conflict_iterator_free",
-              "defined_in": "src/libgit2/index.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 6,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_index_conflict_iterator",
-                    "defined_in": "src/libgit2/index.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
               "name": "git_indexer_append",
               "defined_in": "src/libgit2/indexer.c",
               "kind": "symbol",
@@ -12359,27 +11935,6 @@
                   {
                     "name": "git_indexer_progress",
                     "defined_in": "include/git2/indexer.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
-              "name": "git_indexer_free",
-              "defined_in": "src/libgit2/indexer.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 32,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_indexer",
-                    "defined_in": "src/libgit2/indexer.c"
                   }
                 ],
                 "symbols": []
@@ -12438,27 +11993,6 @@
               "source_kind": "function_exported",
               "layer": 1,
               "loc": 8,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_mailmap",
-                    "defined_in": "src/libgit2/mailmap.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
-              "name": "git_mailmap_free",
-              "defined_in": "src/libgit2/mailmap.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 12,
               "deps": {
                 "types": [
                   {
@@ -12659,13 +12193,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "symbol",
-          "source_file": null,
-          "items": [
+            },
             {
               "name": "git_merge_base_octopus",
               "defined_in": "src/libgit2/merge.c",
@@ -12702,27 +12230,6 @@
                 "types": [
                   {
                     "name": "git_merge_file_input",
-                    "defined_in": "include/git2/merge.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
-              "name": "git_merge_file_result_free",
-              "defined_in": "src/libgit2/merge_file.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 7,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_merge_file_result",
                     "defined_in": "include/git2/merge.h"
                   }
                 ],
@@ -12780,27 +12287,6 @@
               "field_anchors": []
             },
             {
-              "name": "git_note_free",
-              "defined_in": "src/libgit2/notes.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 9,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_note",
-                    "defined_in": "src/libgit2/notes.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
               "name": "git_note_id",
               "defined_in": "src/libgit2/notes.c",
               "kind": "symbol",
@@ -12816,27 +12302,6 @@
                   {
                     "name": "git_oid",
                     "defined_in": "include/git2/oid.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
-              "name": "git_note_iterator_free",
-              "defined_in": "src/libgit2/notes.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 6,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_iterator",
-                    "defined_in": "src/libgit2/iterator.h"
                   }
                 ],
                 "symbols": []
@@ -12937,48 +12402,6 @@
                   {
                     "name": "git_repository",
                     "defined_in": "src/libgit2/repository.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
-              "name": "git_object_dup",
-              "defined_in": "src/libgit2/object.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 5,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_object",
-                    "defined_in": "src/libgit2/object.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
-              "name": "git_object_free",
-              "defined_in": "src/libgit2/object.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 6,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_object",
-                    "defined_in": "src/libgit2/object.h"
                   }
                 ],
                 "symbols": []
@@ -13441,27 +12864,6 @@
               "field_anchors": []
             },
             {
-              "name": "git_packbuilder_free",
-              "defined_in": "src/libgit2/pack-objects.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 30,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_packbuilder",
-                    "defined_in": "src/libgit2/pack-objects.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
               "name": "git_packbuilder_hash",
               "defined_in": "src/libgit2/pack-objects.c",
               "kind": "symbol",
@@ -13772,27 +13174,6 @@
               "field_anchors": []
             },
             {
-              "name": "git_patch_free",
-              "defined_in": "src/libgit2/patch.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 4,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_patch",
-                    "defined_in": "src/libgit2/patch.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
               "name": "git_patch_from_diff",
               "defined_in": "src/libgit2/patch.c",
               "kind": "symbol",
@@ -13841,13 +13222,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "symbol",
-          "source_file": null,
-          "items": [
+            },
             {
               "name": "git_patch_get_line_in_hunk",
               "defined_in": "src/libgit2/patch.c",
@@ -13983,27 +13358,6 @@
               "field_anchors": []
             },
             {
-              "name": "git_pathspec_free",
-              "defined_in": "src/libgit2/pathspec.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 5,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_pathspec",
-                    "defined_in": "src/libgit2/pathspec.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
               "name": "git_pathspec_match_diff",
               "defined_in": "src/libgit2/pathspec.c",
               "kind": "symbol",
@@ -14117,27 +13471,6 @@
               "field_anchors": []
             },
             {
-              "name": "git_pathspec_match_list_free",
-              "defined_in": "src/libgit2/pathspec.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 4,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_pathspec_match_list",
-                    "defined_in": "src/libgit2/pathspec.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
               "name": "git_pathspec_match_workdir",
               "defined_in": "src/libgit2/pathspec.c",
               "kind": "symbol",
@@ -14219,27 +13552,6 @@
               "source_kind": "function_exported",
               "layer": 1,
               "loc": 34,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_rebase",
-                    "defined_in": "src/libgit2/rebase.c"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
-              "name": "git_rebase_free",
-              "defined_in": "src/libgit2/rebase.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 21,
               "deps": {
                 "types": [
                   {
@@ -14364,27 +13676,6 @@
               "field_anchors": []
             },
             {
-              "name": "git_refdb_free",
-              "defined_in": "src/libgit2/refdb.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 6,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_refdb",
-                    "defined_in": "src/libgit2/refdb.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
               "name": "git_reference_cmp",
               "defined_in": "src/libgit2/refs.c",
               "kind": "symbol",
@@ -14433,7 +13724,13 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            },
+            }
+          ]
+        },
+        {
+          "kind": "symbol",
+          "source_file": null,
+          "items": [
             {
               "name": "git_reference_create_matching",
               "defined_in": "src/libgit2/refs.c",
@@ -14485,27 +13782,6 @@
               "field_anchors": []
             },
             {
-              "name": "git_reference_dup",
-              "defined_in": "src/libgit2/refs.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 13,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_reference",
-                    "defined_in": "src/libgit2/refs.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
               "name": "git_reference_dwim",
               "defined_in": "src/libgit2/refs.c",
               "kind": "symbol",
@@ -14542,27 +13818,6 @@
                   {
                     "name": "git_repository",
                     "defined_in": "src/libgit2/repository.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
-              "name": "git_reference_free",
-              "defined_in": "src/libgit2/refs.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 12,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_reference",
-                    "defined_in": "src/libgit2/refs.h"
                   }
                 ],
                 "symbols": []
@@ -14981,13 +14236,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "symbol",
-          "source_file": null,
-          "items": [
+            },
             {
               "name": "git_reference_target_peel",
               "defined_in": "src/libgit2/refs.c",
@@ -15183,27 +14432,6 @@
               "source_kind": "function_exported",
               "layer": 1,
               "loc": 4,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_reflog",
-                    "defined_in": "src/libgit2/reflog.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
-              "name": "git_reflog_free",
-              "defined_in": "src/libgit2/reflog.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 20,
               "deps": {
                 "types": [
                   {
@@ -15713,48 +14941,6 @@
               "field_anchors": []
             },
             {
-              "name": "git_remote_dup",
-              "defined_in": "src/libgit2/remote.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 47,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_remote",
-                    "defined_in": "src/libgit2/remote.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
-              "name": "git_remote_free",
-              "defined_in": "src/libgit2/remote.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 31,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_remote",
-                    "defined_in": "src/libgit2/remote.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
               "name": "git_remote_get_fetch_refspecs",
               "defined_in": "src/libgit2/remote.c",
               "kind": "symbol",
@@ -16121,13 +15307,7 @@
               "back_fill": [],
               "generates": [],
               "field_anchors": []
-            }
-          ]
-        },
-        {
-          "kind": "symbol",
-          "source_file": null,
-          "items": [
+            },
             {
               "name": "git_repository_config",
               "defined_in": "src/libgit2/repository.c",
@@ -16186,27 +15366,6 @@
                   {
                     "name": "git_oid",
                     "defined_in": "include/git2/oid.h"
-                  }
-                ],
-                "symbols": []
-              },
-              "fallback": [],
-              "back_fill": [],
-              "generates": [],
-              "field_anchors": []
-            },
-            {
-              "name": "git_repository_free",
-              "defined_in": "src/libgit2/repository.c",
-              "kind": "symbol",
-              "source_kind": "function_exported",
-              "layer": 1,
-              "loc": 28,
-              "deps": {
-                "types": [
-                  {
-                    "name": "git_repository",
-                    "defined_in": "src/libgit2/repository.h"
                   }
                 ],
                 "symbols": []
