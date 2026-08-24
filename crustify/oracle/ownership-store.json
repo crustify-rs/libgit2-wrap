@@ -3283,6 +3283,28 @@
    ]
   },
   {
+   "name": "git_tree_update",
+   "defined_in": "include/git2/tree.h",
+   "_comment_agent": "Public by-value update descriptor with no lifecycle operation. Its path is a read-only caller borrow; all other fields are inline values.",
+   "fields": [
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "The record borrows a caller-owned NUL-terminated path. git_tree_create_updated reads it (including during temporary sorting) but neither stores nor frees it; callers must keep it valid for every use of the update. strcmp and path traversal dereference it unconditionally, so NULL is not accepted."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_treebuilder",
    "defined_in": "src/libgit2/tree.h",
    "_comment_agent": "The repository pointer is a non-null borrowed keepalive dependency installed by git_treebuilder_new; it is never released by git_treebuilder_free.",

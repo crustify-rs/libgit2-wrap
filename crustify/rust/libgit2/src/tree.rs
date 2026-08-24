@@ -1,10 +1,13 @@
 //! Safe wrappers for libgit2 tree APIs.
 
-use core::ptr::NonNull;
+use core::ffi::CStr;
+use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CBox, CCloned, define_ctype, impl_dropped};
 
+use crate::api::types::GitFileMode;
 use crate::ffi;
+use crate::oid::{OidMut, OidRef};
 
 define_ctype!(
     /// Wraps: git_tree
@@ -196,6 +199,108 @@ define_ctype!(
 // bindgen C type.
 impl_dropped!(TreeBuilder, ffi::git_treebuilder, ffi::git_treebuilder_free);
 
+define_ctype!(
+    /// Wraps: git_tree_update
+    /// A layout-compatible descriptor for one tree update.
+    ///
+    /// The descriptor borrows its path and owns no external resources. Code
+    /// that stores a path in it must keep that path alive until the descriptor
+    /// is no longer observed by C.
+    TreeUpdate,
+    TreeUpdateRef,
+    TreeUpdateMut,
+    ffi::git_tree_update
+);
+
+impl<'a> TreeUpdateRef<'a> {
+    /// Wraps: git_tree_update.action
+    /// Returns the requested update action.
+    ///
+    /// A malformed C value is reported instead of being converted into an
+    /// invalid Rust enum.
+    pub fn action(&self) -> Result<TreeUpdateType, InvalidTreeUpdateType> {
+        // SAFETY: the shared handle covers a live initialized descriptor, and
+        // raw-place projection reads its scalar without forming a reference to
+        // C-visible memory.
+        let action = unsafe { addr_of!((*self.as_ptr()).action).read() };
+        TreeUpdateType::try_from(action)
+    }
+
+    /// Wraps: git_tree_update.path
+    /// Borrows the non-null, NUL-terminated path from the descriptor.
+    #[must_use]
+    pub fn path(&self) -> &'a CStr {
+        // SAFETY: raw-place projection reads the pointer field without forming
+        // a reference to C-visible descriptor storage.
+        let path = unsafe { addr_of!((*self.as_ptr()).path).read() };
+        assert!(!path.is_null(), "a valid tree update has a path");
+        // SAFETY: a valid `git_tree_update` path is NUL-terminated and remains
+        // live while the descriptor is observed. The check above establishes
+        // a valid start and the handle bounds the returned borrow's lifetime.
+        unsafe { CStr::from_ptr(path) }
+    }
+
+    /// Wraps: git_tree_update.id
+    /// Borrows the inline object identifier.
+    #[must_use]
+    pub fn id(&self) -> OidRef<'a> {
+        // SAFETY: the projected inline field is non-null, initialized, and
+        // remains live for the enclosing shared handle's lifetime.
+        unsafe { OidRef::from_ptr(addr_of!((*self.as_ptr()).id).cast_mut()) }
+            .expect("an inline field is non-null")
+    }
+
+    /// Wraps: git_tree_update.filemode
+    /// Returns the entry's file mode when C supplied a published value.
+    #[must_use]
+    pub fn filemode(&self) -> Option<GitFileMode> {
+        // SAFETY: the shared handle covers a live initialized descriptor, and
+        // raw-place projection reads its scalar without forming a reference to
+        // C-visible memory.
+        let filemode = unsafe { addr_of!((*self.as_ptr()).filemode).read() };
+        GitFileMode::from_raw(filemode)
+    }
+}
+
+impl TreeUpdateMut<'_> {
+    /// Sets the requested update action.
+    pub fn set_action(&mut self, action: TreeUpdateType) {
+        // SAFETY: this exclusive handle permits a raw-place write, and the
+        // checked Rust enum has the same representation as the C field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).action).write(action.into()) }
+    }
+
+    /// Stores a borrowed path in the descriptor.
+    ///
+    /// # Safety
+    ///
+    /// `path` must remain alive and unchanged until C can no longer observe
+    /// this descriptor or the field is replaced. Rust cannot attach that
+    /// lifetime to a pointer stored in the C layout.
+    pub unsafe fn set_borrowed_path(&mut self, path: &CStr) {
+        // SAFETY: this exclusive handle permits a raw-place write. `CStr`
+        // supplies a non-null NUL-terminated pointer, and the caller upholds
+        // the stored borrow's lifetime.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).path).write(path.as_ptr()) }
+    }
+
+    /// Borrows the inline object identifier exclusively.
+    #[must_use]
+    pub fn id_mut(&mut self) -> OidMut<'_> {
+        // SAFETY: the projected inline field is non-null and initialized, and
+        // this handle's exclusive reborrow prevents competing Rust handles.
+        unsafe { OidMut::from_ptr(addr_of_mut!((*self.as_mut_ptr()).id)) }
+            .expect("an inline field is non-null")
+    }
+
+    /// Sets the entry's file mode.
+    pub fn set_filemode(&mut self, filemode: GitFileMode) {
+        // SAFETY: this exclusive handle permits a raw-place write, and
+        // `GitFileMode` only contains values published for the C field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).filemode).write(filemode.into()) }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
@@ -382,5 +487,66 @@ mod tests {
             align_of::<TreeWalkMode>(),
             align_of::<ffi::git_treewalk_mode>()
         );
+    }
+
+    #[test]
+    fn tree_update_representation_and_handles_match_the_c_seam() {
+        assert_eq!(size_of::<TreeUpdate>(), size_of::<ffi::git_tree_update>());
+        assert_eq!(align_of::<TreeUpdate>(), align_of::<ffi::git_tree_update>());
+        assert_eq!(
+            size_of::<TreeUpdateRef<'static>>(),
+            size_of::<*const ffi::git_tree_update>()
+        );
+        assert_eq!(
+            size_of::<TreeUpdateMut<'static>>(),
+            size_of::<*mut ffi::git_tree_update>()
+        );
+    }
+
+    #[test]
+    fn tree_update_handles_access_and_replace_every_field() {
+        let mut raw = ffi::git_tree_update {
+            action: ffi::git_tree_update_t_GIT_TREE_UPDATE_UPSERT,
+            id: ffi::git_oid {
+                type_: ffi::git_oid_t_GIT_OID_SHA1 as u8,
+                id: [7; 32],
+            },
+            filemode: ffi::git_filemode_t_GIT_FILEMODE_BLOB,
+            path: c"src/old.rs".as_ptr(),
+        };
+
+        {
+            // SAFETY: `raw` is a live initialized descriptor, this scope has
+            // exclusive access, and both path pointers have static storage.
+            let mut update = unsafe { TreeUpdateMut::from_ptr(&raw mut raw) }
+                .expect("the address of a stack value is non-null");
+
+            assert_eq!(update.as_ref().action(), Ok(TreeUpdateType::Upsert));
+            assert_eq!(update.as_ref().path(), c"src/old.rs");
+            assert_eq!(update.as_ref().filemode(), Some(GitFileMode::BLOB));
+            assert_eq!(
+                update.as_ref().id().oid_type(),
+                Ok(crate::oid::OidType::Sha1)
+            );
+            let mut bytes = [0; 32];
+            assert!(update.as_ref().id().raw_bytes().copy_to_slice(&mut bytes));
+            assert_eq!(bytes, [7; 32]);
+
+            update.set_action(TreeUpdateType::Remove);
+            // SAFETY: this C string literal has static storage and therefore
+            // outlives every future observation of `raw`.
+            unsafe { update.set_borrowed_path(c"src/new.rs") };
+            update.set_filemode(GitFileMode::LINK);
+            update.id_mut().set_oid_type(crate::oid::OidType::Sha256);
+        }
+
+        // SAFETY: `raw` remains live and initialized, no exclusive handle
+        // exists, and its path points at static storage.
+        let update = unsafe { TreeUpdateRef::from_ptr(&raw mut raw) }
+            .expect("the address of a stack value is non-null");
+        assert_eq!(update.action(), Ok(TreeUpdateType::Remove));
+        assert_eq!(update.path(), c"src/new.rs");
+        assert_eq!(update.filemode(), Some(GitFileMode::LINK));
+        assert_eq!(update.id().oid_type(), Ok(crate::oid::OidType::Sha256));
     }
 }
