@@ -3,8 +3,11 @@
 use core::ffi::CStr;
 use core::ptr::{addr_of, addr_of_mut};
 
+use ffibox::CrustifyStr;
+
 use crate::ffi;
 use crate::oid::{OidMut, OidRef};
+use crate::util::alloc::GitStrdupFree;
 
 /// Wraps: git_direction
 /// The direction of a network operation.
@@ -79,14 +82,28 @@ ffibox::define_ctype!(
     /// Wraps: git_remote_head
     /// A layout-compatible advertised remote reference.
     ///
-    /// Remote and transport owners retain these records and their strings;
-    /// borrowed handles expose views without assuming an independent head
-    /// destructor.
+    /// A head has no destructor of its own: its concrete owner - a transport
+    /// packet, a local-transport head, or a remote's reference vector -
+    /// releases the record together with its strings.
+    ///
+    /// `symref_target` is always an owned allocation from libgit2's configured
+    /// allocator, so it has safe owning accessors. `name` is owned by every
+    /// head the transports build but borrowed by the temporary search keys and
+    /// object-ID heads that `remote.c` and `fetch.c` place on the stack, so its
+    /// owning accessors carry that unexpressible distinction as a caller
+    /// obligation.
     RemoteHead,
     RemoteHeadRef,
     RemoteHeadMut,
     ffi::git_remote_head
 );
+
+/// An owned advertised-reference string held by a [`RemoteHead`].
+///
+/// Every producer builds these with `git__strdup`, `git__malloc` or
+/// `git_str_detach` and releases them with `git__free`, so they share the
+/// configured-allocator strategy.
+pub type RemoteHeadString = CrustifyStr<GitStrdupFree>;
 
 impl<'a> RemoteHeadRef<'a> {
     /// Wraps: git_remote_head.oid
@@ -187,12 +204,17 @@ impl RemoteHeadMut<'_> {
 
     /// Stores a borrowed advertised reference name.
     ///
+    /// This is the contract used by the stack search keys in `remote.c` and by
+    /// the object-ID heads in `fetch.c`, which point at storage another object
+    /// owns.
+    ///
     /// # Safety
     ///
-    /// The caller must first dispose any owned old value. A non-null `name`
-    /// must remain alive until the concrete remote-head owner replaces the
-    /// field or finishes using the head, and that owner must not free the
-    /// borrowed string. Rust cannot express those external contracts.
+    /// The caller must first move out any owned old value with
+    /// [`take_name`](Self::take_name); this write leaks it otherwise. A
+    /// non-null `name` must remain alive until the head's concrete owner
+    /// replaces the field or finishes using the head, and that owner must not
+    /// free the borrowed string. Rust cannot express those external contracts.
     pub unsafe fn set_borrowed_name(&mut self, name: Option<&CStr>) {
         let name = name.map_or(core::ptr::null_mut(), |name| name.as_ptr().cast_mut());
         // SAFETY: this exclusive handle permits replacing the pointer field;
@@ -200,19 +222,78 @@ impl RemoteHeadMut<'_> {
         unsafe { addr_of_mut!((*self.as_mut_ptr()).name).write(name) }
     }
 
-    /// Stores a borrowed symbolic-reference target.
+    /// Moves the owned advertised reference name out, leaving the head unnamed.
     ///
     /// # Safety
     ///
-    /// The caller must first dispose any owned old value. A non-null `target`
-    /// must remain alive until the concrete remote-head owner replaces the
-    /// field or finishes using the head, and that owner must not free the
-    /// borrowed string. Rust cannot express those external contracts.
-    pub unsafe fn set_borrowed_symref_target(&mut self, target: Option<&CStr>) {
-        let target = target.map_or(core::ptr::null_mut(), |target| target.as_ptr().cast_mut());
-        // SAFETY: this exclusive handle permits replacing the pointer field;
-        // the caller supplies its unexpressible lifetime obligation.
+    /// The stored name must be an allocation owned by this head and made by
+    /// libgit2's configured allocator, as every transport-built head holds.
+    /// It must not be a name installed by
+    /// [`set_borrowed_name`](Self::set_borrowed_name) or by one of the C
+    /// search keys that borrow another object's storage: only the producer
+    /// knows which contract a given head follows.
+    #[must_use]
+    pub unsafe fn take_name(&mut self) -> Option<RemoteHeadString> {
+        let head = self.as_mut_ptr();
+        // SAFETY: this exclusive handle permits reading and clearing the
+        // pointer field, which transfers whatever it addressed out of the head.
+        let name = unsafe {
+            let name = addr_of!((*head).name).read();
+            addr_of_mut!((*head).name).write(core::ptr::null_mut());
+            name
+        };
+        // SAFETY: the caller guarantees that a non-null name was a unique
+        // allocation from libgit2's configured allocator, and the head no
+        // longer refers to it.
+        unsafe { RemoteHeadString::from_raw(name) }
+    }
+
+    /// Replaces the owned advertised reference name, releasing the old one.
+    ///
+    /// # Safety
+    ///
+    /// Carries [`take_name`](Self::take_name)'s obligation for the value being
+    /// released.
+    pub unsafe fn set_name(&mut self, name: Option<RemoteHeadString>) {
+        // SAFETY: the caller guarantees that the replaced name is owned by the
+        // head and releasable through this strategy.
+        let old = unsafe { self.take_name() };
+        let name = name.map_or(core::ptr::null_mut(), RemoteHeadString::into_raw);
+        // SAFETY: this exclusive handle permits installing ownership of the
+        // compatible allocation now that the old pointer has been cleared.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).name).write(name) }
+        drop(old);
+    }
+
+    /// Moves the owned symbolic-reference target out, leaving the head without
+    /// one.
+    #[must_use]
+    pub fn take_symref_target(&mut self) -> Option<RemoteHeadString> {
+        let head = self.as_mut_ptr();
+        // SAFETY: this exclusive handle permits reading and clearing the owned
+        // pointer field, which transfers its unique allocation out.
+        let target = unsafe {
+            let target = addr_of!((*head).symref_target).read();
+            addr_of_mut!((*head).symref_target).write(core::ptr::null_mut());
+            target
+        };
+        // SAFETY: a valid head's non-null symref_target is always a unique
+        // NUL-terminated allocation from libgit2's configured allocator, and
+        // the head no longer refers to it.
+        unsafe { RemoteHeadString::from_raw(target) }
+    }
+
+    /// Replaces the owned symbolic-reference target, releasing the old one.
+    ///
+    /// This mirrors `smart.c`, which frees the advertised target before
+    /// storing the one detached from its symref capability buffer.
+    pub fn set_symref_target(&mut self, target: Option<RemoteHeadString>) {
+        let old = self.take_symref_target();
+        let target = target.map_or(core::ptr::null_mut(), RemoteHeadString::into_raw);
+        // SAFETY: this exclusive handle permits installing ownership of the
+        // compatible allocation now that the old pointer has been cleared.
         unsafe { addr_of_mut!((*self.as_mut_ptr()).symref_target).write(target) }
+        drop(old);
     }
 }
 
@@ -262,19 +343,87 @@ mod remote_head_tests {
         assert_eq!(head.as_ref().local_oid().raw_bytes().elem(0), Some(2));
 
         head.set_local(true);
-        // SAFETY: these static C strings outlive the stack head and are never
-        // freed through it in this test.
+        // SAFETY: these static C strings outlive the stack head, and the test
+        // moves them back out below rather than releasing them through it.
         unsafe {
             head.set_borrowed_name(Some(c"refs/heads/main"));
-            head.set_borrowed_symref_target(Some(c"refs/heads/trunk"));
         }
         assert!(head.as_ref().is_local());
         assert_eq!(head.as_ref().name(), Some(c"refs/heads/main"));
-        assert_eq!(head.as_ref().symref_target(), Some(c"refs/heads/trunk"));
 
         assert!(head.oid_mut().raw_bytes_mut().set_elem(0, 3));
         assert!(head.local_oid_mut().raw_bytes_mut().set_elem(0, 4));
         assert_eq!(head.as_ref().oid().raw_bytes().elem(0), Some(3));
         assert_eq!(head.as_ref().local_oid().raw_bytes().elem(0), Some(4));
+
+        // SAFETY: clearing the field stores null, which owes no release; the
+        // borrowed static string is simply forgotten by the head.
+        unsafe { head.set_borrowed_name(None) };
+        assert!(head.as_ref().name().is_none());
+    }
+
+    #[test]
+    fn owned_head_strings_are_moved_in_and_out() {
+        // SAFETY: libgit2 initialization is refcounted and this test balances
+        // it below, after every configured allocation has been released.
+        let init_count = unsafe { ffi::git_libgit2_init() };
+        assert!(init_count > 0);
+
+        let mut raw = ffi::git_remote_head {
+            local: 0,
+            // SAFETY: the bindgen OID record holds only integers, so an
+            // all-zero value is a valid initialized one.
+            oid: unsafe { core::mem::zeroed() },
+            // SAFETY: as above, for the second inline OID.
+            loid: unsafe { core::mem::zeroed() },
+            name: core::ptr::null_mut(),
+            symref_target: core::ptr::null_mut(),
+        };
+
+        // SAFETY: `raw` remains live for this scope, its two string fields are
+        // null rather than borrowed, and the handle is the only access path.
+        let mut head = unsafe { RemoteHeadMut::from_ptr(&raw mut raw) }.unwrap();
+
+        assert!(head.take_symref_target().is_none());
+        // SAFETY: the field is null, so nothing is released.
+        assert!(unsafe { head.take_name() }.is_none());
+
+        head.set_symref_target(Some(duplicate(c"refs/heads/trunk")));
+        // SAFETY: the previous name is null and the new one is a libgit2
+        // allocation owned by this head from now on.
+        unsafe { head.set_name(Some(duplicate(c"HEAD"))) };
+        assert_eq!(head.as_ref().name(), Some(c"HEAD"));
+        assert_eq!(head.as_ref().symref_target(), Some(c"refs/heads/trunk"));
+
+        // Replacing an owned string releases the previous allocation, as
+        // `smart.c` does when a symref capability arrives.
+        head.set_symref_target(Some(duplicate(c"refs/heads/main")));
+        assert_eq!(head.as_ref().symref_target(), Some(c"refs/heads/main"));
+
+        // SAFETY: the stored name is the libgit2 allocation installed above.
+        let name = unsafe { head.take_name() }.expect("the name is owned");
+        let target = head
+            .take_symref_target()
+            .expect("the symbolic target is owned");
+        assert_eq!(name.as_c_str(), c"HEAD");
+        assert_eq!(target.as_c_str(), c"refs/heads/main");
+        assert!(head.as_ref().name().is_none());
+        assert!(head.as_ref().symref_target().is_none());
+
+        drop(name);
+        drop(target);
+
+        // SAFETY: balances this test's successful initialization call.
+        let remaining = unsafe { ffi::git_libgit2_shutdown() };
+        assert!(remaining >= 0);
+    }
+
+    fn duplicate(value: &CStr) -> RemoteHeadString {
+        // SAFETY: `value` is a live NUL-terminated string for this
+        // synchronous copy, and libgit2 is initialized by the caller.
+        let raw = unsafe { ffi::crustify_git__strdup(value.as_ptr()) };
+        // SAFETY: a non-null result is a fresh unique allocation from
+        // libgit2's configured allocator, matched by `GitStrdupFree`.
+        unsafe { RemoteHeadString::from_raw(raw) }.expect("libgit2 should duplicate the string")
     }
 }

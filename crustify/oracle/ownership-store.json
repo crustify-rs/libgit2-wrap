@@ -2787,7 +2787,7 @@
   {
    "name": "git_remote_head",
    "defined_in": "include/git2/net.h",
-   "_comment_agent": "git_remote_head is a by-value advertised-reference record whose oid fields and local flag are inline. Persistent heads own their allocated name and optional symref_target, while temporary comparison/search heads can borrow name storage; callers receive views owned by the transport or remote rather than an independently disposable head.",
+   "_comment_agent": "git_remote_head is a by-value advertised-reference record whose oid fields and local flag are inline; it has no destructor of its own, so the concrete owner (git_pkt_ref via git_pkt_free, the local transport's free_head, or a remote's reference vector) releases the record together with its strings. Persistent heads own their allocated name and optional symref_target, while temporary comparison/search heads borrow name storage; callers receive views owned by the transport or remote rather than an independently disposable head.",
    "fields": [
     {
      "name": "name",
@@ -2800,8 +2800,8 @@
        "lifetime": "other"
       },
       "nullable": true,
-      "mutable": false,
-      "note": "Persistent local and smart-transport heads own duplicated name storage, but stack search keys and temporary oid heads borrow another object's name. Formed advertised heads normally have a name; zeroed temporary keys make null observable."
+      "mutable": true,
+      "note": "Persistent local and smart-transport heads own duplicated name storage (local.c add_ref git__strdup and git_str_detach; smart_pkt.c ref_pkt git__malloc), released with git__free by free_head, git_pkt_free and remote.c free_heads. Stack search keys (refspec.c git_refspec__dwim_one, remote.c git_remote_prune) and the temporary oid head in remote.c git_remote_update_tips borrow another object's name instead. Formed advertised heads normally have a name, but fetch.c maybe_want_oid leaves it null when the refspec has no dst, and zeroed temporary keys make null observable. Mutable through the field: smart_pkt.c ref_pkt writes the NUL terminator into the buffer it just stored (pkt->head.name[len] = 0) and then scans it, so the pointee is written after assignment."
      }
     },
     {
@@ -2814,7 +2814,7 @@
       "borrowed": null,
       "nullable": true,
       "mutable": false,
-      "note": "Optional duplicated or detached target string released by the concrete head/packet owner together with the head."
+      "note": "Optional duplicated or detached target string, always owned: local.c add_ref duplicates it with git__strdup and smart.c detaches a git_str into it after freeing the previous value. Released with git__free by the concrete head/packet owner (free_head, git_pkt_free) together with the head. No path writes through the pointer after it is stored."
      }
     }
    ]
