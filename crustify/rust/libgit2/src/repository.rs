@@ -575,7 +575,10 @@ pub fn git_repository_head<'repo>(
     // SAFETY: the output slot is writable and the repository is live and
     // exclusive for cache initialization during reference resolution.
     let status = unsafe { ffi::git_repository_head(&mut output, repository.as_mut_ptr()) };
-    adopt_reference(status, output)
+    // SAFETY: `output` is null or a complete caller-owned reference produced
+    // by the lookup, including on a later error path.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_reference(status, inner)
 }
 
 /// Wraps: git_repository_head_detached

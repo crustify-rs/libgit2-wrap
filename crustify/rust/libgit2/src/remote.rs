@@ -375,6 +375,15 @@ mod remote_type_tests {
     }
 
     #[test]
+    fn populated_error_output_is_already_an_raii_owner() {
+        let _init = Libgit2Init::acquire();
+        let remote = git_remote_create_detached(c"https://example.invalid/repo")
+            .expect("detached remote creation succeeds");
+
+        assert!(matches!(remote_result(-1, Some(remote)), Err(-1)));
+    }
+
+    #[test]
     fn detached_remote_safe_surface_exposes_borrowed_state() {
         let _init = Libgit2Init::acquire();
         let mut remote = git_remote_create_detached(c"https://example.invalid/repo")
@@ -611,25 +620,18 @@ impl GitRemoteWithRepository<'_> {
     }
 }
 
-fn remote_result(status: i32, raw: *mut ffi::git_remote) -> Result<GitRemoteOwned, i32> {
+fn remote_result(status: i32, remote: Option<GitRemoteOwned>) -> Result<GitRemoteOwned, i32> {
     if status == 0 {
-        // SAFETY: success transfers one complete remote allocation.
-        Ok(unsafe { GitRemoteOwned::from_raw(raw) }
-            .expect("libgit2 succeeded without returning a remote"))
+        Ok(remote.expect("libgit2 succeeded without returning a remote"))
     } else {
-        if !raw.is_null() {
-            // SAFETY: a populated error output remains caller-owned.
-            drop(unsafe { GitRemoteOwned::from_raw(raw) });
-        }
         Err(status)
     }
 }
 
 fn repository_remote_result<'repo>(
-    status: i32,
-    raw: *mut ffi::git_remote,
+    result: Result<GitRemoteOwned, i32>,
 ) -> Result<GitRemoteWithRepository<'repo>, i32> {
-    remote_result(status, raw).map(|remote| GitRemoteWithRepository {
+    result.map(|remote| GitRemoteWithRepository {
         remote,
         _repository: PhantomData,
     })
@@ -683,7 +685,11 @@ pub fn git_remote_create<'repo>(
     // borrowed by the result, and both strings are live for the call.
     let status =
         unsafe { ffi::git_remote_create(&mut raw, repo.as_mut_ptr(), name.as_ptr(), url.as_ptr()) };
-    repository_remote_result(status, raw)
+    // SAFETY: `raw` is null or the complete remote allocation transferred by
+    // the output slot. Turning it into RAII immediately also cleans up an
+    // unexpected populated error output.
+    let remote = unsafe { GitRemoteOwned::from_raw(raw) };
+    repository_remote_result(remote_result(status, remote))
 }
 
 /// Wraps: git_remote_create_anonymous
@@ -697,7 +703,10 @@ pub fn git_remote_create_anonymous<'repo>(
     // the result, and `url` is a live transient C string.
     let status =
         unsafe { ffi::git_remote_create_anonymous(&mut raw, repo.as_mut_ptr(), url.as_ptr()) };
-    repository_remote_result(status, raw)
+    // SAFETY: `raw` is null or the complete remote allocation transferred by
+    // the output slot. The owner is lifetime-tethered below before it escapes.
+    let remote = unsafe { GitRemoteOwned::from_raw(raw) };
+    repository_remote_result(remote_result(status, remote))
 }
 
 /// Wraps: git_remote_create_detached
@@ -707,7 +716,10 @@ pub fn git_remote_create_detached(url: &CStr) -> Result<GitRemoteOwned, i32> {
     // SAFETY: the output slot is writable and `url` is a live transient C
     // string. Detached remotes retain no repository pointer.
     let status = unsafe { ffi::git_remote_create_detached(&mut raw, url.as_ptr()) };
-    remote_result(status, raw)
+    // SAFETY: `raw` is null or the complete detached remote allocation
+    // transferred through the output slot.
+    let remote = unsafe { GitRemoteOwned::from_raw(raw) };
+    remote_result(status, remote)
 }
 
 /// Wraps: git_remote_create_with_fetchspec
@@ -732,7 +744,10 @@ pub fn git_remote_create_with_fetchspec<'repo>(
             fetch,
         )
     };
-    repository_remote_result(status, raw)
+    // SAFETY: `raw` is null or the complete remote allocation transferred by
+    // the output slot. The owner is lifetime-tethered below before it escapes.
+    let remote = unsafe { GitRemoteOwned::from_raw(raw) };
+    repository_remote_result(remote_result(status, remote))
 }
 
 /// Wraps: git_remote_default_branch
@@ -828,7 +843,10 @@ pub fn git_remote_lookup<'repo>(
     // SAFETY: the output slot is writable, the repository remains borrowed by
     // the result, and `name` is a live transient C string.
     let status = unsafe { ffi::git_remote_lookup(&mut raw, repo.as_mut_ptr(), name.as_ptr()) };
-    repository_remote_result(status, raw)
+    // SAFETY: `raw` is null or the complete remote allocation transferred by
+    // the output slot. The owner is lifetime-tethered below before it escapes.
+    let remote = unsafe { GitRemoteOwned::from_raw(raw) };
+    repository_remote_result(remote_result(status, remote))
 }
 
 /// Wraps: git_remote_name

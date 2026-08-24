@@ -113,6 +113,10 @@ pub fn git_config_parse_int64(value: Option<&core::ffi::CStr>) -> Result<i64, i3
 
 #[cfg(test)]
 mod tests {
+    use core::mem::{align_of, size_of};
+
+    use ffibox::CDropped;
+
     use super::*;
 
     struct Libgit2Init;
@@ -160,6 +164,27 @@ mod tests {
         assert_eq!(GitConfigLevel::from_raw(0), None);
         assert_eq!(GitConfigLevel::from_raw(1), None);
         assert_eq!(GitConfigLevel::from_raw(-2), None);
+    }
+
+    #[test]
+    fn config_representation_matches_the_c_seam_and_registers_drop() {
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_eq!(size_of::<GitConfig>(), size_of::<ffi::git_config>());
+        assert_eq!(align_of::<GitConfig>(), align_of::<ffi::git_config>());
+        assert_eq!(
+            size_of::<GitConfigRef<'_>>(),
+            size_of::<*const ffi::git_config>()
+        );
+        assert_eq!(
+            size_of::<GitConfigMut<'_>>(),
+            size_of::<*mut ffi::git_config>()
+        );
+        assert_eq!(
+            size_of::<GitConfigOwned>(),
+            size_of::<*mut ffi::git_config>()
+        );
+        assert_dropped::<GitConfig>();
     }
 
     #[test]

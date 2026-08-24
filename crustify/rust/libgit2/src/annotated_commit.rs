@@ -82,6 +82,11 @@ mod tests {
         fn assert_dropped<T: CDropped>() {}
         assert_dropped::<AnnotatedCommit>();
     }
+
+    #[test]
+    fn failed_result_accepts_an_empty_typed_owner() {
+        assert!(matches!(annotated_result(-123, None), Err(-123)));
+    }
 }
 
 /// An owned annotated commit whose lifetime is tied to its repository borrow.
@@ -106,23 +111,16 @@ impl AnnotatedCommitOwned<'_> {
 
 fn annotated_result<'repo>(
     status: i32,
-    raw: *mut ffi::git_annotated_commit,
+    inner: Option<ffibox::CBox<AnnotatedCommit>>,
 ) -> Result<AnnotatedCommitOwned<'repo>, i32> {
     if status == 0 {
-        // SAFETY: success transfers a fresh, non-null allocation owned by the
-        // output slot.
-        let inner = unsafe { ffibox::CBox::from_raw(raw) }
-            .expect("libgit2 succeeded without returning an annotated commit");
+        let inner = inner.expect("libgit2 succeeded without returning an annotated commit");
         Ok(AnnotatedCommitOwned {
             inner,
             _repository: core::marker::PhantomData,
         })
     } else {
-        if !raw.is_null() {
-            // SAFETY: constructors may populate `out` before a later allocation
-            // fails; any such complete annotated commit remains caller-owned.
-            drop(unsafe { ffibox::CBox::<AnnotatedCommit>::from_raw(raw) });
-        }
+        drop(inner);
         Err(status)
     }
 }
@@ -148,7 +146,10 @@ pub fn git_annotated_commit_from_fetchhead<'repo>(
             id.as_ptr(),
         )
     };
-    annotated_result(status, out)
+    // SAFETY: `out` is null or transfers a complete annotated commit from the
+    // constructor's output slot, including on a later error path.
+    let inner = unsafe { ffibox::CBox::<AnnotatedCommit>::from_raw(out) };
+    annotated_result(status, inner)
 }
 
 /// Wraps: git_annotated_commit_from_ref
@@ -162,7 +163,9 @@ pub fn git_annotated_commit_from_ref<'repo>(
     let status = unsafe {
         ffi::git_annotated_commit_from_ref(&mut out, repo.as_mut_ptr(), reference.as_ptr())
     };
-    annotated_result(status, out)
+    // SAFETY: `out` has the transferred-output contract described above.
+    let inner = unsafe { ffibox::CBox::<AnnotatedCommit>::from_raw(out) };
+    annotated_result(status, inner)
 }
 
 /// Wraps: git_annotated_commit_id
@@ -187,7 +190,9 @@ pub fn git_annotated_commit_lookup<'repo>(
     // SAFETY: the handles are live for the call and `out` is writable.
     let status =
         unsafe { ffi::git_annotated_commit_lookup(&mut out, repo.as_mut_ptr(), id.as_ptr()) };
-    annotated_result(status, out)
+    // SAFETY: `out` has the transferred-output contract described above.
+    let inner = unsafe { ffibox::CBox::<AnnotatedCommit>::from_raw(out) };
+    annotated_result(status, inner)
 }
 
 /// Wraps: git_annotated_commit_ref

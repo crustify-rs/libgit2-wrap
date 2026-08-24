@@ -231,20 +231,21 @@ mod tests {
         // cast recovers the allocation's original type.
         drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_reference>>()) });
     }
+
+    #[test]
+    fn failed_result_accepts_an_empty_typed_owner() {
+        assert!(matches!(adopt_reference(-123, None), Err(-123)));
+    }
 }
 
 pub(crate) fn adopt_reference<'a>(
     status: i32,
-    raw: *mut ffi::git_reference,
+    inner: Option<CBox<GitReference>>,
 ) -> Result<GitReferenceTetheredOwned<'a>, i32> {
     if status != 0 {
         return Err(status);
     }
-    // SAFETY: every successful wrapped reference constructor transfers one
-    // complete reference allocation, and the caller supplies the keepalive
-    // lifetime associated with the input repository or reference.
-    let inner = unsafe { CBox::from_raw(raw) }
-        .expect("a successful reference constructor returns a non-null owner");
+    let inner = inner.expect("a successful reference constructor returns a non-null owner");
     Ok(GitReferenceTetheredOwned {
         inner,
         _keepalive: PhantomData,
@@ -293,7 +294,10 @@ pub fn git_reference_create<'a>(
             log_message.map_or(core::ptr::null(), CStr::as_ptr),
         )
     };
-    adopt_reference(status, output)
+    // SAFETY: `output` is null or a complete caller-owned reference produced
+    // by this constructor, including on a later error path.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_reference(status, inner)
 }
 
 /// Wraps: git_reference_create_matching
@@ -321,7 +325,9 @@ pub fn git_reference_create_matching<'a>(
             log_message.map_or(core::ptr::null(), CStr::as_ptr),
         )
     };
-    adopt_reference(status, output)
+    // SAFETY: `output` has the transferred-output contract described above.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_reference(status, inner)
 }
 
 /// Wraps: git_reference_delete
@@ -344,7 +350,9 @@ pub fn git_reference_dup<'a>(
     let status = unsafe {
         ffi::git_reference_dup(core::ptr::addr_of_mut!(output), source.as_ptr().cast_mut())
     };
-    adopt_reference(status, output)
+    // SAFETY: `output` has the transferred-output contract described above.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_reference(status, inner)
 }
 
 /// Wraps: git_reference_dwim
@@ -362,7 +370,9 @@ pub fn git_reference_dwim<'a>(
             shorthand.as_ptr(),
         )
     };
-    adopt_reference(status, output)
+    // SAFETY: `output` has the transferred-output contract described above.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_reference(status, inner)
 }
 
 /// Wraps: git_reference_ensure_log
@@ -434,7 +444,9 @@ pub fn git_reference_lookup<'a>(
             name.as_ptr(),
         )
     };
-    adopt_reference(status, output)
+    // SAFETY: `output` has the transferred-output contract described above.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_reference(status, inner)
 }
 
 /// Wraps: git_reference_name
@@ -515,7 +527,9 @@ pub fn git_reference_rename<'a>(
             log_message.map_or(core::ptr::null(), CStr::as_ptr),
         )
     };
-    adopt_reference(status, output)
+    // SAFETY: `output` has the transferred-output contract described above.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_reference(status, inner)
 }
 
 /// Wraps: git_reference_resolve
@@ -527,7 +541,9 @@ pub fn git_reference_resolve<'a>(
     // SAFETY: `reference` is live and shared and `output` is writable.
     let status =
         unsafe { ffi::git_reference_resolve(core::ptr::addr_of_mut!(output), reference.as_ptr()) };
-    adopt_reference(status, output)
+    // SAFETY: `output` has the transferred-output contract described above.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_reference(status, inner)
 }
 
 /// Wraps: git_reference_set_target
@@ -547,7 +563,9 @@ pub fn git_reference_set_target<'a>(
             log_message.map_or(core::ptr::null(), CStr::as_ptr),
         )
     };
-    adopt_reference(status, output)
+    // SAFETY: `output` has the transferred-output contract described above.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_reference(status, inner)
 }
 
 /// Wraps: git_reference_shorthand
@@ -580,7 +598,9 @@ pub fn git_reference_symbolic_create<'a>(
             log_message.map_or(core::ptr::null(), CStr::as_ptr),
         )
     };
-    adopt_reference(status, output)
+    // SAFETY: `output` has the transferred-output contract described above.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_reference(status, inner)
 }
 
 /// Wraps: git_reference_symbolic_create_matching
@@ -607,7 +627,9 @@ pub fn git_reference_symbolic_create_matching<'a>(
             log_message.map_or(core::ptr::null(), CStr::as_ptr),
         )
     };
-    adopt_reference(status, output)
+    // SAFETY: `output` has the transferred-output contract described above.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_reference(status, inner)
 }
 
 /// Wraps: git_reference_symbolic_set_target
@@ -628,7 +650,9 @@ pub fn git_reference_symbolic_set_target<'a>(
             log_message.map_or(core::ptr::null(), CStr::as_ptr),
         )
     };
-    adopt_reference(status, output)
+    // SAFETY: `output` has the transferred-output contract described above.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_reference(status, inner)
 }
 
 /// Wraps: git_reference_symbolic_target

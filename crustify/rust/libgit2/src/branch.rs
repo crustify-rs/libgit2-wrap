@@ -93,22 +93,21 @@ mod tests {
         assert_eq!(exclusive.as_mut_ptr(), ptr);
         assert_eq!(exclusive.as_ref().as_ptr(), ptr.cast_const());
     }
+
+    #[test]
+    fn failed_reference_result_accepts_an_empty_typed_owner() {
+        assert!(matches!(reference_result(-123, None), Err(-123)));
+    }
 }
 
 fn reference_result(
     status: i32,
-    raw: *mut ffi::git_reference,
+    reference: Option<crate::refs::GitReferenceOwned>,
 ) -> Result<crate::refs::GitReferenceOwned, i32> {
     if status == 0 {
-        // SAFETY: success transfers a fresh, fully initialized reference.
-        Ok(unsafe { crate::refs::GitReferenceOwned::from_raw(raw) }
-            .expect("libgit2 succeeded without returning a reference"))
+        Ok(reference.expect("libgit2 succeeded without returning a reference"))
     } else {
-        if !raw.is_null() {
-            // SAFETY: an error after populating the slot still leaves its owned
-            // reference for the caller to release.
-            drop(unsafe { crate::refs::GitReferenceOwned::from_raw(raw) });
-        }
+        drop(reference);
         Err(status)
     }
 }
@@ -132,7 +131,10 @@ pub fn git_branch_create_from_annotated(
             i32::from(force),
         )
     };
-    reference_result(status, out)
+    // SAFETY: `out` is null or a complete caller-owned reference produced by
+    // the constructor, including on a later error path.
+    let reference = unsafe { crate::refs::GitReferenceOwned::from_raw(out) };
+    reference_result(status, reference)
 }
 
 /// Wraps: git_branch_delete
@@ -192,7 +194,9 @@ pub fn git_branch_lookup(
             kind.bits(),
         )
     };
-    reference_result(status, out)
+    // SAFETY: `out` has the transferred-output contract described above.
+    let reference = unsafe { crate::refs::GitReferenceOwned::from_raw(out) };
+    reference_result(status, reference)
 }
 
 /// Wraps: git_branch_move
@@ -214,7 +218,9 @@ pub fn git_branch_move(
         )
     };
     drop(branch);
-    reference_result(status, out)
+    // SAFETY: `out` has the transferred-output contract described above.
+    let reference = unsafe { crate::refs::GitReferenceOwned::from_raw(out) };
+    reference_result(status, reference)
 }
 
 /// Wraps: git_branch_name
@@ -249,7 +255,10 @@ pub fn git_branch_next(
     let mut raw_kind = 0;
     // SAFETY: `iter` is live and exclusive and both output slots are writable.
     let status = unsafe { ffi::git_branch_next(&mut out, &mut raw_kind, iter.as_mut_ptr()) };
-    let reference = reference_result(status, out)?;
+    // SAFETY: `out` is null or a complete caller-owned reference produced by
+    // the iterator, including on a later error path.
+    let reference = unsafe { crate::refs::GitReferenceOwned::from_raw(out) };
+    let reference = reference_result(status, reference)?;
     let kind = crate::api::types::GitBranchType::from_bits(raw_kind)
         .expect("libgit2 returned an unknown branch kind");
     Ok((reference, kind))
@@ -302,7 +311,9 @@ pub fn git_branch_upstream(
     let mut out = core::ptr::null_mut();
     // SAFETY: `branch` is live and `out` is writable.
     let status = unsafe { ffi::git_branch_upstream(&mut out, branch.as_ptr()) };
-    reference_result(status, out)
+    // SAFETY: `out` has the transferred-output contract described above.
+    let reference = unsafe { crate::refs::GitReferenceOwned::from_raw(out) };
+    reference_result(status, reference)
 }
 
 /// Wraps: git_branch_upstream_merge

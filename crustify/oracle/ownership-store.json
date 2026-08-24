@@ -3589,6 +3589,254 @@
      "refcount": true
     }
    ]
+  },
+  {
+   "name": "git_repository",
+   "defined_in": "src/libgit2/repository.h",
+   "_comment_agent": "The public API exposes git_repository only as an opaque, uniquely owned allocation released by git_repository_free. Internally the repository owns one reference to each lazily populated database/config/index pointer, owns all cache and graft allocations, owns its duplicated path/identity strings, and owns the reserved-name array. Every pointer member is nullable during lazy initialization or for repositories without the corresponding path/cache, except reserved_names.ptr, which repository_alloc initializes before publishing a complete repository.",
+   "fields": [
+    {
+     "name": "_config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily opened mutable configuration. The repository owns one refcount and set_config releases the previous count; weakptr access borrows it."
+     }
+    },
+    {
+     "name": "_index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily opened mutable index. The repository owns one refcount and set_index releases the previous count; weakptr access borrows it."
+     }
+    },
+    {
+     "name": "_odb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily opened object database. The repository owns one refcount and set_odb releases the previous count; weakptr access borrows it."
+     }
+    },
+    {
+     "name": "_refdb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily opened reference database. The repository owns one refcount and set_refdb releases the previous count; weakptr access borrows it."
+     }
+    },
+    {
+     "name": "attrcache",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Lazily allocated mutable attribute cache, atomically installed and owned until git_attr_cache_flush frees it."
+     }
+    },
+    {
+     "name": "commondir",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Owned NUL-terminated common-directory path when configured; absent on a new in-memory repository and released with git__free."
+     }
+    },
+    {
+     "name": "diff_drivers",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Lazily allocated mutable diff-driver registry, atomically installed and freed by git_repository_free."
+     }
+    },
+    {
+     "name": "gitdir",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Owned NUL-terminated repository path when configured; a repository returned by git_repository_new may not yet have one. Released with git__free."
+     }
+    },
+    {
+     "name": "gitlink",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional owned NUL-terminated path detached from git_str storage and released with git__free."
+     }
+    },
+    {
+     "name": "grafts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily allocated mutable graft map, released by git_repository__cleanup through git_grafts_free."
+     }
+    },
+    {
+     "name": "ident_email",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional duplicated identity email, atomically replaced by git_repository_set_ident and released with git__free."
+     }
+    },
+    {
+     "name": "ident_name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional duplicated identity name, atomically replaced by git_repository_set_ident and released with git__free."
+     }
+    },
+    {
+     "name": "namespace",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional duplicated namespace string, replaced by git_repository_set_namespace and released with git__free."
+     }
+    },
+    {
+     "name": "reserved_names.ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "Owned growable buffer of inline git_str values. repository_alloc allocates initial capacity before publishing the repository; git_repository_free disposes each live element then clears the buffer."
+     }
+    },
+    {
+     "name": "shallow_grafts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily allocated mutable shallow-graft map, released by git_repository__cleanup through git_grafts_free."
+     }
+    },
+    {
+     "name": "submodule_cache",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional mutable submodule hashmap explicitly initialized for repository operations and freed/cleared during repository cleanup."
+     }
+    },
+    {
+     "name": "workdir",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional owned NUL-terminated work-tree path; bare repositories keep it null, and setters replace/free it."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
