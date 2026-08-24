@@ -93,6 +93,12 @@
    ]
   },
   {
+   "name": "git_apply_location_t",
+   "defined_in": "include/git2/apply.h",
+   "_comment_agent": "git_apply_location_t is a fieldless public enum with three contiguous values (WORKDIR=0, INDEX=1, BOTH=2) declared in include/git2/apply.h. It is passed by value to git_apply and carries no pointer, lifecycle, refcount, or locking semantics.",
+   "fields": []
+  },
+  {
    "name": "git_attr_value_t",
    "defined_in": "include/git2/attr.h",
    "_comment_agent": "git_attr_value_t is a fieldless enum with no pointer, lifecycle, refcount, or locking semantics.",

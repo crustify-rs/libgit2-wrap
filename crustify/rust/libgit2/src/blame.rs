@@ -38,7 +38,7 @@ unsafe impl CDropped for GitBlame {
 
 #[cfg(test)]
 mod tests {
-    use core::mem::{align_of, size_of};
+    use core::mem::{MaybeUninit, align_of, size_of};
     use core::ptr;
 
     use ffibox::{CBox, CCell};
@@ -73,6 +73,27 @@ mod tests {
             assert!(GitBlameMut::from_ptr(ptr::null_mut()).is_none());
             assert!(CBox::<GitBlame>::from_raw(ptr::null_mut()).is_none());
         }
+    }
+
+    #[test]
+    fn an_empty_buffer_reports_the_code_the_c_assertion_returns() {
+        let storage = Box::new(MaybeUninit::<ffi::git_blame>::zeroed());
+        let raw = Box::into_raw(storage).cast::<ffi::git_blame>();
+
+        {
+            // SAFETY: `raw` is the unique address of live storage for the
+            // zero-sized opaque binding, and `git_blame_buffer` returns on its
+            // empty-buffer guard before this handle reaches libgit2.
+            let base = unsafe { GitBlameRef::from_ptr(raw) }.expect("boxed storage is non-null");
+            assert_eq!(
+                super::git_blame_buffer(base, &[]).err(),
+                Some(ffi::git_error_code_GIT_ERROR)
+            );
+        }
+
+        // SAFETY: `raw` came from `Box::into_raw` above, no handle remains,
+        // and casting back recovers the allocation's original type.
+        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_blame>>()) });
     }
 }
 
@@ -249,7 +270,12 @@ mod options_tests {
     }
 }
 
-/// An owned blame result that cannot outlive the base blame it derives from.
+/// An owned blame result derived from another blame with [`git_blame_buffer`].
+///
+/// libgit2 copies everything it needs out of the base result, so this owner
+/// holds no pointer into it. The one borrow it inherits is the base's
+/// repository, which `git_blame__alloc` stores verbatim; the `'base` parameter
+/// is the tightest bound on that repository a blame handle can express here.
 pub struct GitBlameBuffer<'base> {
     inner: ffibox::CBox<GitBlame>,
     _base: core::marker::PhantomData<GitBlameRef<'base>>,
@@ -271,16 +297,27 @@ impl GitBlameBuffer<'_> {
 
 /// Wraps: git_blame_buffer
 /// Recomputes blame information for modified buffer contents.
+///
+/// The call only reads `base`: it copies the base options by value, duplicates
+/// the base path and every hunk into the new result, and diffs `buffer`
+/// against the base's final blob. A shared handle is therefore the right
+/// argument. The single pointer the result inherits is the base's borrowed
+/// repository, so it must not outlive that repository; see [`GitBlame`] for
+/// the obligation every blame construction carries.
+///
+/// An empty `buffer` is what C's `GIT_ASSERT_ARG(buffer && buffer_len)`
+/// rejects with `GIT_ERROR`, so the wrapper reports that code rather than
+/// handing libgit2 a zero-length slice's dangling pointer.
 pub fn git_blame_buffer<'base>(
     base: GitBlameRef<'base>,
     buffer: &[u8],
 ) -> Result<GitBlameBuffer<'base>, i32> {
     if buffer.is_empty() {
-        return Err(ffi::git_error_code_GIT_EINVALID);
+        return Err(ffi::git_error_code_GIT_ERROR);
     }
     let mut out = core::ptr::null_mut();
-    // SAFETY: `base` is live, `buffer` supplies exactly its readable byte
-    // length, and `out` is writable. The result is lifetime-bound to `base`.
+    // SAFETY: `base` is live and this call only reads it, `buffer` supplies
+    // exactly its readable byte length, and `out` is writable.
     let status = unsafe {
         ffi::git_blame_buffer(
             &mut out,

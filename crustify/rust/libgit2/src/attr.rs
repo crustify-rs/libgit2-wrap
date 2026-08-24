@@ -2,21 +2,21 @@
 
 use crate::ffi;
 
+/// Wraps: git_attr_value_t
 /// A value category returned by libgit2's attribute APIs.
 ///
 /// The string itself is returned separately when the category is [`Self::String`].
-/// Wraps: git_attr_value_t
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-#[repr(C)]
+#[repr(u32)]
 pub enum AttrValue {
     /// The attribute was not specified.
-    Unspecified = ffi::git_attr_value_t_GIT_ATTR_VALUE_UNSPECIFIED as isize,
+    Unspecified = ffi::git_attr_value_t_GIT_ATTR_VALUE_UNSPECIFIED,
     /// The attribute was set without an explicit value.
-    True = ffi::git_attr_value_t_GIT_ATTR_VALUE_TRUE as isize,
+    True = ffi::git_attr_value_t_GIT_ATTR_VALUE_TRUE,
     /// The attribute was explicitly unset.
-    False = ffi::git_attr_value_t_GIT_ATTR_VALUE_FALSE as isize,
+    False = ffi::git_attr_value_t_GIT_ATTR_VALUE_FALSE,
     /// The attribute has a string value.
-    String = ffi::git_attr_value_t_GIT_ATTR_VALUE_STRING as isize,
+    String = ffi::git_attr_value_t_GIT_ATTR_VALUE_STRING,
 }
 
 /// A raw attribute category that is not defined by the linked libgit2 API.
@@ -67,6 +67,20 @@ mod tests {
     fn public_classifier_handles_null_and_ordinary_strings() {
         assert_eq!(git_attr_value(None), AttrValue::Unspecified);
         assert_eq!(git_attr_value(Some(c"ordinary")), AttrValue::String);
+    }
+
+    #[test]
+    fn classification_reads_pointer_identity_and_not_string_contents() {
+        // The sentinel's own spelling, held in Rust storage, is not the
+        // sentinel address, so libgit2 reports an ordinary string value.
+        assert_eq!(
+            git_attr_value(Some(c"[internal]__TRUE__")),
+            AttrValue::String
+        );
+        assert_eq!(
+            git_attr_value(Some(c"[internal]__UNSET__")),
+            AttrValue::String
+        );
     }
 
     #[test]
@@ -139,11 +153,20 @@ pub fn git_attr_get<'repo>(
 
 /// Wraps: git_attr_value
 /// Classifies an optional attribute pointer.
+///
+/// libgit2 classifies by pointer *identity*, not by contents: only the three
+/// sentinel addresses `git_attr__unset`, `git_attr__true` and `git_attr__false`
+/// -- which libgit2 hands out and never publishes -- map to
+/// [`AttrValue::Unspecified`], [`AttrValue::True`] and [`AttrValue::False`].
+/// A null pointer is also unspecified. Every other pointer, including any
+/// string a Rust caller owns, is [`AttrValue::String`] whatever its bytes are.
+/// Callers wanting the category of a lookup should use the classified
+/// [`Attribute`] that [`git_attr_get`] already returns.
 #[must_use]
 pub fn git_attr_value(attr: Option<&core::ffi::CStr>) -> AttrValue {
     let attr = attr.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
-    // SAFETY: `attr` is null or a live C string; the function only compares
-    // the pointer with libgit2's sentinel values.
+    // SAFETY: `attr` is null or a live C string; the function never
+    // dereferences it and only compares it with libgit2's sentinel addresses.
     let raw = unsafe { ffi::git_attr_value(attr) };
     AttrValue::try_from(raw).expect("git_attr_value returned an unknown category")
 }

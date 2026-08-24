@@ -11,6 +11,20 @@ define_ctype!(
     /// The public C API keeps this type opaque. Owned pointers use
     /// [`ffibox::CBox<AnnotatedCommit>`], which releases the object with
     /// `git_annotated_commit_free`.
+    ///
+    /// Internally a discriminant selects two ownership variants: a "real"
+    /// commit owns a duplicated `git_commit`, a lazily peeled `git_tree` and
+    /// its duplicated strings, while a "virtual" merge base owns a
+    /// `git_index` and a parent-id array. Both are released by the same
+    /// destructor, so the wrapper needs no runtime drop state, but a value
+    /// whose discriminant is neither reaches `abort()` in
+    /// `git_annotated_commit_free`.
+    ///
+    /// A real commit stores the `git_repository *` it was looked up in inside
+    /// the `git_object` header it owns, and every consumer of an annotated
+    /// commit (merge, rebase, reset) re-enters that repository through it, so
+    /// an owning handle is only usable while the repository is alive.
+    /// [`AnnotatedCommitOwned`] carries that bound for the constructors here.
     AnnotatedCommit,
     AnnotatedCommitRef,
     AnnotatedCommitMut,
@@ -19,8 +33,11 @@ define_ctype!(
 
 // SAFETY: `git_annotated_commit_free` is the public destructor for a complete
 // `git_annotated_commit` allocation and accepts null, although `CDropped` only
-// supplies a live non-null allocation. `AnnotatedCommit` is transparent over
-// the corresponding bindgen C type.
+// supplies a live non-null allocation. It releases whichever variant the
+// discriminant selects and aborts on any other value, so `CBox` may only adopt
+// a pointer a libgit2 constructor produced -- which is what `CBox::from_raw`
+// already requires. `AnnotatedCommit` is transparent over the corresponding
+// bindgen C type.
 impl_dropped!(
     AnnotatedCommit,
     ffi::git_annotated_commit,
@@ -170,11 +187,16 @@ pub fn git_annotated_commit_from_ref<'repo>(
 
 /// Wraps: git_annotated_commit_id
 /// Borrows the commit ID embedded in an annotated commit.
+///
+/// The result is `None` for a virtual merge base, which carries an index
+/// rather than a commit: libgit2 forwards the null `commit` field to
+/// `git_object_id`, which returns null for it.
 #[must_use]
 pub fn git_annotated_commit_id<'a>(
     commit: AnnotatedCommitRef<'a>,
 ) -> Option<crate::oid::OidRef<'a>> {
-    // SAFETY: `commit` is live; libgit2 returns null or an ID kept alive by it.
+    // SAFETY: `commit` is live; libgit2 returns null or the cached id of the
+    // `git_commit` this annotated commit owns, which it keeps alive.
     let raw = unsafe { ffi::git_annotated_commit_id(commit.as_ptr()) };
     // SAFETY: a non-null result is borrowed from `commit` for `'a`.
     unsafe { crate::oid::OidRef::from_ptr(raw.cast_mut()) }
@@ -197,6 +219,10 @@ pub fn git_annotated_commit_lookup<'repo>(
 
 /// Wraps: git_annotated_commit_ref
 /// Borrows the optional reference name retained by an annotated commit.
+///
+/// The name is a `git__strdup` allocation the annotated commit owns and its
+/// destructor frees, so the borrow is valid for exactly `'a`. It is `None`
+/// unless the commit was built from a reference or from fetch-head metadata.
 #[must_use]
 pub fn git_annotated_commit_ref<'a>(commit: AnnotatedCommitRef<'a>) -> Option<&'a core::ffi::CStr> {
     // SAFETY: `commit` is live; libgit2 returns null or a NUL-terminated string
