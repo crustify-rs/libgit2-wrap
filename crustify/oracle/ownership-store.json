@@ -2617,6 +2617,88 @@
    ]
   },
   {
+   "name": "git_repository_init_options",
+   "defined_in": "include/git2/repository.h",
+   "_comment_agent": "All five const char pointers are nullable, borrowed NUL-terminated strings supplied by the caller. Complete field touchers show only synchronous reads/copies; no path transfers, stores, mutates, or releases them.",
+   "fields": [
+    {
+     "name": "description",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated string; repository initialization only reads/copies its contents and never stores or frees it."
+     }
+    },
+    {
+     "name": "initial_head",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated branch/ref name; initialization reads and duplicates it without storing or freeing the source."
+     }
+    },
+    {
+     "name": "origin_url",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated URL; remote creation consumes it by borrow during initialization and does not store the source pointer."
+     }
+    },
+    {
+     "name": "template_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated path; template processing reads it synchronously and never stores or frees it."
+     }
+    },
+    {
+     "name": "workdir_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated path; directory initialization only reads it and never stores or frees it."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_revwalk",
    "defined_in": "src/libgit2/revwalk.h",
    "_comment_agent": "Reviewed all pointer fields against revwalk.c. Public wrap remains opaque; these facts document internal ownership and lifetime coupling.",
