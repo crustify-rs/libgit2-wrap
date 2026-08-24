@@ -49,7 +49,7 @@ impl<'a> GitRefcountRef<'a> {
     /// `GIT_REFCOUNT_DEC` would otherwise perform.
     #[must_use]
     pub fn has_owner(&self) -> bool {
-        !self.owner_ptr().is_null()
+        self.owner_non_null().is_some()
     }
 
     /// Borrows the recorded weak owner as a `T` handle.
@@ -70,13 +70,14 @@ impl<'a> GitRefcountRef<'a> {
     {
         // SAFETY: the caller asserts that a recorded owner addresses a live
         // `T` outlasting this borrow.
-        NonNull::new(self.owner_ptr().cast::<T>()).map(|owner| unsafe { T::ref_from_raw(owner) })
+        self.owner_non_null()
+            .map(|owner| unsafe { T::ref_from_raw(owner.cast::<T>()) })
     }
 
     /// Atomically loads the erased owner slot.
-    fn owner_ptr(&self) -> *mut c_void {
+    fn owner_non_null(&self) -> Option<NonNull<c_void>> {
         // SAFETY: as `count`, for the owner slot's atomic load.
-        unsafe { ffi::crustify_git_refcount_owner(self.as_ptr().cast_mut()) }
+        NonNull::new(unsafe { ffi::crustify_git_refcount_owner(self.as_ptr().cast_mut()) })
     }
 }
 
