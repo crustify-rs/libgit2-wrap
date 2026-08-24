@@ -7,6 +7,7 @@ use core::ptr::addr_of_mut;
 use ffibox::CBox;
 
 use crate::api::buffer::GitBufMut;
+use crate::api::pack::GitPackbuilderStage;
 use crate::ffi;
 use crate::oid::OidRef;
 use crate::pack::{GitPackbuilderForeachCallback, GitPackbuilderProgressCallback};
@@ -276,6 +277,12 @@ unsafe extern "C" fn progress_trampoline(
     if payload.is_null() {
         return -1;
     }
+    let Ok(stage) = u32::try_from(stage) else {
+        return -1;
+    };
+    let Ok(stage) = GitPackbuilderStage::try_from(stage) else {
+        return -1;
+    };
     // SAFETY: `payload` is the pointer `progress_payload` derived from the
     // boxed callback its wrapper still owns, so it addresses one initialized
     // `ProgressPayload` and carries provenance for writing to it. Libgit2
@@ -415,10 +422,17 @@ mod tests {
 
         let observed = Arc::new(AtomicI32::new(0));
         let sink = Arc::clone(&observed);
-        let callback: ProgressPayload = Box::new(move |stage: i32, current: u32, total: u32| {
-            sink.store(stage + current as i32 + total as i32, Ordering::SeqCst);
-            0
-        });
+        let callback: ProgressPayload = Box::new(
+            move |stage: GitPackbuilderStage, current: u32, total: u32| {
+                sink.store(
+                    ffi::git_packbuilder_stage_t::from(stage) as i32
+                        + current as i32
+                        + total as i32,
+                    Ordering::SeqCst,
+                );
+                0
+            },
+        );
         let mut stored = Some(Box::new(callback));
 
         let payload = progress_payload(stored.as_mut());
@@ -431,11 +445,12 @@ mod tests {
         assert_eq!(status, 0);
         assert_eq!(observed.load(Ordering::SeqCst), 6);
 
-        // The pointer stays usable across calls: the box has not moved.
-        // SAFETY: as above.
-        let status = unsafe { progress_trampoline(4, 5, 6, payload.cast()) };
-        assert_eq!(status, 0);
-        assert_eq!(observed.load(Ordering::SeqCst), 15);
+        // An invalid C stage is rejected without dispatching the callback.
+        // SAFETY: the payload is still valid as above; the stage is an
+        // ordinary C `int` whose value the trampoline must validate.
+        let status = unsafe { progress_trampoline(2, 5, 6, payload.cast()) };
+        assert_eq!(status, -1);
+        assert_eq!(observed.load(Ordering::SeqCst), 6);
 
         drop(stored);
     }

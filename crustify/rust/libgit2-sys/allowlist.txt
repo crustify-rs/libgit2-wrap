@@ -123,6 +123,7 @@
 ^GIT_STREAM_(RDONLY|WRONLY|RW)$
 ^git_packbuilder$
 ^git_packbuilder_free$
+^git_packbuilder_stage_t$
 ^git_proxy_t$
 ^git_refdb$
 ^git_refdb_free$
@@ -137,6 +138,7 @@
 ^git_reference_t$
 ^git_repository$
 ^git_repository_free$
+^git_repository_init_flag_t$
 ^git_repository_init_options$
 ^git_pathspec$
 ^git_pathspec_free$

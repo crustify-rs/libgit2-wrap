@@ -8,6 +8,7 @@ use core::ptr::{addr_of, addr_of_mut};
 use ffibox::CBox;
 
 use crate::api::buffer::GitBufMut;
+use crate::api::repository::GitRepositoryInitFlags;
 use crate::config::{GitConfigMut, GitConfigOwned, GitConfigRef};
 use crate::ffi;
 use crate::oid::{InvalidOidType, OidRef, OidType};
@@ -106,11 +107,11 @@ impl<'a> GitRepositoryInitOptionsRef<'a> {
     }
 
     /// Field: git_repository_init_options.flags
-    /// Returns the raw `git_repository_init_flag_t` bit set.
-    #[must_use]
-    pub fn flags(&self) -> u32 {
+    /// Returns the checked repository-initialization flags.
+    pub fn flags(&self) -> Result<GitRepositoryInitFlags, u32> {
         // SAFETY: as `mode`, for this initialized scalar field.
-        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+        let flags = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        GitRepositoryInitFlags::from_bits(flags).ok_or(flags)
     }
 
     /// Field: git_repository_init_options.version
@@ -216,10 +217,10 @@ impl GitRepositoryInitOptionsMut<'_> {
         unsafe { addr_of_mut!((*self.as_mut_ptr()).mode).write(mode) }
     }
 
-    /// Replaces the raw `git_repository_init_flag_t` bit set.
-    pub fn set_flags(&mut self, flags: u32) {
+    /// Replaces the repository-initialization flags.
+    pub fn set_flags(&mut self, flags: GitRepositoryInitFlags) {
         // SAFETY: as `set_mode`, for this initialized scalar field.
-        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
     }
 
     /// Sets the ABI version of this options value.
@@ -379,7 +380,8 @@ mod init_options_tests {
         let mut options = unsafe { GitRepositoryInitOptionsMut::from_ptr(raw) }
             .expect("the address of a stack value is non-null");
         options.set_version(1);
-        options.set_flags(0x24);
+        let flags = GitRepositoryInitFlags::EXTERNAL_TEMPLATE | GitRepositoryInitFlags::MKDIR;
+        options.set_flags(flags);
         options.set_mode(0o2775);
         options.set_oid_type(Some(OidType::Sha256));
         options.set_refdb_type(Some(GitRefdbType::Reftable));
@@ -395,7 +397,7 @@ mod init_options_tests {
 
         let shared = options.as_ref();
         assert_eq!(shared.version(), 1);
-        assert_eq!(shared.flags(), 0x24);
+        assert_eq!(shared.flags(), Ok(flags));
         assert_eq!(shared.mode(), 0o2775);
         assert_eq!(shared.oid_type(), Ok(Some(OidType::Sha256)));
         assert_eq!(shared.refdb_type(), Ok(Some(GitRefdbType::Reftable)));
