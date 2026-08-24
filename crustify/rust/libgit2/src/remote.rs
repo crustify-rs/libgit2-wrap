@@ -150,12 +150,34 @@ mod tests {
     }
 
     #[test]
-    fn remote_redirect_defaults_to_initial_and_validates_raw_values() {
-        assert_eq!(GitRemoteRedirect::default(), GitRemoteRedirect::Initial);
+    fn remote_redirect_validates_raw_enumeration_values() {
         assert_eq!(GitRemoteRedirect::try_from(1), Ok(GitRemoteRedirect::None));
         assert_eq!(GitRemoteRedirect::try_from(4), Ok(GitRemoteRedirect::All));
         assert_eq!(GitRemoteRedirect::try_from(0), Err(0));
         assert_eq!(GitRemoteRedirect::try_from(3), Err(3));
+    }
+
+    #[test]
+    fn an_unspecified_redirect_field_round_trips_as_none() {
+        // `GIT_FETCH_OPTIONS_INIT` and its siblings leave the field zero, and
+        // libgit2 reads that as "consult http.followRedirects" rather than as
+        // one of the published values.
+        assert_eq!(GitRemoteRedirect::UNSPECIFIED_FIELD, 0);
+        assert_eq!(GitRemoteRedirect::from_field(0), Ok(None));
+        assert_eq!(GitRemoteRedirect::to_field(None), 0);
+
+        for value in [
+            GitRemoteRedirect::None,
+            GitRemoteRedirect::Initial,
+            GitRemoteRedirect::All,
+        ] {
+            let raw = GitRemoteRedirect::to_field(Some(value));
+            assert_ne!(raw, GitRemoteRedirect::UNSPECIFIED_FIELD);
+            assert_eq!(GitRemoteRedirect::from_field(raw), Ok(Some(value)));
+        }
+
+        assert_eq!(GitRemoteRedirect::from_field(3), Err(3));
+        assert_eq!(GitRemoteRedirect::UNCONFIGURED, GitRemoteRedirect::Initial);
     }
 }
 
@@ -233,17 +255,57 @@ impl TryFrom<ffi::git_remote_completion_t> for GitRemoteCompletion {
 
 /// Wraps: git_remote_redirect_t
 /// Controls when a remote operation may follow an off-site redirect.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+///
+/// The three variants are exactly the values the C enumeration publishes.
+/// An options field additionally holds zero, which is what
+/// `GIT_FETCH_OPTIONS_INIT`, `GIT_PUSH_OPTIONS_INIT` and
+/// `GIT_REMOTE_CONNECT_OPTIONS_INIT` leave behind: libgit2 reads that as
+/// *unspecified* and resolves it from `http.followRedirects`, falling back to
+/// [`GitRemoteRedirect::UNCONFIGURED`] when the repository has no such
+/// setting. A field therefore reads and writes as
+/// `Option<GitRemoteRedirect>`, through [`GitRemoteRedirect::from_field`] and
+/// [`GitRemoteRedirect::to_field`], with `None` for that unspecified state.
+/// There is deliberately no `Default`: choosing one of the three published
+/// values would suppress the configuration lookup a zero field selects.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[non_exhaustive]
 #[repr(u32)]
 pub enum GitRemoteRedirect {
     /// Never follow an off-site redirect.
     None = ffi::git_remote_redirect_t_GIT_REMOTE_REDIRECT_NONE,
     /// Follow an off-site redirect only for the initial request.
-    #[default]
     Initial = ffi::git_remote_redirect_t_GIT_REMOTE_REDIRECT_INITIAL,
     /// Follow off-site redirects at any stage.
     All = ffi::git_remote_redirect_t_GIT_REMOTE_REDIRECT_ALL,
+}
+
+impl GitRemoteRedirect {
+    /// The behaviour libgit2 applies to an unspecified field when the
+    /// repository configures no `http.followRedirects` value, and for an
+    /// operation that has no repository to consult.
+    pub const UNCONFIGURED: Self = Self::Initial;
+
+    /// The unspecified value an options initializer leaves in the field.
+    pub const UNSPECIFIED_FIELD: ffi::git_remote_redirect_t = 0;
+
+    /// Reads a `follow_redirects` options field. `Ok(None)` denotes the
+    /// unspecified value that selects the configured behaviour.
+    pub fn from_field(
+        value: ffi::git_remote_redirect_t,
+    ) -> Result<Option<Self>, ffi::git_remote_redirect_t> {
+        if value == Self::UNSPECIFIED_FIELD {
+            Ok(Option::None)
+        } else {
+            Self::try_from(value).map(Some)
+        }
+    }
+
+    /// Encodes a `follow_redirects` options field. `None` stores the
+    /// unspecified value that selects the configured behaviour.
+    #[must_use]
+    pub fn to_field(value: Option<Self>) -> ffi::git_remote_redirect_t {
+        value.map_or(Self::UNSPECIFIED_FIELD, ffi::git_remote_redirect_t::from)
+    }
 }
 
 impl From<GitRemoteRedirect> for ffi::git_remote_redirect_t {

@@ -908,6 +908,33 @@ mod symbol_tests {
     }
 
     #[test]
+    fn an_in_memory_repository_reports_absent_paths() {
+        // SAFETY: libgit2 initialization is process-global and refcounted;
+        // the shutdown below balances this successful acquisition.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        let mut raw = core::ptr::null_mut();
+        // SAFETY: the output slot is writable and `git_repository_new` needs
+        // no other input to build a complete in-memory repository.
+        let status = unsafe { ffi::git_repository_new(&mut raw) };
+        assert_eq!(status, 0);
+        // SAFETY: `raw` is the complete caller-owned repository transferred
+        // through the output slot above.
+        let repository = unsafe { GitRepositoryOwned::from_raw(raw) }
+            .expect("git_repository_new succeeded without a repository");
+
+        // A repository with no on-disk location keeps both path fields null.
+        assert_eq!(git_repository_commondir(repository.as_ref()), None);
+        assert_eq!(git_repository_path(repository.as_ref()), None);
+        assert!(git_repository_is_bare(repository.as_ref()));
+
+        drop(repository);
+        // SAFETY: balances this test's successful initialization, after the
+        // repository owner has been released.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
     fn callback_surfaces_preserve_safe_arguments() {
         let oid = Oid::zeroed();
         let raw = core::ptr::addr_of!(oid).cast::<ffi::git_oid>().cast_mut();
@@ -938,17 +965,21 @@ mod symbol_tests {
 }
 
 /// Wraps: git_repository_commondir
-/// Borrows the repository's shared common-directory path.
+/// Borrows the repository's shared common-directory path, when it has one.
+///
+/// The path is absent for an in-memory repository created by
+/// `git_repository_new`, which never receives one, exactly as
+/// [`git_repository_path`] is absent for the same repository.
 #[must_use]
-pub fn git_repository_commondir<'a>(repo: GitRepositoryRef<'a>) -> &'a CStr {
-    // SAFETY: `repo` is live and shared; a valid repository owns a non-null
-    // NUL-terminated common-directory path for its lifetime.
+pub fn git_repository_commondir<'a>(repo: GitRepositoryRef<'a>) -> Option<&'a CStr> {
+    // SAFETY: `repo` is live and shared; the getter returns the repository's
+    // own optional common-directory field without retaining the argument.
     let path = unsafe { ffi::git_repository_commondir(repo.as_ptr()) };
-    assert!(
-        !path.is_null(),
-        "a complete repository has a common-directory path"
-    );
-    // SAFETY: the repository invariant and null check establish a live C
-    // string tied to the repository borrow.
-    unsafe { CStr::from_ptr(path) }
+    if path.is_null() {
+        None
+    } else {
+        // SAFETY: a non-null result is the repository-owned NUL-terminated
+        // path, live for the repository borrow `'a`.
+        Some(unsafe { CStr::from_ptr(path) })
+    }
 }

@@ -2731,6 +2731,18 @@
    ]
   },
   {
+   "name": "git_remote_autotag_option_t",
+   "defined_in": "include/git2/remote.h",
+   "_comment_agent": "Reviewed against include/git2/remote.h. Closed domain of four contiguous values starting at UNSPECIFIED=0, which GIT_FETCH_OPTIONS_INIT stores and remote.c resolves from the remote's configured autotag setting. Unlike git_remote_redirect_t, the unspecified state is itself a published enumerator, so a wrapper models the field as the plain enum with UNSPECIFIED as its default.",
+   "fields": []
+  },
+  {
+   "name": "git_remote_completion_t",
+   "defined_in": "include/git2/remote.h",
+   "_comment_agent": "Reviewed against include/git2/remote.h. Closed domain of three contiguous values from 0; it is only ever an argument to the completion callback in git_remote_callbacks, never a stored options field, so it has no unspecified state and needs no default.",
+   "fields": []
+  },
+  {
    "name": "git_remote_head",
    "defined_in": "include/git2/net.h",
    "_comment_agent": "git_remote_head is a by-value advertised-reference record whose oid fields and local flag are inline. Persistent heads own their allocated name and optional symref_target, while temporary comparison/search heads can borrow name storage; callers receive views owned by the transport or remote rather than an independently disposable head.",
@@ -2766,9 +2778,15 @@
    ]
   },
   {
+   "name": "git_remote_redirect_t",
+   "defined_in": "include/git2/remote.h",
+   "_comment_agent": "Reviewed against include/git2/remote.h and src/libgit2/remote.c. The enumeration publishes exactly three values (NONE=1, INITIAL=2, ALL=4), and http.c switches on a single one rather than testing bits, so it is not a bit set. A follow_redirects field carries a fourth state: GIT_FETCH_OPTIONS_INIT and its siblings leave it 0, and remote.c's lookup_redirect_config reads 0 as unspecified, resolving it from http.followRedirects and falling back to INITIAL when the repository has no such setting or there is no repository. A wrapper must therefore model the field as an optional enum with 0 = unspecified, and must not default it to INITIAL.",
+   "fields": []
+  },
+  {
    "name": "git_repository",
    "defined_in": "src/libgit2/repository.h",
-   "_comment_agent": "The public API exposes git_repository only as an opaque, uniquely owned allocation released by git_repository_free. Internally the repository owns one reference to each lazily populated database/config/index pointer, owns all cache and graft allocations, owns its duplicated path/identity strings, and owns the reserved-name array. Every pointer member is nullable during lazy initialization or for repositories without the corresponding path/cache, except reserved_names.ptr, which repository_alloc initializes before publishing a complete repository.",
+   "_comment_agent": "The public API exposes git_repository only as an opaque, uniquely owned allocation released by git_repository_free. Internally the repository owns one reference to each lazily populated database/config/index pointer, owns all cache and graft allocations, owns its duplicated path/identity strings, and owns the reserved-name array. Every pointer member is nullable during lazy initialization or for repositories without the corresponding path/cache, except reserved_names.ptr, which repository_alloc initializes before publishing a complete repository. Re-reviewed: the nullability of gitdir and commondir is observable through the public getters git_repository_path and git_repository_commondir, both of which return NULL for a repository built by git_repository_new, so their wrappers must be optional.",
    "fields": [
     {
      "name": "_config",
@@ -3094,6 +3112,12 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_reset_t",
+   "defined_in": "include/git2/reset.h",
+   "_comment_agent": "Reviewed against include/git2/reset.h and src/libgit2/reset.c. Closed domain of SOFT=1, MIXED=2, HARD=3; git_reset switches on the value and rejects anything else with GIT_ERROR_INVALID, so 0 is not a valid value and the type has no default.",
+   "fields": []
   },
   {
    "name": "git_revspec",

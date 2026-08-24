@@ -8,9 +8,15 @@ ffibox::define_ctype!(
     /// Wraps: git_revwalk
     /// An opaque revision walker managed by libgit2.
     ///
-    /// A walker borrows the repository supplied at construction, so that
-    /// repository must remain alive while the walker is used. Owned walker
-    /// handles release their allocation with `git_revwalk_free`.
+    /// A walker stores the repository supplied at construction without
+    /// retaining a count on it, so that repository must outlive the walker;
+    /// it does own one count on the repository's object database, released
+    /// with the walker. Owned walker handles release their allocation with
+    /// `git_revwalk_free`.
+    ///
+    /// [`GitRevwalkOwned`] carries no repository borrow of its own, because
+    /// no safe constructor exists yet. A constructor wrapper must tie its
+    /// result to the repository borrow it was built from.
     GitRevwalk,
     GitRevwalkRef,
     GitRevwalkMut,

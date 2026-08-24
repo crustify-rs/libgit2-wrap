@@ -272,3 +272,4 @@
 ^git_refspec_(direction|dst|dst_matches|force|rtransform|src|src_matches|string|transform)$
 ^git_remote_(add_fetch|add_push|connected|create|create_anonymous|create_with_fetchspec|default_branch|delete|disconnect|get_fetch_refspecs|get_push_refspecs|get_refspec|list|lookup|name|oid_type|pushurl|refspec_count|rename|set_pushurl|set_url|stats|stop|url)$
 ^git_repository_commondir$
+^git_repository_new$
