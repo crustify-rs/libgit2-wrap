@@ -190,6 +190,11 @@ typedef void (*git_refcount_freeptr)(void *r);
 
 #define GIT_REFCOUNT_VAL(r) git_atomic32_get((r)->rc.refcount)
 
+/* Refcount header primitives needed by the Rust bindings. */
+GIT_EXTERN(int) crustify_git_refcount_val(git_refcount *rc);
+GIT_EXTERN(void *) crustify_git_refcount_owner(git_refcount *rc);
+GIT_EXTERN(void) crustify_git_refcount_own(git_refcount *rc, void *owner);
+
 
 static signed char from_hex[] = {
 -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, /* 00 */

@@ -18,7 +18,6 @@ ffibox::define_ctype!(
     ffi::git_cached_obj
 );
 
-/// Field: git_cached_obj.refcount
 /// An independently owned reference to cached object storage.
 ///
 /// Cloning atomically acquires another reference. Dropping dispatches the
@@ -29,6 +28,14 @@ pub type GitCachedObjOwned = CBox<GitCachedObj>;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u16)]
 pub enum CacheStoreKind {
+    /// Not yet classified for the cache.
+    ///
+    /// This is the state a freshly allocated object carries until
+    /// `git_cache_store_raw` or `git_cache_store_parsed` claims it; the
+    /// cache also uses it as the wildcard when looking an entry up. A final
+    /// reference released in this state is handed to the plain allocator
+    /// free rather than to either concrete destructor.
+    Any = 0,
     /// A cached object-database value.
     Raw = 1,
     /// A cached parsed [`crate::object::GitObject`].
@@ -52,6 +59,7 @@ impl TryFrom<u16> for CacheStoreKind {
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         match value {
+            0 => Ok(Self::Any),
             1 => Ok(Self::Raw),
             2 => Ok(Self::Parsed),
             value => Err(InvalidCacheStoreKind(value)),
@@ -91,6 +99,22 @@ impl<'a> GitCachedObjRef<'a> {
             .expect("an embedded field has a non-null address")
     }
 
+    /// Field: git_cached_obj.refcount
+    /// Atomically reads the number of outstanding references to this cached
+    /// object.
+    ///
+    /// The value is a snapshot: another thread holding the cache lock may
+    /// acquire or release a reference before the caller observes it. Owned
+    /// references are counted by [`GitCachedObjOwned`], which is the safe
+    /// way to hold one.
+    #[must_use]
+    pub fn refcount(&self) -> i32 {
+        // SAFETY: this live shared handle addresses an initialized cached
+        // object, and the shim only performs an atomic load through it, so
+        // passing the pointer as `*mut` writes nothing.
+        unsafe { ffi::crustify_git_cached_obj_refcount(self.as_ptr().cast_mut()) }
+    }
+
     /// Field: git_cached_obj.flags
     /// Returns the checked representation stored in the cache.
     pub fn store_kind(&self) -> Result<CacheStoreKind, InvalidCacheStoreKind> {
@@ -110,6 +134,10 @@ impl<'a> GitCachedObjRef<'a> {
 
 impl GitCachedObjMut<'_> {
     /// Sets the memory size charged to the cache for this object.
+    ///
+    /// libgit2 charges `size` to the owning cache when the object is stored
+    /// and refunds the same field when it is evicted, so changing it while
+    /// the object is published leaves the cache's memory accounting adrift.
     pub fn set_size(&mut self, size: usize) {
         // SAFETY: this exclusive handle permits a raw-place scalar write
         // without forming a reference to C-visible memory.
@@ -126,6 +154,10 @@ impl GitCachedObjMut<'_> {
     }
 
     /// Copies an object identifier into the embedded field.
+    ///
+    /// A published cache entry is keyed by a pointer to this very field, so
+    /// overwriting it while the object is in a cache makes the entry
+    /// unreachable under both its old and its new identifier.
     pub fn set_oid(&mut self, oid: OidRef<'_>) {
         // SAFETY: both OIDs are initialized and layout-compatible; `copy`
         // also permits the degenerate overlapping case without references.
@@ -245,6 +277,7 @@ mod tests {
         let mut cached = unsafe { GitCachedObjMut::from_ptr(&raw mut raw) }
             .expect("the address of a stack value is non-null");
         assert_eq!(cached.as_ref().size(), 12);
+        assert_eq!(cached.as_ref().refcount(), 1);
         assert_eq!(cached.as_ref().store_kind(), Ok(CacheStoreKind::Raw));
         assert_eq!(cached.as_ref().object_type(), Ok(GitObjectType::BLOB));
         assert_eq!(cached.as_ref().oid().oid_type(), Ok(OidType::Sha1));
@@ -269,8 +302,11 @@ mod tests {
     }
 
     #[test]
-    fn discriminators_reject_unknown_c_values() {
-        assert_eq!(CacheStoreKind::try_from(0), Err(InvalidCacheStoreKind(0)));
+    fn discriminators_map_every_published_c_value() {
+        assert_eq!(CacheStoreKind::try_from(0), Ok(CacheStoreKind::Any));
+        assert_eq!(CacheStoreKind::try_from(1), Ok(CacheStoreKind::Raw));
+        assert_eq!(CacheStoreKind::try_from(2), Ok(CacheStoreKind::Parsed));
+        assert_eq!(CacheStoreKind::try_from(3), Err(InvalidCacheStoreKind(3)));
         assert_eq!(InvalidCacheStoreKind(7).value(), 7);
         assert_eq!(InvalidCachedObjectType(-7).value(), -7);
     }
@@ -294,7 +330,7 @@ mod tests {
                 },
                 type_: GitObjectType::BLOB.as_raw() as i16,
                 // The generic finalizer path releases this test allocation.
-                flags: 0,
+                flags: CacheStoreKind::Any as u16,
                 size: 0,
                 refcount: ffi::git_atomic32 { val: 1 },
             });
@@ -302,8 +338,11 @@ mod tests {
 
         // SAFETY: `raw` now holds one fully initialized owned cache reference.
         let owner = unsafe { GitCachedObjOwned::from_raw(raw) }.unwrap();
+        assert_eq!(owner.as_ref().store_kind(), Ok(CacheStoreKind::Any));
+        assert_eq!(owner.as_ref().refcount(), 1);
         let duplicate = owner.clone();
         assert_eq!(owner.as_ref().as_ptr(), duplicate.as_ref().as_ptr());
+        assert_eq!(owner.as_ref().refcount(), 2);
         // SAFETY: both owners are live, no refcount operation is concurrent,
         // and this quiescent test-only observation does not race with C.
         assert_eq!(unsafe { addr_of!((*raw).refcount.val).read() }, 2);
@@ -311,6 +350,7 @@ mod tests {
         // SAFETY: the original owner still keeps the allocation alive and no
         // refcount operation is concurrent with this observation.
         assert_eq!(unsafe { addr_of!((*raw).refcount.val).read() }, 1);
+        assert_eq!(owner.as_ref().refcount(), 1);
         drop(owner);
 
         // SAFETY: balances this test's successful initialization after the

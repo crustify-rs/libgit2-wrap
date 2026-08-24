@@ -835,3 +835,18 @@ int git__online_cpus(void)
 
 	return 1;
 }
+
+GIT_EXTERN(int) crustify_git_refcount_val(git_refcount *rc)
+{
+	return git_atomic32_get(&rc->refcount);
+}
+
+GIT_EXTERN(void *) crustify_git_refcount_owner(git_refcount *rc)
+{
+	return git_atomic_load(rc->owner);
+}
+
+GIT_EXTERN(void) crustify_git_refcount_own(git_refcount *rc, void *owner)
+{
+	(void)git_atomic_swap(rc->owner, owner);
+}

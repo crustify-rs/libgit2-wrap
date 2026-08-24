@@ -266,3 +266,8 @@ GIT_EXTERN(void) crustify_git_cached_obj_decref(git_cached_obj *obj)
 {
 	git_cached_obj_decref(obj);
 }
+
+GIT_EXTERN(int) crustify_git_cached_obj_refcount(git_cached_obj *obj)
+{
+	return git_atomic32_get(&obj->refcount);
+}

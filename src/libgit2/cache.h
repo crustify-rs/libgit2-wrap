@@ -67,5 +67,6 @@ void git_cached_obj_decref(void *_obj);
 /* Exported cache lifecycle primitives needed by the Rust bindings. */
 GIT_EXTERN(void) crustify_git_cached_obj_incref(git_cached_obj *obj);
 GIT_EXTERN(void) crustify_git_cached_obj_decref(git_cached_obj *obj);
+GIT_EXTERN(int) crustify_git_cached_obj_refcount(git_cached_obj *obj);
 
 #endif
