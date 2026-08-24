@@ -8104,6 +8104,29 @@
    }
   },
   {
+   "name": "git_error_set",
+   "defined_in": "src/util/errors.c",
+   "ptr_args": [
+    {
+     "name": "fmt",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:fmt"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient printf-format string. git_error_vset reads it synchronously, does not retain, mutate, clone, or free it, and explicitly accepts NULL (notably permitting an OS-only message)."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_error_set_str",
    "defined_in": "src/util/errors.c",
    "ptr_args": [

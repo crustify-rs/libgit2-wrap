@@ -194,6 +194,7 @@
 ^git_checkout_progress_cb$
 ^git_config_parse_(bool|int32|int64)$
 ^git_error_(clear|set_str)$
+^git_error_set$
 ^git_index_matched_path_cb$
 ^git_libgit2_features$
 ^git_libgit2_opts$

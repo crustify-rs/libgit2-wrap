@@ -1,7 +1,7 @@
 //! Safe wrappers for libgit2 errors APIs.
 
-use core::ptr::addr_of;
-use std::ffi::{CStr, CString};
+use core::{fmt, ptr::addr_of};
+use std::ffi::{CStr, CString, NulError};
 
 use crate::api::errors::{GitErrorClass, InvalidGitErrorClass};
 use crate::ffi;
@@ -110,6 +110,34 @@ mod tests {
     }
 
     #[test]
+    fn variadic_error_setter_formats_safely_in_rust() {
+        // SAFETY: initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        assert_eq!(
+            git_error_set(
+                GitErrorClass::Ssh,
+                Some(format_args!("{} is {}% ready", "wrapper", 100))
+            ),
+            Ok(())
+        );
+        let snapshot = git_error_last();
+        assert_eq!(snapshot.message.as_deref(), Some(c"wrapper is 100% ready"));
+        assert_eq!(snapshot.klass, Ok(GitErrorClass::Ssh));
+        assert_eq!(git_error_set(GitErrorClass::Filter, None), Ok(()));
+        assert_eq!(git_error_last().klass, Ok(GitErrorClass::Filter));
+        git_error_clear();
+        // SAFETY: balances this test's successful initialization.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
+    fn variadic_error_setter_rejects_an_interior_nul() {
+        assert!(
+            git_error_set(GitErrorClass::NoMemory, Some(format_args!("bad\0message"))).is_err()
+        );
+    }
+
+    #[test]
     fn error_wrapper_preserves_the_c_layout() {
         assert_eq!(size_of::<GitError>(), size_of::<ffi::git_error>());
         assert_eq!(align_of::<GitError>(), align_of::<ffi::git_error>());
@@ -187,4 +215,31 @@ pub fn git_error_last() -> GitErrorSnapshot {
         message: error.message(),
         klass: error.klass(),
     }
+}
+
+/// Wraps: git_error_set
+/// Formats and copies a message into this thread's libgit2 error state.
+///
+/// Rust performs the formatting so callers never need to satisfy C variadic
+/// argument rules. An interior NUL in the formatted message is rejected.
+/// Passing `None` preserves libgit2's supported null-format behavior.
+pub fn git_error_set(
+    error_class: GitErrorClass,
+    message: Option<fmt::Arguments<'_>>,
+) -> Result<(), NulError> {
+    if let Some(message) = message {
+        let message = CString::new(message.to_string())?;
+
+        // SAFETY: the fixed format string consumes exactly one `const char *`
+        // variadic argument. Both strings are live and NUL-terminated for the
+        // duration of the call, and libgit2 copies the rendered message
+        // instead of retaining either pointer.
+        unsafe { ffi::git_error_set(error_class.as_c_int(), c"%s".as_ptr(), message.as_ptr()) };
+    } else {
+        // SAFETY: libgit2 explicitly accepts a null format and consequently
+        // reads no variadic arguments; it records the class and, for OS
+        // errors, obtains the message from the platform error state.
+        unsafe { ffi::git_error_set(error_class.as_c_int(), core::ptr::null()) };
+    }
+    Ok(())
 }
