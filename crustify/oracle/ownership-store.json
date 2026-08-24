@@ -12456,7 +12456,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
        }
       },
       "array": null,
@@ -12467,7 +12469,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required borrowed output slot receives one newly owned allocation on success."
+      "note": "Required writable out-slot; on success it receives one newly owned reference allocation released by git_reference_free. That allocation is simultaneously BORROWED from `repo`: The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     },
     {
@@ -12484,7 +12486,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+      "note": "Required borrowed repository. It is not consumed, but it IS retained transitively for as long as the reference written to the out-slot lives: The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     }
    ]
@@ -12567,7 +12569,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
        }
       },
       "array": null,
@@ -12578,7 +12582,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required borrowed output slot receives one newly owned allocation on success."
+      "note": "Required writable out-slot; on success it receives one newly owned reference allocation released by git_reference_free. That allocation is simultaneously BORROWED from `repo`: The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     },
     {
@@ -12595,7 +12599,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+      "note": "Required borrowed repository. It is not consumed, but it IS retained transitively for as long as the reference written to the out-slot lives: The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     }
    ]
@@ -12685,7 +12689,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
        }
       },
       "array": null,
@@ -12696,7 +12702,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required borrowed output slot receives one newly owned allocation on success."
+      "note": "Required writable out-slot; on success it receives one newly owned reference allocation released by git_reference_free. That allocation is simultaneously BORROWED from `repo`: The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     },
     {
@@ -12730,7 +12736,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+      "note": "Required borrowed repository. It is not consumed, but it IS retained transitively for as long as the reference written to the out-slot lives: The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     }
    ]
@@ -12988,7 +12994,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
        }
       },
       "array": null,
@@ -12999,7 +13007,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required borrowed output slot receives one newly owned allocation on success."
+      "note": "Required writable out-slot; on success it receives one newly owned reference allocation released by git_reference_free. That allocation is simultaneously BORROWED from `repo`: The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     },
     {
@@ -13016,7 +13024,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+      "note": "Required borrowed repository. It is not consumed, but it IS retained transitively for as long as the reference written to the out-slot lives: The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     }
    ]
@@ -13207,7 +13215,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:ref"
+        }
        }
       },
       "array": null,
@@ -13218,7 +13228,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required borrowed output slot receives one newly owned allocation on success."
+      "note": "Required writable out-slot receiving one newly owned git_object on success, released by git_object_free. The lookup runs against git_reference_owner(ref) == ref->db->repo and the resulting object keeps a borrowed pointer to that repository, so the object is owned yet bounded by `ref`'s repository borrow."
      }
     },
     {
@@ -13284,7 +13294,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:ref"
+        }
        }
       },
       "array": null,
@@ -13295,7 +13307,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required borrowed output slot receives one newly owned allocation on success."
+      "note": "Required writable out-slot receiving one newly owned renamed reference on success. The result is written through the SAME reference database as `ref` and takes its own count on it, so it inherits `ref`'s borrowed repository and may not outlive it."
      }
     },
     {
@@ -13344,7 +13356,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:ref"
+        }
        }
       },
       "array": null,
@@ -13355,7 +13369,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required borrowed output slot receives one newly owned allocation on success."
+      "note": "Required writable out-slot receiving one newly owned resolved direct reference on success. The result is written through the SAME reference database as `ref` and takes its own count on it, so it inherits `ref`'s borrowed repository and may not outlive it."
      }
     }
    ]
@@ -13404,7 +13418,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:ref"
+        }
        }
       },
       "array": null,
@@ -13415,7 +13431,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required borrowed output slot receives one newly owned allocation on success."
+      "note": "Required writable out-slot receiving one newly owned updated reference on success. The result is written through the SAME reference database as `ref` and takes its own count on it, so it inherits `ref`'s borrowed repository and may not outlive it."
      }
     },
     {
@@ -13520,7 +13536,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
        }
       },
       "array": null,
@@ -13531,7 +13549,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required borrowed output slot receives one newly owned allocation on success."
+      "note": "Required writable out-slot; on success it receives one newly owned reference allocation released by git_reference_free. That allocation is simultaneously BORROWED from `repo`: The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     },
     {
@@ -13548,7 +13566,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+      "note": "Required borrowed repository. It is not consumed, but it IS retained transitively for as long as the reference written to the out-slot lives: The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     },
     {
@@ -13631,7 +13649,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
        }
       },
       "array": null,
@@ -13642,7 +13662,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required borrowed output slot receives one newly owned allocation on success."
+      "note": "Required writable out-slot; on success it receives one newly owned reference allocation released by git_reference_free. That allocation is simultaneously BORROWED from `repo`: The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     },
     {
@@ -13659,7 +13679,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+      "note": "Required borrowed repository. It is not consumed, but it IS retained transitively for as long as the reference written to the out-slot lives: The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     },
     {
@@ -13708,7 +13728,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:ref"
+        }
        }
       },
       "array": null,
@@ -13719,7 +13741,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required borrowed output slot receives one newly owned allocation on success."
+      "note": "Required writable out-slot receiving one newly owned updated symbolic reference on success. The result is written through the SAME reference database as `ref` and takes its own count on it, so it inherits `ref`'s borrowed repository and may not outlive it."
      }
     },
     {
@@ -14221,7 +14243,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
        }
       },
       "array": null,
@@ -14232,7 +14256,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot receiving a fresh owned reflog on success."
+      "note": "Required writable out-slot receiving one fresh owned reflog on success. git_refdb_reflog_read runs GIT_REFCOUNT_INC(db) and stores (*out)->db, and refdb->repo / refdb_fs_backend->repo are BORROWED repository pointers; the counted refdb outlives git_repository_free with a dangling repo, which lock_reflog and refdb_reflog_fs__write then dereference. The repository must therefore outlive the reflog."
      }
     },
     {
@@ -14249,7 +14273,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required repository borrowed during lookup; the resulting reflog retains its own refdb count."
+      "note": "Required borrowed repository, retained transitively through the reference-database count the resulting reflog holds; it must outlive that reflog."
      }
     }
    ]
@@ -16121,7 +16145,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
        }
       },
       "array": null,
@@ -16132,7 +16158,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrows an output slot and writes one newly owned config reference on success."
+      "note": "Required writable out-slot; git_repository_config runs GIT_REFCOUNT_INC on the repository's cached config, so the caller receives one independently releasable count. The repository-level backends behind that config keep repository-derived paths and state, so the count is owned yet bounded by the repository borrow."
      }
     },
     {
@@ -16149,7 +16175,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrows the repository and may lazily install its configuration cache; it does not consume the repository."
+      "note": "Borrows the repository and may lazily install its configuration cache; it does not consume the repository, but the returned config count depends on it and may not outlive it."
      }
     }
    ]
@@ -16244,9 +16270,9 @@
       "borrowed": {
        "lifetime": "arg:arg1"
       },
-      "nullable": false,
+      "nullable": true,
       "mutable": false,
-      "note": "Transient required remote URL, valid only during callback invocation."
+      "note": "Transient OPTIONAL remote URL, valid only during the callback invocation. fetchhead_ref_parse sets *remote_url = NULL on entry and only fills it from the description field newer Git clients write; a compatibility FETCH_HEAD line shaped like a loose ref has no description, so git_repository_fetchhead_foreach invokes the callback with a null URL."
      }
     },
     {
@@ -16361,7 +16387,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
        }
       },
       "array": null,
@@ -16372,7 +16400,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrows an output slot and writes one newly owned reference allocation on success."
+      "note": "Required writable out-slot receiving one newly owned reference on success. The new reference stores the source reference database in `ref->db` and takes a count on it (git_refdb_lookup/git_refdb_resolve/reference_normalize_for_repo all run through git_refdb, and refdb->repo plus refdb_fs_backend->repo are plain BORROWED repository pointers libgit2 never owns). A counted refdb therefore survives git_repository_free with a dangling repo, so the repository must outlive the returned reference."
      }
     },
     {
@@ -16389,7 +16417,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrows the repository and may lazily initialize reference-database state while resolving HEAD."
+      "note": "Borrows the repository and may lazily initialize reference-database state while resolving HEAD; the pointer is additionally retained transitively by the reference written to the out-slot, which may not outlive it."
      }
     }
    ]
@@ -16873,7 +16901,9 @@
       "scalar": {
        "by_ref": {
         "owned": true,
-        "borrowed": null
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
        }
       },
       "array": null,
@@ -16884,7 +16914,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrows an output slot and writes one newly owned refdb reference on success."
+      "note": "Required writable out-slot; git_repository_refdb runs GIT_REFCOUNT_INC on the repository's cached refdb, so the caller receives one independently releasable count. refdb->repo and refdb_fs_backend->repo are BORROWED repository pointers, so the count is owned yet bounded by the repository borrow."
      }
     },
     {
@@ -16901,7 +16931,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrows the repository and may lazily install its refdb cache; returned refdb/backend pointers retain a repository dependency."
+      "note": "Borrows the repository and may lazily install its refdb cache; the returned refdb and its backend retain the repository pointer, which must outlive them."
      }
     }
    ]

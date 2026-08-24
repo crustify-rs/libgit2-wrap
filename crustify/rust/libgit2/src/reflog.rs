@@ -1,19 +1,29 @@
 //! Safe wrappers for libgit2 reflog APIs.
 
 use core::ffi::CStr;
+use core::marker::PhantomData;
 
 use ffibox::CBox;
 
 use crate::ffi;
 use crate::oid::OidRef;
-use crate::repository::GitRepositoryMut;
+use crate::repository::{GitRepositoryMut, GitRepositoryRef};
 
 ffibox::define_ctype!(
     /// Wraps: git_reflog
     /// An opaque in-memory reference log owned by libgit2.
     ///
-    /// Owned pointers use [`GitReflogOwned`]. Dropping an owner releases its
-    /// entries, reference name, retained reference-database count, and header.
+    /// Dropping an owner releases its entries, reference name, retained
+    /// reference-database count, and header.
+    ///
+    /// `git_refdb_reflog_read` stores the repository's reference database in
+    /// `reflog->db` and takes a count on it, and a `git_refdb` — together with
+    /// its backend — only *borrows* the repository it was opened from. A
+    /// counted reference database therefore outlives `git_repository_free`
+    /// with a dangling `repo` pointer, which every later reflog operation
+    /// dereferences. Safe constructors consequently hand back
+    /// [`GitReflogTetheredOwned`], which carries that repository borrow in its
+    /// type, rather than the bare [`GitReflogOwned`].
     GitReflog,
     GitReflogRef,
     GitReflogMut,
@@ -21,8 +31,34 @@ ffibox::define_ctype!(
 );
 
 /// Wraps: git_reflog_free
-/// An owning handle that frees a fully formed libgit2 reflog on drop.
+/// A raw-adopted owning handle that frees a fully formed libgit2 reflog on
+/// drop.
+///
+/// Adopting a reflog pointer through this owner is unsafe because the caller
+/// must separately keep the repository behind its reference database alive;
+/// see [`GitReflogTetheredOwned`] for the safe, tethered form.
 pub type GitReflogOwned = CBox<GitReflog>;
+
+/// An owned libgit2 reflog tied to the repository whose reference database it
+/// counts.
+pub struct GitReflogTetheredOwned<'repo> {
+    inner: GitReflogOwned,
+    _repository: PhantomData<GitRepositoryRef<'repo>>,
+}
+
+impl GitReflogTetheredOwned<'_> {
+    /// Borrows the reflog.
+    #[must_use]
+    pub fn as_ref(&self) -> GitReflogRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the reflog exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitReflogMut<'_> {
+        self.inner.as_mut()
+    }
+}
 
 // SAFETY: `git_reflog_free` is the public destructor for a fully formed,
 // ordinary libgit2 reflog. It accepts null, although `CBox` supplies one live
@@ -93,6 +129,20 @@ mod tests {
             size_of::<GitReflogEntryMut<'_>>(),
             size_of::<*mut ffi::git_reflog_entry>()
         );
+    }
+
+    #[test]
+    fn tethered_owner_is_covariant_in_its_repository_borrow() {
+        fn shrink<'short, 'long: 'short>(
+            owner: GitReflogTetheredOwned<'long>,
+        ) -> GitReflogTetheredOwned<'short> {
+            owner
+        }
+
+        // A keepalive marker may only narrow: `shrink` compiling proves the
+        // tether cannot be widened past the repository borrow that produced
+        // the reflog's reference-database count.
+        let _ = shrink::<'_, 'static>;
     }
 
     #[test]
@@ -196,26 +246,30 @@ pub fn git_reflog_entrycount(reflog: GitReflogRef<'_>) -> usize {
 }
 
 /// Wraps: git_reflog_read
-/// Loads an independently owned reflog from a repository.
-pub fn git_reflog_read(
-    repo: &mut GitRepositoryMut<'_>,
+/// Loads an owned reflog that borrows `repo` for its lifetime.
+///
+/// The result keeps a count on the repository's reference database, whose
+/// backend holds a *borrowed* repository pointer; the returned owner therefore
+/// cannot outlive the repository borrow it was read through.
+pub fn git_reflog_read<'repo>(
+    repo: &'repo mut GitRepositoryMut<'_>,
     name: &CStr,
-) -> Result<GitReflogOwned, i32> {
+) -> Result<GitReflogTetheredOwned<'repo>, i32> {
     let mut raw = core::ptr::null_mut();
     // SAFETY: `raw` is writable, the repository is live and exclusive, and
     // `name` is a live string. On success the result owns its refdb count.
     let status = unsafe { ffi::git_reflog_read(&mut raw, repo.as_mut_ptr(), name.as_ptr()) };
-    if status == 0 {
-        // SAFETY: success transfers a complete reflog allocation.
-        Ok(unsafe { GitReflogOwned::from_raw(raw) }
-            .expect("libgit2 succeeded without returning a reflog"))
-    } else {
-        if !raw.is_null() {
-            // SAFETY: a populated error output remains caller-owned.
-            drop(unsafe { GitReflogOwned::from_raw(raw) });
-        }
-        Err(status)
+    // SAFETY: `raw` is null or the complete reflog allocation transferred
+    // through the output slot, including on an unexpected populated error
+    // path. Adopting it immediately makes either case RAII.
+    let inner = unsafe { GitReflogOwned::from_raw(raw) };
+    if status != 0 {
+        return Err(status);
     }
+    Ok(GitReflogTetheredOwned {
+        inner: inner.expect("libgit2 succeeded without returning a reflog"),
+        _repository: PhantomData,
+    })
 }
 
 /// Wraps: git_reflog_rename

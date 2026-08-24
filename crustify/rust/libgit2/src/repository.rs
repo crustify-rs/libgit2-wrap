@@ -523,12 +523,19 @@ pub fn git_repository_discover(
 
 /// Wraps: git_repository_fetchhead_foreach_cb
 /// Safe callable surface for entries read from `FETCH_HEAD`.
+///
+/// Both string arguments are optional. `fetchhead_ref_parse` clears
+/// `remote_url` before parsing and only fills it from the description field
+/// that newer Git clients write; a compatibility line shaped like a loose
+/// reference carries no description, so libgit2 invokes the callback with a
+/// null URL. `reference_name` is likewise null whenever the parsed name is
+/// empty.
 pub trait GitRepositoryFetchheadForeachCallback {
     /// Receives one transient entry. A nonzero result stops iteration.
     fn call(
         &mut self,
         reference_name: Option<&CStr>,
-        remote_url: &CStr,
+        remote_url: Option<&CStr>,
         oid: OidRef<'_>,
         is_merge: bool,
     ) -> i32;
@@ -536,12 +543,12 @@ pub trait GitRepositoryFetchheadForeachCallback {
 
 impl<F> GitRepositoryFetchheadForeachCallback for F
 where
-    F: FnMut(Option<&CStr>, &CStr, OidRef<'_>, bool) -> i32,
+    F: FnMut(Option<&CStr>, Option<&CStr>, OidRef<'_>, bool) -> i32,
 {
     fn call(
         &mut self,
         reference_name: Option<&CStr>,
-        remote_url: &CStr,
+        remote_url: Option<&CStr>,
         oid: OidRef<'_>,
         is_merge: bool,
     ) -> i32 {
@@ -618,8 +625,9 @@ pub fn git_repository_is_empty(repository: &mut GitRepositoryMut<'_>) -> Result<
 /// Wraps: git_repository_is_shallow
 /// Reports whether the repository has a nonempty shallow-boundary file.
 pub fn git_repository_is_shallow(repository: GitRepositoryRef<'_>) -> Result<bool, i32> {
-    // SAFETY: the shared repository and its common-directory string are live;
-    // the function writes only temporary and filesystem state.
+    // SAFETY: the shared repository is live. Despite the non-const C parameter
+    // the body only reads `repo->commondir` and stats the `shallow` file, so a
+    // shared handle is sufficient and no pointer is retained.
     let status = unsafe { ffi::git_repository_is_shallow(repository.as_ptr().cast_mut()) };
     if status < 0 {
         Err(status)
@@ -942,18 +950,24 @@ mod symbol_tests {
         // duration of both callback invocations.
         let oid = unsafe { OidRef::from_ptr(raw) }.expect("local address is non-null");
 
-        let mut fetch = |name: Option<&CStr>, url: &CStr, _: OidRef<'_>, merge: bool| {
-            i32::from(name == Some(c"refs/heads/main") && url == c"origin" && merge)
+        let mut fetch = |name: Option<&CStr>, url: Option<&CStr>, _: OidRef<'_>, merge: bool| {
+            i32::from(name == Some(c"refs/heads/main") && url == Some(c"origin") && merge)
         };
         assert_eq!(
             GitRepositoryFetchheadForeachCallback::call(
                 &mut fetch,
                 Some(c"refs/heads/main"),
-                c"origin",
+                Some(c"origin"),
                 oid,
                 true,
             ),
             1
+        );
+        // A compatibility `FETCH_HEAD` line carries neither a description nor
+        // a reference name, so both strings reach the callback as null.
+        assert_eq!(
+            GitRepositoryFetchheadForeachCallback::call(&mut fetch, None, None, oid, true),
+            0
         );
 
         let mut merge = |value: OidRef<'_>| i32::from(value.as_ptr() == oid.as_ptr());

@@ -291,12 +291,19 @@ pub(crate) fn adopt_reference<'a>(
     })
 }
 
-fn optional_cstr<'a>(raw: *const core::ffi::c_char) -> Option<&'a CStr> {
+/// Borrows an optional C string returned by a libgit2 reference getter.
+///
+/// # Safety
+///
+/// A non-null `raw` must address a NUL-terminated string that stays live and
+/// unmodified for the whole of `'a`, which the caller must bind to the handle
+/// that owns it.
+unsafe fn optional_cstr<'a>(raw: *const core::ffi::c_char) -> Option<&'a CStr> {
     if raw.is_null() {
         None
     } else {
-        // SAFETY: callers pass only libgit2-returned pointers documented as
-        // NUL-terminated and live for their source handle's lifetime.
+        // SAFETY: the caller guarantees a live NUL-terminated string valid for
+        // `'a`, which the null check above narrows to the non-null case.
         Some(unsafe { CStr::from_ptr(raw) })
     }
 }
@@ -372,8 +379,10 @@ pub fn git_reference_create_matching<'a>(
 /// Wraps: git_reference_delete
 /// Deletes the on-disk reference without consuming its in-memory handle.
 pub fn git_reference_delete(reference: &mut GitReferenceMut<'_>) -> Result<(), i32> {
-    // SAFETY: the exclusive handle permits libgit2 to use its mutable snapshot
-    // state; the allocation remains owned by the caller.
+    // SAFETY: the reference is live and, matching the non-const C parameter,
+    // exclusively borrowed for the duration of the reference-database update.
+    // Libgit2 reads its name and target and frees nothing: the allocation
+    // remains owned by the caller and outlives the call.
     let status = unsafe { ffi::git_reference_delete(reference.as_mut_ptr()) };
     if status == 0 { Ok(()) } else { Err(status) }
 }
@@ -495,7 +504,8 @@ pub fn git_reference_name<'a>(reference: GitReferenceRef<'a>) -> &'a CStr {
     // SAFETY: the shared reference stays live for `'a`; its inline name is a
     // valid NUL-terminated string.
     let name = unsafe { ffi::git_reference_name(reference.as_ptr()) };
-    optional_cstr(name).expect("a live reference has a name")
+    // SAFETY: the reference's inline name lives as long as the handle's `'a`.
+    unsafe { optional_cstr(name) }.expect("a live reference has a name")
 }
 
 /// Wraps: git_reference_name_to_id
@@ -613,7 +623,9 @@ pub fn git_reference_set_target<'a>(
 pub fn git_reference_shorthand<'a>(reference: GitReferenceRef<'a>) -> &'a CStr {
     // SAFETY: the returned pointer aliases the live reference's inline name.
     let shorthand = unsafe { ffi::git_reference_shorthand(reference.as_ptr()) };
-    optional_cstr(shorthand).expect("a live reference has a shorthand")
+    // SAFETY: the shorthand points into the reference's inline name, which
+    // lives as long as the handle's `'a`.
+    unsafe { optional_cstr(shorthand) }.expect("a live reference has a shorthand")
 }
 
 /// Wraps: git_reference_symbolic_create
@@ -698,8 +710,9 @@ pub fn git_reference_symbolic_set_target<'a>(
 /// Borrows a symbolic target name, or returns `None` for a direct reference.
 #[must_use]
 pub fn git_reference_symbolic_target<'a>(reference: GitReferenceRef<'a>) -> Option<&'a CStr> {
-    // SAFETY: a non-null result aliases storage owned by the live reference.
-    optional_cstr(unsafe { ffi::git_reference_symbolic_target(reference.as_ptr()) })
+    // SAFETY: a non-null result aliases the symbolic target string owned by
+    // the live reference, which lives as long as the handle's `'a`.
+    unsafe { optional_cstr(ffi::git_reference_symbolic_target(reference.as_ptr())) }
 }
 
 /// Wraps: git_reference_target
