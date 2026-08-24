@@ -1,11 +1,15 @@
 //! Safe wrappers for libgit2 worktree APIs.
 
+use core::ffi::CStr;
 use core::ptr::{addr_of, addr_of_mut};
 
-use ffibox::CBox;
+use ffibox::{CBox, CVal};
 
+use crate::api::buffer::GitBufMut;
 use crate::api::worktree::GitWorktreePruneFlags;
 use crate::ffi;
+use crate::repository::GitRepositoryRef;
+use crate::strarray::GitStrArray;
 
 ffibox::define_ctype!(
     /// Wraps: git_worktree
@@ -30,6 +34,183 @@ pub type GitWorktreeOwned = CBox<GitWorktree>;
 // once, treating a null string field as a no-op. It accepts a null worktree
 // too, although `CBox` supplies one live, non-null allocation.
 ffibox::impl_dropped!(GitWorktree, ffi::git_worktree, ffi::git_worktree_free);
+
+/// Wraps: git_worktree_is_locked
+/// Reports whether a worktree is locked and optionally fills its reason.
+pub fn git_worktree_is_locked(
+    worktree: GitWorktreeRef<'_>,
+    reason: Option<&mut GitBufMut<'_>>,
+) -> Result<bool, i32> {
+    let reason = reason.map_or(core::ptr::null_mut(), GitBufMut::as_mut_ptr);
+    // SAFETY: the worktree is live and shared. `reason` is null or an
+    // exclusively borrowed valid buffer header that libgit2 may replace.
+    let status = unsafe { ffi::git_worktree_is_locked(reason, worktree.as_ptr()) };
+    if status < 0 {
+        Err(status)
+    } else {
+        Ok(status != 0)
+    }
+}
+
+/// Wraps: git_worktree_is_prunable
+/// Reports whether a worktree may be pruned under `options`.
+pub fn git_worktree_is_prunable(
+    worktree: GitWorktreeRef<'_>,
+    options: Option<GitWorktreePruneOptionsRef<'_>>,
+) -> Result<bool, i32> {
+    let options = options.map_or(core::ptr::null_mut(), |options| options.as_ptr().cast_mut());
+    // SAFETY: the worktree and optional validated options are live shared
+    // borrows; the C body only reads them while inspecting the filesystem.
+    let status = unsafe { ffi::git_worktree_is_prunable(worktree.as_ptr().cast_mut(), options) };
+    if status < 0 {
+        Err(status)
+    } else {
+        Ok(status != 0)
+    }
+}
+
+/// Wraps: git_worktree_list
+/// Returns the linked worktree names for a repository.
+pub fn git_worktree_list(repository: GitRepositoryRef<'_>) -> Result<CVal<GitStrArray>, i32> {
+    let mut names = GitStrArray::new();
+    let status = {
+        let mut output = names.as_mut();
+        // SAFETY: `output` is an empty exclusive output header and the live
+        // repository is only read while its worktree directory is scanned.
+        unsafe { ffi::git_worktree_list(output.as_mut_ptr(), repository.as_ptr().cast_mut()) }
+    };
+    if status == 0 { Ok(names) } else { Err(status) }
+}
+
+/// Wraps: git_worktree_lock
+/// Locks a worktree, optionally recording a reason.
+pub fn git_worktree_lock(
+    worktree: &mut GitWorktreeMut<'_>,
+    reason: Option<&CStr>,
+) -> Result<(), i32> {
+    let reason = reason.map_or(core::ptr::null(), CStr::as_ptr);
+    // SAFETY: the worktree is live and exclusive and the optional reason is a
+    // live C string read synchronously before the worktree's state is updated.
+    let status = unsafe { ffi::git_worktree_lock(worktree.as_mut_ptr(), reason) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_worktree_lookup
+/// Looks up and adopts a worktree by name.
+pub fn git_worktree_lookup(
+    repository: GitRepositoryRef<'_>,
+    name: &CStr,
+) -> Result<GitWorktreeOwned, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and both inputs are live for the
+    // call; success produces a self-contained caller-owned worktree.
+    let status = unsafe {
+        ffi::git_worktree_lookup(
+            core::ptr::addr_of_mut!(raw),
+            repository.as_ptr().cast_mut(),
+            name.as_ptr(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success writes a non-null complete worktree allocation.
+    unsafe { GitWorktreeOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_worktree_name
+/// Borrows the worktree's name.
+#[must_use]
+pub fn git_worktree_name<'a>(worktree: GitWorktreeRef<'a>) -> &'a CStr {
+    // SAFETY: the live worktree owns the returned non-null NUL string.
+    let name = unsafe { ffi::git_worktree_name(worktree.as_ptr()) };
+    // SAFETY: the string remains live for the worktree handle lifetime.
+    unsafe { CStr::from_ptr(name) }
+}
+
+/// Wraps: git_worktree_open_from_repository
+/// Opens and adopts the worktree described by a linked repository.
+pub fn git_worktree_open_from_repository(
+    repository: GitRepositoryRef<'_>,
+) -> Result<GitWorktreeOwned, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and the repository remains live for
+    // the call; success returns a self-contained caller-owned worktree.
+    let status = unsafe {
+        ffi::git_worktree_open_from_repository(
+            core::ptr::addr_of_mut!(raw),
+            repository.as_ptr().cast_mut(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success writes a non-null complete worktree allocation.
+    unsafe { GitWorktreeOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_worktree_path
+/// Borrows the worktree's filesystem path.
+#[must_use]
+pub fn git_worktree_path<'a>(worktree: GitWorktreeRef<'a>) -> &'a CStr {
+    // SAFETY: the live worktree owns the returned non-null NUL string.
+    let path = unsafe { ffi::git_worktree_path(worktree.as_ptr()) };
+    // SAFETY: the string remains live for the worktree handle lifetime.
+    unsafe { CStr::from_ptr(path) }
+}
+
+/// Wraps: git_worktree_prune
+/// Removes the worktree's administrative data under `options`.
+pub fn git_worktree_prune(
+    worktree: &mut GitWorktreeMut<'_>,
+    options: Option<GitWorktreePruneOptionsRef<'_>>,
+) -> Result<(), i32> {
+    let options = options.map_or(core::ptr::null_mut(), |options| options.as_ptr().cast_mut());
+    // SAFETY: the worktree is live and exclusive and optional options are live
+    // and read-only for the filesystem operation.
+    let status = unsafe { ffi::git_worktree_prune(worktree.as_mut_ptr(), options) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_worktree_prune_options_init
+/// Constructs prune options for the current public ABI version.
+pub fn git_worktree_prune_options_init() -> Result<GitWorktreePruneOptions, i32> {
+    let mut options = GitWorktreePruneOptions::zeroed();
+    // SAFETY: `options` is writable layout-compatible storage and the version
+    // constant was generated from the same public headers as the function.
+    let status = unsafe {
+        ffi::git_worktree_prune_options_init(
+            core::ptr::addr_of_mut!(options).cast(),
+            ffi::GIT_WORKTREE_PRUNE_OPTIONS_VERSION,
+        )
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_worktree_unlock
+/// Unlocks a worktree, returning `false` when it was already unlocked.
+pub fn git_worktree_unlock(worktree: &mut GitWorktreeMut<'_>) -> Result<bool, i32> {
+    // SAFETY: the worktree is live and exclusive while libgit2 updates its
+    // lockfile and cached lock flag.
+    match unsafe { ffi::git_worktree_unlock(worktree.as_mut_ptr()) } {
+        0 => Ok(true),
+        1 => Ok(false),
+        error => Err(error),
+    }
+}
+
+/// Wraps: git_worktree_validate
+/// Checks that both sides of a linked worktree still exist and agree.
+pub fn git_worktree_validate(worktree: GitWorktreeRef<'_>) -> Result<(), i32> {
+    // SAFETY: the live worktree is shared and the C function only reads its
+    // paths while validating the filesystem.
+    let status = unsafe { ffi::git_worktree_validate(worktree.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
 
 #[cfg(test)]
 mod tests {
@@ -165,6 +346,21 @@ mod prune_options_tests {
             options.as_ref().flags(),
             Ok(GitWorktreePruneFlags::VALID | GitWorktreePruneFlags::WORKING_TREE)
         );
+    }
+
+    #[test]
+    fn prune_options_constructor_uses_the_current_version_and_defaults() {
+        let mut options = git_worktree_prune_options_init().expect("current version is supported");
+        // SAFETY: `options` is initialized, remains live for the handle, and
+        // this scope uses only this shared access path.
+        let options = unsafe {
+            GitWorktreePruneOptionsRef::from_ptr(
+                core::ptr::addr_of_mut!(options).cast::<ffi::git_worktree_prune_options>(),
+            )
+        }
+        .expect("the address of a stack value is non-null");
+        assert_eq!(options.version(), ffi::GIT_WORKTREE_PRUNE_OPTIONS_VERSION);
+        assert_eq!(options.flags(), Ok(GitWorktreePruneFlags::NONE));
     }
 
     #[test]

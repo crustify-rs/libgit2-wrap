@@ -1,8 +1,13 @@
 //! Safe wrappers for libgit2 transaction APIs.
 
+use core::ffi::CStr;
+use core::marker::PhantomData;
+
 use ffibox::CBox;
 
 use crate::ffi;
+use crate::reflog::GitReflogRef;
+use crate::repository::{GitRepositoryMut, GitRepositoryRef};
 
 ffibox::define_ctype!(
     /// Wraps: git_transaction
@@ -32,6 +37,26 @@ ffibox::define_ctype!(
 /// An owned libgit2 transaction.
 pub type GitTransactionOwned = CBox<GitTransaction>;
 
+/// A transaction tied to the repository pointer retained by libgit2.
+pub struct RepositoryTransaction<'repo> {
+    inner: GitTransactionOwned,
+    _repository: PhantomData<GitRepositoryRef<'repo>>,
+}
+
+impl RepositoryTransaction<'_> {
+    /// Borrows the transaction.
+    #[must_use]
+    pub fn as_ref(&self) -> GitTransactionRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the transaction exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitTransactionMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
 // SAFETY: `git_transaction_free` is the public destructor for a complete
 // transaction, releases all resources selected by its internal variant, and
 // accepts null, although `CDropped` supplies a live non-null allocation.
@@ -40,6 +65,76 @@ ffibox::impl_dropped!(
     ffi::git_transaction,
     ffi::git_transaction_free
 );
+
+/// Wraps: git_transaction_commit
+/// Applies the updates queued in a transaction.
+pub fn git_transaction_commit(transaction: &mut GitTransactionMut<'_>) -> Result<(), i32> {
+    // SAFETY: the transaction is live and exclusive and its tethered repository
+    // remains alive for every reference-database access.
+    let status = unsafe { ffi::git_transaction_commit(transaction.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_transaction_lock_ref
+/// Locks `refname` and adds it to the transaction.
+pub fn git_transaction_lock_ref(
+    transaction: &mut GitTransactionMut<'_>,
+    refname: &CStr,
+) -> Result<(), i32> {
+    // SAFETY: the transaction is live and exclusive, and libgit2 copies the
+    // live reference name into its own pool before returning.
+    let status =
+        unsafe { ffi::git_transaction_lock_ref(transaction.as_mut_ptr(), refname.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_transaction_new
+/// Creates a reference transaction and keeps its borrowed repository alive.
+pub fn git_transaction_new<'repo>(
+    repo: &'repo mut GitRepositoryMut<'_>,
+) -> Result<RepositoryTransaction<'repo>, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and the repository remains
+    // exclusively borrowed for the returned transaction's full lifetime.
+    let status = unsafe { ffi::git_transaction_new(&mut raw, repo.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success writes a non-null, complete caller-owned transaction.
+    let inner =
+        unsafe { GitTransactionOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(RepositoryTransaction {
+        inner,
+        _repository: PhantomData,
+    })
+}
+
+/// Wraps: git_transaction_remove
+/// Marks a locked reference for removal at commit time.
+pub fn git_transaction_remove(
+    transaction: &mut GitTransactionMut<'_>,
+    refname: &CStr,
+) -> Result<(), i32> {
+    // SAFETY: the transaction is live and exclusive and `refname` is a live C
+    // string used only to find the already-owned transaction node.
+    let status = unsafe { ffi::git_transaction_remove(transaction.as_mut_ptr(), refname.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_transaction_set_reflog
+/// Deep-copies `reflog` into the locked reference's transaction pool.
+pub fn git_transaction_set_reflog(
+    transaction: &mut GitTransactionMut<'_>,
+    refname: &CStr,
+    reflog: GitReflogRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: all inputs are live for the call; the transaction is exclusive
+    // and libgit2 deep-copies the reflog and its strings before returning.
+    let status = unsafe {
+        ffi::git_transaction_set_reflog(transaction.as_mut_ptr(), refname.as_ptr(), reflog.as_ptr())
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
 
 #[cfg(test)]
 mod tests {

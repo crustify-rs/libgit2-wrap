@@ -5,9 +5,11 @@ use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CBox, CCloned, define_ctype, impl_dropped};
 
-use crate::api::types::GitFileMode;
+use crate::api::types::{GitFileMode, GitObjectType};
 use crate::ffi;
-use crate::oid::{OidMut, OidRef};
+use crate::object::{GitObjectOwned, RepositoryObject};
+use crate::oid::{Oid, OidMut, OidRef};
+use crate::repository::GitRepositoryRef;
 
 define_ctype!(
     /// Wraps: git_tree
@@ -304,6 +306,175 @@ impl TreeUpdateMut<'_> {
         // `GitFileMode` only contains values published for the C field.
         unsafe { addr_of_mut!((*self.as_mut_ptr()).filemode).write(filemode.into()) }
     }
+}
+
+/// Wraps: git_tree_entry_cmp
+/// Compares two entries using Git's tree ordering.
+#[must_use]
+pub fn git_tree_entry_cmp(
+    first: GitTreeEntryRef<'_>,
+    second: GitTreeEntryRef<'_>,
+) -> core::cmp::Ordering {
+    // SAFETY: both entries are live shared borrows for this read-only call.
+    let result = unsafe { ffi::git_tree_entry_cmp(first.as_ptr(), second.as_ptr()) };
+    result.cmp(&0)
+}
+
+/// Wraps: git_tree_entry_filemode
+/// Returns the normalized file mode of an entry.
+#[must_use]
+pub fn git_tree_entry_filemode(entry: GitTreeEntryRef<'_>) -> GitFileMode {
+    // SAFETY: `entry` is a live shared borrow and the getter only reads it.
+    let mode = unsafe { ffi::git_tree_entry_filemode(entry.as_ptr()) };
+    GitFileMode::from_raw(mode).expect("a normalized tree entry has a published file mode")
+}
+
+/// Wraps: git_tree_entry_filemode_raw
+/// Returns the unnormalized mode when it is a published file-mode value.
+pub fn git_tree_entry_filemode_raw(
+    entry: GitTreeEntryRef<'_>,
+) -> Result<GitFileMode, ffi::git_filemode_t> {
+    // SAFETY: `entry` is a live shared borrow and the getter only reads it.
+    let mode = unsafe { ffi::git_tree_entry_filemode_raw(entry.as_ptr()) };
+    GitFileMode::from_raw(mode).ok_or(mode)
+}
+
+/// Wraps: git_tree_entry_id
+/// Borrows the entry's inline object ID.
+#[must_use]
+pub fn git_tree_entry_id<'a>(entry: GitTreeEntryRef<'a>) -> OidRef<'a> {
+    // SAFETY: the live entry owns the non-null inline OID returned here.
+    let oid = unsafe { ffi::git_tree_entry_id(entry.as_ptr()) }.cast_mut();
+    // SAFETY: an inline field remains live for the entry handle's lifetime.
+    unsafe { OidRef::from_ptr(oid) }.expect("a tree entry has an inline OID")
+}
+
+/// Wraps: git_tree_entry_name
+/// Borrows the entry's filename.
+#[must_use]
+pub fn git_tree_entry_name<'a>(entry: GitTreeEntryRef<'a>) -> &'a CStr {
+    // SAFETY: the live entry owns a non-null NUL-terminated filename.
+    let name = unsafe { ffi::git_tree_entry_name(entry.as_ptr()) };
+    // SAFETY: the filename remains live for the entry handle's lifetime.
+    unsafe { CStr::from_ptr(name) }
+}
+
+/// Wraps: git_tree_entry_to_object
+/// Looks up the object named by an entry and ties it to `repository`.
+pub fn git_tree_entry_to_object<'repo>(
+    repository: GitRepositoryRef<'repo>,
+    entry: GitTreeEntryRef<'_>,
+) -> Result<RepositoryObject<'repo>, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and both inputs are live. Success
+    // produces one owned object reference backed by `repository`.
+    let status = unsafe {
+        ffi::git_tree_entry_to_object(
+            core::ptr::addr_of_mut!(raw),
+            repository.as_ptr().cast_mut(),
+            entry.as_ptr(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success writes one non-null fully initialized owned object.
+    let object = unsafe { GitObjectOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(RepositoryObject::from_owned(object, repository))
+}
+
+/// Wraps: git_tree_entry_type
+/// Returns the kind of object named by an entry.
+#[must_use]
+pub fn git_tree_entry_type(entry: GitTreeEntryRef<'_>) -> GitObjectType {
+    // SAFETY: the live shared entry is read only by this getter.
+    let kind = unsafe { ffi::git_tree_entry_type(entry.as_ptr()) };
+    GitObjectType::from_raw(kind).expect("a tree entry names a published object kind")
+}
+
+/// Wraps: git_treebuilder_clear
+/// Removes and frees every entry in a builder.
+pub fn git_treebuilder_clear(builder: &mut TreeBuilderMut<'_>) -> Result<(), i32> {
+    // SAFETY: the builder is live and exclusively borrowed while its owned
+    // entry map is cleared.
+    let status = unsafe { ffi::git_treebuilder_clear(builder.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_treebuilder_entrycount
+/// Returns the number of entries in a builder.
+#[must_use]
+pub fn git_treebuilder_entrycount(builder: TreeBuilderRef<'_>) -> usize {
+    // SAFETY: the C body only reads the live builder's map; restoring
+    // mutability satisfies its historical declaration without writing.
+    unsafe { ffi::git_treebuilder_entrycount(builder.as_ptr().cast_mut()) }
+}
+
+/// Wraps: git_treebuilder_get
+/// Borrows the builder-owned entry named by `filename`.
+#[must_use]
+pub fn git_treebuilder_get<'a>(
+    builder: TreeBuilderRef<'a>,
+    filename: &CStr,
+) -> Option<GitTreeEntryRef<'a>> {
+    // SAFETY: both inputs are live for the call; a non-null result is owned by
+    // the builder and remains live for its shared handle lifetime.
+    let entry = unsafe { ffi::git_treebuilder_get(builder.as_ptr().cast_mut(), filename.as_ptr()) }
+        .cast_mut();
+    // SAFETY: the non-null result follows the builder-tied contract above.
+    unsafe { GitTreeEntryRef::from_ptr(entry) }
+}
+
+/// Wraps: git_treebuilder_insert
+/// Inserts or updates an entry and borrows the builder-owned result.
+pub fn git_treebuilder_insert<'a>(
+    builder: &'a mut TreeBuilderMut<'_>,
+    filename: &CStr,
+    id: OidRef<'_>,
+    filemode: GitFileMode,
+) -> Result<GitTreeEntryRef<'a>, i32> {
+    let mut entry = core::ptr::null();
+    // SAFETY: the output slot is writable; the builder is live and exclusive;
+    // the filename and OID are live for the call and the mode is validated.
+    let status = unsafe {
+        ffi::git_treebuilder_insert(
+            core::ptr::addr_of_mut!(entry),
+            builder.as_mut_ptr(),
+            filename.as_ptr(),
+            id.as_ptr(),
+            filemode.into(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success writes the non-null builder-owned entry, and the return
+    // lifetime holds the exclusive builder reborrow against invalidation.
+    unsafe { GitTreeEntryRef::from_ptr(entry.cast_mut()) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_treebuilder_remove
+/// Removes and frees the builder entry named by `filename`.
+pub fn git_treebuilder_remove(
+    builder: &mut TreeBuilderMut<'_>,
+    filename: &CStr,
+) -> Result<(), i32> {
+    // SAFETY: the builder is live and exclusive and the filename is a live C
+    // string retained only for the lookup.
+    let status = unsafe { ffi::git_treebuilder_remove(builder.as_mut_ptr(), filename.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_treebuilder_write
+/// Writes the builder as a tree object and returns its object ID.
+pub fn git_treebuilder_write(builder: &mut TreeBuilderMut<'_>) -> Result<Oid, i32> {
+    let mut oid = Oid::zeroed();
+    // SAFETY: `oid` is writable layout-compatible storage and the builder is
+    // live and exclusively borrowed for its write cache and repository use.
+    let status = unsafe {
+        ffi::git_treebuilder_write(core::ptr::addr_of_mut!(oid).cast(), builder.as_mut_ptr())
+    };
+    if status == 0 { Ok(oid) } else { Err(status) }
 }
 
 #[cfg(test)]

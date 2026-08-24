@@ -48,6 +48,17 @@ impl RepositoryObject<'_> {
     }
 }
 
+impl<'repo> RepositoryObject<'repo> {
+    /// Attaches an already-owned object to the repository that keeps it valid.
+    pub(crate) fn from_owned(inner: GitObjectOwned, repository: GitRepositoryRef<'repo>) -> Self {
+        let _ = repository;
+        Self {
+            inner,
+            _repository: PhantomData,
+        }
+    }
+}
+
 // SAFETY: `git_object_free` consumes one reference to a fully initialized
 // `git_object`; its matching reference-count decrement releases the allocation
 // only when the final reference is gone. `GitObject` is transparent over the

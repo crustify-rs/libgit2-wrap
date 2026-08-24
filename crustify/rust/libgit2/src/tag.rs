@@ -1,10 +1,15 @@
 //! Safe wrappers for libgit2 tag APIs.
 
+use core::ffi::CStr;
 use core::ptr::NonNull;
 
-use ffibox::{CBox, CCloned, define_ctype, impl_dropped};
+use ffibox::{CBox, CCloned, CVal, define_ctype, impl_dropped};
 
 use crate::ffi;
+use crate::object::GitObjectRef;
+use crate::oid::Oid;
+use crate::repository::GitRepositoryMut;
+use crate::strarray::GitStrArray;
 
 define_ctype!(
     /// Wraps: git_tag
@@ -61,6 +66,67 @@ pub fn git_tag_name_is_valid(name: Option<&core::ffi::CStr>) -> Result<bool, i32
     } else {
         Err(status)
     }
+}
+
+/// Wraps: git_tag_create_lightweight
+/// Creates or replaces a lightweight tag and returns its object ID.
+pub fn git_tag_create_lightweight(
+    repo: &mut GitRepositoryMut<'_>,
+    tag_name: &CStr,
+    target: GitObjectRef<'_>,
+    force: bool,
+) -> Result<Oid, i32> {
+    let mut oid = Oid::zeroed();
+    // SAFETY: the output is writable layout-compatible storage; the repository
+    // is live and exclusive; the string and target are live for this call.
+    let status = unsafe {
+        ffi::git_tag_create_lightweight(
+            core::ptr::addr_of_mut!(oid).cast(),
+            repo.as_mut_ptr(),
+            tag_name.as_ptr(),
+            target.as_ptr(),
+            i32::from(force),
+        )
+    };
+    if status == 0 { Ok(oid) } else { Err(status) }
+}
+
+/// Wraps: git_tag_delete
+/// Deletes the tag reference named by `tag_name`.
+pub fn git_tag_delete(repo: &mut GitRepositoryMut<'_>, tag_name: &CStr) -> Result<(), i32> {
+    // SAFETY: the repository is live and exclusive and the name is a live C
+    // string retained only for this synchronous call.
+    let status = unsafe { ffi::git_tag_delete(repo.as_mut_ptr(), tag_name.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_tag_list
+/// Returns all tag names as an owned string array.
+pub fn git_tag_list(repo: &mut GitRepositoryMut<'_>) -> Result<CVal<GitStrArray>, i32> {
+    let mut names = GitStrArray::new();
+    let status = {
+        let mut output = names.as_mut();
+        // SAFETY: `output` is an empty exclusive output header and the
+        // repository is live and exclusive for traversal and lazy lookup.
+        unsafe { ffi::git_tag_list(output.as_mut_ptr(), repo.as_mut_ptr()) }
+    };
+    if status == 0 { Ok(names) } else { Err(status) }
+}
+
+/// Wraps: git_tag_list_match
+/// Returns tag names matching the standard `fnmatch` pattern.
+pub fn git_tag_list_match(
+    repo: &mut GitRepositoryMut<'_>,
+    pattern: &CStr,
+) -> Result<CVal<GitStrArray>, i32> {
+    let mut names = GitStrArray::new();
+    let status = {
+        let mut output = names.as_mut();
+        // SAFETY: `output` is an empty exclusive output header; `pattern` is a
+        // live C string and the repository is live for the traversal.
+        unsafe { ffi::git_tag_list_match(output.as_mut_ptr(), pattern.as_ptr(), repo.as_mut_ptr()) }
+    };
+    if status == 0 { Ok(names) } else { Err(status) }
 }
 
 #[cfg(test)]
