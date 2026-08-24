@@ -14,6 +14,10 @@ ffibox::define_ctype!(
     ///
     /// Both strings point into the array's private trailer block. A borrowed
     /// handle must therefore never outlive the array that produced it.
+    ///
+    /// Neither string is nullable: `git_message_trailers` sets both on every
+    /// descriptor it produces, and the getters below rely on it. A handle must
+    /// address such a descriptor, not a zeroed one.
     GitMessageTrailer,
     GitMessageTrailerRef,
     GitMessageTrailerMut,
@@ -132,6 +136,12 @@ mod tests {
 ffibox::define_ctype!(
     /// Wraps: git_message_trailer_array
     /// An inline header that owns a trailer descriptor array and its strings.
+    ///
+    /// The header itself is the caller's; `git_message_trailers` fills it with
+    /// two coordinated allocations, and `git_message_trailer_array_free`
+    /// releases both without touching the header, which is what [`CVal`]
+    /// models. A handle must address a header whose `trailers` covers `count`
+    /// initialized descriptors, all-zero being the valid empty state.
     GitMessageTrailerArray,
     GitMessageTrailerArrayRef,
     GitMessageTrailerArrayMut,

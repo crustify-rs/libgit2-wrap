@@ -341,6 +341,14 @@ ffibox::impl_dropped!(GitIndex, ffi::git_index, ffi::git_index_free);
 ffibox::define_ctype!(
     /// Wraps: git_index_entry
     /// The public, layout-compatible representation of one index entry.
+    ///
+    /// The struct never owns anything, in either of its two roles. As
+    /// caller-built input it is a by-value record whose `path` the caller
+    /// keeps alive: `git_index_add` copies the string before returning. As an
+    /// entry read back out of an index, it is the header of an
+    /// `entry_internal` whose `path` points into that allocation's trailing
+    /// storage, so the entry and its string live and die with the index.
+    /// Either way the borrow outlives no handle taken over it.
     IndexEntry,
     IndexEntryRef,
     IndexEntryMut,

@@ -955,6 +955,12 @@ impl Not for MergeFileFlags {
 ffibox::define_ctype!(
     /// Wraps: git_merge_file_options
     /// Borrowing options that control a file-level merge.
+    ///
+    /// The value owns nothing: `merge_file_normalize_opts` shallow-copies the
+    /// whole struct, labels included, and no consumer releases them, so a
+    /// non-null label must outlive every use of the options. `version` is
+    /// declarative here — only `git_merge_file_options_init` reads it, to pick
+    /// the defaults it writes back; the merge entry points never check it.
     MergeFileOptions,
     MergeFileOptionsRef,
     MergeFileOptionsMut,

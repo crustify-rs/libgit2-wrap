@@ -12,6 +12,13 @@ ffibox::define_ctype!(
     /// Wraps: git_odb_stream
     /// A layout-compatible polymorphic stream supplied by an object-database
     /// backend.
+    ///
+    /// Only the write path fills the header in full: `git_odb_open_wstream`
+    /// assigns `oid_type`, `declared_size`, `received_bytes` and `hash_ctx`
+    /// after the backend constructor has set `mode` to `GIT_STREAM_WRONLY`.
+    /// `git_odb_open_rstream` assigns none of them, so a read stream keeps the
+    /// zeroes its concrete allocation was calloc'd with. The validating
+    /// getters below report that state instead of inventing a value for it.
     GitOdbStream,
     GitOdbStreamRef,
     GitOdbStreamMut,
@@ -85,12 +92,25 @@ pub enum GitOdbStreamError {
     /// A read callback claimed more initialized bytes than the supplied
     /// destination can hold.
     InvalidReadCount(usize),
+    /// Finalization was requested before the stream received the byte count
+    /// it declared, which `git_odb_stream_finalize_write` also refuses.
+    IncompleteWrite {
+        /// The stream's `received_bytes` field.
+        received: ffi::git_object_size_t,
+        /// The stream's `declared_size` field.
+        declared: ffi::git_object_size_t,
+    },
 }
 
 impl GitOdbStreamRef<'_> {
     /// Wraps: git_odb_stream.mode
     /// Returns the stream's published capability bits, or `None` if C stored
     /// an unknown or empty mode.
+    ///
+    /// `None` is the normal answer for a stream from `git_odb_open_rstream`:
+    /// no read-stream constructor in libgit2 assigns `mode`, so the field
+    /// keeps its zero. Only the write-stream constructors store
+    /// `GIT_STREAM_WRONLY`.
     #[must_use]
     pub fn mode(&self) -> Option<GitOdbStreamMode> {
         let stream = self.as_ptr();
@@ -102,6 +122,10 @@ impl GitOdbStreamRef<'_> {
 
     /// Wraps: git_odb_stream.oid_type
     /// Returns the object-ID algorithm after validating the C value.
+    ///
+    /// An error is the normal answer for a read stream: `git_oid_t` has no
+    /// zero variant and only `git_odb_open_wstream` copies the database's
+    /// `oid_type` into the header.
     pub fn oid_type(&self) -> Result<OidType, InvalidOidType> {
         let stream = self.as_ptr();
         // SAFETY: `stream` comes from this live shared handle; raw-place
@@ -125,6 +149,11 @@ impl GitOdbStreamRef<'_> {
 
     /// Wraps: git_odb_stream.received_bytes
     /// Returns the number of bytes accepted by this stream so far.
+    ///
+    /// The frontend `git_odb_stream_write` maintains this count. Dispatching
+    /// [`GitOdbStreamMut::write`] does not, so a caller driving the field
+    /// callbacks itself must maintain it with
+    /// [`GitOdbStreamMut::set_received_bytes`].
     #[must_use]
     pub fn received_bytes(&self) -> ffi::git_object_size_t {
         let stream = self.as_ptr();
@@ -148,6 +177,8 @@ impl GitOdbStreamRef<'_> {
 
     /// Wraps: git_odb_stream.declared_size
     /// Returns the byte count promised when the write stream was opened.
+    ///
+    /// Zero on a read stream, which never has a promised size.
     #[must_use]
     pub fn declared_size(&self) -> ffi::git_object_size_t {
         let stream = self.as_ptr();
@@ -190,6 +221,14 @@ impl GitOdbStreamMut<'_> {
 
     /// Wraps: git_odb_stream.write
     /// Dispatches the concrete stream's synchronous write callback.
+    ///
+    /// This is the backend callback alone. The frontend `git_odb_stream_write`
+    /// additionally hashes the bytes into `hash_ctx`, advances
+    /// `received_bytes` and rejects a write past `declared_size`; none of that
+    /// happens here. A caller driving the field callbacks on a frontend write
+    /// stream must keep the count itself with
+    /// [`set_received_bytes`](Self::set_received_bytes), or the object id
+    /// computed by `git_odb_stream_finalize_write` will not match the bytes.
     pub fn write(&mut self, buffer: &[u8]) -> Result<(), GitOdbStreamError> {
         let stream = self.as_mut_ptr();
         // SAFETY: this exclusive handle addresses a live stream; raw-place
@@ -216,6 +255,10 @@ impl GitOdbStreamMut<'_> {
 
     /// Wraps: git_odb_stream.read
     /// Dispatches the concrete stream's synchronous read callback.
+    ///
+    /// Returns the number of bytes the callback reported writing into
+    /// `buffer`. The frontend `git_odb_stream_read` is this dispatch and
+    /// nothing else, so the two agree.
     pub fn read(&mut self, buffer: &mut [u8]) -> Result<usize, GitOdbStreamError> {
         let stream = self.as_mut_ptr();
         // SAFETY: this exclusive handle addresses a live stream; raw-place
@@ -245,8 +288,24 @@ impl GitOdbStreamMut<'_> {
     }
 
     /// Wraps: git_odb_stream.finalize_write
-    /// Dispatches the concrete stream's synchronous finalization callback.
+    /// Dispatches the concrete stream's synchronous finalization callback
+    /// once the stream has received the byte count it declared.
+    ///
+    /// The length equality is a precondition of the callback, not a courtesy:
+    /// `init_fake_wstream` hands the backend a `git__malloc` buffer of
+    /// `declared_size` bytes and `fake_wstream__fwrite` forwards all of them,
+    /// so finalizing a short stream makes libgit2 read heap bytes nothing ever
+    /// wrote. `git_odb_stream_finalize_write` refuses that case, and so does
+    /// this dispatcher, with [`GitOdbStreamError::IncompleteWrite`].
     pub fn finalize_write(&mut self, oid: OidRef<'_>) -> Result<(), GitOdbStreamError> {
+        let (received, declared) = {
+            let shared = self.as_ref();
+            (shared.received_bytes(), shared.declared_size())
+        };
+        if received != declared {
+            return Err(GitOdbStreamError::IncompleteWrite { received, declared });
+        }
+
         let stream = self.as_mut_ptr();
         // SAFETY: this exclusive handle addresses a live stream; raw-place
         // projection reads its initialized callback slot without a reference.
@@ -286,9 +345,13 @@ impl GitOdbStreamMut<'_> {
 
 /// Wraps: git_odb_stream.free
 // SAFETY: adopting `GitOdbStreamOwned` requires a fully constructed stream
-// allocation with its concrete destructor installed. The public free routine
-// first disposes the stream-owned hash context and then invokes that destructor
-// exactly once; `CBox` never accesses the allocation afterward.
+// allocation with a non-null concrete destructor installed, which
+// `git_odb_stream_free` invokes unconditionally, and with `hash_ctx` either
+// null or one libgit2-allocated `git_hash_ctx`, which it runs
+// `git_hash_ctx_cleanup` and `git__free` over first. Both hold for every
+// stream produced by `git_odb_open_wstream` or `git_odb_open_rstream`. The
+// destructor runs exactly once; `CBox` never accesses the allocation
+// afterward.
 unsafe impl ffibox::CDropped for GitOdbStream {
     unsafe fn c_drop(stream: NonNull<Self>) {
         // SAFETY: the `CDropped` contract supplies one live, fully constructed,
@@ -420,6 +483,10 @@ mod tests {
         assert_eq!(&read[..3], b"abc");
         assert_eq!(stream.write(b"hello"), Ok(()));
         assert_eq!(WRITTEN.load(Ordering::SeqCst), 5);
+        // The field-level dispatcher does not keep the frontend's count, so
+        // the caller advances it before the stream may be finalized.
+        assert_eq!(stream.as_ref().received_bytes(), 2);
+        stream.set_received_bytes(stream.as_ref().declared_size());
 
         let mut oid = ffi::git_oid {
             id: [0; 32],
@@ -449,6 +516,68 @@ mod tests {
         );
         assert_eq!(
             stream.write(&[]),
+            Err(GitOdbStreamError::Unsupported(GitOdbStreamOperation::Write))
+        );
+    }
+
+    #[test]
+    fn finalizing_a_short_stream_is_refused_without_dispatching() {
+        FINALIZED.store(0, Ordering::SeqCst);
+        let mut raw = test_stream();
+        // SAFETY: `raw` is initialized and exclusively borrowed for the
+        // handle's lifetime.
+        let mut stream = unsafe { GitOdbStreamMut::from_ptr(&raw mut raw) }.unwrap();
+
+        let mut oid = ffi::git_oid {
+            id: [0; 32],
+            type_: ffi::git_oid_t_GIT_OID_SHA1 as u8,
+        };
+        oid.id[0] = 7;
+        // SAFETY: `oid` is initialized and stays live and shared below.
+        let oid = unsafe { OidRef::from_ptr(&raw mut oid) }.unwrap();
+
+        // `test_stream` declares nine bytes and has received two, exactly the
+        // state `git_odb_stream_finalize_write` rejects.
+        assert_eq!(
+            stream.finalize_write(oid),
+            Err(GitOdbStreamError::IncompleteWrite {
+                received: 2,
+                declared: 9,
+            })
+        );
+        assert_eq!(FINALIZED.load(Ordering::SeqCst), 0);
+
+        stream.set_received_bytes(9);
+        assert_eq!(stream.finalize_write(oid), Ok(()));
+        assert_eq!(FINALIZED.load(Ordering::SeqCst), 7);
+    }
+
+    #[test]
+    fn a_read_stream_header_reports_the_zeroes_libgit2_leaves_in_it() {
+        // `git_odb_open_rstream` fills in only `backend`, `hash_ctx` and the
+        // callbacks: no read-stream constructor assigns `mode`, `oid_type`,
+        // `declared_size` or `received_bytes`, so they keep the calloc'd zero.
+        let mut raw = test_stream();
+        raw.mode = 0;
+        raw.oid_type = 0;
+        raw.declared_size = 0;
+        raw.received_bytes = 0;
+        raw.write = None;
+        raw.finalize_write = None;
+        // SAFETY: `raw` is initialized and exclusively borrowed for the
+        // handle's lifetime.
+        let mut stream = unsafe { GitOdbStreamMut::from_ptr(&raw mut raw) }.unwrap();
+
+        assert_eq!(stream.as_ref().mode(), None);
+        assert!(stream.as_ref().oid_type().is_err());
+        assert_eq!(stream.as_ref().declared_size(), 0);
+        assert_eq!(stream.as_ref().received_bytes(), 0);
+        assert!(stream.as_ref().has_backend());
+
+        let mut read = [0; 4];
+        assert_eq!(stream.read(&mut read), Ok(3));
+        assert_eq!(
+            stream.write(b"x"),
             Err(GitOdbStreamError::Unsupported(GitOdbStreamOperation::Write))
         );
     }

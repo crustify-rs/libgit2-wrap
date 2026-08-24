@@ -14,6 +14,11 @@ ffibox::define_ctype!(
     /// `git_odb_free`; libgit2 does not publish an operation for acquiring a
     /// second count directly, so the owner intentionally does not implement
     /// `Clone`.
+    ///
+    /// A database reached through `git_repository_odb` additionally carries
+    /// the repository as its refcount owner, and `GIT_REFCOUNT_DEC` frees
+    /// nothing while an owner is recorded. Dropping such a handle releases the
+    /// count only; the repository still frees the database.
     GitOdb,
     GitOdbRef,
     GitOdbMut,
