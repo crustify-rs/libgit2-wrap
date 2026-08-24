@@ -962,6 +962,13 @@ mod diff_tests {
 ffibox::define_ctype!(
     /// Wraps: git_diff_binary_file
     /// One owned, compressed side of a binary diff.
+    ///
+    /// The header owns its `data` span: every libgit2 producer allocates the
+    /// deflated bytes through the configured allocator and releases them with
+    /// `git__free`, leaving the field null when the side carries no binary
+    /// content. Borrowing a header through `from_ptr` therefore also asserts
+    /// that invariant, which [`DiffBinaryFileMut::take_data`] and
+    /// [`DiffBinaryFileMut::set_data`] rely on to move the allocation.
     DiffBinaryFile,
     DiffBinaryFileRef,
     DiffBinaryFileMut,
@@ -1241,34 +1248,39 @@ mod diff_file_tests {
 
     #[test]
     fn binary_file_handles_read_and_update_fields() {
-        let bytes = b"compressed";
+        // An empty side owns nothing, so this header satisfies the type's
+        // data-ownership invariant without holding a libgit2 allocation.
         let mut raw = ffi::git_diff_binary_file {
             type_: ffi::git_diff_binary_t_GIT_DIFF_BINARY_LITERAL,
-            data: bytes.as_ptr().cast(),
-            datalen: bytes.len(),
+            data: core::ptr::null(),
+            datalen: 0,
             inflatedlen: 42,
         };
 
         // SAFETY: `raw` is initialized and exclusively borrowed for the
-        // handle's lifetime. Its data pointer remains live and immutable.
+        // handle's lifetime.
         let mut file = unsafe { DiffBinaryFileMut::from_ptr(&raw mut raw) }
             .expect("the address of a stack value is non-null");
         assert_eq!(file.as_ref().kind(), Ok(DiffBinaryKind::Literal));
-        assert_eq!(file.as_ref().data_len(), bytes.len());
+        assert!(file.as_ref().data().is_none());
+        assert_eq!(file.as_ref().data_len(), 0);
         assert_eq!(file.as_ref().inflated_len(), 42);
-        let mut copied = [0; 10];
-        assert!(
-            file.as_ref()
-                .data()
-                .expect("non-null data")
-                .copy_to_slice(&mut copied)
-        );
-        assert_eq!(&copied, bytes);
 
         file.set_kind(DiffBinaryKind::Delta);
         file.set_inflated_len(84);
         assert_eq!(file.as_ref().kind(), Ok(DiffBinaryKind::Delta));
         assert_eq!(file.as_ref().inflated_len(), 84);
+
+        let unknown = ffi::git_diff_binary_t_GIT_DIFF_BINARY_DELTA + 1;
+        raw.type_ = unknown;
+        // SAFETY: the previous handle is dead and `raw` is still a live,
+        // initialized header with no owned data.
+        let file = unsafe { DiffBinaryFileRef::from_ptr(&raw mut raw) }
+            .expect("the address of a stack value is non-null");
+        assert_eq!(
+            file.kind().map_err(InvalidDiffBinaryKind::value),
+            Err(unknown)
+        );
     }
 
     #[test]
@@ -1302,6 +1314,15 @@ mod diff_file_tests {
             .expect("the address of a stack value is non-null");
         file.set_data(Some(owned));
         assert_eq!(file.as_ref().data_len(), source.len());
+
+        let mut copied = [0; 4];
+        assert!(
+            file.as_ref()
+                .data()
+                .expect("non-null data")
+                .copy_to_slice(&mut copied)
+        );
+        assert_eq!(&copied, source);
 
         let detached = file.take_data().expect("the installed allocation");
         assert_eq!(detached.as_slice(), source);

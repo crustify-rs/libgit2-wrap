@@ -152,7 +152,9 @@ ffibox::define_ctype!(
     /// Each [`GitIndexOwned`] represents one reference count and releases it
     /// with `git_index_free`. Libgit2 does not publish an operation for
     /// acquiring another count, so owning handles intentionally do not
-    /// implement `Clone`.
+    /// implement `Clone`: the internal `git_index_snapshot_new` is the only
+    /// routine that takes an extra count, and it is not a duplicator, since it
+    /// also registers a reader that `git_index_snapshot_release` must retire.
     GitIndex,
     GitIndexRef,
     GitIndexMut,
@@ -163,9 +165,12 @@ ffibox::define_ctype!(
 pub type GitIndexOwned = CBox<GitIndex>;
 
 // SAFETY: `git_index_free` consumes exactly one reference to a complete
-// `git_index`. On the final count it disposes the index-owned fields and frees
-// the allocation; it accepts null, although `CBox` always supplies a live
-// non-null object exactly once.
+// `git_index`. An index never takes a refcount owner, so the final count
+// disposes the index-owned fields and frees the allocation, except while an
+// internal snapshot reader is still registered — a state its taker balances
+// before releasing its own count, so it cannot be reached through this owner.
+// The C function accepts null, although `CBox` always supplies a live non-null
+// object exactly once.
 ffibox::impl_dropped!(GitIndex, ffi::git_index, ffi::git_index_free);
 
 ffibox::define_ctype!(

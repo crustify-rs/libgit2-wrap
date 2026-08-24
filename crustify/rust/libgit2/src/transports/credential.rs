@@ -43,11 +43,30 @@ impl GitCredentialType {
     );
 
     /// Converts a C bit set if it contains only published credential kinds.
+    ///
+    /// This is the mask form, as carried by a transport's allowed-types
+    /// argument. For the single kind recorded in a credential header, use
+    /// [`from_bit`](Self::from_bit).
     pub const fn from_bits(bits: ffi::git_credential_t) -> Option<Self> {
         if bits & !Self::ALL.0 == 0 {
             Some(Self(bits))
         } else {
             None
+        }
+    }
+
+    /// Converts a C value holding exactly one published credential kind.
+    ///
+    /// A `git_credential` header records the single kind its concrete subtype
+    /// implements: every libgit2 constructor assigns one `GIT_CREDENTIAL_*`
+    /// constant, and every consumer either switches on the exact value or
+    /// tests it as a single bit against an allowed-types mask. An empty or
+    /// multi-bit value is a malformed header rather than a credential of
+    /// several kinds, so it is rejected here.
+    pub const fn from_bit(bits: ffi::git_credential_t) -> Option<Self> {
+        match Self::from_bits(bits) {
+            Some(kind) if kind.0.is_power_of_two() => Some(kind),
+            _ => None,
         }
     }
 
@@ -140,6 +159,32 @@ mod tests {
         assert_eq!(GitCredentialType::from_bits(1 << 31), None);
         assert!(GitCredentialType::EMPTY.is_empty());
     }
+
+    #[test]
+    fn a_header_kind_must_be_exactly_one_published_bit() {
+        for kind in [
+            GitCredentialType::USERPASS_PLAINTEXT,
+            GitCredentialType::SSH_KEY,
+            GitCredentialType::SSH_CUSTOM,
+            GitCredentialType::DEFAULT,
+            GitCredentialType::SSH_INTERACTIVE,
+            GitCredentialType::USERNAME,
+            GitCredentialType::SSH_MEMORY,
+        ] {
+            assert_eq!(GitCredentialType::from_bit(kind.bits()), Some(kind));
+        }
+
+        // A mask of several kinds describes what a transport accepts, not
+        // what one header records.
+        let mask = GitCredentialType::USERNAME | GitCredentialType::SSH_KEY;
+        assert_eq!(GitCredentialType::from_bits(mask.bits()), Some(mask));
+        assert_eq!(GitCredentialType::from_bit(mask.bits()), None);
+        assert_eq!(
+            GitCredentialType::from_bit(GitCredentialType::EMPTY.bits()),
+            None
+        );
+        assert_eq!(GitCredentialType::from_bit(1 << 31), None);
+    }
 }
 
 ffibox::define_ctype!(
@@ -170,13 +215,17 @@ impl GitCredentialRef<'_> {
     }
 
     /// Field: git_credential.credtype
-    /// Returns the credential kind when its bit set is published by libgit2.
+    /// Returns the single credential kind this header records.
+    ///
+    /// `None` reports a malformed header: the field carries exactly one
+    /// published `GIT_CREDENTIAL_*` value, never an empty or combined bit
+    /// set. See [`GitCredentialType::from_bit`].
     #[must_use]
     pub fn credential_type(&self) -> Option<GitCredentialType> {
         // SAFETY: this live handle permits a raw-place scalar read without
         // forming a reference to the C-visible credential.
         let credtype = unsafe { addr_of!((*self.as_ptr()).credtype).read() };
-        GitCredentialType::from_bits(credtype)
+        GitCredentialType::from_bit(credtype)
     }
 }
 
@@ -229,6 +278,15 @@ mod credential_tests {
             Some(GitCredentialType::USERNAME)
         );
         assert!(credential.has_deallocator());
+
+        // A header carrying several kinds at once is malformed: libgit2's
+        // consumers switch on the exact value.
+        raw.credtype = (GitCredentialType::USERNAME | GitCredentialType::SSH_KEY).bits();
+        // SAFETY: the previous handle is dead and `raw` remains a live
+        // initialized header.
+        let credential = unsafe { GitCredentialRef::from_ptr(&raw mut raw) }
+            .expect("the address of a local credential is non-null");
+        assert_eq!(credential.credential_type(), None);
 
         raw.credtype = 1 << 31;
         raw.free = None;

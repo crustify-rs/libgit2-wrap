@@ -561,7 +561,7 @@
   {
    "name": "git_credential",
    "defined_in": "include/git2/sys/credential.h",
-   "_comment_agent": "git_credential is a polymorphic public base header. Every fully constructed credential installs a non-null immutable finalizer callback with static code lifetime; the callback frees the concrete allocation and any secret-bearing fields. credtype is a by-value bit tag.",
+   "_comment_agent": "git_credential is a polymorphic public base header. Every fully constructed credential installs a non-null immutable finalizer callback with static code lifetime; the callback frees the concrete allocation and any secret-bearing fields. credtype is a by-value tag holding exactly one published GIT_CREDENTIAL_* kind: every constructor assigns a single constant, and every consumer either switches on the exact value or tests it as one bit against an allowed-types mask, so an empty or combined value is a malformed header rather than a multi-kind credential.",
    "fields": [
     {
      "name": "free",
