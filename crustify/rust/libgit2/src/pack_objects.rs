@@ -1,8 +1,17 @@
 //! Safe wrappers for libgit2 pack objects APIs.
 
+use core::ffi::{CStr, c_void};
+use core::marker::PhantomData;
+use core::ptr::addr_of_mut;
+
 use ffibox::CBox;
 
+use crate::api::buffer::GitBufMut;
 use crate::ffi;
+use crate::oid::OidRef;
+use crate::pack::{GitPackbuilderForeachCallback, GitPackbuilderProgressCallback};
+use crate::repository::GitRepositoryRef;
+use crate::revwalk::GitRevwalkMut;
 
 ffibox::define_ctype!(
     /// Wraps: git_packbuilder
@@ -19,6 +28,25 @@ ffibox::define_ctype!(
 
 /// An owned libgit2 packfile builder.
 pub type GitPackbuilderOwned = CBox<GitPackbuilder>;
+
+/// A packbuilder tied to the repository pointer retained by libgit2.
+pub struct RepositoryPackbuilder<'repo> {
+    inner: GitPackbuilderOwned,
+    progress: Option<Box<Box<dyn GitPackbuilderProgressCallback + Send>>>,
+    _repository: PhantomData<GitRepositoryRef<'repo>>,
+}
+
+impl RepositoryPackbuilder<'_> {
+    /// Borrows the builder.
+    pub fn as_ref(&self) -> GitPackbuilderRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the builder exclusively.
+    pub fn as_mut(&mut self) -> GitPackbuilderMut<'_> {
+        self.inner.as_mut()
+    }
+}
 
 // SAFETY: `git_packbuilder_free` is the public destructor for a fully
 // initialized, libgit2-allocated `git_packbuilder`. It releases the allocation
@@ -91,4 +119,240 @@ mod tests {
         // the cast recovers the allocation's original type.
         drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_packbuilder>>()) });
     }
+}
+
+/// Wraps: git_packbuilder_foreach
+/// Streams the completed pack through a synchronous callback.
+pub fn git_packbuilder_foreach<C>(
+    builder: &mut GitPackbuilderMut<'_>,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: GitPackbuilderForeachCallback,
+{
+    unsafe extern "C" fn trampoline<C: GitPackbuilderForeachCallback>(
+        buffer: *mut c_void,
+        size: usize,
+        payload: *mut c_void,
+    ) -> i32 {
+        if buffer.is_null() || payload.is_null() {
+            return -1;
+        }
+        // SAFETY: the outer wrapper passes a live exclusive callback pointer
+        // and libgit2 supplies a transient writable run of `size` bytes.
+        let callback = unsafe { &mut *payload.cast::<C>() };
+        // SAFETY: as above; the slice is confined to this callback invocation.
+        let bytes = unsafe { core::slice::from_raw_parts_mut(buffer.cast::<u8>(), size) };
+        callback.call(bytes)
+    }
+
+    // SAFETY: callback and builder stay live for this synchronous call; the
+    // trampoline reconstructs the exact callback type from its payload.
+    let status = unsafe {
+        ffi::git_packbuilder_foreach(
+            builder.as_mut_ptr(),
+            Some(trampoline::<C>),
+            (callback as *mut C).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_packbuilder_free
+/// Consumes an independently owned packbuilder.
+pub fn git_packbuilder_free(builder: GitPackbuilderOwned) {
+    drop(builder);
+}
+
+/// Wraps: git_packbuilder_hash
+/// Borrows the completed pack hash, when available.
+pub fn git_packbuilder_hash<'a>(builder: GitPackbuilderRef<'a>) -> Option<OidRef<'a>> {
+    // SAFETY: this getter only reads the live builder's completed hash.
+    let raw = unsafe { ffi::git_packbuilder_hash(builder.as_ptr().cast_mut()) };
+    // SAFETY: a non-null result points inside `builder` for its lifetime.
+    unsafe { OidRef::from_ptr(raw.cast_mut()) }
+}
+
+/// Wraps: git_packbuilder_insert
+/// Inserts one object, with an optional display name.
+pub fn git_packbuilder_insert(
+    builder: &mut GitPackbuilderMut<'_>,
+    oid: OidRef<'_>,
+    name: Option<&CStr>,
+) -> Result<(), i32> {
+    // SAFETY: all arguments are live for the call and none is retained.
+    let status = unsafe {
+        ffi::git_packbuilder_insert(
+            builder.as_mut_ptr(),
+            oid.as_ptr(),
+            name.map_or(core::ptr::null(), CStr::as_ptr),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_packbuilder_insert_commit
+/// Inserts a commit and its referenced tree.
+pub fn git_packbuilder_insert_commit(
+    builder: &mut GitPackbuilderMut<'_>,
+    oid: OidRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: both handles are live and libgit2 retains neither pointer.
+    let status = unsafe { ffi::git_packbuilder_insert_commit(builder.as_mut_ptr(), oid.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_packbuilder_insert_recur
+/// Recursively inserts an object and everything it references.
+pub fn git_packbuilder_insert_recur(
+    builder: &mut GitPackbuilderMut<'_>,
+    oid: OidRef<'_>,
+    name: Option<&CStr>,
+) -> Result<(), i32> {
+    // SAFETY: all arguments are live for this synchronous call.
+    let status = unsafe {
+        ffi::git_packbuilder_insert_recur(
+            builder.as_mut_ptr(),
+            oid.as_ptr(),
+            name.map_or(core::ptr::null(), CStr::as_ptr),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_packbuilder_insert_tree
+/// Inserts a tree and all of its entries.
+pub fn git_packbuilder_insert_tree(
+    builder: &mut GitPackbuilderMut<'_>,
+    oid: OidRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: both handles are live and libgit2 retains neither pointer.
+    let status = unsafe { ffi::git_packbuilder_insert_tree(builder.as_mut_ptr(), oid.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_packbuilder_insert_walk
+/// Consumes the remaining revisions from `walk` into the pack.
+pub fn git_packbuilder_insert_walk(
+    builder: &mut GitPackbuilderMut<'_>,
+    walk: &mut GitRevwalkMut<'_>,
+) -> Result<(), i32> {
+    // SAFETY: both objects are exclusively borrowed for the stateful call.
+    let status =
+        unsafe { ffi::git_packbuilder_insert_walk(builder.as_mut_ptr(), walk.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_packbuilder_name
+/// Borrows the completed pack's NUL-terminated name.
+pub fn git_packbuilder_name<'a>(builder: GitPackbuilderRef<'a>) -> Option<&'a CStr> {
+    // SAFETY: this getter only reads stable storage inside the live builder.
+    let raw = unsafe { ffi::git_packbuilder_name(builder.as_ptr().cast_mut()) };
+    if raw.is_null() {
+        None
+    } else {
+        // SAFETY: non-null results are NUL terminated and tied to `builder`.
+        Some(unsafe { CStr::from_ptr(raw) })
+    }
+}
+
+/// Wraps: git_packbuilder_new
+/// Creates a packbuilder tied to the repository it retains.
+pub fn git_packbuilder_new<'repo>(
+    repo: GitRepositoryRef<'repo>,
+) -> Result<RepositoryPackbuilder<'repo>, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: `raw` is writable and `repo` remains alive through the returned
+    // wrapper's lifetime.
+    let status = unsafe { ffi::git_packbuilder_new(addr_of_mut!(raw), repo.as_ptr().cast_mut()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success writes one fully initialized owned builder.
+    let inner =
+        unsafe { GitPackbuilderOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(RepositoryPackbuilder {
+        inner,
+        progress: None,
+        _repository: PhantomData,
+    })
+}
+
+/// Wraps: git_packbuilder_object_count
+/// Returns the number of objects scheduled for the pack.
+pub fn git_packbuilder_object_count(builder: GitPackbuilderRef<'_>) -> usize {
+    // SAFETY: this scalar getter does not mutate the live builder.
+    unsafe { ffi::git_packbuilder_object_count(builder.as_ptr().cast_mut()) }
+}
+
+/// Wraps: git_packbuilder_set_callbacks
+/// Installs or clears a thread-safe, `'static` progress callback.
+pub fn git_packbuilder_set_callbacks(
+    builder: &mut RepositoryPackbuilder<'_>,
+    callback: Option<Box<dyn GitPackbuilderProgressCallback + Send>>,
+) -> Result<(), i32> {
+    unsafe extern "C" fn trampoline(
+        stage: i32,
+        current: u32,
+        total: u32,
+        payload: *mut c_void,
+    ) -> i32 {
+        if payload.is_null() {
+            return -1;
+        }
+        // SAFETY: `payload` points to the heap-stable boxed trait object held
+        // by the live builder wrapper. Libgit2 serializes progress callbacks.
+        let callback =
+            unsafe { &mut *payload.cast::<Box<dyn GitPackbuilderProgressCallback + Send>>() };
+        callback.call(stage, current, total)
+    }
+
+    let stored = callback.map(Box::new);
+    let payload = stored.as_ref().map_or(core::ptr::null_mut(), |callback| {
+        core::ptr::from_ref::<Box<dyn GitPackbuilderProgressCallback + Send>>(callback.as_ref())
+            .cast_mut()
+            .cast()
+    });
+    let function = if stored.is_some() {
+        Some(trampoline as unsafe extern "C" fn(_, _, _, _) -> _)
+    } else {
+        None
+    };
+    let mut handle = builder.as_mut();
+    // SAFETY: `payload` is null or points to heap-stable storage installed in
+    // `builder`; it remains there until a later successful replacement or drop.
+    let status =
+        unsafe { ffi::git_packbuilder_set_callbacks(handle.as_mut_ptr(), function, payload) };
+    if status == 0 {
+        builder.progress = stored;
+        Ok(())
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_packbuilder_set_threads
+/// Sets the worker count and returns the effective value.
+pub fn git_packbuilder_set_threads(builder: &mut GitPackbuilderMut<'_>, threads: u32) -> u32 {
+    // SAFETY: the builder is exclusively borrowed for this mutation.
+    unsafe { ffi::git_packbuilder_set_threads(builder.as_mut_ptr(), threads) }
+}
+
+/// Wraps: git_packbuilder_write_buf
+/// Writes the completed pack into `buffer`.
+pub fn git_packbuilder_write_buf(
+    buffer: &mut GitBufMut<'_>,
+    builder: &mut GitPackbuilderMut<'_>,
+) -> Result<(), i32> {
+    // SAFETY: both independent objects are exclusively borrowed and live.
+    let status =
+        unsafe { ffi::git_packbuilder_write_buf(buffer.as_mut_ptr(), builder.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_packbuilder_written
+/// Returns the number of objects already written.
+pub fn git_packbuilder_written(builder: GitPackbuilderRef<'_>) -> usize {
+    // SAFETY: this scalar getter does not mutate the live builder.
+    unsafe { ffi::git_packbuilder_written(builder.as_ptr().cast_mut()) }
 }

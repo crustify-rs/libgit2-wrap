@@ -2,7 +2,9 @@
 
 use ffibox::CBox;
 
+use crate::api::types::GitObjectType;
 use crate::ffi;
+use crate::oid::{Oid, OidRef};
 
 ffibox::define_ctype!(
     /// Wraps: git_odb
@@ -60,4 +62,53 @@ mod tests {
             assert!(GitOdbOwned::from_raw(ptr::null_mut()).is_none());
         }
     }
+}
+
+/// Wraps: git_odb_foreach_cb
+/// Safe callable surface for object IDs visited by an object database.
+pub trait GitOdbForeachCallback {
+    /// Receives one transient object ID. Nonzero stops iteration.
+    fn call(&mut self, oid: OidRef<'_>) -> i32;
+}
+
+impl<F> GitOdbForeachCallback for F
+where
+    F: for<'a> FnMut(OidRef<'a>) -> i32,
+{
+    fn call(&mut self, oid: OidRef<'_>) -> i32 {
+        self(oid)
+    }
+}
+
+/// Wraps: git_odb_hash
+/// Hashes an in-memory object body with its Git object header.
+pub fn git_odb_hash(data: &[u8], kind: GitObjectType) -> Result<Oid, i32> {
+    let mut out = Oid::zeroed();
+    // SAFETY: `out` is writable and `data` is a readable run of `len` bytes;
+    // libgit2 retains neither pointer.
+    let status = unsafe {
+        ffi::git_odb_hash(
+            core::ptr::addr_of_mut!(out).cast(),
+            data.as_ptr().cast(),
+            data.len(),
+            kind.as_raw(),
+        )
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_odb_hashfile
+/// Hashes the file at `path` as a Git object of `kind`.
+pub fn git_odb_hashfile(path: &core::ffi::CStr, kind: GitObjectType) -> Result<Oid, i32> {
+    let mut out = Oid::zeroed();
+    // SAFETY: `out` is writable and `path` is a live C string retained only
+    // for this call.
+    let status = unsafe {
+        ffi::git_odb_hashfile(
+            core::ptr::addr_of_mut!(out).cast(),
+            path.as_ptr(),
+            kind.as_raw(),
+        )
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
 }

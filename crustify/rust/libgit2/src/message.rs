@@ -5,6 +5,7 @@ use core::ptr::{NonNull, addr_of};
 
 use ffibox::{CSlice, CSliceMut, CVal};
 
+use crate::api::buffer::GitBufMut;
 use crate::ffi;
 
 ffibox::define_ctype!(
@@ -298,4 +299,25 @@ mod trailer_array_tests {
         }
         assert_eq!(exclusive.get(1).unwrap().value(), c"Second Reviewer");
     }
+}
+
+/// Wraps: git_message_prettify
+/// Cleans whitespace and optionally removes comment lines.
+pub fn git_message_prettify(
+    output: &mut GitBufMut<'_>,
+    message: &CStr,
+    strip_comments: bool,
+    comment_char: core::ffi::c_char,
+) -> Result<(), i32> {
+    // SAFETY: both handles address live values, `message` is NUL terminated,
+    // and libgit2 retains none of these pointers.
+    let status = unsafe {
+        ffi::git_message_prettify(
+            output.as_mut_ptr(),
+            message.as_ptr(),
+            i32::from(strip_comments),
+            comment_char,
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

@@ -7,6 +7,8 @@ use core::ptr::{NonNull, addr_of, addr_of_mut};
 use ffibox::{CLenDropped, CSlice, CVal, CVec, CrustifyStr};
 
 use crate::ffi;
+use crate::oid::Oid;
+use crate::repository::GitRepositoryRef;
 use crate::util::alloc::GitStrdupFree;
 
 /// Wraps: git_merge_analysis_t
@@ -1102,4 +1104,52 @@ mod file_options_tests {
         assert_eq!(options.flags(), Err(unknown_flags));
         assert_eq!(options.favor(), Err(99));
     }
+
+    #[test]
+    fn file_input_initializer_builds_the_public_default() {
+        let mut input = git_merge_file_input_init(1).expect("version one is supported");
+        // SAFETY: `input` is live initialized wrapper storage and this handle
+        // is its only active borrow.
+        let input = unsafe {
+            MergeFileInputRef::from_ptr(addr_of_mut!(input).cast::<ffi::git_merge_file_input>())
+        }
+        .unwrap();
+        assert_eq!(input.version(), 1);
+        assert_eq!(input.size(), 0);
+        assert!(input.contents().is_none());
+        assert!(input.path().is_none());
+    }
+}
+
+/// Wraps: git_merge_base_octopus
+/// Finds a merge base for at least two commit IDs.
+pub fn git_merge_base_octopus(
+    repo: GitRepositoryRef<'_>,
+    inputs: CSlice<'_, Oid>,
+) -> Result<Oid, i32> {
+    if inputs.len() < 2 {
+        return Err(-1);
+    }
+    let mut out = Oid::zeroed();
+    // SAFETY: `out` is writable, `repo` is live for this call, and `inputs`
+    // describes `len` initialized OIDs. Libgit2 retains none of the pointers.
+    let status = unsafe {
+        ffi::git_merge_base_octopus(
+            addr_of_mut!(out).cast(),
+            repo.as_ptr().cast_mut(),
+            inputs.len(),
+            inputs.as_ptr(),
+        )
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_merge_file_input_init
+/// Creates a merge-file input initialized for `version`.
+pub fn git_merge_file_input_init(version: u32) -> Result<MergeFileInput, i32> {
+    let mut input = MergeFileInput::zeroed();
+    // SAFETY: `input` is writable layout-compatible storage and the C
+    // initializer retains no pointer to it.
+    let status = unsafe { ffi::git_merge_file_input_init(addr_of_mut!(input).cast(), version) };
+    if status == 0 { Ok(input) } else { Err(status) }
 }

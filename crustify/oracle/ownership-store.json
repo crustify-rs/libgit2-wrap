@@ -7037,6 +7037,69 @@
    ]
   },
   {
+   "name": "git_merge_base_octopus",
+   "defined_in": "src/libgit2/merge.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_merge_file_input_init",
+   "defined_in": "src/libgit2/merge.c",
+   "ptr_args": [
+    {
+     "name": "input",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:input"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_merge_file_result_free",
    "defined_in": "src/libgit2/merge_file.c",
    "lifetime": {
@@ -7061,6 +7124,46 @@
       "nullable": true,
       "mutable": false,
       "note": "The routine accepts a nullable borrowed result header, reads its fields, and frees the path and content allocations while retaining the header storage."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_message_prettify",
+   "defined_in": "src/libgit2/message.c",
+   "ptr_args": [
+    {
+     "name": "message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:message"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "message_out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:message_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
      }
     }
    ]
@@ -7095,6 +7198,46 @@
    ]
   },
   {
+   "name": "git_note_default_ref",
+   "defined_in": "src/libgit2/notes.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_note_free",
    "defined_in": "src/libgit2/notes.c",
    "lifetime": {
@@ -7122,6 +7265,45 @@
    ]
   },
   {
+   "name": "git_note_id",
+   "defined_in": "src/libgit2/notes.c",
+   "ptr_args": [
+    {
+     "name": "note",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:note"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:note"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Returned borrow is tied to the storage named by its lifetime source and is not owned."
+    }
+   }
+  },
+  {
    "name": "git_note_iterator_free",
    "defined_in": "src/libgit2/notes.c",
    "lifetime": {
@@ -7144,6 +7326,239 @@
       "nullable": true,
       "mutable": true,
       "note": "Public note-iterator destructor; consumes one complete git_note_iterator and delegates to git_iterator_free, while NULL is accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_note_iterator_new",
+   "defined_in": "src/libgit2/notes.c",
+   "ptr_args": [
+    {
+     "name": "it",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:it"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot written with a newly owned allocation on success."
+     }
+    },
+    {
+     "name": "notes_ref_in",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:notes_ref_in"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_note_message",
+   "defined_in": "src/libgit2/notes.c",
+   "ptr_args": [
+    {
+     "name": "note",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:note"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:note"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Returned borrow is tied to the storage named by its lifetime source and is not owned."
+    }
+   }
+  },
+  {
+   "name": "git_note_next",
+   "defined_in": "src/libgit2/notes.c",
+   "ptr_args": [
+    {
+     "name": "annotated_id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:annotated_id"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
+     }
+    },
+    {
+     "name": "it",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:it"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "note_id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:note_id"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_note_read",
+   "defined_in": "src/libgit2/notes.c",
+   "ptr_args": [
+    {
+     "name": "notes_ref_in",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:notes_ref_in"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot written with a newly owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
      }
     }
    ]
@@ -7228,6 +7643,354 @@
    ]
   },
   {
+   "name": "git_object_id",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:obj"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Returned borrow is tied to the storage named by its lifetime source and is not owned."
+    }
+   }
+  },
+  {
+   "name": "git_object_lookup",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "object_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:object_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot written with a newly owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_lookup_prefix",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "object_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:object_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot written with a newly owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_peel",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "object",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:object"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "peeled",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:peeled"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot written with a newly owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_short_id",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_string2type",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:str"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_type",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_type2string",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "static"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Returned borrow is tied to the storage named by its lifetime source and is not owned."
+    }
+   }
+  },
+  {
+   "name": "git_odb_foreach_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_odb_free",
    "defined_in": "src/libgit2/odb.c",
    "lifetime": {
@@ -7250,6 +8013,86 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one git_odb reference; NULL is explicitly accepted. It decrements rc and destroys the complete object only when the final unowned count is released."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_hash",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "data",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:data"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_hashfile",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
      }
     }
    ]
@@ -7280,6 +8123,245 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_oid_cmp",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "a",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:a"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "b",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:b"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_equal",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "a",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:a"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "b",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:b"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_fromraw",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
+     }
+    },
+    {
+     "name": "raw",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:raw"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_fromstrn",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
+     }
+    },
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:str"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_is_zero",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_tostr",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:out"
+     },
+     "nullable": false,
+     "mutable": true,
+     "note": "Returned borrow is tied to the storage named by its lifetime source and is not owned."
+    }
+   }
   },
   {
    "name": "git_oidarray_dispose",
@@ -7335,6 +8417,63 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrows the inline header mutably, frees its owned ids run, and retains the header storage."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_foreach",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cb"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
      }
     }
    ]
@@ -7407,6 +8546,384 @@
    ]
   },
   {
+   "name": "git_packbuilder_hash",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:pb"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Returned borrow is tied to the storage named by its lifetime source and is not owned."
+    }
+   }
+  },
+  {
+   "name": "git_packbuilder_insert",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_insert_commit",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_insert_recur",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_insert_tree",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_insert_walk",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_name",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:pb"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Returned borrow is tied to the storage named by its lifetime source and is not owned."
+    }
+   }
+  },
+  {
+   "name": "git_packbuilder_new",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot written with a newly owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_object_count",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_packbuilder_progress",
    "defined_in": null,
    "ptr_args": [
@@ -7425,6 +8942,149 @@
       "nullable": true,
       "mutable": true,
       "note": "Opaque caller payload borrowed for the callback invocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_set_callbacks",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed builder mutated to retain the callback and payload."
+     }
+    },
+    {
+     "name": "progress_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional callback retained by the packbuilder until replaced or the builder is freed."
+     }
+    },
+    {
+     "name": "progress_cb_payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional callback state retained by the packbuilder for the callback lifetime."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_set_threads",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_write_buf",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "buf",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:buf"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output storage written during the call and not retained."
+     }
+    },
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_packbuilder_written",
+   "defined_in": "src/libgit2/pack-objects.c",
+   "ptr_args": [
+    {
+     "name": "pb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
      }
     }
    ]
@@ -7452,6 +9112,111 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one owning patch reference. Null is accepted; the allocation and fields are released through free_fn when the reference count reaches zero."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_patch_from_diff",
+   "defined_in": "src/libgit2/patch.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot written with a newly owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_patch_get_hunk",
+   "defined_in": "src/libgit2/patch.c",
+   "ptr_args": [
+    {
+     "name": "lines_in_hunk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:lines_in_hunk"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional output storage written with the line count."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": false,
+        "borrowed": {
+         "lifetime": "arg:patch"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional output slot receives a borrowed const hunk tied to the patch on success."
+     }
+    },
+    {
+     "name": "patch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:patch"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed patch queried during the call; ownership is retained by the caller."
      }
     }
    ]

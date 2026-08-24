@@ -172,4 +172,85 @@ mod tests {
             unsafe { OidRef::from_ptr(raw) }.expect("the address of a stack value is non-null");
         assert_eq!(oid.oid_type(), Err(InvalidOidType(0)));
     }
+
+    #[test]
+    fn safe_oid_operations_parse_compare_and_format() {
+        let raw = [0xabu8; 20];
+        let mut first = git_oid_fromraw(&raw).expect("twenty bytes form a SHA-1 OID");
+        let mut second = git_oid_fromstrn(b"abababababababababababababababababababab")
+            .expect("forty hexadecimal bytes form a SHA-1 OID");
+
+        // SAFETY: both pointers address live initialized wrapper storage and
+        // are borrowed only within this scope.
+        let first_ref = unsafe { OidRef::from_ptr(addr_of_mut!(first).cast()) }.unwrap();
+        // SAFETY: as above, for the independent `second` value.
+        let second_ref = unsafe { OidRef::from_ptr(addr_of_mut!(second).cast()) }.unwrap();
+        assert!(git_oid_equal(first_ref, second_ref));
+        assert_eq!(
+            git_oid_cmp(first_ref, second_ref),
+            core::cmp::Ordering::Equal
+        );
+        assert!(!git_oid_is_zero(first_ref));
+
+        let mut text = [0u8; 41];
+        assert_eq!(
+            git_oid_tostr(&mut text, first_ref).unwrap().to_bytes(),
+            b"abababababababababababababababababababab"
+        );
+        assert!(git_oid_tostr(&mut [], first_ref).is_none());
+    }
+}
+
+/// Wraps: git_oid_cmp
+/// Compares object IDs by algorithm and digest bytes.
+pub fn git_oid_cmp(a: OidRef<'_>, b: OidRef<'_>) -> core::cmp::Ordering {
+    // SAFETY: both object IDs are live for this read-only comparison.
+    unsafe { ffi::git_oid_cmp(a.as_ptr(), b.as_ptr()) }.cmp(&0)
+}
+
+/// Wraps: git_oid_equal
+/// Reports whether two object IDs are identical.
+pub fn git_oid_equal(a: OidRef<'_>, b: OidRef<'_>) -> bool {
+    // SAFETY: both object IDs are live for this read-only comparison.
+    unsafe { ffi::git_oid_equal(a.as_ptr(), b.as_ptr()) != 0 }
+}
+
+/// Wraps: git_oid_fromraw
+/// Constructs a SHA-1 object ID from its 20 raw digest bytes.
+pub fn git_oid_fromraw(raw: &[u8; 20]) -> Result<Oid, i32> {
+    let mut out = Oid::zeroed();
+    // SAFETY: `out` is writable and `raw` provides the 20 bytes required by
+    // this deprecated SHA-1-specific entry point.
+    let status = unsafe { ffi::git_oid_fromraw(addr_of_mut!(out).cast(), raw.as_ptr()) };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_oid_fromstrn
+/// Parses a counted SHA-1 hexadecimal prefix.
+pub fn git_oid_fromstrn(hex: &[u8]) -> Result<Oid, i32> {
+    let mut out = Oid::zeroed();
+    // SAFETY: `out` is writable and `hex` provides exactly the readable byte
+    // count passed to C; the input need not be NUL terminated.
+    let status =
+        unsafe { ffi::git_oid_fromstrn(addr_of_mut!(out).cast(), hex.as_ptr().cast(), hex.len()) };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_oid_is_zero
+/// Reports whether all digest bytes are zero.
+pub fn git_oid_is_zero(id: OidRef<'_>) -> bool {
+    // SAFETY: `id` is live for this read-only query.
+    unsafe { ffi::git_oid_is_zero(id.as_ptr()) != 0 }
+}
+
+/// Wraps: git_oid_tostr
+/// Formats an object ID into a nonempty caller-owned buffer.
+pub fn git_oid_tostr<'a>(out: &'a mut [u8], oid: OidRef<'_>) -> Option<&'a core::ffi::CStr> {
+    if out.is_empty() {
+        return None;
+    }
+    // SAFETY: `out` is a writable run of `len` bytes and `oid` is live. C
+    // writes a trailing NUL and retains neither pointer.
+    unsafe { ffi::git_oid_tostr(out.as_mut_ptr().cast(), out.len(), oid.as_ptr()) };
+    core::ffi::CStr::from_bytes_until_nul(out).ok()
 }

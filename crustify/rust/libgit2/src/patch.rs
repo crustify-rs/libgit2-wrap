@@ -1,10 +1,11 @@
 //! Safe wrappers for libgit2 patch APIs.
 
+use core::marker::PhantomData;
 use core::ptr::NonNull;
 
 use ffibox::{CBox, CDropped};
 
-use crate::diff::DiffLineRef;
+use crate::diff::{DiffHunkRef, DiffLineRef, DiffRef};
 use crate::ffi;
 
 ffibox::define_ctype!(
@@ -22,6 +23,24 @@ ffibox::define_ctype!(
 
 /// An owning reference to a fully formed libgit2 patch.
 pub type GitPatchOwned = CBox<GitPatch>;
+
+/// An owned patch tied to the diff storage from which it was created.
+pub struct DiffPatch<'diff> {
+    inner: GitPatchOwned,
+    _diff: PhantomData<DiffRef<'diff>>,
+}
+
+impl DiffPatch<'_> {
+    /// Borrows the patch.
+    pub fn as_ref(&self) -> GitPatchRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the patch exclusively.
+    pub fn as_mut(&mut self) -> GitPatchMut<'_> {
+        self.inner.as_mut()
+    }
+}
 
 /// Wraps: git_patch_free
 // SAFETY: `git_patch_free` consumes one owning reference to a fully formed
@@ -175,4 +194,58 @@ pub fn git_patch_size(
             i32::from(include_file_headers),
         )
     }
+}
+
+/// Wraps: git_patch_from_diff
+/// Creates a patch tied to the diff that supplies its backing data.
+pub fn git_patch_from_diff<'diff>(
+    diff: DiffRef<'diff>,
+    index: usize,
+) -> Result<DiffPatch<'diff>, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: `raw` is writable and `diff` remains live for the lifetime
+    // attached to the resulting wrapper.
+    let status = unsafe {
+        ffi::git_patch_from_diff(
+            core::ptr::addr_of_mut!(raw),
+            diff.as_ptr().cast_mut(),
+            index,
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success writes one complete owned patch reference.
+    let inner = unsafe { GitPatchOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(DiffPatch {
+        inner,
+        _diff: PhantomData,
+    })
+}
+
+/// Wraps: git_patch_get_hunk
+/// Borrows one hunk and returns its line count.
+pub fn git_patch_get_hunk<'a>(
+    patch: &'a mut GitPatchMut<'_>,
+    index: usize,
+) -> Result<(DiffHunkRef<'a>, usize), i32> {
+    let mut raw = core::ptr::null();
+    let mut lines = 0;
+    // SAFETY: both outputs are writable and the patch is exclusively borrowed
+    // for the lifetime assigned to its returned interior hunk.
+    let status = unsafe {
+        ffi::git_patch_get_hunk(
+            core::ptr::addr_of_mut!(raw),
+            core::ptr::addr_of_mut!(lines),
+            patch.as_mut_ptr(),
+            index,
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns a non-null hunk inside the live patch.
+    let hunk = unsafe { DiffHunkRef::from_ptr(raw.cast_mut()) }
+        .expect("a successful hunk lookup returns non-null");
+    Ok((hunk, lines))
 }
