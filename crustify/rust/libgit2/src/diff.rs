@@ -5,6 +5,7 @@ use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CBox, CDropped};
 
+use crate::api::diff::{DiffLineOrigin, InvalidDiffLineOrigin};
 use crate::ffi;
 
 /// The kind of change represented by a diff delta.
@@ -632,11 +633,11 @@ impl<'a> DiffLineRef<'a> {
     }
 
     /// Field: git_diff_line.origin
-    /// Returns the raw `git_diff_line_t` character code.
-    #[must_use]
-    pub fn origin(&self) -> core::ffi::c_char {
+    /// Returns the validated line-origin character code.
+    pub fn origin(&self) -> Result<DiffLineOrigin, InvalidDiffLineOrigin> {
         // SAFETY: as `content_len`, for this initialized scalar field.
-        unsafe { core::ptr::addr_of!((*self.as_ptr()).origin).read() }
+        let origin = unsafe { core::ptr::addr_of!((*self.as_ptr()).origin).read() };
+        DiffLineOrigin::from_char(origin)
     }
 
     /// Field: git_diff_line.new_lineno
@@ -693,10 +694,10 @@ impl DiffLineMut<'_> {
         }
     }
 
-    /// Sets the raw `git_diff_line_t` character code.
-    pub fn set_origin(&mut self, value: core::ffi::c_char) {
+    /// Sets a published `git_diff_line_t` character code.
+    pub fn set_origin(&mut self, value: DiffLineOrigin) {
         // SAFETY: this exclusive handle permits a raw-place scalar write.
-        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).origin).write(value) }
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).origin).write(value.as_char()) }
     }
 
     /// Sets the new-file line number.
@@ -773,7 +774,7 @@ mod diff_record_tests {
         // value above and this is its only active handle.
         let mut line = unsafe { DiffLineMut::from_ptr(raw) }.unwrap();
 
-        line.set_origin(b'+' as core::ffi::c_char);
+        line.set_origin(DiffLineOrigin::Addition);
         line.set_old_lineno(-1);
         line.set_new_lineno(7);
         line.set_num_lines(1);
@@ -783,7 +784,7 @@ mod diff_record_tests {
         unsafe { line.set_borrowed_content(Some(b"hello\n")) };
 
         let shared = line.as_ref();
-        assert_eq!(shared.origin(), b'+' as core::ffi::c_char);
+        assert_eq!(shared.origin(), Ok(DiffLineOrigin::Addition));
         assert_eq!(shared.old_lineno(), -1);
         assert_eq!(shared.new_lineno(), 7);
         assert_eq!(shared.num_lines(), 1);
@@ -833,7 +834,7 @@ mod diff_record_tests {
                 assert_eq!(line.num_lines(), 1);
                 #[allow(clippy::cast_sign_loss)]
                 (
-                    line.origin() as u8,
+                    line.origin().expect("a published line origin").as_char() as u8,
                     line.old_lineno(),
                     line.new_lineno(),
                     collect(content),

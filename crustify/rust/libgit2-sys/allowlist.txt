@@ -37,6 +37,8 @@
 ^git_diff_stats_free$
 ^git_diff_hunk$
 ^git_diff_line$
+^git_diff_line_t$
+^git_diff_option_t$
 ^GIT_DIFF_HUNK_HEADER_SIZE$
 ^git_libgit2_(init|shutdown)$
 ^git_mailmap$

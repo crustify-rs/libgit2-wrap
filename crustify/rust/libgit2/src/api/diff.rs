@@ -1,1 +1,366 @@
 //! Safe wrappers for libgit2 diff APIs.
+
+use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+
+use crate::ffi;
+
+/// Wraps: git_diff_line_t
+/// A validated origin code for a line or header emitted by libgit2.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum DiffLineOrigin {
+    /// An unchanged context line.
+    Context = ffi::git_diff_line_t_GIT_DIFF_LINE_CONTEXT,
+    /// A line present only in the new version.
+    Addition = ffi::git_diff_line_t_GIT_DIFF_LINE_ADDITION,
+    /// A line present only in the old version.
+    Deletion = ffi::git_diff_line_t_GIT_DIFF_LINE_DELETION,
+    /// Both files lack a trailing line feed.
+    ContextEofNoLineFeed = ffi::git_diff_line_t_GIT_DIFF_LINE_CONTEXT_EOFNL,
+    /// The old file lacks a trailing line feed.
+    AdditionEofNoLineFeed = ffi::git_diff_line_t_GIT_DIFF_LINE_ADD_EOFNL,
+    /// The new file lacks a trailing line feed.
+    DeletionEofNoLineFeed = ffi::git_diff_line_t_GIT_DIFF_LINE_DEL_EOFNL,
+    /// A file-header line produced while formatting a diff.
+    FileHeader = ffi::git_diff_line_t_GIT_DIFF_LINE_FILE_HDR,
+    /// A hunk-header line produced while formatting a diff.
+    HunkHeader = ffi::git_diff_line_t_GIT_DIFF_LINE_HUNK_HDR,
+    /// A binary-difference marker produced while formatting a diff.
+    Binary = ffi::git_diff_line_t_GIT_DIFF_LINE_BINARY,
+}
+
+impl DiffLineOrigin {
+    /// Converts a raw C enum value when it is a published line origin.
+    pub const fn from_raw(raw: ffi::git_diff_line_t) -> Result<Self, InvalidDiffLineOrigin> {
+        match raw {
+            ffi::git_diff_line_t_GIT_DIFF_LINE_CONTEXT => Ok(Self::Context),
+            ffi::git_diff_line_t_GIT_DIFF_LINE_ADDITION => Ok(Self::Addition),
+            ffi::git_diff_line_t_GIT_DIFF_LINE_DELETION => Ok(Self::Deletion),
+            ffi::git_diff_line_t_GIT_DIFF_LINE_CONTEXT_EOFNL => Ok(Self::ContextEofNoLineFeed),
+            ffi::git_diff_line_t_GIT_DIFF_LINE_ADD_EOFNL => Ok(Self::AdditionEofNoLineFeed),
+            ffi::git_diff_line_t_GIT_DIFF_LINE_DEL_EOFNL => Ok(Self::DeletionEofNoLineFeed),
+            ffi::git_diff_line_t_GIT_DIFF_LINE_FILE_HDR => Ok(Self::FileHeader),
+            ffi::git_diff_line_t_GIT_DIFF_LINE_HUNK_HDR => Ok(Self::HunkHeader),
+            ffi::git_diff_line_t_GIT_DIFF_LINE_BINARY => Ok(Self::Binary),
+            value => Err(InvalidDiffLineOrigin(value)),
+        }
+    }
+
+    /// Converts the `char` representation stored in [`ffi::git_diff_line`].
+    pub const fn from_char(origin: core::ffi::c_char) -> Result<Self, InvalidDiffLineOrigin> {
+        Self::from_raw(origin as ffi::git_diff_line_t)
+    }
+
+    /// Returns the raw C enum value.
+    #[must_use]
+    pub const fn as_raw(self) -> ffi::git_diff_line_t {
+        self as ffi::git_diff_line_t
+    }
+
+    /// Returns the character code stored in [`ffi::git_diff_line::origin`].
+    #[must_use]
+    pub const fn as_char(self) -> core::ffi::c_char {
+        self as core::ffi::c_char
+    }
+}
+
+impl From<DiffLineOrigin> for ffi::git_diff_line_t {
+    fn from(origin: DiffLineOrigin) -> Self {
+        origin.as_raw()
+    }
+}
+
+impl TryFrom<ffi::git_diff_line_t> for DiffLineOrigin {
+    type Error = InvalidDiffLineOrigin;
+
+    fn try_from(raw: ffi::git_diff_line_t) -> Result<Self, Self::Error> {
+        Self::from_raw(raw)
+    }
+}
+
+/// A raw value that is not a published [`DiffLineOrigin`].
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidDiffLineOrigin(ffi::git_diff_line_t);
+
+impl InvalidDiffLineOrigin {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_diff_line_t {
+        self.0
+    }
+}
+
+/// Wraps: git_diff_option_t
+/// A checked set of options controlling diff generation and formatting.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct DiffOptions(ffi::git_diff_option_t);
+
+impl DiffOptions {
+    /// Normal diff behavior with no options enabled.
+    pub const NORMAL: Self = Self(ffi::git_diff_option_t_GIT_DIFF_NORMAL);
+    /// Reverse the old and new sides.
+    pub const REVERSE: Self = Self(ffi::git_diff_option_t_GIT_DIFF_REVERSE);
+    /// Include ignored files.
+    pub const INCLUDE_IGNORED: Self = Self(ffi::git_diff_option_t_GIT_DIFF_INCLUDE_IGNORED);
+    /// Recurse into ignored directories.
+    pub const RECURSE_IGNORED_DIRS: Self =
+        Self(ffi::git_diff_option_t_GIT_DIFF_RECURSE_IGNORED_DIRS);
+    /// Include untracked files.
+    pub const INCLUDE_UNTRACKED: Self = Self(ffi::git_diff_option_t_GIT_DIFF_INCLUDE_UNTRACKED);
+    /// Recurse into untracked directories.
+    pub const RECURSE_UNTRACKED_DIRS: Self =
+        Self(ffi::git_diff_option_t_GIT_DIFF_RECURSE_UNTRACKED_DIRS);
+    /// Include unmodified files.
+    pub const INCLUDE_UNMODIFIED: Self = Self(ffi::git_diff_option_t_GIT_DIFF_INCLUDE_UNMODIFIED);
+    /// Emit type-change deltas instead of add/delete pairs.
+    pub const INCLUDE_TYPECHANGE: Self = Self(ffi::git_diff_option_t_GIT_DIFF_INCLUDE_TYPECHANGE);
+    /// Preserve blob-to-tree changes as type-change deltas.
+    pub const INCLUDE_TYPECHANGE_TREES: Self =
+        Self(ffi::git_diff_option_t_GIT_DIFF_INCLUDE_TYPECHANGE_TREES);
+    /// Ignore file-mode changes.
+    pub const IGNORE_FILEMODE: Self = Self(ffi::git_diff_option_t_GIT_DIFF_IGNORE_FILEMODE);
+    /// Treat all submodules as unmodified.
+    pub const IGNORE_SUBMODULES: Self = Self(ffi::git_diff_option_t_GIT_DIFF_IGNORE_SUBMODULES);
+    /// Compare file names without case sensitivity.
+    pub const IGNORE_CASE: Self = Self(ffi::git_diff_option_t_GIT_DIFF_IGNORE_CASE);
+    /// Report case-only changes as an add/delete pair.
+    pub const INCLUDE_CASECHANGE: Self = Self(ffi::git_diff_option_t_GIT_DIFF_INCLUDE_CASECHANGE);
+    /// Treat pathspec entries as literal paths.
+    pub const DISABLE_PATHSPEC_MATCH: Self =
+        Self(ffi::git_diff_option_t_GIT_DIFF_DISABLE_PATHSPEC_MATCH);
+    /// Skip binary-content detection.
+    pub const SKIP_BINARY_CHECK: Self = Self(ffi::git_diff_option_t_GIT_DIFF_SKIP_BINARY_CHECK);
+    /// Avoid scanning ignored entries inside untracked directories.
+    pub const ENABLE_FAST_UNTRACKED_DIRS: Self =
+        Self(ffi::git_diff_option_t_GIT_DIFF_ENABLE_FAST_UNTRACKED_DIRS);
+    /// Update index stat information when content is unchanged.
+    pub const UPDATE_INDEX: Self = Self(ffi::git_diff_option_t_GIT_DIFF_UPDATE_INDEX);
+    /// Include unreadable files.
+    pub const INCLUDE_UNREADABLE: Self = Self(ffi::git_diff_option_t_GIT_DIFF_INCLUDE_UNREADABLE);
+    /// Treat unreadable files as untracked.
+    pub const INCLUDE_UNREADABLE_AS_UNTRACKED: Self =
+        Self(ffi::git_diff_option_t_GIT_DIFF_INCLUDE_UNREADABLE_AS_UNTRACKED);
+    /// Apply the indentation-aware hunk heuristic.
+    pub const INDENT_HEURISTIC: Self = Self(ffi::git_diff_option_t_GIT_DIFF_INDENT_HEURISTIC);
+    /// Ignore blank lines.
+    pub const IGNORE_BLANK_LINES: Self = Self(ffi::git_diff_option_t_GIT_DIFF_IGNORE_BLANK_LINES);
+    /// Force all files to be treated as text.
+    pub const FORCE_TEXT: Self = Self(ffi::git_diff_option_t_GIT_DIFF_FORCE_TEXT);
+    /// Force all files to be treated as binary.
+    pub const FORCE_BINARY: Self = Self(ffi::git_diff_option_t_GIT_DIFF_FORCE_BINARY);
+    /// Ignore all whitespace differences.
+    pub const IGNORE_WHITESPACE: Self = Self(ffi::git_diff_option_t_GIT_DIFF_IGNORE_WHITESPACE);
+    /// Ignore changes in the amount of whitespace.
+    pub const IGNORE_WHITESPACE_CHANGE: Self =
+        Self(ffi::git_diff_option_t_GIT_DIFF_IGNORE_WHITESPACE_CHANGE);
+    /// Ignore whitespace at the end of a line.
+    pub const IGNORE_WHITESPACE_EOL: Self =
+        Self(ffi::git_diff_option_t_GIT_DIFF_IGNORE_WHITESPACE_EOL);
+    /// Include the contents of untracked files.
+    pub const SHOW_UNTRACKED_CONTENT: Self =
+        Self(ffi::git_diff_option_t_GIT_DIFF_SHOW_UNTRACKED_CONTENT);
+    /// Show unmodified files in applicable output formats.
+    pub const SHOW_UNMODIFIED: Self = Self(ffi::git_diff_option_t_GIT_DIFF_SHOW_UNMODIFIED);
+    /// Use the patience diff algorithm.
+    pub const PATIENCE: Self = Self(ffi::git_diff_option_t_GIT_DIFF_PATIENCE);
+    /// Spend extra time finding a minimal diff.
+    pub const MINIMAL: Self = Self(ffi::git_diff_option_t_GIT_DIFF_MINIMAL);
+    /// Include binary delta data suitable for `git apply`.
+    pub const SHOW_BINARY: Self = Self(ffi::git_diff_option_t_GIT_DIFF_SHOW_BINARY);
+    /// Every option published by this version of libgit2.
+    pub const ALL: Self = Self(
+        Self::REVERSE.0
+            | Self::INCLUDE_IGNORED.0
+            | Self::RECURSE_IGNORED_DIRS.0
+            | Self::INCLUDE_UNTRACKED.0
+            | Self::RECURSE_UNTRACKED_DIRS.0
+            | Self::INCLUDE_UNMODIFIED.0
+            | Self::INCLUDE_TYPECHANGE.0
+            | Self::INCLUDE_TYPECHANGE_TREES.0
+            | Self::IGNORE_FILEMODE.0
+            | Self::IGNORE_SUBMODULES.0
+            | Self::IGNORE_CASE.0
+            | Self::INCLUDE_CASECHANGE.0
+            | Self::DISABLE_PATHSPEC_MATCH.0
+            | Self::SKIP_BINARY_CHECK.0
+            | Self::ENABLE_FAST_UNTRACKED_DIRS.0
+            | Self::UPDATE_INDEX.0
+            | Self::INCLUDE_UNREADABLE.0
+            | Self::INCLUDE_UNREADABLE_AS_UNTRACKED.0
+            | Self::INDENT_HEURISTIC.0
+            | Self::IGNORE_BLANK_LINES.0
+            | Self::FORCE_TEXT.0
+            | Self::FORCE_BINARY.0
+            | Self::IGNORE_WHITESPACE.0
+            | Self::IGNORE_WHITESPACE_CHANGE.0
+            | Self::IGNORE_WHITESPACE_EOL.0
+            | Self::SHOW_UNTRACKED_CONTENT.0
+            | Self::SHOW_UNMODIFIED.0
+            | Self::PATIENCE.0
+            | Self::MINIMAL.0
+            | Self::SHOW_BINARY.0,
+    );
+
+    /// Converts raw bits when every enabled option is published by libgit2.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_diff_option_t) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 option bits.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_diff_option_t {
+        self.0
+    }
+
+    /// Returns whether no option is enabled.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every option in `other` is enabled.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any option in `other` is enabled.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl From<DiffOptions> for ffi::git_diff_option_t {
+    fn from(options: DiffOptions) -> Self {
+        options.bits()
+    }
+}
+
+impl TryFrom<ffi::git_diff_option_t> for DiffOptions {
+    type Error = ffi::git_diff_option_t;
+
+    fn try_from(bits: ffi::git_diff_option_t) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl BitOr for DiffOptions {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for DiffOptions {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for DiffOptions {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for DiffOptions {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for DiffOptions {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(self.0 ^ Self::ALL.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn published_line_origins_round_trip_through_both_c_representations() {
+        let origins = [
+            DiffLineOrigin::Context,
+            DiffLineOrigin::Addition,
+            DiffLineOrigin::Deletion,
+            DiffLineOrigin::ContextEofNoLineFeed,
+            DiffLineOrigin::AdditionEofNoLineFeed,
+            DiffLineOrigin::DeletionEofNoLineFeed,
+            DiffLineOrigin::FileHeader,
+            DiffLineOrigin::HunkHeader,
+            DiffLineOrigin::Binary,
+        ];
+
+        for origin in origins {
+            assert_eq!(DiffLineOrigin::try_from(origin.as_raw()), Ok(origin));
+            assert_eq!(DiffLineOrigin::from_char(origin.as_char()), Ok(origin));
+        }
+
+        let invalid = b'?' as ffi::git_diff_line_t;
+        assert_eq!(
+            DiffLineOrigin::try_from(invalid).unwrap_err().value(),
+            invalid
+        );
+    }
+
+    #[test]
+    fn diff_options_form_checked_sets() {
+        let mut options = DiffOptions::REVERSE | DiffOptions::INCLUDE_UNTRACKED;
+        assert!(options.contains(DiffOptions::REVERSE));
+        assert!(options.intersects(DiffOptions::INCLUDE_UNTRACKED));
+        assert!(!options.intersects(DiffOptions::SHOW_BINARY));
+
+        options |= DiffOptions::SHOW_BINARY;
+        options &= DiffOptions::REVERSE | DiffOptions::SHOW_BINARY;
+        assert_eq!(options, DiffOptions::REVERSE | DiffOptions::SHOW_BINARY);
+        assert_eq!(DiffOptions::from_bits(options.bits()), Some(options));
+        assert!(DiffOptions::NORMAL.is_empty());
+        assert_eq!(DiffOptions::default(), DiffOptions::NORMAL);
+    }
+
+    #[test]
+    fn diff_options_reject_reserved_bits() {
+        assert_eq!(DiffOptions::from_bits(1 << 27), None);
+        assert_eq!(DiffOptions::from_bits(1 << 31), None);
+        assert_eq!(
+            DiffOptions::from_bits(DiffOptions::ALL.bits()),
+            Some(DiffOptions::ALL)
+        );
+    }
+
+    #[test]
+    fn wrappers_match_their_c_enum_layouts() {
+        assert_eq!(
+            size_of::<DiffLineOrigin>(),
+            size_of::<ffi::git_diff_line_t>()
+        );
+        assert_eq!(
+            align_of::<DiffLineOrigin>(),
+            align_of::<ffi::git_diff_line_t>()
+        );
+        assert_eq!(
+            size_of::<DiffOptions>(),
+            size_of::<ffi::git_diff_option_t>()
+        );
+        assert_eq!(
+            align_of::<DiffOptions>(),
+            align_of::<ffi::git_diff_option_t>()
+        );
+    }
+}
