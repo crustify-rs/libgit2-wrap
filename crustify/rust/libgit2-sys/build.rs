@@ -12,6 +12,7 @@ fn main() {
     let mut command = Command::new("bindgen");
     command
         .arg(crate_dir.join("wrapper.h"))
+        .arg("--no-doc-comments")
         .arg("--output")
         .arg(&out_file);
 

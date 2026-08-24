@@ -65,6 +65,7 @@
 ^git_merge_file_input$
 ^git_diff_stats_format_t$
 ^git_direction$
+^git_remote_head$
 ^git_refspec$
 ^git_refspec_free$
 ^git_error$
@@ -121,6 +122,10 @@
 ^git_refdb_free$
 ^git_refdb_t$
 ^git_reference$
+^git_reference_iterator$
+^git_reference_iterator_free$
+^git_reference_next$
+^git_reference_next_name$
 ^git_reference_dup$
 ^git_reference_free$
 ^git_reference_t$
