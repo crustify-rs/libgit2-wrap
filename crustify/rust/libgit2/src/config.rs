@@ -183,6 +183,18 @@ mod tests {
         assert_eq!(exclusive.as_mut_ptr(), raw);
         assert_eq!(exclusive.as_ref().as_ptr(), raw.cast_const());
     }
+
+    #[test]
+    fn config_snapshot_returns_an_independent_owner() {
+        let _init = Libgit2Init::acquire();
+        let mut raw = core::ptr::null_mut();
+        // SAFETY: libgit2 is initialized and `raw` is writable.
+        assert_eq!(unsafe { ffi::git_config_new(&mut raw) }, 0);
+        // SAFETY: success returned one fresh owned config count.
+        let config = unsafe { GitConfigOwned::from_raw(raw) }.unwrap();
+        let snapshot = git_config_snapshot(config.as_ref()).unwrap();
+        assert_ne!(snapshot.as_ref().as_ptr(), config.as_ref().as_ptr());
+    }
 }
 
 ffibox::define_ctype!(
@@ -613,4 +625,56 @@ pub fn git_config_set_int64(
     // SAFETY: the config is live and exclusive and `name` is live.
     let status = unsafe { ffi::git_config_set_int64(config.as_mut_ptr(), name.as_ptr(), value) };
     if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_set_multivar
+/// Replaces every value matching `regexp` in the highest-priority writable
+/// backend. Libgit2 reads all strings only for the duration of the call.
+pub fn git_config_set_multivar(
+    config: &mut GitConfigMut<'_>,
+    name: &CStr,
+    regexp: &CStr,
+    value: &CStr,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies a live config and all three
+    // arguments are live NUL-terminated strings that libgit2 does not retain.
+    let status = unsafe {
+        ffi::git_config_set_multivar(
+            config.as_mut_ptr(),
+            name.as_ptr(),
+            regexp.as_ptr(),
+            value.as_ptr(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_set_string
+/// Copies a string into the highest-priority writable backend.
+pub fn git_config_set_string(
+    config: &mut GitConfigMut<'_>,
+    name: &CStr,
+    value: &CStr,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies a live config and both strings
+    // remain live and NUL-terminated throughout this non-retaining call.
+    let status =
+        unsafe { ffi::git_config_set_string(config.as_mut_ptr(), name.as_ptr(), value.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_snapshot
+/// Creates an independently owned, read-only snapshot of `config`.
+pub fn git_config_snapshot(config: GitConfigRef<'_>) -> Result<GitConfigOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and `config` is a live shared handle. The C
+    // declaration predates const-correctness but snapshotting does not mutate
+    // the source config or retain its pointer.
+    let status = unsafe { ffi::git_config_snapshot(&mut out, config.as_ptr().cast_mut()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one fresh owned config count, released by the
+    // `GitConfig` drop contract.
+    unsafe { GitConfigOwned::from_raw(out) }.ok_or(-1)
 }

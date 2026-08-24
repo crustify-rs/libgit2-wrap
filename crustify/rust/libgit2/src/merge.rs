@@ -6,8 +6,10 @@ use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CLenDropped, CSlice, CVal, CVec, CrustifyStr};
 
+use crate::annotated_commit::AnnotatedCommitRef;
 use crate::ffi;
-use crate::oid::Oid;
+use crate::oid::{Oid, OidRef};
+use crate::refs::GitReferenceRef;
 use crate::repository::GitRepositoryRef;
 use crate::util::alloc::GitStrdupFree;
 
@@ -1152,4 +1154,136 @@ pub fn git_merge_file_input_init(version: u32) -> Result<MergeFileInput, i32> {
     // initializer retains no pointer to it.
     let status = unsafe { ffi::git_merge_file_input_init(addr_of_mut!(input).cast(), version) };
     if status == 0 { Ok(input) } else { Err(status) }
+}
+
+/// Failure returned by the merge-analysis wrappers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MergeAnalysisError {
+    /// Libgit2 returned an error status.
+    Libgit2(i32),
+    /// C returned analysis bits unknown to this build's headers.
+    InvalidAnalysis(ffi::git_merge_analysis_t),
+    /// C returned an unknown merge preference.
+    InvalidPreference(ffi::git_merge_preference_t),
+}
+
+fn validate_analysis(
+    status: i32,
+    analysis: ffi::git_merge_analysis_t,
+    preference: ffi::git_merge_preference_t,
+) -> Result<(GitMergeAnalysis, MergePreference), MergeAnalysisError> {
+    if status != 0 {
+        return Err(MergeAnalysisError::Libgit2(status));
+    }
+    let analysis =
+        GitMergeAnalysis::try_from(analysis).map_err(MergeAnalysisError::InvalidAnalysis)?;
+    let preference =
+        MergePreference::try_from(preference).map_err(MergeAnalysisError::InvalidPreference)?;
+    Ok((analysis, preference))
+}
+
+/// Wraps: git_merge_analysis
+/// Analyzes the single merge head supported by this libgit2 implementation.
+pub fn git_merge_analysis(
+    repository: GitRepositoryRef<'_>,
+    their_head: AnnotatedCommitRef<'_>,
+) -> Result<(GitMergeAnalysis, MergePreference), MergeAnalysisError> {
+    let mut analysis = 0;
+    let mut preference = 0;
+    let mut head = their_head.as_ptr();
+    // SAFETY: both output slots are writable, the repository and annotated
+    // commit remain live, and the one-element pointer array is live for the
+    // complete non-retaining call.
+    let status = unsafe {
+        ffi::git_merge_analysis(
+            &mut analysis,
+            &mut preference,
+            repository.as_ptr().cast_mut(),
+            core::ptr::addr_of_mut!(head),
+            1,
+        )
+    };
+    validate_analysis(status, analysis, preference)
+}
+
+/// Wraps: git_merge_analysis_for_ref
+/// Analyzes one merge head relative to `our_reference`.
+pub fn git_merge_analysis_for_ref(
+    repository: GitRepositoryRef<'_>,
+    our_reference: GitReferenceRef<'_>,
+    their_head: AnnotatedCommitRef<'_>,
+) -> Result<(GitMergeAnalysis, MergePreference), MergeAnalysisError> {
+    let mut analysis = 0;
+    let mut preference = 0;
+    let mut head = their_head.as_ptr();
+    // SAFETY: both outputs are writable, every handle is live, and the local
+    // one-element pointer array remains valid for this non-retaining call.
+    let status = unsafe {
+        ffi::git_merge_analysis_for_ref(
+            &mut analysis,
+            &mut preference,
+            repository.as_ptr().cast_mut(),
+            our_reference.as_ptr().cast_mut(),
+            core::ptr::addr_of_mut!(head),
+            1,
+        )
+    };
+    validate_analysis(status, analysis, preference)
+}
+
+fn oid_output(status: i32, output: Oid) -> Result<Oid, i32> {
+    if status == 0 { Ok(output) } else { Err(status) }
+}
+
+/// Wraps: git_merge_base
+/// Finds a best common ancestor of two commits.
+pub fn git_merge_base(
+    repository: GitRepositoryRef<'_>,
+    one: OidRef<'_>,
+    two: OidRef<'_>,
+) -> Result<Oid, i32> {
+    let mut output = Oid::zeroed();
+    // SAFETY: output is writable layout-compatible storage and every input
+    // handle remains live for this non-retaining graph walk.
+    let status = unsafe {
+        ffi::git_merge_base(
+            core::ptr::addr_of_mut!(output).cast(),
+            repository.as_ptr().cast_mut(),
+            one.as_ptr(),
+            two.as_ptr(),
+        )
+    };
+    oid_output(status, output)
+}
+
+/// Wraps: git_merge_base_many
+/// Finds a best common ancestor of at least two commits.
+pub fn git_merge_base_many(
+    repository: GitRepositoryRef<'_>,
+    commits: &[OidRef<'_>],
+) -> Result<Oid, i32> {
+    if commits.len() < 2 {
+        return Err(-1);
+    }
+    let raw: Vec<ffi::git_oid> = commits
+        .iter()
+        .map(|oid| {
+            // SAFETY: `git_oid` is a plain bindgen C value with no destructor;
+            // this copies its initialized bytes without forming a reference to
+            // the C-visible object covered by the handle.
+            unsafe { oid.as_ptr().read() }
+        })
+        .collect();
+    let mut output = Oid::zeroed();
+    // SAFETY: output is writable, `raw` is a contiguous array of complete
+    // copied OIDs, and the repository remains live for the call.
+    let status = unsafe {
+        ffi::git_merge_base_many(
+            core::ptr::addr_of_mut!(output).cast(),
+            repository.as_ptr().cast_mut(),
+            raw.len(),
+            raw.as_ptr(),
+        )
+    };
+    oid_output(status, output)
 }

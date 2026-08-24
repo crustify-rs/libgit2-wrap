@@ -808,6 +808,7 @@ ffibox::define_ctype!(
     ffi::git_diff
 );
 
+/// Wraps: git_diff_free
 /// An owned reference count to a [`Diff`].
 ///
 /// Dropping it calls `git_diff_free`. Libgit2 does not publish an operation
@@ -1305,5 +1306,64 @@ mod diff_file_tests {
         }
         file.clear_path();
         assert_eq!(file.as_ref().path(), None);
+    }
+}
+
+/// Wraps: git_diff_is_sorted_icase
+/// Returns whether the diff's deltas use case-insensitive ordering.
+#[must_use]
+pub fn git_diff_is_sorted_icase(diff: DiffRef<'_>) -> bool {
+    // SAFETY: `diff` is a live shared handle and C only reads its ordering
+    // configuration for this call.
+    unsafe { ffi::git_diff_is_sorted_icase(diff.as_ptr()) != 0 }
+}
+
+/// Wraps: git_diff_num_deltas
+/// Returns the number of deltas in `diff`.
+#[must_use]
+pub fn git_diff_num_deltas(diff: DiffRef<'_>) -> usize {
+    // SAFETY: `diff` is a live shared handle and C performs a scalar read.
+    unsafe { ffi::git_diff_num_deltas(diff.as_ptr()) }
+}
+
+/// Wraps: git_diff_patchid
+/// Computes the stable patch identifier for a diff.
+pub fn git_diff_patchid(
+    diff: &mut DiffMut<'_>,
+    options: Option<DiffPatchIdOptions>,
+) -> Result<crate::oid::Oid, i32> {
+    let mut out = crate::oid::Oid::zeroed();
+    let out_ptr = core::ptr::addr_of_mut!(out).cast::<ffi::git_oid>();
+    // Keep a by-value options layout in stable local storage for the call,
+    // avoiding any Rust reference over its C-visible bytes.
+    let status = match options {
+        Some(mut options) => {
+            let options = core::ptr::addr_of_mut!(options).cast::<ffi::git_diff_patchid_options>();
+            // SAFETY: `out_ptr` and `options` address initialized,
+            // layout-compatible storage and `diff` is exclusively borrowed.
+            unsafe { ffi::git_diff_patchid(out_ptr, diff.as_mut_ptr(), options) }
+        }
+        None => {
+            // SAFETY: `out_ptr` is writable, `diff` is exclusively borrowed,
+            // and null requests the published default options.
+            unsafe { ffi::git_diff_patchid(out_ptr, diff.as_mut_ptr(), core::ptr::null_mut()) }
+        }
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_diff_patchid_options_init
+/// Constructs patch-id options for the current ABI version.
+pub fn git_diff_patchid_options_init() -> Result<DiffPatchIdOptions, i32> {
+    let mut options = DiffPatchIdOptions::zeroed();
+    let raw = core::ptr::addr_of_mut!(options).cast::<ffi::git_diff_patchid_options>();
+    // SAFETY: `raw` addresses writable, layout-compatible storage and the
+    // requested version is published by the headers used to build this crate.
+    let status =
+        unsafe { ffi::git_diff_patchid_options_init(raw, ffi::GIT_DIFF_PATCHID_OPTIONS_VERSION) };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
     }
 }

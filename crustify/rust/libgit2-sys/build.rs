@@ -12,6 +12,8 @@ fn main() {
     let mut command = Command::new("bindgen");
     command
         .arg(crate_dir.join("wrapper.h"))
+        // Public headers contain C examples that rustdoc would otherwise
+        // misclassify as Rust doctests in the generated raw bindings.
         .arg("--no-doc-comments")
         .arg("--output")
         .arg(&out_file);

@@ -1,5 +1,7 @@
 //! Safe wrappers for libgit2 indexer APIs.
 
+use core::ffi::CStr;
+
 use ffibox::CBox;
 
 use crate::ffi;
@@ -17,6 +19,7 @@ ffibox::define_ctype!(
     ffi::git_indexer
 );
 
+/// Wraps: git_indexer_free
 /// An owned libgit2 indexer allocation.
 pub type IndexerOwned = CBox<Indexer>;
 
@@ -285,5 +288,96 @@ mod tests {
         assert_eq!(progress.as_ref().total_deltas(), 15);
         assert_eq!(progress.as_ref().indexed_deltas(), 16);
         assert_eq!(progress.as_ref().received_bytes(), 17);
+    }
+}
+
+/// Wraps: git_indexer_append
+/// Appends a counted packfile chunk and updates `stats` in place.
+pub fn git_indexer_append(
+    indexer: &mut IndexerMut<'_>,
+    data: &[u8],
+    stats: &mut IndexerProgressMut<'_>,
+) -> Result<(), i32> {
+    let data_ptr = if data.is_empty() {
+        b"".as_ptr()
+    } else {
+        data.as_ptr()
+    };
+    // SAFETY: both handles are exclusive and live, and `data` supplies exactly
+    // `data.len()` readable bytes that C consumes before returning.
+    let status = unsafe {
+        ffi::git_indexer_append(
+            indexer.as_mut_ptr(),
+            data_ptr.cast(),
+            data.len(),
+            stats.as_mut_ptr(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_indexer_commit
+/// Resolves pending deltas and commits the final pack and index files.
+pub fn git_indexer_commit(
+    indexer: &mut IndexerMut<'_>,
+    stats: &mut IndexerProgressMut<'_>,
+) -> Result<(), i32> {
+    // SAFETY: both C objects are exclusively borrowed and remain live for the
+    // complete call; libgit2 retains neither pointer after it returns.
+    let status = unsafe { ffi::git_indexer_commit(indexer.as_mut_ptr(), stats.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_indexer_name
+/// Borrows the finalized packfile's unique NUL-terminated name.
+#[must_use]
+pub fn git_indexer_name<'a>(indexer: IndexerRef<'a>) -> Option<&'a CStr> {
+    // SAFETY: `indexer` is live and C only reads its name pointer.
+    let name = unsafe { ffi::git_indexer_name(indexer.as_ptr()) };
+    if name.is_null() {
+        None
+    } else {
+        // SAFETY: after finalization, a non-null name is NUL-terminated and
+        // owned by the indexer for its remaining lifetime.
+        Some(unsafe { CStr::from_ptr(name) })
+    }
+}
+
+/// Wraps: git_indexer_progress_cb
+/// Safe callable surface for transient indexer progress notifications.
+pub trait GitIndexerProgressCallback {
+    /// Returns zero to continue or a nonzero status to cancel indexing.
+    fn call(&mut self, progress: IndexerProgressRef<'_>) -> i32;
+}
+
+impl<F> GitIndexerProgressCallback for F
+where
+    F: for<'a> FnMut(IndexerProgressRef<'a>) -> i32,
+{
+    fn call(&mut self, progress: IndexerProgressRef<'_>) -> i32 {
+        self(progress)
+    }
+}
+
+#[cfg(test)]
+mod callback_tests {
+    use super::*;
+
+    #[test]
+    fn progress_callback_receives_a_typed_borrow() {
+        let mut raw = ffi::git_indexer_progress {
+            total_objects: 9,
+            indexed_objects: 0,
+            received_objects: 0,
+            local_objects: 0,
+            total_deltas: 0,
+            indexed_deltas: 0,
+            received_bytes: 0,
+        };
+        // SAFETY: `raw` is initialized and remains live and immutable while
+        // the callback uses this shared handle.
+        let progress = unsafe { IndexerProgressRef::from_ptr(&raw mut raw) }.unwrap();
+        let mut callback = |value: IndexerProgressRef<'_>| value.total_objects() as i32;
+        assert_eq!(GitIndexerProgressCallback::call(&mut callback, progress), 9);
     }
 }

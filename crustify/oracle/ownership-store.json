@@ -6613,6 +6613,170 @@
    ]
   },
   {
+   "name": "git_config_set_multivar",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:config"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient NUL-terminated input string; libgit2 copies or consumes it before returning."
+     }
+    },
+    {
+     "name": "regexp",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:regexp"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient NUL-terminated input string; libgit2 copies or consumes it before returning."
+     }
+    },
+    {
+     "name": "value",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:value"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient NUL-terminated input string; libgit2 copies or consumes it before returning."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_set_string",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:config"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient NUL-terminated input string; libgit2 copies or consumes it before returning."
+     }
+    },
+    {
+     "name": "value",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:value"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient NUL-terminated input string; libgit2 copies or consumes it before returning."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_snapshot",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "in",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:in"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Non-null borrowed output slot receives one fresh owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_credential_free",
    "defined_in": "src/libgit2/transports/credential.c",
    "lifetime": {
@@ -6640,6 +6804,125 @@
    ]
   },
   {
+   "name": "git_describe_commit",
+   "defined_in": "src/libgit2/describe.c",
+   "ptr_args": [
+    {
+     "name": "committish",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:committish"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "result",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": {
+         "lifetime": "arg:committish"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:result"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Non-null output slot receives owned result storage that retains a borrowed repository derived from committish."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_describe_format",
+   "defined_in": "src/libgit2/describe.c",
+   "ptr_args": [
+    {
+     "name": "given",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "result",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:result"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_describe_result_free",
    "defined_in": "src/libgit2/describe.c",
    "lifetime": {
@@ -6662,6 +6945,68 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees a complete describe result plus its owned name/tag variant; NULL is accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_describe_workdir",
+   "defined_in": "src/libgit2/describe.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Non-null output slot receives owned result storage that retains a borrowed repository derived from repo."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
      }
     }
    ]
@@ -6726,6 +7071,304 @@
    ]
   },
   {
+   "name": "git_diff_from_buffer",
+   "defined_in": "src/libgit2/diff_parse.c",
+   "ptr_args": [
+    {
+     "name": "content",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:content"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Counted transient byte span read only during the call."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Non-null borrowed output slot receives one fresh owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_get_stats",
+   "defined_in": "src/libgit2/diff_stats.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Non-null borrowed output slot receives one fresh owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_is_sorted_icase",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_merge",
+   "defined_in": "src/libgit2/diff_tform.c",
+   "ptr_args": [
+    {
+     "name": "from",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:from"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "onto",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:onto"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_num_deltas",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_patchid",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_patchid_options_init",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_stats_deletions",
+   "defined_in": "src/libgit2/diff_stats.c",
+   "ptr_args": [
+    {
+     "name": "stats",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:stats"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_stats_files_changed",
+   "defined_in": "src/libgit2/diff_stats.c",
+   "ptr_args": [
+    {
+     "name": "stats",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:stats"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_stats_free",
    "defined_in": "src/libgit2/diff_stats.c",
    "lifetime": {
@@ -6753,8 +7396,91 @@
    ]
   },
   {
+   "name": "git_diff_stats_insertions",
+   "defined_in": "src/libgit2/diff_stats.c",
+   "ptr_args": [
+    {
+     "name": "stats",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:stats"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_stats_to_buf",
+   "defined_in": "src/libgit2/diff_stats.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "stats",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:stats"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_error_clear",
    "defined_in": "src/util/errors.c"
+  },
+  {
+   "name": "git_error_last",
+   "defined_in": "src/util/errors.c",
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "other"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Non-null thread-local error record managed and replaceable by libgit2; callers must copy it before another call."
+    }
+   }
   },
   {
    "name": "git_error_set_str",
@@ -6775,6 +7501,270 @@
       "nullable": false,
       "mutable": false,
       "note": "Required transient NUL string copied into thread-local error storage."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_graph_ahead_behind",
+   "defined_in": "src/libgit2/graph.c",
+   "ptr_args": [
+    {
+     "name": "ahead",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ahead"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "behind",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:behind"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "local",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:local"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "upstream",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:upstream"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_graph_descendant_of",
+   "defined_in": "src/libgit2/graph.c",
+   "ptr_args": [
+    {
+     "name": "ancestor",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ancestor"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_ignore_add_rule",
+   "defined_in": "src/libgit2/ignore.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "rules",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:rules"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient NUL-terminated input string; libgit2 copies or consumes it before returning."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_ignore_clear_internal_rules",
+   "defined_in": "src/libgit2/ignore.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_ignore_path_is_ignored",
+   "defined_in": "src/libgit2/ignore.c",
+   "ptr_args": [
+    {
+     "name": "ignored",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ignored"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "pathname",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pathname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient NUL-terminated input string; libgit2 copies or consumes it before returning."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
      }
     }
    ]
@@ -6891,6 +7881,103 @@
    ]
   },
   {
+   "name": "git_indexer_append",
+   "defined_in": "src/libgit2/indexer.c",
+   "ptr_args": [
+    {
+     "name": "data",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:data"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Counted transient byte span read only during the call."
+     }
+    },
+    {
+     "name": "idx",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:idx"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "stats",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:stats"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_indexer_commit",
+   "defined_in": "src/libgit2/indexer.c",
+   "ptr_args": [
+    {
+     "name": "idx",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:idx"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "stats",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:stats"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_indexer_free",
    "defined_in": "src/libgit2/indexer.c",
    "lifetime": {
@@ -6913,6 +8000,83 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a complete indexer allocation and all owned fields; NULL is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_indexer_name",
+   "defined_in": "src/libgit2/indexer.c",
+   "ptr_args": [
+    {
+     "name": "idx",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:idx"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": null,
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:idx"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "NUL-terminated name owned by the indexer; null before successful finalization and otherwise valid for the indexer lifetime."
+    }
+   }
+  },
+  {
+   "name": "git_indexer_progress_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Caller-owned callback payload borrowed for this invocation."
      }
     }
    ]
@@ -7010,6 +8174,89 @@
    ]
   },
   {
+   "name": "git_mailmap_add_entry",
+   "defined_in": "src/libgit2/mailmap.c",
+   "ptr_args": [
+    {
+     "name": "mm",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:mm"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "real_email",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:real_email"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Transient NUL-terminated input string; libgit2 copies or consumes it before returning."
+     }
+    },
+    {
+     "name": "real_name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:real_name"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Transient NUL-terminated input string; libgit2 copies or consumes it before returning."
+     }
+    },
+    {
+     "name": "replace_email",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:replace_email"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient NUL-terminated input string; libgit2 copies or consumes it before returning."
+     }
+    },
+    {
+     "name": "replace_name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:replace_name"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Transient NUL-terminated input string; libgit2 copies or consumes it before returning."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_mailmap_free",
    "defined_in": "src/libgit2/mailmap.c",
    "lifetime": {
@@ -7032,6 +8279,407 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a complete mailmap when non-null, frees every owned entry, disposes the entries vector, and releases the mailmap allocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_mailmap_from_buffer",
+   "defined_in": "src/libgit2/mailmap.c",
+   "ptr_args": [
+    {
+     "name": "data",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:data"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Counted transient byte span read only during the call."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Non-null borrowed output slot receives one fresh owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_mailmap_from_repository",
+   "defined_in": "src/libgit2/mailmap.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Non-null borrowed output slot receives one fresh owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_mailmap_new",
+   "defined_in": "src/libgit2/mailmap.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Non-null borrowed output slot receives one fresh owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_merge_analysis",
+   "defined_in": "src/libgit2/merge.c",
+   "ptr_args": [
+    {
+     "name": "analysis_out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:analysis_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "preference_out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:preference_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "their_heads",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "arg:their_heads"
+        }
+       }
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:their_heads"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Counted array of borrowed annotated-commit pointers; neither array nor elements are retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_merge_analysis_for_ref",
+   "defined_in": "src/libgit2/merge.c",
+   "ptr_args": [
+    {
+     "name": "analysis_out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:analysis_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "our_ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:our_ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "preference_out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:preference_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "their_heads",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "arg:their_heads"
+        }
+       }
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:their_heads"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Counted array of borrowed annotated-commit pointers; neither array nor elements are retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_merge_base",
+   "defined_in": "src/libgit2/merge.c",
+   "ptr_args": [
+    {
+     "name": "one",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:one"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "two",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:two"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_merge_base_many",
+   "defined_in": "src/libgit2/merge.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; libgit2 retains no ownership."
      }
     }
    ]

@@ -3,9 +3,12 @@
 use core::ffi::CStr;
 use core::ptr::{addr_of, addr_of_mut};
 
-use ffibox::{define_ctype, impl_dropped};
+use ffibox::{CBox, CVal, define_ctype, impl_dropped};
 
+use crate::api::buffer::GitBuf;
 use crate::ffi;
+use crate::object::GitObjectRef;
+use crate::repository::GitRepositoryRef;
 
 define_ctype!(
     /// Formatting options consumed by libgit2 describe operations.
@@ -413,4 +416,84 @@ mod describe_type_tests {
         // `None` without adopting or dereferencing an allocation.
         assert!(unsafe { CBox::<DescribeResult>::from_raw(ptr::null_mut()) }.is_none());
     }
+}
+
+/// Wraps: git_describe_result_free
+/// An owned describe result tied to the repository from which it was built.
+pub struct DescribeResultOwned<'repo> {
+    inner: CBox<DescribeResult>,
+    repository: core::marker::PhantomData<&'repo ()>,
+}
+
+impl<'repo> DescribeResultOwned<'repo> {
+    unsafe fn from_raw(raw: *mut ffi::git_describe_result) -> Option<Self> {
+        // SAFETY: the caller guarantees that `raw` is null or a fresh complete
+        // result whose destructor is registered above.
+        let inner = unsafe { CBox::from_raw(raw) }?;
+        Some(Self {
+            inner,
+            repository: core::marker::PhantomData,
+        })
+    }
+
+    /// Borrows the result for formatting.
+    #[must_use]
+    pub fn as_ref(&self) -> DescribeResultRef<'_> {
+        self.inner.as_ref()
+    }
+}
+
+/// Wraps: git_describe_commit
+/// Describes `committish` and ties the result to its repository lifetime.
+pub fn git_describe_commit<'repo>(
+    committish: GitObjectRef<'repo>,
+    options: Option<DescribeOptionsRef<'_>>,
+) -> Result<DescribeResultOwned<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    let options = options.map_or(core::ptr::null_mut(), |value| value.as_ptr().cast_mut());
+    // SAFETY: `out` is writable, both handles are live for the call, and C
+    // copies the options. The returned result only borrows the object's
+    // repository, represented by `'repo` in the owning result.
+    let status =
+        unsafe { ffi::git_describe_commit(&mut out, committish.as_ptr().cast_mut(), options) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns a fresh complete describe result.
+    unsafe { DescribeResultOwned::from_raw(out) }.ok_or(-1)
+}
+
+/// Wraps: git_describe_format
+/// Formats a describe result into a field-owning libgit2 buffer.
+pub fn git_describe_format(
+    out: &mut CVal<GitBuf>,
+    result: DescribeResultRef<'_>,
+    options: Option<DescribeFormatOptionsRef<'_>>,
+) -> Result<(), i32> {
+    let options = options.map_or(core::ptr::null(), |value| value.as_ptr());
+    // SAFETY: the output header is exclusively borrowed and initialized, and
+    // both input handles remain live for this non-retaining call.
+    let status =
+        unsafe { ffi::git_describe_format(out.as_mut().as_mut_ptr(), result.as_ptr(), options) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_describe_workdir
+/// Describes `HEAD` and the worktree, tying the result to `repository`.
+pub fn git_describe_workdir<'repo>(
+    repository: GitRepositoryRef<'repo>,
+    options: Option<DescribeOptionsRef<'_>>,
+) -> Result<DescribeResultOwned<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    let options = options.map_or(core::ptr::null_mut(), |value| value.as_ptr().cast_mut());
+    // SAFETY: `out` is writable and the two live handles satisfy the C call.
+    // The successful result retains a non-owning repository pointer, whose
+    // lifetime is carried by `DescribeResultOwned<'repo>`.
+    let status =
+        unsafe { ffi::git_describe_workdir(&mut out, repository.as_ptr().cast_mut(), options) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns a fresh complete describe result.
+    unsafe { DescribeResultOwned::from_raw(out) }.ok_or(-1)
 }

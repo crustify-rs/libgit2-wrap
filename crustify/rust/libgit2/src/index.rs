@@ -73,6 +73,7 @@ ffibox::define_ctype!(
     ffi::git_index_conflict_iterator
 );
 
+/// Wraps: git_index_conflict_iterator_free
 /// An owning conflict-iterator allocation.
 ///
 /// This raw ownership building block does not by itself carry the iterator's

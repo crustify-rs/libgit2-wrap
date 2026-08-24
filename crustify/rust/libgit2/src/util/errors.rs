@@ -87,6 +87,19 @@ mod tests {
     }
 
     #[test]
+    fn last_error_is_copied_out_of_thread_local_storage() {
+        // SAFETY: initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        assert_eq!(git_error_set_str(7, c"snapshot"), Ok(()));
+        let snapshot = git_error_last();
+        assert_eq!(snapshot.message.as_deref(), Some(c"snapshot"));
+        assert_eq!(snapshot.klass, 7);
+        git_error_clear();
+        // SAFETY: balances this test's successful initialization.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
     fn error_wrapper_preserves_the_c_layout() {
         assert_eq!(size_of::<GitError>(), size_of::<ffi::git_error>());
         assert_eq!(align_of::<GitError>(), align_of::<ffi::git_error>());
@@ -125,5 +138,30 @@ mod tests {
         // occurs while the handle is used.
         let error = unsafe { GitErrorRef::from_ptr(&raw mut raw) }.unwrap();
         assert_eq!(error.message(), None);
+    }
+}
+
+/// An owned copy of libgit2's thread-local last-error record.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GitErrorSnapshot {
+    /// The optional copied error message.
+    pub message: Option<CString>,
+    /// The libgit2 error class.
+    pub klass: i32,
+}
+
+/// Wraps: git_error_last
+/// Copies the current thread's last-error record before another libgit2 call
+/// can replace its thread-local storage.
+#[must_use]
+pub fn git_error_last() -> GitErrorSnapshot {
+    // SAFETY: libgit2 documents a non-null pointer to an initialized
+    // thread-local record. The handle is kept private and used only until both
+    // fields have been copied below.
+    let error = unsafe { GitErrorRef::from_ptr(ffi::git_error_last().cast_mut()) }
+        .expect("git_error_last is documented never to return null");
+    GitErrorSnapshot {
+        message: error.message(),
+        klass: error.klass(),
     }
 }
