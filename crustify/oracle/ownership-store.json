@@ -2699,6 +2699,43 @@
    ]
   },
   {
+   "name": "git_revspec",
+   "defined_in": "include/git2/revparse.h",
+   "_comment_agent": "The public git_revparse output is a caller-allocated value whose from and to members independently receive owned git_object references. Both are nullable (single specifications omit to, and failure cleanup clears from), and callers release every non-null member with git_object_free.",
+   "fields": [
+    {
+     "name": "from",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Owned git_object result transferred into the output; null on initialization/error paths and released independently with git_object_free."
+     }
+    },
+    {
+     "name": "to",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Owned right-hand git_object result for ranges; null for single revisions and released independently with git_object_free."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_revwalk",
    "defined_in": "src/libgit2/revwalk.h",
    "_comment_agent": "Reviewed all pointer fields against revwalk.c. Public wrap remains opaque; these facts document internal ownership and lifetime coupling.",
@@ -2878,6 +2915,39 @@
       "nullable": true,
       "mutable": true,
       "note": "Owned linked-list head allocated while pushing commits and freed by git_revwalk_reset."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_signature",
+   "defined_in": "include/git2/types.h",
+   "_comment_agent": "A fully initialized public git_signature owns non-null NUL-terminated name and email allocations. git_signature_free releases both strings and the header; git_signature_dup deep-copies the complete value. Public documentation also permits manual teardown of the three allocations.",
+   "fields": [
+    {
+     "name": "email",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": false,
+      "note": "Non-null owned NUL-terminated email allocated by libgit2 and released with git__free by git_signature_free."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": false,
+      "note": "Non-null owned NUL-terminated name allocated by libgit2 and released with git__free by git_signature_free."
      }
     }
    ]
@@ -5636,6 +5706,85 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees a complete walker allocation; NULL is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_signature_dup",
+   "defined_in": "src/libgit2/signature.c",
+   "lifetime": {
+    "for": "source",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": true,
+     "upref": false
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "dest",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:dest"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed non-null output slot receives a fresh independently owned deep copy on success."
+     }
+    },
+    {
+     "name": "source",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:source"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed source read during deep copy; the implementation accepts null as a no-op, while owned-wrapper cloning supplies non-null."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_signature_free",
+   "defined_in": "src/libgit2/signature.c",
+   "lifetime": {
+    "for": "sig",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "sig",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and releases a complete signature allocation and its two strings; null is accepted."
      }
     }
    ]

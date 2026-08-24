@@ -1,9 +1,11 @@
 //! Safe wrappers for libgit2 types APIs.
 
+use core::ffi::CStr;
 use core::ops::{BitOr, BitOrAssign};
 use core::ptr::NonNull;
 
 use crate::ffi;
+use crate::util::alloc::GitStrdupFree;
 
 /// Wraps: git_branch_t
 /// A checked set of branch kinds used by libgit2 branch APIs.
@@ -812,5 +814,242 @@ mod writestream_tests {
 
         drop(stream);
         assert_eq!(FREES.load(Ordering::SeqCst), 1);
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_signature
+    /// A self-contained actor identity and action time allocated by libgit2.
+    GitSignature,
+    GitSignatureRef,
+    GitSignatureMut,
+    ffi::git_signature
+);
+
+/// An owned signature released with `git_signature_free`.
+pub type GitSignatureOwned = ffibox::CBox<GitSignature>;
+
+/// An owned signature name or email allocated by libgit2.
+pub type GitSignatureString = ffibox::CrustifyStr<GitStrdupFree>;
+
+// SAFETY: `git_signature_free` releases a fully initialized signature header
+// and its two uniquely owned strings. `GitSignature` is transparent over the
+// corresponding bindgen layout.
+ffibox::impl_dropped!(GitSignature, ffi::git_signature, ffi::git_signature_free);
+
+// SAFETY: `git_signature_dup` deep-copies a live signature and both strings
+// into a fresh allocation that is independently releasable by
+// `git_signature_free`.
+unsafe impl ffibox::CCloned for GitSignature {
+    unsafe fn c_clone(obj: NonNull<Self>) -> Option<NonNull<Self>> {
+        let mut duplicate = core::ptr::null_mut();
+        // SAFETY: the `CCloned` contract supplies a live initialized source,
+        // and `duplicate` is a valid non-null output slot for the C call.
+        let error = unsafe {
+            ffi::git_signature_dup(
+                core::ptr::addr_of_mut!(duplicate),
+                obj.as_ptr().cast::<ffi::git_signature>(),
+            )
+        };
+        if error < 0 {
+            None
+        } else {
+            NonNull::new(duplicate.cast::<Self>())
+        }
+    }
+}
+
+impl<'a> GitSignatureRef<'a> {
+    /// Wraps: git_signature.name
+    /// Borrows the nonempty, NUL-terminated actor name.
+    #[must_use]
+    pub fn name(&self) -> &'a CStr {
+        // SAFETY: raw-place projection reads the initialized pointer field
+        // without forming a reference to the signature header.
+        let name = unsafe { core::ptr::addr_of!((*self.as_ptr()).name).read() };
+        // SAFETY: every valid signature owns a non-null NUL-terminated name,
+        // which remains live for this shared handle's lifetime.
+        unsafe { CStr::from_ptr(name) }
+    }
+
+    /// Clones the actor name into a new independently owned allocation.
+    pub fn try_clone_name(&self) -> Option<GitSignatureString> {
+        clone_signature_string(self.name())
+    }
+
+    /// Wraps: git_signature.when
+    /// Borrows the signature timestamp stored by value.
+    #[must_use]
+    pub fn when(&self) -> GitTimeRef<'a> {
+        // SAFETY: raw-place projection from this live handle obtains the
+        // inline field address without forming a reference to C-visible data.
+        let when = unsafe { core::ptr::addr_of!((*self.as_ptr()).when).cast_mut() };
+        // SAFETY: `when` projects the initialized inline field of this live
+        // shared signature; the returned handle is bounded by the same borrow.
+        unsafe { GitTimeRef::from_ptr(when) }.expect("an inline field is non-null")
+    }
+
+    /// Wraps: git_signature.email
+    /// Borrows the nonempty, NUL-terminated actor email address.
+    #[must_use]
+    pub fn email(&self) -> &'a CStr {
+        // SAFETY: raw-place projection reads the initialized pointer field
+        // without forming a reference to the signature header.
+        let email = unsafe { core::ptr::addr_of!((*self.as_ptr()).email).read() };
+        // SAFETY: every valid signature owns a non-null NUL-terminated email,
+        // which remains live for this shared handle's lifetime.
+        unsafe { CStr::from_ptr(email) }
+    }
+
+    /// Clones the email address into a new independently owned allocation.
+    pub fn try_clone_email(&self) -> Option<GitSignatureString> {
+        clone_signature_string(self.email())
+    }
+}
+
+impl GitSignatureMut<'_> {
+    /// Replaces the owned actor name and releases the previous allocation.
+    pub fn set_name(&mut self, name: GitSignatureString) {
+        let name = name.into_raw();
+        let signature = self.as_mut_ptr();
+        // SAFETY: this exclusive handle permits replacing the owned pointer.
+        // A valid signature's old name is non-null and uniquely owned.
+        let old = unsafe {
+            let old = core::ptr::addr_of!((*signature).name).read();
+            core::ptr::addr_of_mut!((*signature).name).write(name);
+            GitSignatureString::from_raw(old)
+        }
+        .expect("a valid signature has a non-null name");
+        drop(old);
+    }
+
+    /// Exclusively borrows the signature timestamp stored by value.
+    #[must_use]
+    pub fn when_mut(&mut self) -> GitTimeMut<'_> {
+        // SAFETY: raw-place projection from this exclusive handle obtains the
+        // inline field address without forming a reference to C-visible data.
+        let when = unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).when) };
+        // SAFETY: `when` projects the initialized inline field of this live
+        // exclusive signature and the returned handle is tied to the reborrow.
+        unsafe { GitTimeMut::from_ptr(when) }.expect("an inline field is non-null")
+    }
+
+    /// Replaces the owned email address and releases the previous allocation.
+    pub fn set_email(&mut self, email: GitSignatureString) {
+        let email = email.into_raw();
+        let signature = self.as_mut_ptr();
+        // SAFETY: this exclusive handle permits replacing the owned pointer.
+        // A valid signature's old email is non-null and uniquely owned.
+        let old = unsafe {
+            let old = core::ptr::addr_of!((*signature).email).read();
+            core::ptr::addr_of_mut!((*signature).email).write(email);
+            GitSignatureString::from_raw(old)
+        }
+        .expect("a valid signature has a non-null email");
+        drop(old);
+    }
+}
+
+fn clone_signature_string(value: &CStr) -> Option<GitSignatureString> {
+    // SAFETY: `value` supplies a live NUL-terminated string for the duration
+    // of this synchronous deep-copy call.
+    let duplicate = unsafe { ffi::crustify_git__strdup(value.as_ptr()) };
+    // SAFETY: a non-null result is a fresh NUL-terminated allocation made by
+    // libgit2's configured allocator and matched by `GitStrdupFree`.
+    unsafe { GitSignatureString::from_raw(duplicate) }
+}
+
+#[cfg(test)]
+mod signature_tests {
+    use core::mem::{align_of, size_of};
+
+    use ffibox::{CCloned, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn signature_wrapper_preserves_layout_and_lifecycle() {
+        fn assert_lifecycle<T: CDropped + CCloned>() {}
+        assert_lifecycle::<GitSignature>();
+        assert_eq!(size_of::<GitSignature>(), size_of::<ffi::git_signature>());
+        assert_eq!(align_of::<GitSignature>(), align_of::<ffi::git_signature>());
+        assert_eq!(
+            size_of::<GitSignatureRef<'_>>(),
+            size_of::<*const ffi::git_signature>()
+        );
+        assert_eq!(
+            size_of::<GitSignatureMut<'_>>(),
+            size_of::<*mut ffi::git_signature>()
+        );
+        assert_eq!(
+            size_of::<Option<GitSignatureOwned>>(),
+            size_of::<*mut ffi::git_signature>()
+        );
+    }
+
+    #[test]
+    fn owned_signature_clones_strings_and_projects_time() {
+        // SAFETY: libgit2 initialization is process-global and refcounted; the
+        // successful call is balanced after every test allocation is dropped.
+        let init_count = unsafe { ffi::git_libgit2_init() };
+        assert!(init_count > 0);
+
+        // SAFETY: libgit2 is initialized, so these calls use its configured
+        // allocator and copy live NUL-terminated literals.
+        let (header, name, email) = unsafe {
+            (
+                ffi::crustify_git__malloc(size_of::<ffi::git_signature>())
+                    .cast::<ffi::git_signature>(),
+                ffi::crustify_git__strdup(c"Ada".as_ptr()),
+                ffi::crustify_git__strdup(c"ada@example.com".as_ptr()),
+            )
+        };
+        assert!(!header.is_null());
+        assert!(!name.is_null());
+        assert!(!email.is_null());
+        // SAFETY: `header` addresses suitably aligned storage large enough for
+        // the bindgen type, and the two strings are fresh owned allocations.
+        unsafe {
+            header.write(ffi::git_signature {
+                name,
+                email,
+                when: ffi::git_time {
+                    time: 42,
+                    offset: -60,
+                    sign: b'-' as core::ffi::c_char,
+                },
+            });
+        }
+        // SAFETY: `header` is now one fully initialized, uniquely owned
+        // signature allocation matched by `git_signature_free`.
+        let mut signature = unsafe { GitSignatureOwned::from_raw(header) }.unwrap();
+
+        assert_eq!(signature.as_ref().name(), c"Ada");
+        assert_eq!(signature.as_ref().email(), c"ada@example.com");
+        assert_eq!(signature.as_ref().when().time(), 42);
+        assert_eq!(signature.as_ref().when().sign(), Ok(GitTimeSign::Negative));
+
+        let cloned = signature.try_clone().expect("signature deep copy");
+        assert_eq!(cloned.as_ref().name(), signature.as_ref().name());
+        assert_ne!(
+            cloned.as_ref().name().as_ptr(),
+            signature.as_ref().name().as_ptr()
+        );
+
+        let replacement = signature
+            .as_ref()
+            .try_clone_email()
+            .expect("email deep copy");
+        signature.as_mut().set_name(replacement);
+        signature.as_mut().when_mut().set_time(84);
+        assert_eq!(signature.as_ref().name(), c"ada@example.com");
+        assert_eq!(signature.as_ref().when().time(), 84);
+
+        drop(cloned);
+        drop(signature);
+        // SAFETY: balances this test's successful initialization after all
+        // libgit2 allocations have been released.
+        let remaining = unsafe { ffi::git_libgit2_shutdown() };
+        assert!(remaining >= 0);
     }
 }
