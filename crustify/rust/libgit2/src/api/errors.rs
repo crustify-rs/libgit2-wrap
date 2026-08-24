@@ -142,8 +142,178 @@ impl TryFrom<ffi::git_error_code> for GitErrorCode {
     }
 }
 
+/// Wraps: git_error_t
+/// A checked category attached to libgit2's thread-local error record.
+#[non_exhaustive]
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum GitErrorClass {
+    /// No error category.
+    None = ffi::git_error_t_GIT_ERROR_NONE,
+    /// Memory allocation failed.
+    NoMemory = ffi::git_error_t_GIT_ERROR_NOMEMORY,
+    /// Operating-system error.
+    Os = ffi::git_error_t_GIT_ERROR_OS,
+    /// Invalid input or state.
+    Invalid = ffi::git_error_t_GIT_ERROR_INVALID,
+    /// Reference error.
+    Reference = ffi::git_error_t_GIT_ERROR_REFERENCE,
+    /// Compression error.
+    Zlib = ffi::git_error_t_GIT_ERROR_ZLIB,
+    /// Repository error.
+    Repository = ffi::git_error_t_GIT_ERROR_REPOSITORY,
+    /// Configuration error.
+    Config = ffi::git_error_t_GIT_ERROR_CONFIG,
+    /// Regular-expression error.
+    Regex = ffi::git_error_t_GIT_ERROR_REGEX,
+    /// Object-database error.
+    Odb = ffi::git_error_t_GIT_ERROR_ODB,
+    /// Index error.
+    Index = ffi::git_error_t_GIT_ERROR_INDEX,
+    /// Git object error.
+    Object = ffi::git_error_t_GIT_ERROR_OBJECT,
+    /// Network error.
+    Net = ffi::git_error_t_GIT_ERROR_NET,
+    /// Tag error.
+    Tag = ffi::git_error_t_GIT_ERROR_TAG,
+    /// Tree error.
+    Tree = ffi::git_error_t_GIT_ERROR_TREE,
+    /// Indexer error.
+    Indexer = ffi::git_error_t_GIT_ERROR_INDEXER,
+    /// TLS error.
+    Ssl = ffi::git_error_t_GIT_ERROR_SSL,
+    /// Submodule error.
+    Submodule = ffi::git_error_t_GIT_ERROR_SUBMODULE,
+    /// Threading error.
+    Thread = ffi::git_error_t_GIT_ERROR_THREAD,
+    /// Stash error.
+    Stash = ffi::git_error_t_GIT_ERROR_STASH,
+    /// Checkout error.
+    Checkout = ffi::git_error_t_GIT_ERROR_CHECKOUT,
+    /// FETCH_HEAD error.
+    FetchHead = ffi::git_error_t_GIT_ERROR_FETCHHEAD,
+    /// Merge error.
+    Merge = ffi::git_error_t_GIT_ERROR_MERGE,
+    /// SSH error.
+    Ssh = ffi::git_error_t_GIT_ERROR_SSH,
+    /// Filter error.
+    Filter = ffi::git_error_t_GIT_ERROR_FILTER,
+    /// Revert error.
+    Revert = ffi::git_error_t_GIT_ERROR_REVERT,
+    /// Callback error.
+    Callback = ffi::git_error_t_GIT_ERROR_CALLBACK,
+    /// Cherry-pick error.
+    CherryPick = ffi::git_error_t_GIT_ERROR_CHERRYPICK,
+    /// Describe error.
+    Describe = ffi::git_error_t_GIT_ERROR_DESCRIBE,
+    /// Rebase error.
+    Rebase = ffi::git_error_t_GIT_ERROR_REBASE,
+    /// Filesystem error.
+    Filesystem = ffi::git_error_t_GIT_ERROR_FILESYSTEM,
+    /// Patch error.
+    Patch = ffi::git_error_t_GIT_ERROR_PATCH,
+    /// Worktree error.
+    Worktree = ffi::git_error_t_GIT_ERROR_WORKTREE,
+    /// Object-ID hashing error.
+    Sha = ffi::git_error_t_GIT_ERROR_SHA,
+    /// HTTP error.
+    Http = ffi::git_error_t_GIT_ERROR_HTTP,
+    /// Internal libgit2 error.
+    Internal = ffi::git_error_t_GIT_ERROR_INTERNAL,
+    /// Grafts error.
+    Grafts = ffi::git_error_t_GIT_ERROR_GRAFTS,
+}
+
+impl GitErrorClass {
+    /// Converts a raw C enum value when it is published by this libgit2 API.
+    #[must_use]
+    pub const fn from_raw(raw: ffi::git_error_t) -> Option<Self> {
+        match raw {
+            ffi::git_error_t_GIT_ERROR_NONE => Some(Self::None),
+            ffi::git_error_t_GIT_ERROR_NOMEMORY => Some(Self::NoMemory),
+            ffi::git_error_t_GIT_ERROR_OS => Some(Self::Os),
+            ffi::git_error_t_GIT_ERROR_INVALID => Some(Self::Invalid),
+            ffi::git_error_t_GIT_ERROR_REFERENCE => Some(Self::Reference),
+            ffi::git_error_t_GIT_ERROR_ZLIB => Some(Self::Zlib),
+            ffi::git_error_t_GIT_ERROR_REPOSITORY => Some(Self::Repository),
+            ffi::git_error_t_GIT_ERROR_CONFIG => Some(Self::Config),
+            ffi::git_error_t_GIT_ERROR_REGEX => Some(Self::Regex),
+            ffi::git_error_t_GIT_ERROR_ODB => Some(Self::Odb),
+            ffi::git_error_t_GIT_ERROR_INDEX => Some(Self::Index),
+            ffi::git_error_t_GIT_ERROR_OBJECT => Some(Self::Object),
+            ffi::git_error_t_GIT_ERROR_NET => Some(Self::Net),
+            ffi::git_error_t_GIT_ERROR_TAG => Some(Self::Tag),
+            ffi::git_error_t_GIT_ERROR_TREE => Some(Self::Tree),
+            ffi::git_error_t_GIT_ERROR_INDEXER => Some(Self::Indexer),
+            ffi::git_error_t_GIT_ERROR_SSL => Some(Self::Ssl),
+            ffi::git_error_t_GIT_ERROR_SUBMODULE => Some(Self::Submodule),
+            ffi::git_error_t_GIT_ERROR_THREAD => Some(Self::Thread),
+            ffi::git_error_t_GIT_ERROR_STASH => Some(Self::Stash),
+            ffi::git_error_t_GIT_ERROR_CHECKOUT => Some(Self::Checkout),
+            ffi::git_error_t_GIT_ERROR_FETCHHEAD => Some(Self::FetchHead),
+            ffi::git_error_t_GIT_ERROR_MERGE => Some(Self::Merge),
+            ffi::git_error_t_GIT_ERROR_SSH => Some(Self::Ssh),
+            ffi::git_error_t_GIT_ERROR_FILTER => Some(Self::Filter),
+            ffi::git_error_t_GIT_ERROR_REVERT => Some(Self::Revert),
+            ffi::git_error_t_GIT_ERROR_CALLBACK => Some(Self::Callback),
+            ffi::git_error_t_GIT_ERROR_CHERRYPICK => Some(Self::CherryPick),
+            ffi::git_error_t_GIT_ERROR_DESCRIBE => Some(Self::Describe),
+            ffi::git_error_t_GIT_ERROR_REBASE => Some(Self::Rebase),
+            ffi::git_error_t_GIT_ERROR_FILESYSTEM => Some(Self::Filesystem),
+            ffi::git_error_t_GIT_ERROR_PATCH => Some(Self::Patch),
+            ffi::git_error_t_GIT_ERROR_WORKTREE => Some(Self::Worktree),
+            ffi::git_error_t_GIT_ERROR_SHA => Some(Self::Sha),
+            ffi::git_error_t_GIT_ERROR_HTTP => Some(Self::Http),
+            ffi::git_error_t_GIT_ERROR_INTERNAL => Some(Self::Internal),
+            ffi::git_error_t_GIT_ERROR_GRAFTS => Some(Self::Grafts),
+            _ => None,
+        }
+    }
+
+    /// Returns the underlying C enum value.
+    #[must_use]
+    pub const fn as_raw(self) -> ffi::git_error_t {
+        self as ffi::git_error_t
+    }
+
+    /// Returns the integer form used by `git_error` records and setters.
+    #[must_use]
+    pub const fn as_c_int(self) -> core::ffi::c_int {
+        self.as_raw() as core::ffi::c_int
+    }
+}
+
+/// An integer error class not published by this libgit2 API.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidGitErrorClass(core::ffi::c_int);
+
+impl InvalidGitErrorClass {
+    /// Returns the unrecognized integer.
+    #[must_use]
+    pub const fn value(self) -> core::ffi::c_int {
+        self.0
+    }
+}
+
+impl From<GitErrorClass> for ffi::git_error_t {
+    fn from(class: GitErrorClass) -> Self {
+        class.as_raw()
+    }
+}
+
+impl TryFrom<core::ffi::c_int> for GitErrorClass {
+    type Error = InvalidGitErrorClass;
+
+    fn try_from(raw: core::ffi::c_int) -> Result<Self, Self::Error> {
+        if raw < 0 {
+            return Err(InvalidGitErrorClass(raw));
+        }
+        Self::from_raw(raw as ffi::git_error_t).ok_or(InvalidGitErrorClass(raw))
+    }
+}
+
 #[cfg(test)]
-mod tests {
+mod code_tests {
     use core::mem::{align_of, size_of};
 
     use super::*;
@@ -208,5 +378,38 @@ mod tests {
             align_of::<GitErrorCode>(),
             align_of::<ffi::git_error_code>()
         );
+    }
+}
+
+#[cfg(test)]
+mod class_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn every_published_error_class_round_trips() {
+        for raw in ffi::git_error_t_GIT_ERROR_NONE..=ffi::git_error_t_GIT_ERROR_GRAFTS {
+            let class = GitErrorClass::from_raw(raw).expect("published classes are dense");
+            assert_eq!(class.as_raw(), raw);
+            assert_eq!(GitErrorClass::try_from(raw as core::ffi::c_int), Ok(class));
+        }
+    }
+
+    #[test]
+    fn unknown_error_classes_are_rejected() {
+        let unknown = ffi::git_error_t_GIT_ERROR_GRAFTS as core::ffi::c_int + 1;
+        assert_eq!(GitErrorClass::from_raw(unknown as ffi::git_error_t), None);
+        assert_eq!(
+            GitErrorClass::try_from(unknown).unwrap_err().value(),
+            unknown
+        );
+        assert_eq!(GitErrorClass::try_from(-1).unwrap_err().value(), -1);
+    }
+
+    #[test]
+    fn error_class_preserves_the_c_enum_layout() {
+        assert_eq!(size_of::<GitErrorClass>(), size_of::<ffi::git_error_t>());
+        assert_eq!(align_of::<GitErrorClass>(), align_of::<ffi::git_error_t>());
     }
 }

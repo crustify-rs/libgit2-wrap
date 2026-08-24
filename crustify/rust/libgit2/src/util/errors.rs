@@ -3,6 +3,7 @@
 use core::ptr::addr_of;
 use std::ffi::{CStr, CString};
 
+use crate::api::errors::{GitErrorClass, InvalidGitErrorClass};
 use crate::ffi;
 
 ffibox::define_ctype!(
@@ -43,13 +44,13 @@ impl<'a> GitErrorRef<'a> {
     }
 
     /// Field: git_error.klass
-    /// Returns the raw libgit2 error class value.
-    #[must_use]
-    pub fn klass(&self) -> i32 {
+    /// Returns the validated libgit2 error class.
+    pub fn klass(&self) -> Result<GitErrorClass, InvalidGitErrorClass> {
         // SAFETY: `self` carries a live shared borrow of an initialized
         // `git_error`; raw-place projection reads the scalar field without
         // forming a reference to C-visible object storage.
-        unsafe { addr_of!((*self.as_ptr()).klass).read() }
+        let raw = unsafe { addr_of!((*self.as_ptr()).klass).read() };
+        GitErrorClass::try_from(raw)
     }
 }
 
@@ -63,10 +64,13 @@ pub fn git_error_clear() {
 
 /// Wraps: git_error_set_str
 /// Copies `message` into this thread's libgit2 error state.
-pub fn git_error_set_str(error_class: i32, message: &CStr) -> Result<(), i32> {
+pub fn git_error_set_str(
+    error_class: GitErrorClass,
+    message: &CStr,
+) -> Result<(), core::ffi::c_int> {
     // SAFETY: `message` is a live NUL-terminated string and libgit2 copies it
     // before returning rather than retaining the pointer.
-    let status = unsafe { ffi::git_error_set_str(error_class, message.as_ptr()) };
+    let status = unsafe { ffi::git_error_set_str(error_class.as_c_int(), message.as_ptr()) };
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
@@ -80,7 +84,10 @@ mod tests {
     fn thread_error_can_be_set_and_cleared_from_safe_rust() {
         // SAFETY: initialization is refcounted and balanced below.
         assert!(unsafe { ffi::git_libgit2_init() } > 0);
-        assert_eq!(git_error_set_str(1, c"failure"), Ok(()));
+        assert_eq!(
+            git_error_set_str(GitErrorClass::NoMemory, c"failure"),
+            Ok(())
+        );
         git_error_clear();
         // SAFETY: balances this test's successful initialization.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
@@ -90,10 +97,13 @@ mod tests {
     fn last_error_is_copied_out_of_thread_local_storage() {
         // SAFETY: initialization is refcounted and balanced below.
         assert!(unsafe { ffi::git_libgit2_init() } > 0);
-        assert_eq!(git_error_set_str(7, c"snapshot"), Ok(()));
+        assert_eq!(
+            git_error_set_str(GitErrorClass::Config, c"snapshot"),
+            Ok(())
+        );
         let snapshot = git_error_last();
         assert_eq!(snapshot.message.as_deref(), Some(c"snapshot"));
-        assert_eq!(snapshot.klass, 7);
+        assert_eq!(snapshot.klass, Ok(GitErrorClass::Config));
         git_error_clear();
         // SAFETY: balances this test's successful initialization.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
@@ -124,7 +134,20 @@ mod tests {
         // outlives the handle, and no mutation occurs while it is used.
         let error = unsafe { GitErrorRef::from_ptr(&raw mut raw) }.unwrap();
         assert_eq!(error.message().as_deref(), Some(c"failure"));
-        assert_eq!(error.klass(), 7);
+        assert_eq!(error.klass(), Ok(GitErrorClass::Config));
+    }
+
+    #[test]
+    fn shared_handle_rejects_an_unknown_error_class() {
+        let mut raw = ffi::git_error {
+            message: core::ptr::null_mut(),
+            klass: -1,
+        };
+
+        // SAFETY: `raw` is initialized and remains live, and no mutation
+        // occurs while the handle is used.
+        let error = unsafe { GitErrorRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(error.klass().unwrap_err().value(), -1);
     }
 
     #[test]
@@ -147,7 +170,7 @@ pub struct GitErrorSnapshot {
     /// The optional copied error message.
     pub message: Option<CString>,
     /// The libgit2 error class.
-    pub klass: i32,
+    pub klass: Result<GitErrorClass, InvalidGitErrorClass>,
 }
 
 /// Wraps: git_error_last
