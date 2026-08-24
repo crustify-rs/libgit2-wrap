@@ -3,7 +3,7 @@
 use ffibox::{CBox, CVal};
 
 use crate::api::buffer::GitBuf;
-use crate::diff::{DiffRef, DiffStatsFormat};
+use crate::diff::{DiffMut, DiffStatsFormat};
 use crate::ffi;
 
 ffibox::define_ctype!(
@@ -70,11 +70,18 @@ mod tests {
 
 /// Wraps: git_diff_get_stats
 /// Accumulates statistics and retains its own reference count to `diff`.
-pub fn git_diff_get_stats(diff: DiffRef<'_>) -> Result<DiffStatsOwned, i32> {
+///
+/// The diff is borrowed exclusively because the call mutates it: it bumps the
+/// diff's reference count and expands every delta through
+/// `git_patch_from_diff`, which takes a further count and records each delta's
+/// cached binary-detection flag. The returned owner is independent of that
+/// borrow, since `git_diff_stats_free` releases the count the call took.
+pub fn git_diff_get_stats(diff: &mut DiffMut<'_>) -> Result<DiffStatsOwned, i32> {
     let mut out = core::ptr::null_mut();
-    // SAFETY: `out` is writable and `diff` is live. C increments the diff's
-    // reference count before returning the independently owned stats object.
-    let status = unsafe { ffi::git_diff_get_stats(&mut out, diff.as_ptr().cast_mut()) };
+    // SAFETY: `out` is a writable owner slot and `diff` supplies the exclusive
+    // access that the reference-count bump and delta expansion require. C
+    // returns an independently owned stats object holding its own count.
+    let status = unsafe { ffi::git_diff_get_stats(&mut out, diff.as_mut_ptr()) };
     if status != 0 {
         return Err(status);
     }
@@ -128,11 +135,37 @@ pub fn git_diff_stats_to_buf(
 mod wrapper_tests {
     use super::*;
 
+    /// Holds one libgit2 initialization count for the duration of a test.
+    ///
+    /// Every call below reaches libgit2's allocator and thread-local error
+    /// state, neither of which exists before `git_libgit2_init`. Without this
+    /// guard the test only survives when an unrelated test happens to hold a
+    /// count concurrently.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and
+            // refcounted; this guard balances the successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard, after every libgit2 owner has already been dropped.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
     #[test]
     fn parsed_diff_stats_are_counted_and_formatted() {
+        let _libgit2 = Libgit2Init::acquire();
         let patch = b"diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new\n";
-        let diff = crate::diff_parse::git_diff_from_buffer(patch).unwrap();
-        let stats = git_diff_get_stats(diff.as_ref()).unwrap();
+        let mut diff = crate::diff_parse::git_diff_from_buffer(patch).unwrap();
+        let stats = git_diff_get_stats(&mut diff.as_mut()).unwrap();
         assert_eq!(git_diff_stats_files_changed(stats.as_ref()), 1);
         assert_eq!(git_diff_stats_insertions(stats.as_ref()), 1);
         assert_eq!(git_diff_stats_deletions(stats.as_ref()), 1);

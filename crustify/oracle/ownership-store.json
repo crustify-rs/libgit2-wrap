@@ -857,7 +857,7 @@
   {
    "name": "git_diff_line",
    "defined_in": "include/git2/diff.h",
-   "_comment_agent": "Inspected every content/content_len assignment, read, and release path. Ownership is runtime-conditional at the containing patch implementation level, so the wrapper exposes a borrowed counted view and does not assume standalone ownership.",
+   "_comment_agent": "Review wave correction: borrowed.lifetime was recorded as 'self' (the enclosing git_diff_line). No borrowing path stores the bytes inside the line record; every one of them points into another object's storage (generated patch file content, print buffer, or caller buffer), so the field-oriented source is 'other'. The owned path (parsed patches) is unchanged and is what patch_parsed__free releases. Verified against src/libgit2/patch_parse.c:659,701,1154-1156, src/libgit2/diff_xdiff.c:67-80, src/libgit2/diff_print.c:677 and src/libgit2/apply.c:46-55.",
    "fields": [
     {
      "name": "content",
@@ -869,11 +869,11 @@
       "string": false,
       "owned": true,
       "borrowed": {
-       "lifetime": "self"
+       "lifetime": "other"
       },
       "nullable": true,
       "mutable": false,
-      "note": "Counted, non-NUL-terminated bytes. Parsed-patch lines own separately allocated content which patch_parsed__free releases; generated, apply, print, and xdiff lines borrow parent or callback backing storage. Public observations bind the bytes to the line/containing patch lifetime. Zero-initialized and empty construction paths permit NULL with length zero; the const pointer is never written through."
+      "note": "Counted, non-NUL-terminated bytes; content_len is the byte count and the pointer is never written through. Runtime-conditional ownership. Owned path: patch_parse.c stores git__strndup results (parse_hunk_body, parse_hunk_body_line) and patch_parsed__free releases each line->content. Borrowed path: the storage always belongs to some OTHER object, never to the enclosing git_diff_line -- diff_xdiff.c's diff_update_lines points at the xdiff mmbuffer backed by the generated patch's loaded ofile/nfile content, diff_print.c's diff_print_patch_file_binary points at the print info's git_str buffer, and apply.c's patch_line_init points at the caller's input buffer. Public observations therefore bind the bytes to the containing patch or to the callback invocation, not to the line record itself. Zero-initialized and empty construction paths permit NULL with length zero."
      }
     }
    ]

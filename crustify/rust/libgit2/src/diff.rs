@@ -793,6 +793,63 @@ mod diff_record_tests {
         assert_eq!(content.elem(0), Some(b'h'));
         assert_eq!(content.elem(5), Some(b'\n'));
     }
+
+    /// Collects a borrowed counted view into an owned buffer for comparison.
+    fn collect(view: ffibox::CSlice<'_, u8>) -> Vec<u8> {
+        (0..view.len())
+            .map(|index| view.elem(index).expect("index is in range"))
+            .collect()
+    }
+
+    #[test]
+    fn parsed_patch_hunks_and_lines_read_real_libgit2_storage() {
+        let _libgit2 = super::diff_tests::Libgit2Init::acquire();
+        let text = b"diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1,2 +1,2 @@\n context\n-old\n+new\n";
+        let mut diff = crate::diff_parse::git_diff_from_buffer(text).expect("a valid patch");
+        let patch = crate::patch::git_patch_from_diff(&mut diff.as_mut(), 0)
+            .expect("the single delta expands")
+            .expect("a text delta produces a patch");
+        let patch = patch.as_ref();
+
+        let (hunk, line_count) =
+            crate::patch::git_patch_get_hunk(patch, 0).expect("the single hunk");
+        assert_eq!(hunk.old_start(), 1);
+        assert_eq!(hunk.old_lines(), 2);
+        assert_eq!(hunk.new_start(), 1);
+        assert_eq!(hunk.new_lines(), 2);
+        let header = hunk.header().expect("a NUL-terminated hunk header");
+        assert_eq!(header.len(), hunk.header_len());
+        assert_eq!(collect(header), b"@@ -1,2 +1,2 @@\n");
+        assert_eq!(line_count, 3);
+
+        let lines: Vec<(u8, i32, i32, Vec<u8>)> = (0..line_count)
+            .map(|index| {
+                let line = crate::patch::git_patch_get_line_in_hunk(patch, 0, index)
+                    .expect("an in-range line");
+                // A parsed patch owns its line bytes; the borrowed counted
+                // view stays valid for the patch borrow either way.
+                let content = line.content().expect("a parsed line carries content");
+                assert_eq!(content.len(), line.content_len());
+                assert_eq!(line.num_lines(), 1);
+                #[allow(clippy::cast_sign_loss)]
+                (
+                    line.origin() as u8,
+                    line.old_lineno(),
+                    line.new_lineno(),
+                    collect(content),
+                )
+            })
+            .collect();
+
+        assert_eq!(
+            lines,
+            vec![
+                (b' ', 1, 1, b"context\n".to_vec()),
+                (b'-', 2, -1, b"old\n".to_vec()),
+                (b'+', -1, 2, b"new\n".to_vec()),
+            ]
+        );
+    }
 }
 
 ffibox::define_ctype!(
@@ -838,10 +895,10 @@ mod diff_tests {
 
     use super::*;
 
-    struct Libgit2Init;
+    pub(super) struct Libgit2Init;
 
     impl Libgit2Init {
-        fn acquire() -> Self {
+        pub(super) fn acquire() -> Self {
             // SAFETY: libgit2 initialization is process-global and
             // refcounted; this guard balances the successful acquisition.
             assert!(unsafe { ffi::git_libgit2_init() } > 0);

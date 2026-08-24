@@ -225,6 +225,60 @@ mod tests {
             assert!(GitIndexConflictIteratorOwned::from_raw(ptr::null_mut()).is_none());
         }
     }
+
+    /// Holds one libgit2 initialization count for the duration of a test.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and
+            // refcounted; this guard balances the successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard, after every libgit2 owner has already been dropped.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    #[test]
+    fn conflict_iterator_owner_releases_its_allocation() {
+        let _libgit2 = Libgit2Init::acquire();
+
+        let mut raw_index = ptr::null_mut();
+        // SAFETY: `raw_index` is a writable out-slot; on success libgit2
+        // transfers one owned in-memory index reference through it.
+        let status = unsafe { ffi::git_index_new(&raw mut raw_index) };
+        assert_eq!(status, 0);
+        // SAFETY: the successful constructor produced one non-null owned
+        // index count that has not been adopted elsewhere.
+        let mut index = unsafe { GitIndexOwned::from_raw(raw_index) }.expect("a new index");
+
+        let mut raw_iterator = ptr::null_mut();
+        // SAFETY: `raw_iterator` is a writable out-slot and the index stays
+        // exclusively borrowed for as long as the iterator below lives. The
+        // constructor stores the index pointer without retaining a count.
+        let status = unsafe {
+            ffi::git_index_conflict_iterator_new(&raw mut raw_iterator, index.as_mut().as_mut_ptr())
+        };
+        assert_eq!(status, 0);
+        // SAFETY: the successful constructor produced one non-null owned
+        // iterator allocation that has not been adopted elsewhere.
+        let mut iterator =
+            unsafe { GitIndexConflictIteratorOwned::from_raw(raw_iterator) }.expect("an iterator");
+        assert_eq!(iterator.as_ref().as_ptr(), raw_iterator.cast_const());
+        assert_eq!(iterator.as_mut().as_mut_ptr(), raw_iterator);
+
+        // `git_index_conflict_iterator_free` runs here and must not touch the
+        // borrowed index, which outlives it.
+        drop(iterator);
+        drop(index);
+    }
 }
 
 #[cfg(test)]
