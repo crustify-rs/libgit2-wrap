@@ -94,3 +94,243 @@ mod tests {
         assert_eq!(exclusive.as_ref().as_ptr(), ptr.cast_const());
     }
 }
+
+fn reference_result(
+    status: i32,
+    raw: *mut ffi::git_reference,
+) -> Result<crate::refs::GitReferenceOwned, i32> {
+    if status == 0 {
+        // SAFETY: success transfers a fresh, fully initialized reference.
+        Ok(unsafe { crate::refs::GitReferenceOwned::from_raw(raw) }
+            .expect("libgit2 succeeded without returning a reference"))
+    } else {
+        if !raw.is_null() {
+            // SAFETY: an error after populating the slot still leaves its owned
+            // reference for the caller to release.
+            drop(unsafe { crate::refs::GitReferenceOwned::from_raw(raw) });
+        }
+        Err(status)
+    }
+}
+
+/// Wraps: git_branch_create_from_annotated
+/// Creates a branch pointing at an annotated commit.
+pub fn git_branch_create_from_annotated(
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    branch_name: &core::ffi::CStr,
+    target: crate::annotated_commit::AnnotatedCommitRef<'_>,
+    force: bool,
+) -> Result<crate::refs::GitReferenceOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: all handles and the string are live for this call and `out` is writable.
+    let status = unsafe {
+        ffi::git_branch_create_from_annotated(
+            &mut out,
+            repo.as_mut_ptr(),
+            branch_name.as_ptr(),
+            target.as_ptr(),
+            i32::from(force),
+        )
+    };
+    reference_result(status, out)
+}
+
+/// Wraps: git_branch_delete
+/// Deletes a branch and consumes the now-stale reference handle.
+pub fn git_branch_delete(branch: crate::refs::GitReferenceOwned) -> Result<(), i32> {
+    // SAFETY: `branch` uniquely owns a live reference for the call. It is
+    // dropped immediately afterward on success or failure.
+    let status = unsafe { ffi::git_branch_delete(branch.as_ptr()) };
+    drop(branch);
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_branch_is_head
+/// Tests whether the branch is the repository's current HEAD.
+pub fn git_branch_is_head(branch: crate::refs::GitReferenceRef<'_>) -> Result<bool, i32> {
+    // SAFETY: `branch` is live and this function only reads it.
+    let status = unsafe { ffi::git_branch_is_head(branch.as_ptr()) };
+    if status < 0 {
+        Err(status)
+    } else {
+        Ok(status != 0)
+    }
+}
+
+/// Wraps: git_branch_iterator_new
+/// Creates an iterator over selected branch kinds.
+pub fn git_branch_iterator_new(
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    kinds: crate::api::types::GitBranchType,
+) -> Result<ffibox::CBox<GitBranchIterator>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `repo` is live and exclusive and `out` is writable.
+    let status = unsafe { ffi::git_branch_iterator_new(&mut out, repo.as_mut_ptr(), kinds.bits()) };
+    if status == 0 {
+        // SAFETY: success transfers the fresh iterator allocation.
+        Ok(unsafe { ffibox::CBox::from_raw(out) }
+            .expect("libgit2 succeeded without returning an iterator"))
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_branch_lookup
+/// Looks up a local, remote, or either-kind branch.
+pub fn git_branch_lookup(
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    branch_name: &core::ffi::CStr,
+    kind: crate::api::types::GitBranchType,
+) -> Result<crate::refs::GitReferenceOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: arguments are live and `out` is writable.
+    let status = unsafe {
+        ffi::git_branch_lookup(
+            &mut out,
+            repo.as_mut_ptr(),
+            branch_name.as_ptr(),
+            kind.bits(),
+        )
+    };
+    reference_result(status, out)
+}
+
+/// Wraps: git_branch_move
+/// Renames a local branch and consumes the stale old reference.
+pub fn git_branch_move(
+    branch: crate::refs::GitReferenceOwned,
+    new_name: &core::ffi::CStr,
+    force: bool,
+) -> Result<crate::refs::GitReferenceOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `branch` remains live for the call, `new_name` is a live C
+    // string, and `out` is writable.
+    let status = unsafe {
+        ffi::git_branch_move(
+            &mut out,
+            branch.as_ptr(),
+            new_name.as_ptr(),
+            i32::from(force),
+        )
+    };
+    drop(branch);
+    reference_result(status, out)
+}
+
+/// Wraps: git_branch_name
+/// Borrows a branch's shorthand name.
+pub fn git_branch_name<'a>(
+    branch: crate::refs::GitReferenceRef<'a>,
+) -> Result<&'a core::ffi::CStr, i32> {
+    let mut out = core::ptr::null();
+    // SAFETY: `branch` is live and `out` is writable. Success returns a string
+    // stored inside that reference.
+    let status = unsafe { ffi::git_branch_name(&mut out, branch.as_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    debug_assert!(!out.is_null());
+    // SAFETY: success returns a non-null NUL-terminated substring retained by `branch`.
+    Ok(unsafe { core::ffi::CStr::from_ptr(out) })
+}
+
+/// Wraps: git_branch_next
+/// Advances an iterator and returns its next owned reference and checked kind.
+pub fn git_branch_next(
+    iter: &mut GitBranchIteratorMut<'_>,
+) -> Result<
+    (
+        crate::refs::GitReferenceOwned,
+        crate::api::types::GitBranchType,
+    ),
+    i32,
+> {
+    let mut out = core::ptr::null_mut();
+    let mut raw_kind = 0;
+    // SAFETY: `iter` is live and exclusive and both output slots are writable.
+    let status = unsafe { ffi::git_branch_next(&mut out, &mut raw_kind, iter.as_mut_ptr()) };
+    let reference = reference_result(status, out)?;
+    let kind = crate::api::types::GitBranchType::from_bits(raw_kind)
+        .expect("libgit2 returned an unknown branch kind");
+    Ok((reference, kind))
+}
+
+fn branch_name_to_buffer(
+    out: &mut crate::api::buffer::GitBufMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    refname: &core::ffi::CStr,
+    call: unsafe extern "C" fn(
+        *mut ffi::git_buf,
+        *mut ffi::git_repository,
+        *const core::ffi::c_char,
+    ) -> core::ffi::c_int,
+) -> Result<(), i32> {
+    // SAFETY: the two handles and string are live, and `call` is one of the
+    // scheduled libgit2 functions with exactly this synchronous contract.
+    let status = unsafe { call(out.as_mut_ptr(), repo.as_mut_ptr(), refname.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_branch_remote_name
+/// Writes the matching remote name for a remote-tracking reference.
+pub fn git_branch_remote_name(
+    out: &mut crate::api::buffer::GitBufMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    refname: &core::ffi::CStr,
+) -> Result<(), i32> {
+    branch_name_to_buffer(out, repo, refname, ffi::git_branch_remote_name)
+}
+
+/// Wraps: git_branch_set_upstream
+/// Sets or clears a local branch's upstream configuration.
+pub fn git_branch_set_upstream(
+    branch: crate::refs::GitReferenceRef<'_>,
+    upstream: Option<&core::ffi::CStr>,
+) -> Result<(), i32> {
+    let upstream = upstream.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    // SAFETY: the branch and optional string are live. Source inspection shows
+    // this API only reads the reference object while mutating repository config.
+    let status = unsafe { ffi::git_branch_set_upstream(branch.as_ptr().cast_mut(), upstream) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_branch_upstream
+/// Returns the branch's owned upstream reference.
+pub fn git_branch_upstream(
+    branch: crate::refs::GitReferenceRef<'_>,
+) -> Result<crate::refs::GitReferenceOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `branch` is live and `out` is writable.
+    let status = unsafe { ffi::git_branch_upstream(&mut out, branch.as_ptr()) };
+    reference_result(status, out)
+}
+
+/// Wraps: git_branch_upstream_merge
+/// Writes the configured upstream merge refspec.
+pub fn git_branch_upstream_merge(
+    out: &mut crate::api::buffer::GitBufMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    refname: &core::ffi::CStr,
+) -> Result<(), i32> {
+    branch_name_to_buffer(out, repo, refname, ffi::git_branch_upstream_merge)
+}
+
+/// Wraps: git_branch_upstream_name
+/// Resolves and writes the full upstream reference name.
+pub fn git_branch_upstream_name(
+    out: &mut crate::api::buffer::GitBufMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    refname: &core::ffi::CStr,
+) -> Result<(), i32> {
+    branch_name_to_buffer(out, repo, refname, ffi::git_branch_upstream_name)
+}
+
+/// Wraps: git_branch_upstream_remote
+/// Writes the configured upstream remote name.
+pub fn git_branch_upstream_remote(
+    out: &mut crate::api::buffer::GitBufMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    refname: &core::ffi::CStr,
+) -> Result<(), i32> {
+    branch_name_to_buffer(out, repo, refname, ffi::git_branch_upstream_remote)
+}

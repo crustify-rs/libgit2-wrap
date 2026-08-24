@@ -204,3 +204,11 @@
 ^git_blob$
 ^git_blob_dup$
 ^git_blob_free$
+^git_annotated_commit_(from_fetchhead|from_ref|id|lookup|ref)$
+^git_attr_(get|value)$
+^git_blame_(buffer|get_hunk_count)$
+^git_blob_create_from(buffer|disk|stream|stream_commit)$
+^git_branch_(create_from_annotated|delete|is_head|iterator_new|lookup|move|name|next|remote_name|set_upstream|upstream|upstream_merge|upstream_name|upstream_remote)$
+^git_checkout_perfdata_cb$
+^git_commit_(create_with_signature|extract_signature)$
+^git_config_(add_file_ondisk|delete_entry|delete_multivar|find_global|find_system|find_xdg|get_bool|get_int32|get_int64|get_path|get_string|get_string_buf|new|open_default|open_global|open_level|open_ondisk|set_bool|set_int32|set_int64)$

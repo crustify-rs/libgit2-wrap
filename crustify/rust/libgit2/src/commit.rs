@@ -106,3 +106,53 @@ mod tests {
         drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_commit>>()) });
     }
 }
+
+/// Wraps: git_commit_create_with_signature
+/// Creates a commit object from raw commit text and an optional signature.
+pub fn git_commit_create_with_signature(
+    out: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    commit_content: &core::ffi::CStr,
+    signature: Option<&core::ffi::CStr>,
+    signature_field: Option<&core::ffi::CStr>,
+) -> Result<(), i32> {
+    let signature = signature.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    let signature_field = signature_field.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    // SAFETY: both handles are live and exclusive, strings are live or null,
+    // and libgit2 retains none of the input string pointers.
+    let status = unsafe {
+        ffi::git_commit_create_with_signature(
+            out.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            commit_content.as_ptr(),
+            signature,
+            signature_field,
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_commit_extract_signature
+/// Extracts a commit's signature and signed payload into owned buffers.
+pub fn git_commit_extract_signature(
+    signature: &mut crate::api::buffer::GitBufMut<'_>,
+    signed_data: &mut crate::api::buffer::GitBufMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    commit_id: crate::oid::OidRef<'_>,
+    field: Option<&core::ffi::CStr>,
+) -> Result<(), i32> {
+    let field = field.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    // SAFETY: output buffers and repository are live and exclusive. Source
+    // inspection shows `commit_id` is only read despite the legacy non-const C
+    // signature; `field` is null or a live string.
+    let status = unsafe {
+        ffi::git_commit_extract_signature(
+            signature.as_mut_ptr(),
+            signed_data.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            commit_id.as_ptr().cast_mut(),
+            field,
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}

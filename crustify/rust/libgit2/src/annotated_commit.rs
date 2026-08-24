@@ -83,3 +83,124 @@ mod tests {
         assert_dropped::<AnnotatedCommit>();
     }
 }
+
+/// An owned annotated commit whose lifetime is tied to its repository borrow.
+pub struct AnnotatedCommitOwned<'repo> {
+    inner: ffibox::CBox<AnnotatedCommit>,
+    _repository: core::marker::PhantomData<crate::repository::GitRepositoryRef<'repo>>,
+}
+
+impl AnnotatedCommitOwned<'_> {
+    /// Borrows the annotated commit.
+    #[must_use]
+    pub fn as_ref(&self) -> AnnotatedCommitRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the annotated commit exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> AnnotatedCommitMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+fn annotated_result<'repo>(
+    status: i32,
+    raw: *mut ffi::git_annotated_commit,
+) -> Result<AnnotatedCommitOwned<'repo>, i32> {
+    if status == 0 {
+        // SAFETY: success transfers a fresh, non-null allocation owned by the
+        // output slot.
+        let inner = unsafe { ffibox::CBox::from_raw(raw) }
+            .expect("libgit2 succeeded without returning an annotated commit");
+        Ok(AnnotatedCommitOwned {
+            inner,
+            _repository: core::marker::PhantomData,
+        })
+    } else {
+        if !raw.is_null() {
+            // SAFETY: constructors may populate `out` before a later allocation
+            // fails; any such complete annotated commit remains caller-owned.
+            drop(unsafe { ffibox::CBox::<AnnotatedCommit>::from_raw(raw) });
+        }
+        Err(status)
+    }
+}
+
+/// Wraps: git_annotated_commit_from_fetchhead
+/// Creates an annotated commit from fetch-head metadata.
+pub fn git_annotated_commit_from_fetchhead<'repo>(
+    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    branch_name: &core::ffi::CStr,
+    remote_url: &core::ffi::CStr,
+    id: crate::oid::OidRef<'_>,
+) -> Result<AnnotatedCommitOwned<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: the handles and C strings are live for the synchronous call and
+    // `out` is a writable output slot. The returned owner retains the repo
+    // lifetime required by the commit stored inside it.
+    let status = unsafe {
+        ffi::git_annotated_commit_from_fetchhead(
+            &mut out,
+            repo.as_mut_ptr(),
+            branch_name.as_ptr(),
+            remote_url.as_ptr(),
+            id.as_ptr(),
+        )
+    };
+    annotated_result(status, out)
+}
+
+/// Wraps: git_annotated_commit_from_ref
+/// Creates an annotated commit from a reference in `repo`.
+pub fn git_annotated_commit_from_ref<'repo>(
+    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    reference: crate::refs::GitReferenceRef<'_>,
+) -> Result<AnnotatedCommitOwned<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: all pointers come from live typed handles and `out` is writable.
+    let status = unsafe {
+        ffi::git_annotated_commit_from_ref(&mut out, repo.as_mut_ptr(), reference.as_ptr())
+    };
+    annotated_result(status, out)
+}
+
+/// Wraps: git_annotated_commit_id
+/// Borrows the commit ID embedded in an annotated commit.
+#[must_use]
+pub fn git_annotated_commit_id<'a>(
+    commit: AnnotatedCommitRef<'a>,
+) -> Option<crate::oid::OidRef<'a>> {
+    // SAFETY: `commit` is live; libgit2 returns null or an ID kept alive by it.
+    let raw = unsafe { ffi::git_annotated_commit_id(commit.as_ptr()) };
+    // SAFETY: a non-null result is borrowed from `commit` for `'a`.
+    unsafe { crate::oid::OidRef::from_ptr(raw.cast_mut()) }
+}
+
+/// Wraps: git_annotated_commit_lookup
+/// Creates an annotated commit by object ID.
+pub fn git_annotated_commit_lookup<'repo>(
+    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    id: crate::oid::OidRef<'_>,
+) -> Result<AnnotatedCommitOwned<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: the handles are live for the call and `out` is writable.
+    let status =
+        unsafe { ffi::git_annotated_commit_lookup(&mut out, repo.as_mut_ptr(), id.as_ptr()) };
+    annotated_result(status, out)
+}
+
+/// Wraps: git_annotated_commit_ref
+/// Borrows the optional reference name retained by an annotated commit.
+#[must_use]
+pub fn git_annotated_commit_ref<'a>(commit: AnnotatedCommitRef<'a>) -> Option<&'a core::ffi::CStr> {
+    // SAFETY: `commit` is live; libgit2 returns null or a NUL-terminated string
+    // kept alive by that annotated commit.
+    let raw = unsafe { ffi::git_annotated_commit_ref(commit.as_ptr()) };
+    if raw.is_null() {
+        None
+    } else {
+        // SAFETY: the non-null result has the lifetime and string contract above.
+        Some(unsafe { core::ffi::CStr::from_ptr(raw) })
+    }
+}

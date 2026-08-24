@@ -248,3 +248,64 @@ mod options_tests {
         assert_eq!(shared.oldest_commit().oid_type(), Ok(OidType::Sha1));
     }
 }
+
+/// An owned blame result that cannot outlive the base blame it derives from.
+pub struct GitBlameBuffer<'base> {
+    inner: ffibox::CBox<GitBlame>,
+    _base: core::marker::PhantomData<GitBlameRef<'base>>,
+}
+
+impl GitBlameBuffer<'_> {
+    /// Borrows the result.
+    #[must_use]
+    pub fn as_ref(&self) -> GitBlameRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the result exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitBlameMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+/// Wraps: git_blame_buffer
+/// Recomputes blame information for modified buffer contents.
+pub fn git_blame_buffer<'base>(
+    base: GitBlameRef<'base>,
+    buffer: &[u8],
+) -> Result<GitBlameBuffer<'base>, i32> {
+    if buffer.is_empty() {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `base` is live, `buffer` supplies exactly its readable byte
+    // length, and `out` is writable. The result is lifetime-bound to `base`.
+    let status = unsafe {
+        ffi::git_blame_buffer(
+            &mut out,
+            base.as_ptr().cast_mut(),
+            buffer.as_ptr().cast(),
+            buffer.len(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns a fresh blame allocation owned by the caller.
+    let inner = unsafe { ffibox::CBox::from_raw(out) }
+        .expect("libgit2 succeeded without returning blame data");
+    Ok(GitBlameBuffer {
+        inner,
+        _base: core::marker::PhantomData,
+    })
+}
+
+/// Wraps: git_blame_get_hunk_count
+/// Returns the number of hunks in a blame result.
+#[must_use]
+pub fn git_blame_get_hunk_count(blame: GitBlameRef<'_>) -> u32 {
+    // SAFETY: `blame` is a live typed handle; this deprecated accessor only
+    // reads its hunk vector.
+    unsafe { ffi::git_blame_get_hunk_count(blame.as_ptr().cast_mut()) }
+}

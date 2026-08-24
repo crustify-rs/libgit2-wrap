@@ -113,8 +113,6 @@ pub fn git_config_parse_int64(value: Option<&core::ffi::CStr>) -> Result<i64, i3
 
 #[cfg(test)]
 mod tests {
-    use core::ptr;
-
     use super::*;
 
     struct Libgit2Init;
@@ -175,14 +173,8 @@ mod tests {
     #[test]
     fn config_owner_provides_shared_and_exclusive_handles() {
         let _init = Libgit2Init::acquire();
-        let mut raw = ptr::null_mut();
-
-        // SAFETY: libgit2 is initialized and `raw` is a writable out slot.
-        assert_eq!(unsafe { ffi::git_config_new(&mut raw) }, 0);
-        // SAFETY: a successful `git_config_new` returns a fresh owned count,
-        // whose matching down-reference operation is `git_config_free`.
-        let mut config = unsafe { GitConfigOwned::from_raw(raw) }
-            .expect("git_config_new returned success with a null config");
+        let mut config = git_config_new().expect("an empty config can be allocated");
+        let raw = config.as_ptr();
 
         let shared = config.as_ref();
         assert_eq!(shared.as_ptr(), raw.cast_const());
@@ -347,4 +339,278 @@ mod entry_tests {
         assert_eq!(entry.origin_path(), None);
         assert_eq!(entry.level(), None);
     }
+}
+
+fn config_result(status: i32, raw: *mut ffi::git_config) -> Result<GitConfigOwned, i32> {
+    if status == 0 {
+        // SAFETY: success transfers one complete config reference.
+        Ok(unsafe { GitConfigOwned::from_raw(raw) }
+            .expect("libgit2 succeeded without returning a config"))
+    } else {
+        if !raw.is_null() {
+            // SAFETY: a populated error output remains an owned count that the
+            // caller must release.
+            drop(unsafe { GitConfigOwned::from_raw(raw) });
+        }
+        Err(status)
+    }
+}
+
+/// Wraps: git_config_add_file_ondisk
+/// Adds a file backend without a repository-dependent include context.
+pub fn git_config_add_file_ondisk(
+    config: &mut GitConfigMut<'_>,
+    path: &CStr,
+    level: GitConfigLevel,
+    force: bool,
+) -> Result<(), i32> {
+    // SAFETY: the config is live and exclusive and `path` is a live C string.
+    // Passing null guarantees the backend stores no repository borrow.
+    let status = unsafe {
+        ffi::git_config_add_file_ondisk(
+            config.as_mut_ptr(),
+            path.as_ptr(),
+            level.as_raw(),
+            core::ptr::null(),
+            i32::from(force),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_add_file_ondisk
+/// Adds a file backend that retains `repo` for conditional-include matching.
+///
+/// # Safety
+///
+/// `repo` must remain alive until `config` and every config sharing the added
+/// backend have been freed. The existing config type cannot express a lifetime
+/// introduced by mutating it in place.
+pub unsafe fn git_config_add_file_ondisk_with_repository(
+    config: &mut GitConfigMut<'_>,
+    path: &CStr,
+    level: GitConfigLevel,
+    repo: crate::repository::GitRepositoryRef<'_>,
+    force: bool,
+) -> Result<(), i32> {
+    // SAFETY: typed handles and `path` are live for the call; the caller
+    // upholds the backend's longer-lived repository-pointer obligation.
+    let status = unsafe {
+        ffi::git_config_add_file_ondisk(
+            config.as_mut_ptr(),
+            path.as_ptr(),
+            level.as_raw(),
+            repo.as_ptr(),
+            i32::from(force),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_delete_entry
+/// Deletes the highest-priority writable value for `name`.
+pub fn git_config_delete_entry(config: &mut GitConfigMut<'_>, name: &CStr) -> Result<(), i32> {
+    // SAFETY: the config is live and exclusive and `name` is a live C string.
+    let status = unsafe { ffi::git_config_delete_entry(config.as_mut_ptr(), name.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_delete_multivar
+/// Deletes multivar values matching `regexp`.
+pub fn git_config_delete_multivar(
+    config: &mut GitConfigMut<'_>,
+    name: &CStr,
+    regexp: &CStr,
+) -> Result<(), i32> {
+    // SAFETY: the config is live and exclusive and both strings are live.
+    let status = unsafe {
+        ffi::git_config_delete_multivar(config.as_mut_ptr(), name.as_ptr(), regexp.as_ptr())
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+fn find_config_path(
+    out: &mut crate::api::buffer::GitBufMut<'_>,
+    call: unsafe extern "C" fn(*mut ffi::git_buf) -> core::ffi::c_int,
+) -> Result<(), i32> {
+    // SAFETY: `out` is live and exclusive and `call` is one of the scheduled
+    // libgit2 path-finder functions with this exact output contract.
+    let status = unsafe { call(out.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_find_global
+/// Writes the discovered global configuration path.
+pub fn git_config_find_global(out: &mut crate::api::buffer::GitBufMut<'_>) -> Result<(), i32> {
+    find_config_path(out, ffi::git_config_find_global)
+}
+
+/// Wraps: git_config_find_system
+/// Writes the discovered system configuration path.
+pub fn git_config_find_system(out: &mut crate::api::buffer::GitBufMut<'_>) -> Result<(), i32> {
+    find_config_path(out, ffi::git_config_find_system)
+}
+
+/// Wraps: git_config_find_xdg
+/// Writes the discovered XDG configuration path.
+pub fn git_config_find_xdg(out: &mut crate::api::buffer::GitBufMut<'_>) -> Result<(), i32> {
+    find_config_path(out, ffi::git_config_find_xdg)
+}
+
+/// Wraps: git_config_get_bool
+/// Reads and parses a boolean configuration value.
+pub fn git_config_get_bool(config: GitConfigRef<'_>, name: &CStr) -> Result<bool, i32> {
+    let mut out = 0;
+    // SAFETY: the config and string are live and `out` is writable.
+    let status = unsafe { ffi::git_config_get_bool(&mut out, config.as_ptr(), name.as_ptr()) };
+    if status == 0 {
+        Ok(out != 0)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_config_get_int32
+/// Reads and parses a 32-bit integer configuration value.
+pub fn git_config_get_int32(config: GitConfigRef<'_>, name: &CStr) -> Result<i32, i32> {
+    let mut out = 0;
+    // SAFETY: the config and string are live and `out` is writable.
+    let status = unsafe { ffi::git_config_get_int32(&mut out, config.as_ptr(), name.as_ptr()) };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_config_get_int64
+/// Reads and parses a 64-bit integer configuration value.
+pub fn git_config_get_int64(config: GitConfigRef<'_>, name: &CStr) -> Result<i64, i32> {
+    let mut out = 0;
+    // SAFETY: the config and string are live and `out` is writable.
+    let status = unsafe { ffi::git_config_get_int64(&mut out, config.as_ptr(), name.as_ptr()) };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_config_get_path
+/// Expands and writes a path-valued configuration entry.
+pub fn git_config_get_path(
+    out: &mut crate::api::buffer::GitBufMut<'_>,
+    config: GitConfigRef<'_>,
+    name: &CStr,
+) -> Result<(), i32> {
+    // SAFETY: both handles and `name` are live, and `out` is exclusive.
+    let status =
+        unsafe { ffi::git_config_get_path(out.as_mut_ptr(), config.as_ptr(), name.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_get_string
+/// Borrows a string from a read-only snapshot config.
+pub fn git_config_get_string<'a>(config: GitConfigRef<'a>, name: &CStr) -> Result<&'a CStr, i32> {
+    let mut out = core::ptr::null();
+    // SAFETY: the config and name are live and `out` is writable. Success
+    // returns a string retained by the snapshot config.
+    let status = unsafe { ffi::git_config_get_string(&mut out, config.as_ptr(), name.as_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    debug_assert!(!out.is_null());
+    // SAFETY: success returns a non-null NUL-terminated string retained by `config`.
+    Ok(unsafe { CStr::from_ptr(out) })
+}
+
+/// Wraps: git_config_get_string_buf
+/// Copies a string-valued entry into `out`.
+pub fn git_config_get_string_buf(
+    out: &mut crate::api::buffer::GitBufMut<'_>,
+    config: GitConfigRef<'_>,
+    name: &CStr,
+) -> Result<(), i32> {
+    // SAFETY: both handles and `name` are live, and `out` is exclusive.
+    let status =
+        unsafe { ffi::git_config_get_string_buf(out.as_mut_ptr(), config.as_ptr(), name.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_new
+/// Allocates an empty configuration object.
+pub fn git_config_new() -> Result<GitConfigOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is a writable owner output slot.
+    let status = unsafe { ffi::git_config_new(&mut out) };
+    config_result(status, out)
+}
+
+/// Wraps: git_config_open_default
+/// Opens the default prioritized configuration stack.
+pub fn git_config_open_default() -> Result<GitConfigOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is a writable owner output slot.
+    let status = unsafe { ffi::git_config_open_default(&mut out) };
+    config_result(status, out)
+}
+
+/// Wraps: git_config_open_global
+/// Opens the writable global or XDG backend from `config`.
+pub fn git_config_open_global(config: GitConfigRef<'_>) -> Result<GitConfigOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `config` is live and source inspection shows it is only read;
+    // `out` is writable. The returned config refcounts its backend instance.
+    let status = unsafe { ffi::git_config_open_global(&mut out, config.as_ptr().cast_mut()) };
+    config_result(status, out)
+}
+
+/// Wraps: git_config_open_level
+/// Opens a focused configuration object for one priority level.
+pub fn git_config_open_level(
+    parent: GitConfigRef<'_>,
+    level: GitConfigLevel,
+) -> Result<GitConfigOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `parent` is live, `out` is writable, and a checked level is passed.
+    let status = unsafe { ffi::git_config_open_level(&mut out, parent.as_ptr(), level.as_raw()) };
+    config_result(status, out)
+}
+
+/// Wraps: git_config_open_ondisk
+/// Opens one on-disk configuration file.
+pub fn git_config_open_ondisk(path: &CStr) -> Result<GitConfigOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `path` is live and `out` is writable.
+    let status = unsafe { ffi::git_config_open_ondisk(&mut out, path.as_ptr()) };
+    config_result(status, out)
+}
+
+/// Wraps: git_config_set_bool
+/// Stores a boolean in the highest-priority writable backend.
+pub fn git_config_set_bool(
+    config: &mut GitConfigMut<'_>,
+    name: &CStr,
+    value: bool,
+) -> Result<(), i32> {
+    // SAFETY: the config is live and exclusive and `name` is live.
+    let status =
+        unsafe { ffi::git_config_set_bool(config.as_mut_ptr(), name.as_ptr(), i32::from(value)) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_set_int32
+/// Stores a 32-bit integer in the highest-priority writable backend.
+pub fn git_config_set_int32(
+    config: &mut GitConfigMut<'_>,
+    name: &CStr,
+    value: i32,
+) -> Result<(), i32> {
+    // SAFETY: the config is live and exclusive and `name` is live.
+    let status = unsafe { ffi::git_config_set_int32(config.as_mut_ptr(), name.as_ptr(), value) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_set_int64
+/// Stores a 64-bit integer in the highest-priority writable backend.
+pub fn git_config_set_int64(
+    config: &mut GitConfigMut<'_>,
+    name: &CStr,
+    value: i64,
+) -> Result<(), i32> {
+    // SAFETY: the config is live and exclusive and `name` is live.
+    let status = unsafe { ffi::git_config_set_int64(config.as_mut_ptr(), name.as_ptr(), value) };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

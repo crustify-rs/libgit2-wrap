@@ -83,3 +83,88 @@ mod tests {
         }
     }
 }
+
+/// A blob write stream tied to the repository pointer retained by libgit2.
+pub struct GitBlobWriteStream<'repo> {
+    inner: crate::api::types::GitWriteStreamOwned,
+    _repository: core::marker::PhantomData<crate::repository::GitRepositoryRef<'repo>>,
+}
+
+impl GitBlobWriteStream<'_> {
+    /// Borrows the stream exclusively for writing.
+    #[must_use]
+    pub fn as_mut(&mut self) -> crate::api::types::GitWriteStreamMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+/// Wraps: git_blob_create_frombuffer
+/// Writes `buffer` as a blob and stores its ID in `id`.
+pub fn git_blob_create_frombuffer(
+    id: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    buffer: &[u8],
+) -> Result<(), i32> {
+    // SAFETY: both handles are exclusive and live, and `buffer` supplies the
+    // exact readable length retained only for this call.
+    let status = unsafe {
+        ffi::git_blob_create_frombuffer(
+            id.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            buffer.as_ptr().cast(),
+            buffer.len(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_blob_create_fromdisk
+/// Creates a blob from the file at `path`.
+pub fn git_blob_create_fromdisk(
+    id: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    path: &core::ffi::CStr,
+) -> Result<(), i32> {
+    // SAFETY: the output and repository handles are live and exclusive, and
+    // `path` is a live NUL-terminated string for the synchronous call.
+    let status =
+        unsafe { ffi::git_blob_create_fromdisk(id.as_mut_ptr(), repo.as_mut_ptr(), path.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_blob_create_fromstream
+/// Opens a stream that retains a borrow of `repo` until it is committed or dropped.
+pub fn git_blob_create_fromstream<'repo>(
+    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    hint_path: Option<&core::ffi::CStr>,
+) -> Result<GitBlobWriteStream<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    let hint_path = hint_path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    // SAFETY: `repo` is live and exclusive, `hint_path` is null or a live C
+    // string, and `out` is writable. The returned type carries the repo borrow.
+    let status = unsafe { ffi::git_blob_create_fromstream(&mut out, repo.as_mut_ptr(), hint_path) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers a fully initialized stream whose installed
+    // `free` callback is its destructor.
+    let inner = unsafe { crate::api::types::GitWriteStreamOwned::from_raw(out) }
+        .expect("libgit2 succeeded without returning a write stream");
+    Ok(GitBlobWriteStream {
+        inner,
+        _repository: core::marker::PhantomData,
+    })
+}
+
+/// Wraps: git_blob_create_fromstream_commit
+/// Commits and consumes a blob stream, storing the resulting object ID.
+pub fn git_blob_create_fromstream_commit(
+    id: &mut crate::oid::OidMut<'_>,
+    stream: GitBlobWriteStream<'_>,
+) -> Result<(), i32> {
+    let raw = stream.inner.into_raw();
+    // SAFETY: `raw` transfers the one owned stream to this function, whose C
+    // implementation frees it on every return path; `id` is writable.
+    let status = unsafe { ffi::git_blob_create_fromstream_commit(id.as_mut_ptr(), raw) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}

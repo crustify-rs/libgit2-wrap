@@ -221,6 +221,23 @@ mod tests {
     }
 
     #[test]
+    fn perfdata_callback_receives_a_typed_transient_handle() {
+        let mut raw = ffi::git_checkout_perfdata {
+            mkdir_calls: 7,
+            stat_calls: 8,
+            chmod_calls: 9,
+        };
+        // SAFETY: `raw` remains initialized and live for this callback call.
+        let data = unsafe { CheckoutPerfDataRef::from_ptr(&raw mut raw) }.unwrap();
+        let mut seen = 0;
+        let mut callback = |data: CheckoutPerfDataRef<'_>| {
+            seen = data.mkdir_calls() + data.stat_calls() + data.chmod_calls();
+        };
+        GitCheckoutPerfDataCallback::call(&mut callback, data);
+        assert_eq!(seen, 24);
+    }
+
+    #[test]
     fn perfdata_handles_read_and_write_all_fields() {
         let mut raw = ffi::git_checkout_perfdata {
             mkdir_calls: 1,
@@ -263,5 +280,21 @@ mod tests {
             core::mem::align_of::<CheckoutPerfData>(),
             core::mem::align_of::<ffi::git_checkout_perfdata>()
         );
+    }
+}
+
+/// Wraps: git_checkout_perfdata_cb
+/// Safe callable surface for checkout performance reports.
+pub trait GitCheckoutPerfDataCallback {
+    /// Receives one transient shared view of the checkout counters.
+    fn call(&mut self, perfdata: CheckoutPerfDataRef<'_>);
+}
+
+impl<F> GitCheckoutPerfDataCallback for F
+where
+    F: for<'a> FnMut(CheckoutPerfDataRef<'a>),
+{
+    fn call(&mut self, perfdata: CheckoutPerfDataRef<'_>) {
+        self(perfdata)
     }
 }
