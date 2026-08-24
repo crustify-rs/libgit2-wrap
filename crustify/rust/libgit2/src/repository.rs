@@ -7,6 +7,7 @@ use core::ptr::{addr_of, addr_of_mut};
 
 use ffibox::CBox;
 
+use crate::annotated_commit::AnnotatedCommitRef;
 use crate::api::buffer::GitBufMut;
 use crate::api::repository::GitRepositoryInitFlags;
 use crate::config::{GitConfigMut, GitConfigOwned, GitConfigRef};
@@ -997,5 +998,127 @@ pub fn git_repository_commondir<'a>(repo: GitRepositoryRef<'a>) -> Option<&'a CS
         // SAFETY: a non-null result is the repository-owned NUL-terminated
         // path, live for the repository borrow `'a`.
         Some(unsafe { CStr::from_ptr(path) })
+    }
+}
+
+/// Wraps: git_repository_set_head
+/// Changes `HEAD` to the named reference or commit.
+pub fn git_repository_set_head(
+    repository: &mut GitRepositoryMut<'_>,
+    refname: &CStr,
+) -> Result<(), i32> {
+    // SAFETY: both arguments are live for the synchronous call; libgit2
+    // retains neither pointer and the exclusive handle permits repository mutation.
+    let status = unsafe { ffi::git_repository_set_head(repository.as_mut_ptr(), refname.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_set_head_detached
+/// Detaches `HEAD` at the commit identified by `committish`.
+pub fn git_repository_set_head_detached(
+    repository: &mut GitRepositoryMut<'_>,
+    committish: OidRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: the repository is exclusively borrowed and the OID is live and
+    // shared for the call; neither pointer is retained.
+    let status = unsafe {
+        ffi::git_repository_set_head_detached(repository.as_mut_ptr(), committish.as_ptr())
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_set_head_detached_from_annotated
+/// Detaches `HEAD` using an annotated commit's exact reflog description.
+pub fn git_repository_set_head_detached_from_annotated(
+    repository: &mut GitRepositoryMut<'_>,
+    committish: AnnotatedCommitRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: both typed handles are live for the synchronous call and the
+    // repository is exclusively borrowed for the mutation.
+    let status = unsafe {
+        ffi::git_repository_set_head_detached_from_annotated(
+            repository.as_mut_ptr(),
+            committish.as_ptr(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_set_namespace
+/// Replaces the active reference namespace, or clears it with `None`.
+pub fn git_repository_set_namespace(
+    repository: &mut GitRepositoryMut<'_>,
+    namespace: Option<&CStr>,
+) -> Result<(), i32> {
+    let namespace = namespace.map_or(core::ptr::null(), CStr::as_ptr);
+    // SAFETY: the repository is exclusively borrowed and `namespace` is null
+    // or a live C string. Libgit2 duplicates a non-null string before returning.
+    let status = unsafe { ffi::git_repository_set_namespace(repository.as_mut_ptr(), namespace) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_set_refdb
+/// Installs a reference database while retaining the caller's owned count.
+pub fn git_repository_set_refdb(
+    repository: &mut GitRepositoryMut<'_>,
+    refdb: GitRefdbRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: both handles are live. Libgit2 acquires its own refdb count and
+    // makes it repository-owned, so it does not retain the borrowed handle.
+    let status = unsafe {
+        ffi::git_repository_set_refdb(repository.as_mut_ptr(), refdb.as_ptr().cast_mut())
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_set_workdir
+/// Changes the repository working directory.
+pub fn git_repository_set_workdir(
+    repository: &mut GitRepositoryMut<'_>,
+    workdir: &CStr,
+    update_gitlink: bool,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive repository and C string are live for the call;
+    // libgit2 copies the normalized path and retains no caller pointer.
+    let status = unsafe {
+        ffi::git_repository_set_workdir(
+            repository.as_mut_ptr(),
+            workdir.as_ptr(),
+            i32::from(update_gitlink),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_state
+/// Reports the current libgit2 repository-state code.
+pub fn git_repository_state(repository: &mut GitRepositoryMut<'_>) -> Result<i32, i32> {
+    // SAFETY: the repository is live and exclusive for any lazy reference
+    // database initialization performed while inspecting state.
+    let state = unsafe { ffi::git_repository_state(repository.as_mut_ptr()) };
+    if state < 0 { Err(state) } else { Ok(state) }
+}
+
+/// Wraps: git_repository_state_cleanup
+/// Removes metadata for an in-progress merge, rebase, or similar operation.
+pub fn git_repository_state_cleanup(repository: &mut GitRepositoryMut<'_>) -> Result<(), i32> {
+    // SAFETY: the repository is live and exclusively borrowed while libgit2
+    // removes its state files and references.
+    let status = unsafe { ffi::git_repository_state_cleanup(repository.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_workdir
+/// Borrows the working-directory path, or returns `None` for a bare repository.
+#[must_use]
+pub fn git_repository_workdir<'repo>(repository: GitRepositoryRef<'repo>) -> Option<&'repo CStr> {
+    // SAFETY: the repository is live for `'repo`; the returned pointer is null
+    // or a repository-owned C string with that same lifetime.
+    let workdir = unsafe { ffi::git_repository_workdir(repository.as_ptr()) };
+    if workdir.is_null() {
+        None
+    } else {
+        // SAFETY: justified by the libgit2 getter contract above.
+        Some(unsafe { CStr::from_ptr(workdir) })
     }
 }

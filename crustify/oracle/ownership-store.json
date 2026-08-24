@@ -17133,6 +17133,528 @@
    ]
   },
   {
+   "name": "git_repository_set_head",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "refname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_set_head_detached",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "committish",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:committish"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_set_head_detached_from_annotated",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "committish",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:committish"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_set_namespace",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "namespace",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:namespace"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_set_refdb",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "refdb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refdb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_set_workdir",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "workdir",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:workdir"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_state",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository is borrowed for the call and may lazily initialize reference-database state while determining the operation state."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_state_cleanup",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_workdir",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:repo"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed pointer into the input object; it remains valid only for that input borrow and may be absent where documented."
+    }
+   }
+  },
+  {
+   "name": "git_reset_default",
+   "defined_in": "src/libgit2/reset.c",
+   "ptr_args": [
+    {
+     "name": "pathspecs",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pathspecs"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "target",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:target"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revparse_ext",
+   "defined_in": "src/libgit2/revparse.c",
+   "ptr_args": [
+    {
+     "name": "object_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:object_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-provided output slot; on success the inner pointer transfers one independently releasable owner."
+     }
+    },
+    {
+     "name": "reference_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:reference_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-provided output slot; on success the inner pointer transfers one independently releasable owner."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "spec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:spec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revparse_single",
+   "defined_in": "src/libgit2/revparse.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-provided output slot; on success the inner pointer transfers one independently releasable owner."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "spec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:spec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_revwalk_free",
    "defined_in": "src/libgit2/revwalk.c",
    "lifetime": {
@@ -17155,6 +17677,524 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees a complete walker allocation; NULL is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_hide",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_hide_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback payload borrowed for the transient invocation; the callback may access its state and null is permitted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_hide_glob",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "glob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:glob"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_hide_head",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_hide_ref",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "refname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_new",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "revwalk_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:revwalk_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-provided output slot; on success the inner pointer transfers one independently releasable owner."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_next",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_push",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_push_glob",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "glob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:glob"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_push_head",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_push_range",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "range",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:range"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_push_ref",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "refname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_reset",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_simplify_first_parent",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revwalk_sorting",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
      }
     }
    ]
@@ -17239,6 +18279,189 @@
    ]
   },
   {
+   "name": "git_stash_apply_progress_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback payload borrowed for the transient invocation; the callback may access its state and null is permitted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_stash_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "arg3",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg3"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback payload borrowed for the transient invocation; the callback may access its state and null is permitted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_stash_drop",
+   "defined_in": "src/libgit2/stash.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_status_file",
+   "defined_in": "src/libgit2/status.c",
+   "ptr_args": [
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "status_flags",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:status_flags"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_status_list_entrycount",
+   "defined_in": "src/libgit2/status.c",
+   "ptr_args": [
+    {
+     "name": "status",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:status"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_status_list_free",
    "defined_in": "src/libgit2/status.c",
    "lifetime": {
@@ -17261,6 +18484,63 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and destroys the complete status-list allocation; null is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_status_should_ignore",
+   "defined_in": "src/libgit2/status.c",
+   "ptr_args": [
+    {
+     "name": "ignored",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ignored"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
      }
     }
    ]
@@ -17373,6 +18653,225 @@
    ]
   },
   {
+   "name": "git_submodule_add_finalize",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "sm",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:sm"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_add_setup",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Caller-provided output slot; on success the inner pointer transfers one independently releasable owner."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_add_to_index",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "sm",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:sm"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_branch",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "submodule",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:submodule"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:submodule"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed pointer into the input object; it remains valid only for that input borrow and may be absent where documented."
+    }
+   }
+  },
+  {
+   "name": "git_submodule_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback payload borrowed for the transient invocation; the callback may access its state and null is permitted."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_submodule_dup",
    "defined_in": "src/libgit2/submodule.c",
    "lifetime": {
@@ -17447,6 +18946,474 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one reference when non-null; decrements rc and releases the allocation on the final reference."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_head_id",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "submodule",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:submodule"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:submodule"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed pointer into the input object; it remains valid only for that input borrow and may be absent where documented."
+    }
+   }
+  },
+  {
+   "name": "git_submodule_ignore",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "submodule",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:submodule"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_index_id",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "submodule",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:submodule"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:submodule"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed pointer into the input object; it remains valid only for that input borrow and may be absent where documented."
+    }
+   }
+  },
+  {
+   "name": "git_submodule_init",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "sm",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:sm"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_lookup",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Caller-provided output slot; on success the inner pointer transfers one independently releasable owner."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_name",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "submodule",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:submodule"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:submodule"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed pointer into the input object; it remains valid only for that input borrow and may be absent where documented."
+    }
+   }
+  },
+  {
+   "name": "git_submodule_open",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "sm",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:sm"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "subrepo",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:subrepo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-provided output slot; on success the inner pointer transfers one independently releasable owner."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_path",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "submodule",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:submodule"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:submodule"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed pointer into the input object; it remains valid only for that input borrow and may be absent where documented."
+    }
+   }
+  },
+  {
+   "name": "git_submodule_reload",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "sm",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:sm"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_repo_init",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-provided output slot; on success the inner pointer transfers one independently releasable owner."
+     }
+    },
+    {
+     "name": "sm",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:sm"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_set_branch",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "branch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:branch"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_set_ignore",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated string borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
      }
     }
    ]

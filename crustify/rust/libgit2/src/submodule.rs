@@ -1,14 +1,17 @@
 //! Safe wrappers for libgit2 submodule APIs.
 
 use core::ffi::CStr;
+use core::marker::PhantomData;
 use core::ptr::NonNull;
 
 use ffibox::{CBox, CCloned};
 
-use crate::api::types::{GitSubmoduleIgnore, GitSubmoduleUpdate, InvalidGitSubmoduleUpdate};
+use crate::api::types::{
+    GitSubmoduleIgnore, GitSubmoduleUpdate, InvalidGitSubmoduleIgnore, InvalidGitSubmoduleUpdate,
+};
 use crate::ffi;
 use crate::oid::OidRef;
-use crate::repository::GitRepositoryMut;
+use crate::repository::{GitRepositoryMut, GitRepositoryOwned, GitRepositoryRef};
 
 ffibox::define_ctype!(
     /// Wraps: git_submodule
@@ -24,8 +27,48 @@ ffibox::define_ctype!(
     ffi::git_submodule
 );
 
-/// An owned reference to a libgit2 submodule.
-pub type GitSubmoduleOwned = CBox<GitSubmodule>;
+/// An owned submodule reference tied to its borrowed parent repository.
+pub struct GitSubmoduleOwned<'repo> {
+    inner: CBox<GitSubmodule>,
+    _repository: PhantomData<GitRepositoryRef<'repo>>,
+}
+
+impl GitSubmoduleOwned<'_> {
+    /// Borrows the submodule.
+    #[must_use]
+    pub fn as_ref(&self) -> GitSubmoduleRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the submodule exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitSubmoduleMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+impl Clone for GitSubmoduleOwned<'_> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            _repository: PhantomData,
+        }
+    }
+}
+
+fn adopt_submodule<'repo>(
+    status: i32,
+    inner: Option<CBox<GitSubmodule>>,
+) -> Result<GitSubmoduleOwned<'repo>, i32> {
+    if status != 0 {
+        return Err(status);
+    }
+    let inner = inner.expect("a successful submodule constructor returns a non-null owner");
+    Ok(GitSubmoduleOwned {
+        inner,
+        _repository: PhantomData,
+    })
+}
 
 // SAFETY: `git_submodule_free` consumes one reference to a fully initialized
 // `git_submodule`. Its refcount decrement releases the allocation only after
@@ -143,6 +186,242 @@ pub fn git_submodule_wd_id<'a>(submodule: &'a mut GitSubmoduleMut<'_>) -> Option
     unsafe { OidRef::from_ptr(oid) }
 }
 
+/// Wraps: git_submodule_add_finalize
+/// Adds a prepared submodule and `.gitmodules` to the parent index.
+pub fn git_submodule_add_finalize(submodule: &mut GitSubmoduleMut<'_>) -> Result<(), i32> {
+    // SAFETY: the submodule and its tethered parent repository are live and
+    // the exclusive handle permits the index-affecting operation.
+    status_result(unsafe { ffi::git_submodule_add_finalize(submodule.as_mut_ptr()) })
+}
+
+/// Wraps: git_submodule_add_setup
+/// Prepares a new submodule and returns an owner tied to `repository`.
+pub fn git_submodule_add_setup<'repo>(
+    mut repository: GitRepositoryMut<'repo>,
+    url: &CStr,
+    path: &CStr,
+    use_gitlink: bool,
+) -> Result<GitSubmoduleOwned<'repo>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output is writable, the repository is live and exclusive,
+    // and both strings live for the call. The returned submodule stores the
+    // repository pointer, whose borrow is carried by `GitSubmoduleOwned`.
+    let status = unsafe {
+        ffi::git_submodule_add_setup(
+            core::ptr::addr_of_mut!(output),
+            repository.as_mut_ptr(),
+            url.as_ptr(),
+            path.as_ptr(),
+            i32::from(use_gitlink),
+        )
+    };
+    // SAFETY: output is null or one complete owned submodule reference.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_submodule(status, inner)
+}
+
+/// Wraps: git_submodule_add_to_index
+/// Records the submodule's current `HEAD` in the parent index.
+pub fn git_submodule_add_to_index(
+    submodule: &mut GitSubmoduleMut<'_>,
+    write_index: bool,
+) -> Result<(), i32> {
+    // SAFETY: the submodule is live and exclusive for its cached-ID updates.
+    status_result(unsafe {
+        ffi::git_submodule_add_to_index(submodule.as_mut_ptr(), i32::from(write_index))
+    })
+}
+
+/// Wraps: git_submodule_branch
+/// Borrows the configured branch, when one is present.
+#[must_use]
+pub fn git_submodule_branch<'a>(submodule: GitSubmoduleRef<'a>) -> Option<&'a CStr> {
+    // SAFETY: the shared handle is live; the getter only reads an owned field.
+    let branch = unsafe { ffi::git_submodule_branch(submodule.as_ptr().cast_mut()) };
+    optional_submodule_string(branch)
+}
+
+/// Wraps: git_submodule_head_id
+/// Borrows the submodule ID recorded in the current `HEAD` tree.
+#[must_use]
+pub fn git_submodule_head_id<'a>(submodule: GitSubmoduleRef<'a>) -> Option<OidRef<'a>> {
+    // SAFETY: the shared handle is live and the getter only reads cached fields.
+    let oid = unsafe { ffi::git_submodule_head_id(submodule.as_ptr().cast_mut()) };
+    // SAFETY: a non-null result is an inline field live for the submodule borrow.
+    unsafe { OidRef::from_ptr(oid.cast_mut()) }
+}
+
+/// Wraps: git_submodule_ignore
+/// Returns the checked ignore rule used for status calculations.
+pub fn git_submodule_ignore(
+    submodule: GitSubmoduleRef<'_>,
+) -> Result<GitSubmoduleIgnore, InvalidGitSubmoduleIgnore> {
+    // SAFETY: the getter only reads the live submodule's scalar field.
+    let value = unsafe { ffi::git_submodule_ignore(submodule.as_ptr().cast_mut()) };
+    GitSubmoduleIgnore::try_from(value)
+}
+
+/// Wraps: git_submodule_index_id
+/// Borrows the submodule ID recorded in the index.
+#[must_use]
+pub fn git_submodule_index_id<'a>(submodule: GitSubmoduleRef<'a>) -> Option<OidRef<'a>> {
+    // SAFETY: the shared handle is live and the getter only reads cached fields.
+    let oid = unsafe { ffi::git_submodule_index_id(submodule.as_ptr().cast_mut()) };
+    // SAFETY: a non-null result is an inline field live for the submodule borrow.
+    unsafe { OidRef::from_ptr(oid.cast_mut()) }
+}
+
+/// Wraps: git_submodule_init
+/// Copies submodule configuration into the parent repository configuration.
+pub fn git_submodule_init(submodule: &mut GitSubmoduleMut<'_>, overwrite: bool) -> Result<(), i32> {
+    // SAFETY: the submodule and its parent are live and the exclusive handle
+    // permits configuration and cache access during the call.
+    status_result(unsafe { ffi::git_submodule_init(submodule.as_mut_ptr(), i32::from(overwrite)) })
+}
+
+/// Wraps: git_submodule_lookup
+/// Looks up a submodule and ties its returned reference to `repository`.
+pub fn git_submodule_lookup<'repo>(
+    mut repository: GitRepositoryMut<'repo>,
+    name: &CStr,
+) -> Result<GitSubmoduleOwned<'repo>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output is writable, repository is live and exclusive, and
+    // `name` is a live C string. The result's type carries the stored repo borrow.
+    let status = unsafe {
+        ffi::git_submodule_lookup(
+            core::ptr::addr_of_mut!(output),
+            repository.as_mut_ptr(),
+            name.as_ptr(),
+        )
+    };
+    // SAFETY: output is null or one complete owned submodule reference.
+    let inner = unsafe { CBox::from_raw(output) };
+    adopt_submodule(status, inner)
+}
+
+/// Wraps: git_submodule_lookup
+/// Tests for a submodule without requesting an owned output reference.
+pub fn git_submodule_exists(repository: &mut GitRepositoryMut<'_>, name: &CStr) -> Result<(), i32> {
+    // SAFETY: a null output is explicitly supported; repository and name are
+    // live for the call and no caller pointer is retained.
+    status_result(unsafe {
+        ffi::git_submodule_lookup(
+            core::ptr::null_mut(),
+            repository.as_mut_ptr(),
+            name.as_ptr(),
+        )
+    })
+}
+
+/// Wraps: git_submodule_name
+/// Borrows the non-null submodule name.
+#[must_use]
+pub fn git_submodule_name<'a>(submodule: GitSubmoduleRef<'a>) -> &'a CStr {
+    // SAFETY: every complete submodule owns a non-null NUL-terminated name.
+    unsafe { CStr::from_ptr(ffi::git_submodule_name(submodule.as_ptr().cast_mut())) }
+}
+
+/// Wraps: git_submodule_open
+/// Opens a distinct owned repository for a checked-out submodule.
+pub fn git_submodule_open(submodule: &mut GitSubmoduleMut<'_>) -> Result<GitRepositoryOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output is writable and the submodule is live and exclusive
+    // for its working-directory status cache updates.
+    let status = unsafe { ffi::git_submodule_open(&mut output, submodule.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete, independently owned repository.
+    unsafe { GitRepositoryOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_submodule_path
+/// Borrows the non-null repository-relative submodule path.
+#[must_use]
+pub fn git_submodule_path<'a>(submodule: GitSubmoduleRef<'a>) -> &'a CStr {
+    // SAFETY: every complete submodule owns a non-null NUL-terminated path.
+    unsafe { CStr::from_ptr(ffi::git_submodule_path(submodule.as_ptr().cast_mut())) }
+}
+
+/// Wraps: git_submodule_reload
+/// Refreshes cached submodule data from configuration, index, and `HEAD`.
+pub fn git_submodule_reload(submodule: &mut GitSubmoduleMut<'_>, force: bool) -> Result<(), i32> {
+    // SAFETY: the submodule is live and exclusively borrowed while its cached
+    // strings, IDs, and flags are replaced.
+    status_result(unsafe { ffi::git_submodule_reload(submodule.as_mut_ptr(), i32::from(force)) })
+}
+
+/// Wraps: git_submodule_repo_init
+/// Initializes and returns an owned repository for a submodule checkout.
+pub fn git_submodule_repo_init(
+    submodule: GitSubmoduleRef<'_>,
+    use_gitlink: bool,
+) -> Result<GitRepositoryOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: output is writable and the shared submodule remains live for the
+    // call; the returned repository is independently owned.
+    let status = unsafe {
+        ffi::git_submodule_repo_init(
+            core::ptr::addr_of_mut!(output),
+            submodule.as_ptr(),
+            i32::from(use_gitlink),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete, independently owned repository.
+    unsafe { GitRepositoryOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_submodule_set_branch
+/// Sets the configured branch, or removes it with `None`.
+pub fn git_submodule_set_branch(
+    repository: &mut GitRepositoryMut<'_>,
+    name: &CStr,
+    branch: Option<&CStr>,
+) -> Result<(), i32> {
+    let branch = branch.map_or(core::ptr::null(), CStr::as_ptr);
+    // SAFETY: repository is exclusive and both strings are live or null as
+    // allowed. Libgit2 copies configuration data before returning.
+    status_result(unsafe {
+        ffi::git_submodule_set_branch(repository.as_mut_ptr(), name.as_ptr(), branch)
+    })
+}
+
+/// Wraps: git_submodule_set_ignore
+/// Stores a checked ignore rule in `.gitmodules`.
+pub fn git_submodule_set_ignore(
+    repository: &mut GitRepositoryMut<'_>,
+    name: &CStr,
+    ignore: GitSubmoduleIgnore,
+) -> Result<(), i32> {
+    // SAFETY: repository and name are live for the call, and `ignore` is a
+    // validated C enum value. No pointer is retained.
+    status_result(unsafe {
+        ffi::git_submodule_set_ignore(
+            repository.as_mut_ptr(),
+            name.as_ptr(),
+            ffi::git_submodule_ignore_t::from(ignore),
+        )
+    })
+}
+
+fn status_result(status: i32) -> Result<(), i32> {
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+fn optional_submodule_string<'a>(value: *const core::ffi::c_char) -> Option<&'a CStr> {
+    if value.is_null() {
+        None
+    } else {
+        // SAFETY: callers bind `'a` to the submodule handle that owns this
+        // live NUL-terminated string.
+        Some(unsafe { CStr::from_ptr(value) })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
@@ -164,7 +443,7 @@ mod tests {
             size_of::<*mut ffi::git_submodule>()
         );
         assert_eq!(
-            size_of::<Option<GitSubmoduleOwned>>(),
+            size_of::<Option<GitSubmoduleOwned<'_>>>(),
             size_of::<*mut ffi::git_submodule>()
         );
     }

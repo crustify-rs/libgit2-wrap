@@ -1,10 +1,12 @@
 //! Safe wrappers for libgit2 status APIs.
 
+use core::ffi::CStr;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 use ffibox::CBox;
 
 use crate::ffi;
+use crate::repository::GitRepositoryMut;
 
 /// Wraps: git_status_show_t
 /// Selects which comparisons libgit2 includes in a status scan.
@@ -226,6 +228,58 @@ ffibox::impl_dropped!(
     ffi::git_status_list,
     ffi::git_status_list_free
 );
+
+/// Wraps: git_status_file
+/// Returns the status flags for one exact repository-relative path.
+pub fn git_status_file(repository: &mut GitRepositoryMut<'_>, path: &CStr) -> Result<Status, i32> {
+    let mut flags = 0;
+    // SAFETY: the output slot and repository are exclusively borrowed and
+    // `path` is a live C string. Libgit2 retains none of the pointers.
+    let status = unsafe {
+        ffi::git_status_file(
+            core::ptr::addr_of_mut!(flags),
+            repository.as_mut_ptr(),
+            path.as_ptr(),
+        )
+    };
+    if status == 0 {
+        Ok(Status::from_bits_retain(flags))
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_status_list_entrycount
+/// Returns the number of entries in a status list.
+#[must_use]
+pub fn git_status_list_entrycount(status: GitStatusListRef<'_>) -> usize {
+    // SAFETY: the shared list is live; despite the historical non-const C
+    // spelling, the body only reads the vector length and retains no pointer.
+    unsafe { ffi::git_status_list_entrycount(status.as_ptr().cast_mut()) }
+}
+
+/// Wraps: git_status_should_ignore
+/// Reports whether an exact repository-relative path is ignored.
+pub fn git_status_should_ignore(
+    repository: &mut GitRepositoryMut<'_>,
+    path: &CStr,
+) -> Result<bool, i32> {
+    let mut ignored = 0;
+    // SAFETY: the output slot and repository are exclusively borrowed and
+    // `path` is a live C string; the callee retains no pointer.
+    let status = unsafe {
+        ffi::git_status_should_ignore(
+            core::ptr::addr_of_mut!(ignored),
+            repository.as_mut_ptr(),
+            path.as_ptr(),
+        )
+    };
+    if status == 0 {
+        Ok(ignored != 0)
+    } else {
+        Err(status)
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -1,12 +1,15 @@
 //! Safe wrappers for libgit2 revparse APIs.
 
+use core::ffi::CStr;
 use core::ops::{BitOr, BitOrAssign};
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CVal, CValued};
 
 use crate::ffi;
-use crate::object::{GitObjectOwned, GitObjectRef};
+use crate::object::{GitObjectOwned, GitObjectRef, RepositoryObject, adopt_repository_object};
+use crate::refs::{GitReferenceTetheredOwned, adopt_optional_reference};
+use crate::repository::GitRepositoryMut;
 
 ffibox::define_ctype!(
     /// Wraps: git_revspec
@@ -218,6 +221,84 @@ unsafe impl CValued for GitRevspec {
         let to = unsafe { GitObjectOwned::from_raw(to) };
         drop((from, to));
     }
+}
+
+/// The object and optional intermediate reference resolved by [`git_revparse_ext`].
+pub struct GitRevparseExt<'repo> {
+    object: RepositoryObject<'repo>,
+    reference: Option<GitReferenceTetheredOwned<'repo>>,
+}
+
+impl GitRevparseExt<'_> {
+    /// Borrows the resolved object.
+    #[must_use]
+    pub fn object(&self) -> GitObjectRef<'_> {
+        self.object.as_ref()
+    }
+
+    /// Borrows the intermediate reference, when the expression traversed one.
+    #[must_use]
+    pub fn reference(&self) -> Option<crate::refs::GitReferenceRef<'_>> {
+        self.reference
+            .as_ref()
+            .map(GitReferenceTetheredOwned::as_ref)
+    }
+}
+
+/// Wraps: git_revparse_ext
+/// Resolves an object and, when applicable, its intermediate reference.
+pub fn git_revparse_ext<'repo>(
+    mut repository: GitRepositoryMut<'repo>,
+    spec: &CStr,
+) -> Result<GitRevparseExt<'repo>, i32> {
+    let mut object = core::ptr::null_mut();
+    let mut reference = core::ptr::null_mut();
+    // SAFETY: both output slots are writable, the repository is live and
+    // exclusive for cache access, and `spec` is a live C string. No input
+    // pointer is retained; successful outputs transfer one owned count each.
+    let status = unsafe {
+        ffi::git_revparse_ext(
+            core::ptr::addr_of_mut!(object),
+            core::ptr::addr_of_mut!(reference),
+            repository.as_mut_ptr(),
+            spec.as_ptr(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers a complete non-null object owner.
+    let object = unsafe { GitObjectOwned::from_raw(object) };
+    let object = adopt_repository_object(status, object)?;
+    // SAFETY: the optional non-null reference output transfers one complete
+    // owner whose reference database borrows the same repository.
+    let reference = unsafe { ffibox::CBox::from_raw(reference) };
+    Ok(GitRevparseExt {
+        object,
+        reference: adopt_optional_reference(reference),
+    })
+}
+
+/// Wraps: git_revparse_single
+/// Resolves one revision expression into a repository-tethered object.
+pub fn git_revparse_single<'repo>(
+    mut repository: GitRepositoryMut<'repo>,
+    spec: &CStr,
+) -> Result<RepositoryObject<'repo>, i32> {
+    let mut object = core::ptr::null_mut();
+    // SAFETY: the output slot is writable, the repository is live and
+    // exclusive, and `spec` is a live C string retained only for this call.
+    let status = unsafe {
+        ffi::git_revparse_single(
+            core::ptr::addr_of_mut!(object),
+            repository.as_mut_ptr(),
+            spec.as_ptr(),
+        )
+    };
+    // SAFETY: the output is null on failure or one complete owned object count
+    // on success, tied to the repository borrow by the returned type.
+    let object = unsafe { GitObjectOwned::from_raw(object) };
+    adopt_repository_object(status, object)
 }
 
 #[cfg(test)]

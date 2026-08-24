@@ -179,6 +179,15 @@ pub fn git_reference_normalize_name<'a>(
 /// `'a` is constrained by no argument: every caller must bind it to the borrow
 /// of the repository, or of the reference whose database it shares, that the
 /// new reference depends on, so the tether the returned owner claims is real.
+pub(crate) fn adopt_optional_reference<'a>(
+    inner: Option<CBox<GitReference>>,
+) -> Option<GitReferenceTetheredOwned<'a>> {
+    inner.map(|inner| GitReferenceTetheredOwned {
+        inner,
+        _keepalive: PhantomData,
+    })
+}
+
 pub(crate) fn adopt_reference<'a>(
     status: i32,
     inner: Option<CBox<GitReference>>,

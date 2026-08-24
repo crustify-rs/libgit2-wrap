@@ -307,3 +307,10 @@
 ^git_url_resolve_cb$
 ^git_worktree_(is_locked|is_prunable|list|lock|lookup|name|open_from_repository|path|prune|prune_options_init|unlock|validate)$
 ^GIT_WORKTREE_PRUNE_OPTIONS_VERSION$
+^git_repository_(set_head|set_head_detached|set_head_detached_from_annotated|set_namespace|set_refdb|set_workdir|state|state_cleanup|workdir)$
+^git_reset_default$
+^git_revparse_(ext|single)$
+^git_revwalk_(hide|hide_glob|hide_head|hide_ref|new|next|push|push_glob|push_head|push_range|push_ref|reset|simplify_first_parent|sorting)$
+^git_stash_drop$
+^git_status_(file|list_entrycount|should_ignore)$
+^git_submodule_(add_finalize|add_setup|add_to_index|branch|head_id|ignore|index_id|init|lookup|name|open|path|reload|repo_init|set_branch|set_ignore)$

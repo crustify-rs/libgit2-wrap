@@ -1,6 +1,7 @@
 //! Safe wrappers for libgit2 stash APIs.
 
 use crate::ffi;
+use crate::repository::GitRepositoryMut;
 
 /// Wraps: git_stash_apply_progress_t
 /// A stage reported while libgit2 applies a stash.
@@ -72,6 +73,15 @@ impl TryFrom<ffi::git_stash_apply_progress_t> for StashApplyProgress {
             value => Err(InvalidStashApplyProgress(value)),
         }
     }
+}
+
+/// Wraps: git_stash_drop
+/// Removes the stash at `index` from the repository.
+pub fn git_stash_drop(repository: &mut GitRepositoryMut<'_>, index: usize) -> Result<(), i32> {
+    // SAFETY: the repository is live and exclusively borrowed while libgit2
+    // updates its stash reference and reflog; no pointer is retained.
+    let status = unsafe { ffi::git_stash_drop(repository.as_mut_ptr(), index) };
+    if status == 0 { Ok(()) } else { Err(status) }
 }
 
 #[cfg(test)]

@@ -36,6 +36,20 @@ pub struct RepositoryObject<'repo> {
     _repository: PhantomData<GitRepositoryRef<'repo>>,
 }
 
+pub(crate) fn adopt_repository_object<'repo>(
+    status: i32,
+    inner: Option<GitObjectOwned>,
+) -> Result<RepositoryObject<'repo>, i32> {
+    if status != 0 {
+        return Err(status);
+    }
+    let inner = inner.expect("a successful object constructor returns a non-null owner");
+    Ok(RepositoryObject {
+        inner,
+        _repository: PhantomData,
+    })
+}
+
 impl RepositoryObject<'_> {
     /// Borrows the object.
     pub fn as_ref(&self) -> GitObjectRef<'_> {
