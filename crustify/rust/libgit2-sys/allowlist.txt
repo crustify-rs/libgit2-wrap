@@ -309,9 +309,11 @@
 ^git_submodule_(set_update|set_url|status|sync|update_strategy|url|wd_id)$
 ^git_tag_(create_lightweight|delete|foreach_cb|list|list_match)$
 ^git_trace_cb$
-^git_transaction_(commit|lock_ref|new|remove|set_reflog)$
-^git_tree_entry_(cmp|filemode|filemode_raw|id|name|to_object|type)$
-^git_treebuilder_(clear|entrycount|filter_cb|get|insert|remove|write)$
+^git_transaction_(commit|lock_ref|new|remove|set_reflog|set_symbolic_target|set_target)$
+^git_transport_certificate_check_cb$
+^git_tree_(create_updated|entrycount|id|lookup|walk)$
+^git_tree_entry_(byid|byindex|byname|bypath|cmp|filemode|filemode_raw|id|name|to_object|type)$
+^git_treebuilder_(clear|entrycount|filter|filter_cb|get|insert|new|remove|write)$
 ^git_treewalk_cb$
 ^git_url_resolve_cb$
 ^git_worktree_(is_locked|is_prunable|list|lock|lookup|name|open_from_repository|path|prune|prune_options_init|unlock|validate)$

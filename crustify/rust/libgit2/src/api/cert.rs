@@ -22,6 +22,53 @@ pub enum GitCertType {
     Strarray = ffi::git_cert_t_GIT_CERT_STRARRAY,
 }
 
+/// Wraps: git_transport_certificate_check_cb
+/// Safe callable surface for a transport's final certificate decision.
+pub trait GitTransportCertificateCheckCallback {
+    /// Returns zero to accept, a negative error to reject, or a positive value
+    /// to defer to libgit2's existing validity determination.
+    fn call(&mut self, certificate: GitCertRef<'_>, valid: bool, host: &core::ffi::CStr) -> i32;
+}
+
+impl<F> GitTransportCertificateCheckCallback for F
+where
+    F: for<'cert, 'host> FnMut(GitCertRef<'cert>, bool, &'host core::ffi::CStr) -> i32,
+{
+    fn call(&mut self, certificate: GitCertRef<'_>, valid: bool, host: &core::ffi::CStr) -> i32 {
+        self(certificate, valid, host)
+    }
+}
+
+#[cfg(test)]
+mod certificate_callback_tests {
+    use super::*;
+
+    #[test]
+    fn callback_receives_checked_certificate_data() {
+        let mut raw = ffi::git_cert {
+            cert_type: ffi::git_cert_t_GIT_CERT_X509,
+        };
+        // SAFETY: `raw` is initialized and remains live without mutation for
+        // the callback invocation.
+        let certificate = unsafe { GitCertRef::from_ptr(&raw mut raw) }.unwrap();
+        let mut callback = |certificate: GitCertRef<'_>, valid: bool, host: &core::ffi::CStr| {
+            assert_eq!(certificate.cert_type(), Ok(GitCertType::X509));
+            assert!(valid);
+            assert_eq!(host, c"example.com");
+            1
+        };
+        assert_eq!(
+            GitTransportCertificateCheckCallback::call(
+                &mut callback,
+                certificate,
+                true,
+                c"example.com",
+            ),
+            1
+        );
+    }
+}
+
 /// A raw certificate type not published by this libgit2 API.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct InvalidGitCertType(ffi::git_cert_t);

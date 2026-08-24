@@ -1,10 +1,12 @@
 //! Safe wrappers for libgit2 tree APIs.
 
-use core::ffi::CStr;
+use core::ffi::{CStr, c_char, c_void};
+use core::marker::PhantomData;
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
-use ffibox::{CBox, CCloned, define_ctype, impl_dropped};
+use ffibox::{CBox, CCloned, CSlice, define_ctype, impl_dropped};
 
+use crate::api::tree::{GitTreebuilderFilterCallback, GitTreewalkCallback};
 use crate::api::types::{GitFileMode, GitObjectType};
 use crate::ffi;
 use crate::object::{GitObjectOwned, RepositoryObject};
@@ -26,6 +28,39 @@ define_ctype!(
 
 /// An owned reference to a Git tree.
 pub type GitTreeOwned = CBox<GitTree>;
+
+/// An owned tree tied to the repository pointer retained by its base object.
+pub struct RepositoryTree<'repo> {
+    inner: GitTreeOwned,
+    _repository: PhantomData<GitRepositoryRef<'repo>>,
+}
+
+impl RepositoryTree<'_> {
+    /// Borrows the tree.
+    #[must_use]
+    pub fn as_ref(&self) -> GitTreeRef<'_> {
+        self.inner.as_ref()
+    }
+}
+
+impl<'repo> RepositoryTree<'repo> {
+    pub(crate) fn from_owned(inner: GitTreeOwned, repository: GitRepositoryRef<'repo>) -> Self {
+        let _ = repository;
+        Self {
+            inner,
+            _repository: PhantomData,
+        }
+    }
+}
+
+impl Clone for RepositoryTree<'_> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            _repository: PhantomData,
+        }
+    }
+}
 
 // SAFETY: `git_tree_free` consumes one reference to a complete tree and
 // releases the allocation only when its underlying object cache refcount
@@ -199,6 +234,26 @@ define_ctype!(
 
 /// An owned in-memory tree builder.
 pub type TreeBuilderOwned = CBox<TreeBuilder>;
+
+/// An owned tree builder tied to the repository pointer it retains.
+pub struct RepositoryTreeBuilder<'repo> {
+    inner: TreeBuilderOwned,
+    _repository: PhantomData<GitRepositoryRef<'repo>>,
+}
+
+impl RepositoryTreeBuilder<'_> {
+    /// Borrows the builder.
+    #[must_use]
+    pub fn as_ref(&self) -> TreeBuilderRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the builder exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> TreeBuilderMut<'_> {
+        self.inner.as_mut()
+    }
+}
 
 // SAFETY: `git_treebuilder_free` is the public destructor for a complete
 // `git_treebuilder` allocation and accepts null, although `CDropped` supplies
@@ -742,5 +797,248 @@ mod tests {
         assert_eq!(update.path(), c"src/new.rs");
         assert_eq!(update.filemode(), Some(GitFileMode::LINK));
         assert_eq!(update.id().oid_type(), Ok(crate::oid::OidType::Sha256));
+    }
+}
+
+/// Wraps: git_tree_create_updated
+/// Writes a tree formed by applying a contiguous run of updates to an optional
+/// baseline tree.
+pub fn git_tree_create_updated(
+    repository: GitRepositoryRef<'_>,
+    baseline: Option<GitTreeRef<'_>>,
+    updates: CSlice<'_, TreeUpdate>,
+) -> Result<Oid, i32> {
+    let mut oid = Oid::zeroed();
+    let baseline = baseline.map_or(core::ptr::null_mut(), |tree| tree.as_ptr().cast_mut());
+    // SAFETY: output storage is writable, the repository and optional tree
+    // are live, and `updates` describes its full initialized contiguous run.
+    // Libgit2 retains none of these pointers after returning.
+    let status = unsafe {
+        ffi::git_tree_create_updated(
+            addr_of_mut!(oid).cast(),
+            repository.as_ptr().cast_mut(),
+            baseline,
+            updates.len(),
+            updates.as_ptr().cast_const(),
+        )
+    };
+    if status == 0 { Ok(oid) } else { Err(status) }
+}
+
+/// Wraps: git_tree_entry_byid
+/// Borrows the tree-owned entry whose object ID matches `id`.
+#[must_use]
+pub fn git_tree_entry_byid<'tree>(
+    tree: GitTreeRef<'tree>,
+    id: OidRef<'_>,
+) -> Option<GitTreeEntryRef<'tree>> {
+    // SAFETY: both inputs are live shared handles; a non-null result points
+    // into storage owned by `tree` and remains valid for its borrow.
+    let entry = unsafe { ffi::git_tree_entry_byid(tree.as_ptr(), id.as_ptr()) }.cast_mut();
+    // SAFETY: the result follows the tree-tied contract above.
+    unsafe { GitTreeEntryRef::from_ptr(entry) }
+}
+
+/// Wraps: git_tree_entry_byindex
+/// Borrows the tree-owned entry at `index`, or returns `None` when out of
+/// range.
+#[must_use]
+pub fn git_tree_entry_byindex(tree: GitTreeRef<'_>, index: usize) -> Option<GitTreeEntryRef<'_>> {
+    // SAFETY: `tree` is live and the C getter bounds-checks `index`; a
+    // non-null result is owned by the tree.
+    let entry = unsafe { ffi::git_tree_entry_byindex(tree.as_ptr(), index) }.cast_mut();
+    // SAFETY: the result remains live for the tree handle's lifetime.
+    unsafe { GitTreeEntryRef::from_ptr(entry) }
+}
+
+/// Wraps: git_tree_entry_byname
+/// Borrows the tree-owned entry named by `filename`.
+#[must_use]
+pub fn git_tree_entry_byname<'tree>(
+    tree: GitTreeRef<'tree>,
+    filename: &CStr,
+) -> Option<GitTreeEntryRef<'tree>> {
+    // SAFETY: both inputs are live and libgit2 retains neither filename nor a
+    // new owner; a non-null result points into `tree`.
+    let entry = unsafe { ffi::git_tree_entry_byname(tree.as_ptr(), filename.as_ptr()) }.cast_mut();
+    // SAFETY: the result remains live for the tree handle's lifetime.
+    unsafe { GitTreeEntryRef::from_ptr(entry) }
+}
+
+/// Wraps: git_tree_entry_bypath
+/// Looks up a relative path and returns a caller-owned deep copy of its entry.
+pub fn git_tree_entry_bypath(root: GitTreeRef<'_>, path: &CStr) -> Result<GitTreeEntryOwned, i32> {
+    let mut entry = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and both inputs are live. Success
+    // writes one independently owned entry allocation.
+    let status =
+        unsafe { ffi::git_tree_entry_bypath(addr_of_mut!(entry), root.as_ptr(), path.as_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success writes a complete non-null entry owned by the caller.
+    unsafe { GitTreeEntryOwned::from_raw(entry) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_tree_entrycount
+/// Returns the number of entries directly contained in a tree.
+#[must_use]
+pub fn git_tree_entrycount(tree: GitTreeRef<'_>) -> usize {
+    // SAFETY: the live shared tree is only read by this scalar getter.
+    unsafe { ffi::git_tree_entrycount(tree.as_ptr()) }
+}
+
+/// Wraps: git_tree_walk
+/// Traverses a tree synchronously through a safe callback.
+pub fn git_tree_walk<C>(
+    tree: GitTreeRef<'_>,
+    mode: TreeWalkMode,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: GitTreewalkCallback,
+{
+    unsafe extern "C" fn trampoline<C: GitTreewalkCallback>(
+        root: *const c_char,
+        entry: *const ffi::git_tree_entry,
+        payload: *mut c_void,
+    ) -> i32 {
+        if root.is_null() || entry.is_null() || payload.is_null() {
+            return -1;
+        }
+        // SAFETY: the outer wrapper passes this exact callback pointer and C
+        // invokes the trampoline only during the synchronous walk.
+        let callback = unsafe { &mut *payload.cast::<C>() };
+        // SAFETY: libgit2 supplies a live NUL-terminated path for this
+        // invocation and retains ownership of its storage.
+        let root = unsafe { CStr::from_ptr(root) };
+        // SAFETY: libgit2 supplies a live tree-owned entry for this callback
+        // invocation; the handle cannot escape the callback trait's lifetime.
+        let entry = unsafe { GitTreeEntryRef::from_ptr(entry.cast_mut()) }
+            .expect("the trampoline rejected null");
+        callback.call(root, entry)
+    }
+
+    // SAFETY: all inputs remain live for this synchronous call; the
+    // trampoline reconstructs the exact callback type from its payload.
+    let status = unsafe {
+        ffi::git_tree_walk(
+            tree.as_ptr(),
+            mode.into(),
+            Some(trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_treebuilder_filter
+/// Removes every builder entry selected by a synchronous callback.
+pub fn git_treebuilder_filter<C>(
+    builder: &mut TreeBuilderMut<'_>,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: GitTreebuilderFilterCallback,
+{
+    unsafe extern "C" fn trampoline<C: GitTreebuilderFilterCallback>(
+        entry: *const ffi::git_tree_entry,
+        payload: *mut c_void,
+    ) -> i32 {
+        if entry.is_null() || payload.is_null() {
+            return 0;
+        }
+        // SAFETY: the outer wrapper passes this exact callback pointer and C
+        // invokes it synchronously while the builder remains exclusive.
+        let callback = unsafe { &mut *payload.cast::<C>() };
+        // SAFETY: the builder owns this live entry for the invocation. The
+        // callback's HRTB prevents the transient handle from escaping.
+        let entry = unsafe { GitTreeEntryRef::from_ptr(entry.cast_mut()) }
+            .expect("the trampoline rejected null");
+        i32::from(callback.remove(entry))
+    }
+
+    // SAFETY: the builder and callback remain live and exclusive for this
+    // synchronous call; the trampoline reconstructs the exact callback type.
+    let status = unsafe {
+        ffi::git_treebuilder_filter(
+            builder.as_mut_ptr(),
+            Some(trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_treebuilder_new
+/// Creates a builder tied to the repository pointer it retains, optionally
+/// deep-copying entries from `source`.
+pub fn git_treebuilder_new<'repo>(
+    repository: GitRepositoryRef<'repo>,
+    source: Option<GitTreeRef<'_>>,
+) -> Result<RepositoryTreeBuilder<'repo>, i32> {
+    let mut builder = core::ptr::null_mut();
+    let source = source.map_or(core::ptr::null(), |tree| tree.as_ptr());
+    // SAFETY: the output slot is writable, the repository remains live for
+    // the returned wrapper's lifetime, and the optional source is null or
+    // live while libgit2 copies its entries.
+    let status = unsafe {
+        ffi::git_treebuilder_new(
+            addr_of_mut!(builder),
+            repository.as_ptr().cast_mut(),
+            source,
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success writes one complete non-null caller-owned builder.
+    let inner =
+        unsafe { TreeBuilderOwned::from_raw(builder) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(RepositoryTreeBuilder {
+        inner,
+        _repository: PhantomData,
+    })
+}
+
+#[cfg(test)]
+mod callback_surface_tests {
+    use core::mem::MaybeUninit;
+
+    use super::*;
+
+    #[test]
+    fn walk_callback_preserves_path_entry_and_control_result() {
+        let storage = Box::new(MaybeUninit::<ffi::git_tree_entry>::zeroed());
+        let raw = Box::into_raw(storage).cast::<ffi::git_tree_entry>();
+        // SAFETY: `raw` addresses live aligned opaque entry storage for the
+        // callback invocation.
+        let entry = unsafe { GitTreeEntryRef::from_ptr(raw) }.unwrap();
+        let mut callback = |root: &CStr, seen: GitTreeEntryRef<'_>| {
+            assert_eq!(root, c"src/");
+            assert_eq!(seen.as_ptr(), raw.cast_const());
+            -7
+        };
+        assert_eq!(GitTreewalkCallback::call(&mut callback, c"src/", entry), -7);
+        // SAFETY: no handle remains in use and this recovers the allocation's
+        // original type from `Box::into_raw`.
+        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_tree_entry>>()) });
+    }
+
+    #[test]
+    fn builder_filter_callback_preserves_its_boolean_decision() {
+        let storage = Box::new(MaybeUninit::<ffi::git_tree_entry>::zeroed());
+        let raw = Box::into_raw(storage).cast::<ffi::git_tree_entry>();
+        // SAFETY: `raw` addresses live aligned opaque entry storage for the
+        // callback invocation.
+        let entry = unsafe { GitTreeEntryRef::from_ptr(raw) }.unwrap();
+        let mut callback = |seen: GitTreeEntryRef<'_>| {
+            assert_eq!(seen.as_ptr(), raw.cast_const());
+            true
+        };
+        assert!(GitTreebuilderFilterCallback::remove(&mut callback, entry));
+        // SAFETY: no handle remains in use and this recovers the allocation's
+        // original type from `Box::into_raw`.
+        drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_tree_entry>>()) });
     }
 }
