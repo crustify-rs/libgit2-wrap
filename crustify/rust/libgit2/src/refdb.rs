@@ -1,6 +1,8 @@
 //! Safe wrappers for libgit2 refdb APIs.
 
-use ffibox::{CBox, define_ctype, impl_dropped};
+use core::ptr::NonNull;
+
+use ffibox::{CBox, CDropped, define_ctype};
 
 use crate::ffi;
 
@@ -21,11 +23,18 @@ define_ctype!(
 /// One owned reference count to a [`GitRefdb`].
 pub type GitRefdbOwned = CBox<GitRefdb>;
 
+/// Wraps: git_refdb_free
 // SAFETY: `git_refdb_free` releases exactly one reference count from a fully
 // constructed `git_refdb` and destroys its backend and allocation only when
 // that was the final count. It accepts null, although `CBox` supplies a live,
 // non-null allocation. `GitRefdb` is transparent over the matching C type.
-impl_dropped!(GitRefdb, ffi::git_refdb, ffi::git_refdb_free);
+unsafe impl CDropped for GitRefdb {
+    unsafe fn c_drop(object: NonNull<Self>) {
+        // SAFETY: the trait contract supplies one live owned refdb count and
+        // the wrapper is transparent over `ffi::git_refdb`.
+        unsafe { ffi::git_refdb_free(object.as_ptr().cast()) }
+    }
+}
 
 /// Wraps: git_refdb_t
 /// The storage backend selected for a reference database.
@@ -125,4 +134,13 @@ mod tests {
         assert_eq!(size_of::<GitRefdbType>(), size_of::<ffi::git_refdb_t>());
         assert_eq!(align_of::<GitRefdbType>(), align_of::<ffi::git_refdb_t>());
     }
+}
+
+/// Wraps: git_refdb_compress
+/// Asks the selected reference backend to compact its storage.
+pub fn git_refdb_compress(refdb: &mut GitRefdbMut<'_>) -> Result<(), i32> {
+    // SAFETY: the exclusive handle provides live backend state for the call;
+    // the backend retains no new pointer to the handle.
+    let status = unsafe { ffi::git_refdb_compress(refdb.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

@@ -1,10 +1,17 @@
 //! Safe wrappers for libgit2 refs APIs.
 
+use core::cmp::Ordering;
+use core::ffi::CStr;
+use core::marker::PhantomData;
 use core::ptr::NonNull;
 
-use ffibox::{CBox, CCloned};
+use ffibox::{CBox, CCloned, CDropped};
 
+use crate::api::types::GitObjectType;
 use crate::ffi;
+use crate::object::{GitObjectOwned, GitObjectRef};
+use crate::oid::{Oid, OidRef};
+use crate::repository::{GitRepositoryMut, GitRepositoryRef};
 
 ffibox::define_ctype!(
     /// Wraps: git_reference
@@ -19,14 +26,67 @@ ffibox::define_ctype!(
     ffi::git_reference
 );
 
-/// An owned libgit2 reference.
+/// A raw-adopted owned libgit2 reference. Creating this owner from a pointer is
+/// unsafe because the caller must separately keep its repository alive.
 pub type GitReferenceOwned = CBox<GitReference>;
 
+/// An owned libgit2 reference tied to the repository or reference that keeps
+/// its reference database's borrowed repository pointer alive.
+pub struct GitReferenceTetheredOwned<'a> {
+    inner: CBox<GitReference>,
+    _keepalive: PhantomData<GitRepositoryRef<'a>>,
+}
+
+impl GitReferenceTetheredOwned<'_> {
+    /// Borrows the reference.
+    #[must_use]
+    pub fn as_ref(&self) -> GitReferenceRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the reference exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitReferenceMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+impl Clone for GitReferenceTetheredOwned<'_> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            _keepalive: PhantomData,
+        }
+    }
+}
+
+/// An object peeled through a reference, tied to the repository behind that
+/// reference.
+pub struct GitReferencePeeledObject<'a> {
+    inner: GitObjectOwned,
+    _keepalive: PhantomData<GitObjectRef<'a>>,
+}
+
+impl GitReferencePeeledObject<'_> {
+    /// Borrows the peeled object.
+    #[must_use]
+    pub fn as_ref(&self) -> GitObjectRef<'_> {
+        self.inner.as_ref()
+    }
+}
+
+/// Wraps: git_reference_free
 // SAFETY: `git_reference_free` is the public destructor for a complete
 // `git_reference` allocation and accepts null, although `CDropped` supplies a
 // live non-null allocation. `GitReference` is transparent over the matching
 // bindgen type.
-ffibox::impl_dropped!(GitReference, ffi::git_reference, ffi::git_reference_free);
+unsafe impl CDropped for GitReference {
+    unsafe fn c_drop(object: NonNull<Self>) {
+        // SAFETY: the trait contract supplies one complete live reference and
+        // the wrapper is transparent over `ffi::git_reference`.
+        unsafe { ffi::git_reference_free(object.as_ptr().cast()) }
+    }
+}
 
 // SAFETY: `git_reference_dup` leaves its live source unchanged and, on
 // success, writes a fresh fully initialized allocation that is independently
@@ -171,4 +231,421 @@ mod tests {
         // cast recovers the allocation's original type.
         drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_reference>>()) });
     }
+}
+
+fn adopt_reference<'a>(
+    status: i32,
+    raw: *mut ffi::git_reference,
+) -> Result<GitReferenceTetheredOwned<'a>, i32> {
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: every successful wrapped reference constructor transfers one
+    // complete reference allocation, and the caller supplies the keepalive
+    // lifetime associated with the input repository or reference.
+    let inner = unsafe { CBox::from_raw(raw) }
+        .expect("a successful reference constructor returns a non-null owner");
+    Ok(GitReferenceTetheredOwned {
+        inner,
+        _keepalive: PhantomData,
+    })
+}
+
+fn optional_cstr<'a>(raw: *const core::ffi::c_char) -> Option<&'a CStr> {
+    if raw.is_null() {
+        None
+    } else {
+        // SAFETY: callers pass only libgit2-returned pointers documented as
+        // NUL-terminated and live for their source handle's lifetime.
+        Some(unsafe { CStr::from_ptr(raw) })
+    }
+}
+
+/// Wraps: git_reference_cmp
+/// Compares two references using libgit2's stable ordering.
+#[must_use]
+pub fn git_reference_cmp(left: GitReferenceRef<'_>, right: GitReferenceRef<'_>) -> Ordering {
+    // SAFETY: both references are live shared inputs retained only for the call.
+    let result = unsafe { ffi::git_reference_cmp(left.as_ptr(), right.as_ptr()) };
+    result.cmp(&0)
+}
+
+/// Wraps: git_reference_create
+/// Creates or replaces a direct reference.
+pub fn git_reference_create<'a>(
+    repository: &'a mut GitRepositoryMut<'_>,
+    name: &CStr,
+    id: OidRef<'_>,
+    force: bool,
+    log_message: Option<&CStr>,
+) -> Result<GitReferenceTetheredOwned<'a>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and every borrowed input is live and
+    // NUL-terminated where required. The resulting reference retains a refdb
+    // whose repository borrow is bounded by `'a`.
+    let status = unsafe {
+        ffi::git_reference_create(
+            core::ptr::addr_of_mut!(output),
+            repository.as_mut_ptr(),
+            name.as_ptr(),
+            id.as_ptr(),
+            i32::from(force),
+            log_message.map_or(core::ptr::null(), CStr::as_ptr),
+        )
+    };
+    adopt_reference(status, output)
+}
+
+/// Wraps: git_reference_create_matching
+/// Conditionally creates a direct reference when its current target matches.
+pub fn git_reference_create_matching<'a>(
+    repository: &'a mut GitRepositoryMut<'_>,
+    name: &CStr,
+    id: OidRef<'_>,
+    force: bool,
+    current_id: Option<OidRef<'_>>,
+    log_message: Option<&CStr>,
+) -> Result<GitReferenceTetheredOwned<'a>, i32> {
+    let mut output = core::ptr::null_mut();
+    let current_id = current_id.map_or(core::ptr::null(), |id| id.as_ptr());
+    // SAFETY: as `git_reference_create`; `current_id` is null or a live shared
+    // OID used only for the conditional comparison.
+    let status = unsafe {
+        ffi::git_reference_create_matching(
+            core::ptr::addr_of_mut!(output),
+            repository.as_mut_ptr(),
+            name.as_ptr(),
+            id.as_ptr(),
+            i32::from(force),
+            current_id,
+            log_message.map_or(core::ptr::null(), CStr::as_ptr),
+        )
+    };
+    adopt_reference(status, output)
+}
+
+/// Wraps: git_reference_delete
+/// Deletes the on-disk reference without consuming its in-memory handle.
+pub fn git_reference_delete(reference: &mut GitReferenceMut<'_>) -> Result<(), i32> {
+    // SAFETY: the exclusive handle permits libgit2 to use its mutable snapshot
+    // state; the allocation remains owned by the caller.
+    let status = unsafe { ffi::git_reference_delete(reference.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_reference_dup
+/// Deep-copies a reference while preserving its repository keepalive lifetime.
+pub fn git_reference_dup<'a>(
+    source: GitReferenceRef<'a>,
+) -> Result<GitReferenceTetheredOwned<'a>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: `source` is live, is left unchanged, and `output` is a writable
+    // slot for the independently owned deep copy.
+    let status = unsafe {
+        ffi::git_reference_dup(core::ptr::addr_of_mut!(output), source.as_ptr().cast_mut())
+    };
+    adopt_reference(status, output)
+}
+
+/// Wraps: git_reference_dwim
+/// Resolves a shorthand reference name using Git's precedence rules.
+pub fn git_reference_dwim<'a>(
+    repository: &'a mut GitRepositoryMut<'_>,
+    shorthand: &CStr,
+) -> Result<GitReferenceTetheredOwned<'a>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot and both borrowed inputs are live for the call.
+    let status = unsafe {
+        ffi::git_reference_dwim(
+            core::ptr::addr_of_mut!(output),
+            repository.as_mut_ptr(),
+            shorthand.as_ptr(),
+        )
+    };
+    adopt_reference(status, output)
+}
+
+/// Wraps: git_reference_ensure_log
+/// Ensures future updates to `name` append to a reflog.
+pub fn git_reference_ensure_log(
+    repository: &mut GitRepositoryMut<'_>,
+    name: &CStr,
+) -> Result<(), i32> {
+    // SAFETY: both inputs are live for the call and no pointer is retained.
+    let status = unsafe { ffi::git_reference_ensure_log(repository.as_mut_ptr(), name.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_reference_has_log
+/// Reports whether `name` has a reflog.
+pub fn git_reference_has_log(
+    repository: &mut GitRepositoryMut<'_>,
+    name: &CStr,
+) -> Result<bool, i32> {
+    // SAFETY: both inputs are live for the call and no pointer is retained.
+    let status = unsafe { ffi::git_reference_has_log(repository.as_mut_ptr(), name.as_ptr()) };
+    match status {
+        0 => Ok(false),
+        1 => Ok(true),
+        error => Err(error),
+    }
+}
+
+/// Wraps: git_reference_is_branch
+#[must_use]
+pub fn git_reference_is_branch(reference: GitReferenceRef<'_>) -> bool {
+    // SAFETY: the shared reference is live and retained only for the call.
+    unsafe { ffi::git_reference_is_branch(reference.as_ptr()) != 0 }
+}
+
+/// Wraps: git_reference_is_note
+#[must_use]
+pub fn git_reference_is_note(reference: GitReferenceRef<'_>) -> bool {
+    // SAFETY: the shared reference is live and retained only for the call.
+    unsafe { ffi::git_reference_is_note(reference.as_ptr()) != 0 }
+}
+
+/// Wraps: git_reference_is_remote
+#[must_use]
+pub fn git_reference_is_remote(reference: GitReferenceRef<'_>) -> bool {
+    // SAFETY: the shared reference is live and retained only for the call.
+    unsafe { ffi::git_reference_is_remote(reference.as_ptr()) != 0 }
+}
+
+/// Wraps: git_reference_is_tag
+#[must_use]
+pub fn git_reference_is_tag(reference: GitReferenceRef<'_>) -> bool {
+    // SAFETY: the shared reference is live and retained only for the call.
+    unsafe { ffi::git_reference_is_tag(reference.as_ptr()) != 0 }
+}
+
+/// Wraps: git_reference_lookup
+/// Looks up a full reference name.
+pub fn git_reference_lookup<'a>(
+    repository: &'a mut GitRepositoryMut<'_>,
+    name: &CStr,
+) -> Result<GitReferenceTetheredOwned<'a>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and both borrowed inputs are live.
+    let status = unsafe {
+        ffi::git_reference_lookup(
+            core::ptr::addr_of_mut!(output),
+            repository.as_mut_ptr(),
+            name.as_ptr(),
+        )
+    };
+    adopt_reference(status, output)
+}
+
+/// Wraps: git_reference_name
+/// Borrows the full reference name.
+#[must_use]
+pub fn git_reference_name<'a>(reference: GitReferenceRef<'a>) -> &'a CStr {
+    // SAFETY: the shared reference stays live for `'a`; its inline name is a
+    // valid NUL-terminated string.
+    let name = unsafe { ffi::git_reference_name(reference.as_ptr()) };
+    optional_cstr(name).expect("a live reference has a name")
+}
+
+/// Wraps: git_reference_name_to_id
+/// Resolves a reference name directly into an owned object-ID value.
+pub fn git_reference_name_to_id(
+    repository: &mut GitRepositoryMut<'_>,
+    name: &CStr,
+) -> Result<Oid, i32> {
+    let mut output = Oid::zeroed();
+    // SAFETY: `output` is writable layout-compatible OID storage and both
+    // borrowed inputs are live for the call.
+    let status = unsafe {
+        ffi::git_reference_name_to_id(
+            core::ptr::addr_of_mut!(output).cast(),
+            repository.as_mut_ptr(),
+            name.as_ptr(),
+        )
+    };
+    if status == 0 { Ok(output) } else { Err(status) }
+}
+
+/// Wraps: git_reference_peel
+/// Peels a reference to an owned object tied to the same repository lifetime.
+pub fn git_reference_peel<'a>(
+    reference: GitReferenceRef<'a>,
+    object_type: GitObjectType,
+) -> Result<GitReferencePeeledObject<'a>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: `output` is writable, `reference` is live, and `object_type` is
+    // one of the validated public C values.
+    let status = unsafe {
+        ffi::git_reference_peel(
+            core::ptr::addr_of_mut!(output),
+            reference.as_ptr(),
+            object_type.into(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one owned object reference, whose repository
+    // dependency is preserved by the returned lifetime.
+    let inner = unsafe { GitObjectOwned::from_raw(output) }
+        .expect("a successful peel returns a non-null object");
+    Ok(GitReferencePeeledObject {
+        inner,
+        _keepalive: PhantomData,
+    })
+}
+
+/// Wraps: git_reference_rename
+/// Renames a reference and returns the resulting owned snapshot.
+pub fn git_reference_rename<'a>(
+    reference: &'a mut GitReferenceMut<'_>,
+    new_name: &CStr,
+    force: bool,
+    log_message: Option<&CStr>,
+) -> Result<GitReferenceTetheredOwned<'a>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the exclusive reference and borrowed strings are live, and the
+    // writable output receives a new independently owned snapshot.
+    let status = unsafe {
+        ffi::git_reference_rename(
+            core::ptr::addr_of_mut!(output),
+            reference.as_mut_ptr(),
+            new_name.as_ptr(),
+            i32::from(force),
+            log_message.map_or(core::ptr::null(), CStr::as_ptr),
+        )
+    };
+    adopt_reference(status, output)
+}
+
+/// Wraps: git_reference_resolve
+/// Resolves a symbolic reference to an owned direct reference.
+pub fn git_reference_resolve<'a>(
+    reference: GitReferenceRef<'a>,
+) -> Result<GitReferenceTetheredOwned<'a>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: `reference` is live and shared and `output` is writable.
+    let status =
+        unsafe { ffi::git_reference_resolve(core::ptr::addr_of_mut!(output), reference.as_ptr()) };
+    adopt_reference(status, output)
+}
+
+/// Wraps: git_reference_set_target
+/// Replaces a direct reference target and returns the resulting snapshot.
+pub fn git_reference_set_target<'a>(
+    reference: &'a mut GitReferenceMut<'_>,
+    id: OidRef<'_>,
+    log_message: Option<&CStr>,
+) -> Result<GitReferenceTetheredOwned<'a>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: all borrowed inputs are live and `output` is writable.
+    let status = unsafe {
+        ffi::git_reference_set_target(
+            core::ptr::addr_of_mut!(output),
+            reference.as_mut_ptr(),
+            id.as_ptr(),
+            log_message.map_or(core::ptr::null(), CStr::as_ptr),
+        )
+    };
+    adopt_reference(status, output)
+}
+
+/// Wraps: git_reference_shorthand
+/// Borrows the human-readable shorthand for a reference.
+#[must_use]
+pub fn git_reference_shorthand<'a>(reference: GitReferenceRef<'a>) -> &'a CStr {
+    // SAFETY: the returned pointer aliases the live reference's inline name.
+    let shorthand = unsafe { ffi::git_reference_shorthand(reference.as_ptr()) };
+    optional_cstr(shorthand).expect("a live reference has a shorthand")
+}
+
+/// Wraps: git_reference_symbolic_create
+/// Creates or replaces a symbolic reference.
+pub fn git_reference_symbolic_create<'a>(
+    repository: &'a mut GitRepositoryMut<'_>,
+    name: &CStr,
+    target: &CStr,
+    force: bool,
+    log_message: Option<&CStr>,
+) -> Result<GitReferenceTetheredOwned<'a>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output is writable and all string inputs are live C strings.
+    let status = unsafe {
+        ffi::git_reference_symbolic_create(
+            core::ptr::addr_of_mut!(output),
+            repository.as_mut_ptr(),
+            name.as_ptr(),
+            target.as_ptr(),
+            i32::from(force),
+            log_message.map_or(core::ptr::null(), CStr::as_ptr),
+        )
+    };
+    adopt_reference(status, output)
+}
+
+/// Wraps: git_reference_symbolic_create_matching
+/// Conditionally creates a symbolic reference when its target matches.
+pub fn git_reference_symbolic_create_matching<'a>(
+    repository: &'a mut GitRepositoryMut<'_>,
+    name: &CStr,
+    target: &CStr,
+    force: bool,
+    current_target: Option<&CStr>,
+    log_message: Option<&CStr>,
+) -> Result<GitReferenceTetheredOwned<'a>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: as `git_reference_symbolic_create`; `current_target` is null or
+    // a live C string used only for the conditional comparison.
+    let status = unsafe {
+        ffi::git_reference_symbolic_create_matching(
+            core::ptr::addr_of_mut!(output),
+            repository.as_mut_ptr(),
+            name.as_ptr(),
+            target.as_ptr(),
+            i32::from(force),
+            current_target.map_or(core::ptr::null(), CStr::as_ptr),
+            log_message.map_or(core::ptr::null(), CStr::as_ptr),
+        )
+    };
+    adopt_reference(status, output)
+}
+
+/// Wraps: git_reference_symbolic_set_target
+/// Replaces a symbolic reference target and returns the resulting snapshot.
+pub fn git_reference_symbolic_set_target<'a>(
+    reference: &'a mut GitReferenceMut<'_>,
+    target: &CStr,
+    log_message: Option<&CStr>,
+) -> Result<GitReferenceTetheredOwned<'a>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the exclusive reference and both optional/required C strings are
+    // live, and `output` is writable.
+    let status = unsafe {
+        ffi::git_reference_symbolic_set_target(
+            core::ptr::addr_of_mut!(output),
+            reference.as_mut_ptr(),
+            target.as_ptr(),
+            log_message.map_or(core::ptr::null(), CStr::as_ptr),
+        )
+    };
+    adopt_reference(status, output)
+}
+
+/// Wraps: git_reference_symbolic_target
+/// Borrows a symbolic target name, or returns `None` for a direct reference.
+#[must_use]
+pub fn git_reference_symbolic_target<'a>(reference: GitReferenceRef<'a>) -> Option<&'a CStr> {
+    // SAFETY: a non-null result aliases storage owned by the live reference.
+    optional_cstr(unsafe { ffi::git_reference_symbolic_target(reference.as_ptr()) })
+}
+
+/// Wraps: git_reference_target
+/// Borrows a direct target OID, or returns `None` for a symbolic reference.
+#[must_use]
+pub fn git_reference_target<'a>(reference: GitReferenceRef<'a>) -> Option<OidRef<'a>> {
+    // SAFETY: a non-null result aliases the initialized inline target OID of
+    // the live reference.
+    let target = unsafe { ffi::git_reference_target(reference.as_ptr()) };
+    // SAFETY: the optional handle is tied to the source reference's `'a`.
+    unsafe { OidRef::from_ptr(target.cast_mut()) }
 }

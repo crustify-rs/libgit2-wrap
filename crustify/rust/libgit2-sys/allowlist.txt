@@ -212,3 +212,8 @@
 ^git_checkout_perfdata_cb$
 ^git_commit_(create_with_signature|extract_signature)$
 ^git_config_(add_file_ondisk|delete_entry|delete_multivar|find_global|find_system|find_xdg|get_bool|get_int32|get_int64|get_path|get_string|get_string_buf|new|open_default|open_global|open_level|open_ondisk|set_bool|set_int32|set_int64)$
+^git_patch_(get_line_in_hunk|line_stats|num_hunks|num_lines_in_hunk|size|to_buf)$
+^git_pathspec_(match_diff|match_list_entry|match_list_entrycount|match_list_failed_entry|match_list_failed_entrycount|match_workdir|matches_path|new)$
+^git_rebase_(abort|operation_current|operation_entrycount|orig_head_id|orig_head_name)$
+^git_refdb_compress$
+^git_reference_(cmp|create|create_matching|delete|dwim|ensure_log|has_log|is_branch|is_note|is_remote|is_tag|lookup|name|name_to_id|peel|rename|resolve|set_target|shorthand|symbolic_create|symbolic_create_matching|symbolic_set_target|symbolic_target|target)$

@@ -7457,6 +7457,234 @@
    ]
   },
   {
+   "name": "git_patch_get_line_in_hunk",
+   "defined_in": "src/libgit2/patch.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "arg:patch"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required borrowed output slot receives an internal line pointer tied to the patch lifetime."
+     }
+    },
+    {
+     "name": "patch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:patch"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_patch_line_stats",
+   "defined_in": "src/libgit2/patch.c",
+   "ptr_args": [
+    {
+     "name": "patch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:patch"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "total_adds",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:total_adds"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required caller-owned output storage written during the call."
+     }
+    },
+    {
+     "name": "total_ctxt",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:total_ctxt"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required caller-owned output storage written during the call."
+     }
+    },
+    {
+     "name": "total_dels",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:total_dels"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required caller-owned output storage written during the call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_patch_num_hunks",
+   "defined_in": "src/libgit2/patch.c",
+   "ptr_args": [
+    {
+     "name": "patch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:patch"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_patch_num_lines_in_hunk",
+   "defined_in": "src/libgit2/patch.c",
+   "ptr_args": [
+    {
+     "name": "patch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:patch"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_patch_size",
+   "defined_in": "src/libgit2/patch.c",
+   "ptr_args": [
+    {
+     "name": "patch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:patch"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_patch_to_buf",
+   "defined_in": "src/libgit2/diff_print.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required caller-owned output storage written during the call."
+     }
+    },
+    {
+     "name": "patch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:patch"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_pathspec_free",
    "defined_in": "src/libgit2/pathspec.c",
    "lifetime": {
@@ -7484,6 +7712,190 @@
    ]
   },
   {
+   "name": "git_pathspec_match_diff",
+   "defined_in": "src/libgit2/pathspec.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "ps",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ps"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_pathspec_match_list_entry",
+   "defined_in": "src/libgit2/pathspec.c",
+   "ptr_args": [
+    {
+     "name": "m",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:m"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:m"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed internal result owned by the input object and valid only for that object lifetime."
+    }
+   }
+  },
+  {
+   "name": "git_pathspec_match_list_entrycount",
+   "defined_in": "src/libgit2/pathspec.c",
+   "ptr_args": [
+    {
+     "name": "m",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:m"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_pathspec_match_list_failed_entry",
+   "defined_in": "src/libgit2/pathspec.c",
+   "ptr_args": [
+    {
+     "name": "m",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:m"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:m"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed internal result owned by the input object and valid only for that object lifetime."
+    }
+   }
+  },
+  {
+   "name": "git_pathspec_match_list_failed_entrycount",
+   "defined_in": "src/libgit2/pathspec.c",
+   "ptr_args": [
+    {
+     "name": "m",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:m"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_pathspec_match_list_free",
    "defined_in": "src/libgit2/pathspec.c",
    "lifetime": {
@@ -7506,6 +7918,149 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a complete match-list allocation; NULL is a no-op. It releases the retained pathspec count, arrays, pool, and header."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_pathspec_match_workdir",
+   "defined_in": "src/libgit2/pathspec.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "ps",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ps"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_pathspec_matches_path",
+   "defined_in": "src/libgit2/pathspec.c",
+   "ptr_args": [
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "ps",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ps"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_pathspec_new",
+   "defined_in": "src/libgit2/pathspec.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "pathspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pathspec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
      }
     }
    ]
@@ -7618,6 +8173,29 @@
    ]
   },
   {
+   "name": "git_rebase_abort",
+   "defined_in": "src/libgit2/rebase.c",
+   "ptr_args": [
+    {
+     "name": "rebase",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:rebase"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_rebase_free",
    "defined_in": "src/libgit2/rebase.c",
    "lifetime": {
@@ -7645,6 +8223,153 @@
    ]
   },
   {
+   "name": "git_rebase_operation_current",
+   "defined_in": "src/libgit2/rebase.c",
+   "ptr_args": [
+    {
+     "name": "rebase",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:rebase"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_rebase_operation_entrycount",
+   "defined_in": "src/libgit2/rebase.c",
+   "ptr_args": [
+    {
+     "name": "rebase",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:rebase"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_rebase_orig_head_id",
+   "defined_in": "src/libgit2/rebase.c",
+   "ptr_args": [
+    {
+     "name": "rebase",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:rebase"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:rebase"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed internal result owned by the input object and valid only for that object lifetime."
+    }
+   }
+  },
+  {
+   "name": "git_rebase_orig_head_name",
+   "defined_in": "src/libgit2/rebase.c",
+   "ptr_args": [
+    {
+     "name": "rebase",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:rebase"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:rebase"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed internal result owned by the input object and valid only for that object lifetime."
+    }
+   }
+  },
+  {
+   "name": "git_refdb_compress",
+   "defined_in": "src/libgit2/refdb.c",
+   "ptr_args": [
+    {
+     "name": "db",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:db"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_refdb_free",
    "defined_in": "src/libgit2/refdb.c",
    "lifetime": {
@@ -7667,6 +8392,274 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one owned refcount. NULL is explicitly accepted; the final count frees the backend and git_refdb allocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_cmp",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref1"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "ref2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref2"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_create",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "log_message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:log_message"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "ref_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_create_matching",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "log_message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:log_message"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "old_id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_id"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "ref_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_delete",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
      }
     }
    ]
@@ -7724,6 +8717,106 @@
    ]
   },
   {
+   "name": "git_reference_dwim",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "refname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_ensure_log",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "refname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_reference_free",
    "defined_in": "src/libgit2/refs.c",
    "lifetime": {
@@ -7749,6 +8842,237 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_reference_has_log",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "refname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_is_branch",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_is_note",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_is_remote",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_is_tag",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_lookup",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "ref_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_name",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:ref"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed internal result owned by the input object and valid only for that object lifetime."
+    }
+   }
   },
   {
    "name": "git_reference_name_is_valid",
@@ -7786,6 +9110,63 @@
       "nullable": false,
       "mutable": true,
       "note": "Required scalar out-slot."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_name_to_id",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required caller-owned output storage written during the call."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
      }
     }
    ]
@@ -7829,6 +9210,645 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_reference_peel",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "peeled",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:peeled"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_rename",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "log_message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:log_message"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "new_name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_resolve",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "ref_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_set_target",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "log_message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:log_message"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_shorthand",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:ref"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed internal result owned by the input object and valid only for that object lifetime."
+    }
+   }
+  },
+  {
+   "name": "git_reference_symbolic_create",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "log_message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:log_message"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "ref_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "target",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:target"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_symbolic_create_matching",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "log_message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:log_message"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "old_target",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_target"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "ref_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "target",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:target"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_symbolic_set_target",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "log_message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:log_message"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required borrowed output slot receives one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    },
+    {
+     "name": "target",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:target"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_symbolic_target",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:ref"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed internal result owned by the input object and valid only for that object lifetime."
+    }
+   }
+  },
+  {
+   "name": "git_reference_target",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:ref"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed internal result owned by the input object and valid only for that object lifetime."
+    }
+   }
   },
   {
    "name": "git_reflog_entry__free",

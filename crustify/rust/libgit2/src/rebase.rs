@@ -1,8 +1,8 @@
 //! Safe wrappers for libgit2 rebase APIs.
 
-use core::ptr::addr_of;
+use core::ptr::{NonNull, addr_of};
 
-use ffibox::CBox;
+use ffibox::{CBox, CDropped};
 
 use crate::ffi;
 use crate::oid::OidRef;
@@ -78,10 +78,17 @@ ffibox::define_ctype!(
 /// An exclusively owned, fully constructed libgit2 rebase.
 pub type GitRebaseOwned = CBox<GitRebase>;
 
+/// Wraps: git_rebase_free
 // SAFETY: `git_rebase_free` is the public destructor for a fully constructed
 // `git_rebase`. It releases every owned field and the allocation, and accepts
 // null although `CBox` supplies one live non-null allocation exactly once.
-ffibox::impl_dropped!(GitRebase, ffi::git_rebase, ffi::git_rebase_free);
+unsafe impl CDropped for GitRebase {
+    unsafe fn c_drop(object: NonNull<Self>) {
+        // SAFETY: the trait contract supplies one complete live rebase and the
+        // wrapper is transparent over `ffi::git_rebase`.
+        unsafe { ffi::git_rebase_free(object.as_ptr().cast()) }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -289,5 +296,63 @@ impl<'a> GitRebaseOperationRef<'a> {
             // NUL-terminated string for the operation's lifetime.
             Ok(Some(unsafe { core::ffi::CStr::from_ptr(ptr) }))
         }
+    }
+}
+
+/// Wraps: git_rebase_abort
+/// Aborts the in-progress rebase and restores its original checkout state.
+pub fn git_rebase_abort(rebase: &mut GitRebaseMut<'_>) -> Result<(), i32> {
+    // SAFETY: the exclusive handle permits every mutation performed while
+    // aborting, and libgit2 retains no new pointer.
+    let status = unsafe { ffi::git_rebase_abort(rebase.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_rebase_operation_current
+/// Returns the current operation index, or `None` before the first operation.
+#[must_use]
+pub fn git_rebase_operation_current(rebase: &mut GitRebaseMut<'_>) -> Option<usize> {
+    // SAFETY: the exclusive handle satisfies the C signature; the call only
+    // reads rebase state and retains no pointer.
+    let current = unsafe { ffi::git_rebase_operation_current(rebase.as_mut_ptr()) };
+    (current != usize::MAX).then_some(current)
+}
+
+/// Wraps: git_rebase_operation_entrycount
+/// Returns the number of operations in the rebase plan.
+#[must_use]
+pub fn git_rebase_operation_entrycount(rebase: &mut GitRebaseMut<'_>) -> usize {
+    // SAFETY: the exclusive handle satisfies the C signature; the call only
+    // reads the initialized operation-array count.
+    unsafe { ffi::git_rebase_operation_entrycount(rebase.as_mut_ptr()) }
+}
+
+/// Wraps: git_rebase_orig_head_id
+/// Borrows the original HEAD object ID from a merge rebase.
+#[must_use]
+pub fn git_rebase_orig_head_id<'a>(rebase: &'a mut GitRebaseMut<'_>) -> OidRef<'a> {
+    // SAFETY: the exclusive reborrow keeps the rebase and its inline OID live
+    // and prevents mutation while the returned handle is usable.
+    let id = unsafe { ffi::git_rebase_orig_head_id(rebase.as_mut_ptr()) };
+    // SAFETY: libgit2 returns the non-null address of the initialized inline
+    // `orig_head_id`; its lifetime is bounded by the rebase reborrow.
+    unsafe { OidRef::from_ptr(id.cast_mut()) }.expect("an inline OID is non-null")
+}
+
+/// Wraps: git_rebase_orig_head_name
+/// Borrows the optional original HEAD name from a merge rebase.
+#[must_use]
+pub fn git_rebase_orig_head_name<'a>(
+    rebase: &'a mut GitRebaseMut<'_>,
+) -> Option<&'a core::ffi::CStr> {
+    // SAFETY: the exclusive reborrow keeps every rebase-owned string live and
+    // prevents mutation for the returned borrow.
+    let name = unsafe { ffi::git_rebase_orig_head_name(rebase.as_mut_ptr()) };
+    if name.is_null() {
+        None
+    } else {
+        // SAFETY: a non-null libgit2 result is NUL-terminated and owned by the
+        // rebase for the duration of this exclusive reborrow.
+        Some(unsafe { core::ffi::CStr::from_ptr(name) })
     }
 }
