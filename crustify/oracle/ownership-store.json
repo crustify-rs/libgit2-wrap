@@ -3470,6 +3470,114 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_reference_iterator",
+   "defined_in": "include/git2/sys/refdb_backend.h",
+   "_comment_agent": "A fully constructed iterator owns one git_refdb reference in db. Its three callbacks are required non-null static function pointers installed by the backend. The public iterator destructor first releases the db reference and then invokes free; next/next_name advance mutable iterator state.",
+   "fields": [
+    {
+     "name": "db",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "git_refdb_iterator increments this reference before publishing the iterator; git_refdb_iterator_free decrements it before freeing the concrete iterator."
+     }
+    },
+    {
+     "name": "free",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required backend callback with static code lifetime; it destroys the concrete iterator allocation."
+     }
+    },
+    {
+     "name": "next",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required backend callback with static code lifetime; invocation advances mutable iterator state and yields an owned reference."
+     }
+    },
+    {
+     "name": "next_name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required backend callback with static code lifetime; invocation advances mutable iterator state and yields a name borrowed from iterator-managed storage until the next advance."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_head",
+   "defined_in": "include/git2/net.h",
+   "_comment_agent": "git_remote_head is a by-value advertised-reference record whose oid fields and local flag are inline. Persistent heads own their allocated name and optional symref_target, while temporary comparison/search heads can borrow name storage; callers receive views owned by the transport or remote rather than an independently disposable head.",
+   "fields": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Persistent local and smart-transport heads own duplicated name storage, but stack search keys and temporary oid heads borrow another object's name. Formed advertised heads normally have a name; zeroed temporary keys make null observable."
+     }
+    },
+    {
+     "name": "symref_target",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional duplicated or detached target string released by the concrete head/packet owner together with the head."
+     }
+    }
+   ]
   }
  ],
  "symbols": [
@@ -17073,6 +17181,33 @@
      "note": "Optional URL owned by and borrowed from the remote."
     }
    }
+  },
+  {
+   "name": "git_reference_iterator_free",
+   "defined_in": "src/libgit2/refs.c",
+   "lifetime": {
+    "for": "iter",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "iter",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and destroys a complete iterator; null is explicitly accepted as a no-op."
+     }
+    }
+   ]
   }
  ]
 }
