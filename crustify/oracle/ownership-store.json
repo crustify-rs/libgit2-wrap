@@ -12611,7 +12611,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrowed out-slot receives a newly allocated owned reference on success."
+      "note": "Borrowed out-slot always written: git_reference_dup assigns the allocation result, so a failure leaves it NULL and returns -1. On success the copy is a fresh allocation released by git_reference_free, but it stores source->db and takes its own count on it, so it depends on the same reference database - and therefore the same borrowed repository - as the source."
      }
     },
     {
@@ -12628,7 +12628,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Reads a live source and leaves it owned by the caller."
+      "note": "Reads a live source and leaves it owned by the caller; the source struct is not written. The source must be attached to a reference database: git_reference_dup dereferences source->db unconditionally through GIT_REFCOUNT_INC, so a detached allocation from git_reference__alloc would fault. Every public constructor attaches one."
      }
     }
    ]

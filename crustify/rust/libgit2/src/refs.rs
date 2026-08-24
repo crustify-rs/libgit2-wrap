@@ -27,7 +27,13 @@ ffibox::define_ctype!(
 );
 
 /// A raw-adopted owned libgit2 reference. Creating this owner from a pointer is
-/// unsafe because the caller must separately keep its repository alive.
+/// unsafe because the caller must separately keep its repository alive: a
+/// reference counts its reference database, and that database only borrows the
+/// repository it was opened from.
+///
+/// A safe wrapper that hands a newly constructed reference to its caller
+/// therefore returns [`GitReferenceTetheredOwned`], which carries the
+/// repository borrow in its type, rather than this bare owner.
 pub type GitReferenceOwned = CBox<GitReference>;
 
 /// An owned libgit2 reference tied to the repository or reference that keeps
@@ -90,7 +96,12 @@ unsafe impl CDropped for GitReference {
 
 // SAFETY: `git_reference_dup` leaves its live source unchanged and, on
 // success, writes a fresh fully initialized allocation that is independently
-// releasable by `git_reference_free`.
+// releasable by `git_reference_free`. It reads `source->db` unconditionally,
+// so an owner reaching this strategy must hold a reference attached to a
+// reference database, the only shape libgit2's public constructors produce.
+// The copy takes its own count on that same database and therefore inherits
+// the source's repository dependency; that count is the only state the call
+// mutates, and no Rust reference covers it.
 unsafe impl CCloned for GitReference {
     unsafe fn c_clone(obj: NonNull<Self>) -> Option<NonNull<Self>> {
         let mut duplicate = core::ptr::null_mut();
@@ -173,6 +184,10 @@ mod tests {
 
     #[test]
     fn opaque_representation_and_handles_match_the_c_seam() {
+        // `struct git_reference` is defined in the private `src/libgit2/refs.h`
+        // and ends in a flexible array member, so the binding is an opaque
+        // marker: no field is reachable and the object is heap-only.
+        assert_eq!(size_of::<ffi::git_reference>(), 0);
         assert_eq!(size_of::<GitReference>(), size_of::<ffi::git_reference>());
         assert_eq!(align_of::<GitReference>(), align_of::<ffi::git_reference>());
         assert_eq!(
@@ -239,11 +254,29 @@ mod tests {
     }
 
     #[test]
+    fn tethered_owner_is_covariant_in_its_repository_borrow() {
+        fn shrink<'short, 'long: 'short>(
+            owner: GitReferenceTetheredOwned<'long>,
+        ) -> GitReferenceTetheredOwned<'short> {
+            owner
+        }
+
+        // A keepalive marker may only narrow: `shrink` compiling proves the
+        // tether cannot be widened past the repository borrow it records.
+        let _ = shrink::<'_, 'static>;
+    }
+
+    #[test]
     fn failed_result_accepts_an_empty_typed_owner() {
         assert!(matches!(adopt_reference(-123, None), Err(-123)));
     }
 }
 
+/// Adopts a successful constructor result as a repository-tethered owner.
+///
+/// `'a` is constrained by no argument: every caller must bind it to the borrow
+/// of the repository, or of the reference whose database it shares, that the
+/// new reference depends on, so the tether the returned owner claims is real.
 pub(crate) fn adopt_reference<'a>(
     status: i32,
     inner: Option<CBox<GitReference>>,

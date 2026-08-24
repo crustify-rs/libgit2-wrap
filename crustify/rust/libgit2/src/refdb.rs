@@ -94,6 +94,10 @@ mod tests {
 
         assert_cell::<GitRefdb>();
         assert_dropped::<GitRefdb>();
+        // `struct git_refdb` is defined in the private `src/libgit2/refdb.h`,
+        // so the binding is an opaque marker: the reference count and the
+        // backend pointer stay unreachable from Rust.
+        assert_eq!(size_of::<ffi::git_refdb>(), 0);
         assert_eq!(size_of::<GitRefdb>(), size_of::<ffi::git_refdb>());
         assert_eq!(align_of::<GitRefdb>(), align_of::<ffi::git_refdb>());
         assert_eq!(

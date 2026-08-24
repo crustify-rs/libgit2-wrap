@@ -13,7 +13,8 @@ use crate::oid::OidRef;
 #[non_exhaustive]
 #[repr(u32)]
 pub enum RebaseOperationType {
-    /// Cherry-pick the commit and continue after resolving conflicts.
+    /// Cherry-pick the commit; the client commits and continues when the
+    /// cherry-pick produced no conflicts.
     Pick = ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_PICK,
     /// Cherry-pick the commit after allowing its message to be rewritten.
     Reword = ffi::git_rebase_operation_t_GIT_REBASE_OPERATION_REWORD,
@@ -66,9 +67,10 @@ ffibox::define_ctype!(
     /// An opaque in-progress rebase managed by libgit2.
     ///
     /// Owned rebases use [`GitRebaseOwned`] and are released by
-    /// `git_rebase_free`. A rebase retains a borrowed repository pointer, so
-    /// safe constructors must keep that repository alive for the full lifetime
-    /// of the returned owner.
+    /// `git_rebase_free`. Libgit2 gives a rebase neither a reference count nor
+    /// a duplication entry point, so an owner is unique and not cloneable. A
+    /// rebase retains a borrowed repository pointer, so safe constructors must
+    /// keep that repository alive for the full lifetime of the returned owner.
     GitRebase,
     GitRebaseRef,
     GitRebaseMut,
@@ -140,6 +142,10 @@ mod tests {
 
         assert_cell::<GitRebase>();
         assert_dropped::<GitRebase>();
+        // `struct git_rebase` is defined only in `src/libgit2/rebase.c`, so
+        // the binding is an opaque marker: no field is reachable from Rust and
+        // every operation crosses the FFI seam.
+        assert_eq!(size_of::<ffi::git_rebase>(), 0);
         assert_eq!(size_of::<GitRebase>(), size_of::<ffi::git_rebase>());
         assert_eq!(align_of::<GitRebase>(), align_of::<ffi::git_rebase>());
         assert_eq!(
