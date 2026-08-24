@@ -15,6 +15,14 @@ use crate::repository::{GitRepositoryMut, GitRepositoryRef};
 ffibox::define_ctype!(
     /// Wraps: git_revspec
     /// A caller-allocated revision parse result that owns its object results.
+    ///
+    /// The result is **single-use**: `git_revparse` begins by `memset`ting the
+    /// whole struct, so it overwrites both object fields without releasing
+    /// what they held. A result that already carries objects must therefore be
+    /// emptied before it is parsed into again — with
+    /// [`GitRevspecMut::take_from`] / [`GitRevspecMut::take_to`] to keep the
+    /// objects, or `set_from(None)` / `set_to(None)` to release them —
+    /// otherwise those references leak.
     GitRevspec,
     GitRevspecRef,
     GitRevspecMut,
@@ -25,7 +33,10 @@ ffibox::define_ctype!(
 pub type GitRevspecOwned = CVal<GitRevspec>;
 
 impl GitRevspec {
-    /// Constructs an empty result ready for `git_revparse` to fill.
+    /// Constructs an empty result ready for `git_revparse` to fill once.
+    ///
+    /// See the type documentation for why a filled result must be emptied
+    /// before it is reused.
     #[must_use]
     pub fn new() -> GitRevspecOwned {
         // The C empty representation consists of null pointers and zero flags.
@@ -334,6 +345,78 @@ mod tests {
             );
         }
         // SAFETY: no handle retains the object pointer, and this recovers the
+        // exact allocation originally produced by `Box::into_raw`.
+        drop(unsafe { Box::from_raw(object.cast::<MaybeUninit<ffi::git_object>>()) });
+    }
+
+    #[test]
+    fn exclusive_revspec_handles_move_object_ownership_between_fields() {
+        // The two fields hold independent owned references, so taking one out
+        // must clear it and installing it elsewhere must not duplicate it.
+        // The reference is never dropped here: this opaque storage carries no
+        // libgit2 refcount for `git_object_free` to release.
+        let object = Box::new(MaybeUninit::<ffi::git_object>::zeroed());
+        let object = Box::into_raw(object).cast::<ffi::git_object>();
+        let mut raw = ffi::git_revspec {
+            from: object,
+            to: core::ptr::null_mut(),
+            flags: GitRevspecFlags::SINGLE.bits(),
+        };
+
+        {
+            // SAFETY: `raw` and the opaque object storage remain live, and
+            // this scope has exclusive access to the revspec header.
+            let mut revspec = unsafe { GitRevspecMut::from_ptr(&raw mut raw) }.unwrap();
+
+            let taken = revspec.take_from().expect("the left-hand field was set");
+            assert!(revspec.as_ref().from().is_none());
+            assert!(revspec.take_from().is_none());
+
+            revspec.set_to(Some(taken));
+            assert!(revspec.as_ref().from().is_none());
+            assert_eq!(revspec.as_ref().to().unwrap().as_ptr(), object);
+
+            let taken = revspec.take_to().expect("the right-hand field was set");
+            assert!(revspec.as_ref().to().is_none());
+            // Surrender the owner instead of dropping it.
+            assert_eq!(taken.into_raw(), object);
+        }
+
+        assert!(raw.from.is_null());
+        assert!(raw.to.is_null());
+        // SAFETY: no handle retains the object pointer, and this recovers the
+        // exact allocation originally produced by `Box::into_raw`.
+        drop(unsafe { Box::from_raw(object.cast::<MaybeUninit<ffi::git_object>>()) });
+    }
+
+    #[test]
+    fn disposing_an_emptied_revspec_releases_nothing() {
+        // `c_dispose` clears both fields, so the emptied header below has no
+        // reference left to release when the `CVal` is dropped.
+        let object = Box::new(MaybeUninit::<ffi::git_object>::zeroed());
+        let object = Box::into_raw(object).cast::<ffi::git_object>();
+
+        let mut revspec = GitRevspec::new();
+        revspec.as_mut().set_flags(GitRevspecFlags::RANGE);
+        // SAFETY: the opaque storage is live and this is its only owner.
+        let owned = unsafe { GitObjectOwned::from_raw(object) }.unwrap();
+        revspec.as_mut().set_from(Some(owned));
+        assert_eq!(revspec.as_ref().from().unwrap().as_ptr(), object);
+
+        // Emptying is what makes the result safe to parse into again.
+        assert_eq!(
+            revspec
+                .as_mut()
+                .take_from()
+                .expect("the left-hand field was set")
+                .into_raw(),
+            object
+        );
+        assert!(revspec.as_ref().from().is_none());
+        assert!(revspec.as_ref().to().is_none());
+        drop(revspec);
+
+        // SAFETY: the disposed revspec released nothing, so this recovers the
         // exact allocation originally produced by `Box::into_raw`.
         drop(unsafe { Box::from_raw(object.cast::<MaybeUninit<ffi::git_object>>()) });
     }

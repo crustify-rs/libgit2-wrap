@@ -918,6 +918,14 @@ mod writestream_tests {
 ffibox::define_ctype!(
     /// Wraps: git_signature
     /// A self-contained actor identity and action time allocated by libgit2.
+    ///
+    /// Every `GitSignature` place carries the `git_signature_free` contract:
+    /// its `name` and `email` are distinct allocations made by libgit2's
+    /// configured allocator, so both the destructor and the setters below
+    /// release them with `git__free`. A signature whose strings came from
+    /// somewhere else does not satisfy that contract — `git_signature__pdup`
+    /// copies one into a `git_pool`, and such a value may only be viewed
+    /// through a borrowed handle, never owned or mutated through one.
     GitSignature,
     GitSignatureRef,
     GitSignatureMut,
@@ -959,7 +967,14 @@ unsafe impl ffibox::CCloned for GitSignature {
 
 impl<'a> GitSignatureRef<'a> {
     /// Field: git_signature.name
-    /// Borrows the nonempty, NUL-terminated actor name.
+    /// Borrows the non-null, NUL-terminated actor name.
+    ///
+    /// The name may be **empty**. `git_signature_new` rejects an empty name,
+    /// but `git_signature__parse` — which is what `git_signature_from_buffer`
+    /// and every commit, tag and reflog parser use — fills the field with
+    /// `extract_trimmed`, which strips leading and trailing control, space and
+    /// punctuation bytes and yields `""` when nothing survives. Parsing
+    /// `"<ada@example.com> 1234567890 +0000"` produces exactly that.
     #[must_use]
     pub fn name(&self) -> &'a CStr {
         // SAFETY: raw-place projection reads the initialized pointer field
@@ -988,7 +1003,10 @@ impl<'a> GitSignatureRef<'a> {
     }
 
     /// Field: git_signature.email
-    /// Borrows the nonempty, NUL-terminated actor email address.
+    /// Borrows the non-null, NUL-terminated actor email address.
+    ///
+    /// Like [`Self::name`], the address may be empty: a parsed `"Ada <>"`
+    /// leaves the field pointing at `""` rather than at nothing.
     #[must_use]
     pub fn email(&self) -> &'a CStr {
         // SAFETY: raw-place projection reads the initialized pointer field
@@ -1007,6 +1025,9 @@ impl<'a> GitSignatureRef<'a> {
 
 impl GitSignatureMut<'_> {
     /// Replaces the owned actor name and releases the previous allocation.
+    ///
+    /// The old name is released with `git__free`, which is what the type's
+    /// `git_signature_free` contract promises it can be.
     pub fn set_name(&mut self, name: GitSignatureString) {
         let name = name.into_raw();
         let signature = self.as_mut_ptr();
@@ -1033,6 +1054,8 @@ impl GitSignatureMut<'_> {
     }
 
     /// Replaces the owned email address and releases the previous allocation.
+    ///
+    /// The old address is released with `git__free`, as for [`Self::set_name`].
     pub fn set_email(&mut self, email: GitSignatureString) {
         let email = email.into_raw();
         let signature = self.as_mut_ptr();
@@ -1144,6 +1167,61 @@ mod signature_tests {
         assert_eq!(signature.as_ref().when().time(), 84);
 
         drop(cloned);
+        drop(signature);
+        // SAFETY: balances this test's successful initialization after all
+        // libgit2 allocations have been released.
+        let remaining = unsafe { ffi::git_libgit2_shutdown() };
+        assert!(remaining >= 0);
+    }
+
+    #[test]
+    fn an_empty_parsed_name_or_email_is_still_a_borrowable_string() {
+        // `git_signature__parse` trims with `extract_trimmed`, so parsing
+        // "<ada@example.com> 1234567890 +0000" leaves `name` pointing at a
+        // non-null empty allocation rather than at nothing. Reproduce that
+        // state directly: the getters must borrow it, not treat it as absent.
+        // SAFETY: libgit2 initialization is process-global and refcounted; the
+        // successful call is balanced after every test allocation is dropped.
+        let init_count = unsafe { ffi::git_libgit2_init() };
+        assert!(init_count > 0);
+
+        // SAFETY: libgit2 is initialized, so these calls use its configured
+        // allocator and copy live NUL-terminated literals.
+        let (header, name, email) = unsafe {
+            (
+                ffi::crustify_git__malloc(size_of::<ffi::git_signature>())
+                    .cast::<ffi::git_signature>(),
+                ffi::crustify_git__strdup(c"".as_ptr()),
+                ffi::crustify_git__strdup(c"".as_ptr()),
+            )
+        };
+        assert!(!header.is_null());
+        assert!(!name.is_null());
+        assert!(!email.is_null());
+        // SAFETY: `header` addresses suitably aligned storage large enough for
+        // the bindgen type, and the two strings are fresh owned allocations.
+        unsafe {
+            header.write(ffi::git_signature {
+                name,
+                email,
+                when: ffi::git_time {
+                    time: 1_234_567_890,
+                    offset: 0,
+                    // The state a buffer without a timezone field leaves.
+                    sign: 0,
+                },
+            });
+        }
+        // SAFETY: `header` is one fully initialized, uniquely owned signature
+        // allocation whose strings are matched by `git_signature_free`.
+        let signature = unsafe { GitSignatureOwned::from_raw(header) }.unwrap();
+
+        assert_eq!(signature.as_ref().name(), c"");
+        assert_eq!(signature.as_ref().email(), c"");
+        assert!(signature.as_ref().name().to_bytes().is_empty());
+        assert_eq!(signature.as_ref().try_clone_name().unwrap().as_c_str(), c"");
+        assert_eq!(signature.as_ref().when().sign(), Err(InvalidGitTimeSign(0)));
+
         drop(signature);
         // SAFETY: balances this test's successful initialization after all
         // libgit2 allocations have been released.

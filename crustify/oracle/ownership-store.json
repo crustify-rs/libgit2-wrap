@@ -5908,7 +5908,7 @@
   {
    "name": "git_revspec",
    "defined_in": "include/git2/revparse.h",
-   "_comment_agent": "The public git_revparse output is a caller-allocated value whose from and to members independently receive owned git_object references. Both are nullable (single specifications omit to, and failure cleanup clears from), and callers release every non-null member with git_object_free.",
+   "_comment_agent": "The public git_revparse output is a caller-allocated value whose from and to members independently receive owned git_object references. Both are nullable (single specifications omit to, and failure cleanup clears from), and callers release every non-null member with git_object_free. git_revparse memsets the whole struct before parsing, so it overwrites both members without releasing what they already held: a result carrying objects must be emptied before it is parsed into again, or those references leak. git_revwalk_push_range shows the intended discipline, freeing both members on every exit path.",
    "fields": [
     {
      "name": "from",
@@ -6129,7 +6129,7 @@
   {
    "name": "git_signature",
    "defined_in": "include/git2/types.h",
-   "_comment_agent": "A fully initialized public git_signature owns non-null NUL-terminated name and email allocations. git_signature_free releases both strings and the header; git_signature_dup deep-copies the complete value. Public documentation also permits manual teardown of the three allocations.",
+   "_comment_agent": "A fully initialized public git_signature owns non-null NUL-terminated name and email allocations. git_signature_free releases both strings and the header; git_signature_dup deep-copies the complete value. Public documentation also permits manual teardown of the three allocations. Non-null does not mean non-empty: git_signature_new rejects an empty name or email, but git_signature__parse \u2014 reached from git_signature_from_buffer and every commit, tag and reflog parser \u2014 fills both fields with extract_trimmed, which strips leading and trailing crud bytes and returns a non-null \"\" when nothing survives. git_signature__pdup builds the same layout out of a git_pool instead of the configured allocator, so a pool-built signature must never reach git_signature_free or any git__free of its strings.",
    "fields": [
     {
      "name": "email",
@@ -6141,7 +6141,7 @@
       "borrowed": null,
       "nullable": false,
       "mutable": false,
-      "note": "Non-null owned NUL-terminated email allocated by libgit2 and released with git__free by git_signature_free."
+      "note": "Non-null owned NUL-terminated email allocated by libgit2 and released with git__free by git_signature_free. As for name, it may be the empty string \u2014 parsing \"Ada <> 1234567890 +0000\" leaves email pointing at \"\" \u2014 and git_signature__pdup's pool-allocated variant is not git__free-able."
      }
     },
     {
@@ -6154,7 +6154,7 @@
       "borrowed": null,
       "nullable": false,
       "mutable": false,
-      "note": "Non-null owned NUL-terminated name allocated by libgit2 and released with git__free by git_signature_free."
+      "note": "Non-null owned NUL-terminated name allocated by libgit2 and released with git__free by git_signature_free. It may be the empty string: git_signature__parse fills it with extract_trimmed, so parsing \"<ada@example.com> 1234567890 +0000\" leaves name pointing at \"\". git_signature__pdup allocates it from a git_pool instead, and that variant is not git__free-able."
      }
     }
    ]
