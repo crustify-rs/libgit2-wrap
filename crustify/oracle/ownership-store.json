@@ -366,6 +366,30 @@
    "fields": []
   },
   {
+   "name": "git_cert_x509",
+   "defined_in": "include/git2/cert.h",
+   "_comment_agent": "git_cert_x509 is a borrowed view record passed to certificate callbacks. Its data/len pair describes DER bytes retained by the enclosing transport stream or platform certificate context; the record has no independent lifecycle.",
+   "fields": [
+    {
+     "name": "data",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "All X.509 producers expose a non-empty DER byte buffer retained by the enclosing stream or certificate context. The buffer remains live for the certificate callback/view and is never mutated through this field; its storage is released with the enclosing producer, not by git_cert_x509."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_clone_local_t",
    "defined_in": "include/git2/clone.h",
    "_comment_agent": "Closed public C enum with four scalar values and no ownership-bearing fields.",
@@ -496,6 +520,30 @@
     {
      "name": "rc",
      "refcount": true
+    }
+   ]
+  },
+  {
+   "name": "git_config_backend_entry",
+   "defined_in": "include/git2/sys/config.h",
+   "_comment_agent": "git_config_backend_entry embeds git_config_entry as its first member and installs a required static finalizer callback. Ownership is released by dispatching that callback, directly or through git_config_entry_free.",
+   "fields": [
+    {
+     "name": "free",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Every fully constructed backend entry installs a static concrete finalizer. git_config_entry_free casts the embedded base entry back to git_config_backend_entry and invokes this callback unconditionally."
+     }
     }
    ]
   },

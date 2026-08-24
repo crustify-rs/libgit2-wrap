@@ -1,5 +1,6 @@
 #include <git2.h>
 #include <git2/sys/credential.h>
+#include <git2/sys/config.h>
 #include <git2/sys/refdb_backend.h>
 #include <git2/sys/repository.h>
 #include <git2/sys/transport.h>

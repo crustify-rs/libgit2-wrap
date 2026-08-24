@@ -1,6 +1,9 @@
 //! Safe wrappers for libgit2 cert APIs.
 
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+use core::ptr::{NonNull, addr_of, addr_of_mut};
+
+use ffibox::CSlice;
 
 use crate::ffi;
 
@@ -382,5 +385,124 @@ mod ssh_raw_type_tests {
             align_of::<GitCertSshRawType>(),
             align_of::<ffi::git_cert_ssh_raw_type_t>()
         );
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_cert_x509
+    /// Layout-compatible X.509 certificate view passed to transport callbacks.
+    GitCertX509,
+    GitCertX509Ref,
+    GitCertX509Mut,
+    ffi::git_cert_x509
+);
+
+impl<'a> GitCertX509Ref<'a> {
+    /// Field: git_cert_x509.parent
+    /// Borrows the embedded certificate header.
+    #[must_use]
+    pub fn parent(&self) -> GitCertRef<'a> {
+        // SAFETY: raw-place projection reaches the live initialized header
+        // without forming a reference over the C-visible certificate.
+        let parent = unsafe { addr_of!((*self.as_ptr()).parent) }.cast_mut();
+        // SAFETY: an inline field is non-null and remains live for this
+        // certificate handle's complete `'a` borrow.
+        unsafe { GitCertRef::from_ptr(parent) }.expect("an embedded certificate is non-null")
+    }
+
+    /// Field: git_cert_x509.data
+    /// Borrows the DER-encoded certificate bytes.
+    #[must_use]
+    pub fn data(&self) -> CSlice<'a, u8> {
+        let cert = self.as_ptr();
+        // SAFETY: both members are initialized fields of this live X.509
+        // record and raw-place reads form no references to C-visible storage.
+        let (data, len) = unsafe {
+            (
+                addr_of!((*cert).data).read().cast::<u8>(),
+                addr_of!((*cert).len).read(),
+            )
+        };
+        let data = NonNull::new(data).expect("an X.509 certificate has DER data");
+        // SAFETY: every X.509 producer supplies `len` initialized DER bytes at
+        // this non-null pointer and retains them for the record's lifetime.
+        unsafe { CSlice::from_raw_parts(data, len) }
+    }
+
+    /// Field: git_cert_x509.len
+    /// Returns the length of the DER-encoded certificate.
+    #[must_use]
+    pub fn data_len(&self) -> usize {
+        // SAFETY: this live shared handle permits a raw-place scalar read
+        // without forming a reference to the C-visible certificate.
+        unsafe { addr_of!((*self.as_ptr()).len).read() }
+    }
+}
+
+impl GitCertX509Mut<'_> {
+    /// Borrows the embedded certificate header exclusively.
+    #[must_use]
+    pub fn parent_mut(&mut self) -> GitCertMut<'_> {
+        // SAFETY: raw-place projection reaches the initialized inline header;
+        // the returned exclusive handle is tied to this exclusive reborrow.
+        unsafe { GitCertMut::from_ptr(addr_of_mut!((*self.as_mut_ptr()).parent)) }
+            .expect("an embedded certificate is non-null")
+    }
+}
+
+#[cfg(test)]
+mod x509_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn x509_wrapper_preserves_the_c_layout() {
+        assert_eq!(size_of::<GitCertX509>(), size_of::<ffi::git_cert_x509>());
+        assert_eq!(align_of::<GitCertX509>(), align_of::<ffi::git_cert_x509>());
+        assert_eq!(
+            size_of::<GitCertX509Ref<'_>>(),
+            size_of::<*const ffi::git_cert_x509>()
+        );
+        assert_eq!(
+            size_of::<GitCertX509Mut<'_>>(),
+            size_of::<*mut ffi::git_cert_x509>()
+        );
+    }
+
+    #[test]
+    fn x509_handle_borrows_header_and_der_bytes() {
+        let mut der = [0x30, 0x03, 0x02, 0x01, 0x01];
+        let mut raw = ffi::git_cert_x509 {
+            parent: ffi::git_cert {
+                cert_type: ffi::git_cert_t_GIT_CERT_X509,
+            },
+            data: der.as_mut_ptr().cast(),
+            len: der.len(),
+        };
+
+        // SAFETY: `raw` and `der` remain live and unchanged while the shared
+        // handle and its derived views are used.
+        let cert = unsafe { GitCertX509Ref::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(cert.parent().cert_type(), Ok(GitCertType::X509));
+        assert_eq!(cert.data_len(), der.len());
+        assert_eq!(cert.data().elems().collect::<Vec<_>>(), der);
+    }
+
+    #[test]
+    fn exclusive_x509_handle_projects_the_inline_header() {
+        let mut der = [0x30];
+        let mut raw = ffi::git_cert_x509 {
+            parent: ffi::git_cert {
+                cert_type: ffi::git_cert_t_GIT_CERT_X509,
+            },
+            data: der.as_mut_ptr().cast(),
+            len: der.len(),
+        };
+
+        // SAFETY: `raw` and `der` remain live, and this is the only handle
+        // addressing the local record.
+        let mut cert = unsafe { GitCertX509Mut::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(cert.parent_mut().as_mut_ptr(), addr_of_mut!(raw.parent));
     }
 }

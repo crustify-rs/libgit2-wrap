@@ -19,6 +19,7 @@
 ^git_checkout_perfdata$
 ^git_config_level_t$
 ^git_config_entry$
+^git_config_backend_entry$
 ^git_config_entry_free$
 ^git_credential$
 ^git_credential_free$
@@ -100,6 +101,7 @@
 ^git_buf$
 ^git_buf_dispose$
 ^git_cert$
+^git_cert_x509$
 ^git_cert_t$
 ^git_cert_ssh_t$
 ^git_cert_ssh_raw_type_t$
