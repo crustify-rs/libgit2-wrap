@@ -343,6 +343,17 @@
    ]
   },
   {
+   "name": "git_cached_obj",
+   "defined_in": "src/libgit2/cache.h",
+   "_comment_agent": "git_cached_obj is the common prefix of git_object and git_odb_object. Its refcount field is atomically incremented/decremented by git_cached_obj_incref/decref; the remaining fields are initialized before cache publication and contain no pointers.",
+   "fields": [
+    {
+     "name": "refcount",
+     "refcount": true
+    }
+   ]
+  },
+  {
    "name": "git_cert",
    "defined_in": "include/git2/cert.h",
    "_comment_agent": "Public git_cert is a one-field by-value base record. cert_type is a scalar git_cert_t discriminant initialized by the concrete certificate producer and thereafter read through public callbacks; the type has no pointer fields, refcount, or independent lifecycle operation.",
@@ -2402,6 +2413,79 @@
    ]
   },
   {
+   "name": "git_reference_iterator",
+   "defined_in": "include/git2/sys/refdb_backend.h",
+   "_comment_agent": "A fully constructed iterator owns one git_refdb reference in db. Its three callbacks are required non-null static function pointers installed by the backend. The public iterator destructor first releases the db reference and then invokes free; next/next_name advance mutable iterator state.",
+   "fields": [
+    {
+     "name": "db",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "git_refdb_iterator increments this reference before publishing the iterator; git_refdb_iterator_free decrements it before freeing the concrete iterator."
+     }
+    },
+    {
+     "name": "free",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required backend callback with static code lifetime; it destroys the concrete iterator allocation."
+     }
+    },
+    {
+     "name": "next",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required backend callback with static code lifetime; invocation advances mutable iterator state and yields an owned reference."
+     }
+    },
+    {
+     "name": "next_name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required backend callback with static code lifetime; invocation advances mutable iterator state and yields a name borrowed from iterator-managed storage until the next advance."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_reflog",
    "defined_in": "src/libgit2/reflog.h",
    "_comment_agent": "Publicly returned reflogs own ref_name and one refdb count. Internal transaction duplicates are pool-backed, so their ref_name has an alternate borrow from the transaction pool; their null db is never used as an owned refdb count.",
@@ -2612,6 +2696,289 @@
       "nullable": true,
       "mutable": false,
       "note": "Heap-duplicated NUL string released or replaced with git__free; configuration-only remotes and construction failure paths may leave it NULL."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_head",
+   "defined_in": "include/git2/net.h",
+   "_comment_agent": "git_remote_head is a by-value advertised-reference record whose oid fields and local flag are inline. Persistent heads own their allocated name and optional symref_target, while temporary comparison/search heads can borrow name storage; callers receive views owned by the transport or remote rather than an independently disposable head.",
+   "fields": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Persistent local and smart-transport heads own duplicated name storage, but stack search keys and temporary oid heads borrow another object's name. Formed advertised heads normally have a name; zeroed temporary keys make null observable."
+     }
+    },
+    {
+     "name": "symref_target",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional duplicated or detached target string released by the concrete head/packet owner together with the head."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository",
+   "defined_in": "src/libgit2/repository.h",
+   "_comment_agent": "The public API exposes git_repository only as an opaque, uniquely owned allocation released by git_repository_free. Internally the repository owns one reference to each lazily populated database/config/index pointer, owns all cache and graft allocations, owns its duplicated path/identity strings, and owns the reserved-name array. Every pointer member is nullable during lazy initialization or for repositories without the corresponding path/cache, except reserved_names.ptr, which repository_alloc initializes before publishing a complete repository.",
+   "fields": [
+    {
+     "name": "_config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily opened mutable configuration. The repository owns one refcount and set_config releases the previous count; weakptr access borrows it."
+     }
+    },
+    {
+     "name": "_index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily opened mutable index. The repository owns one refcount and set_index releases the previous count; weakptr access borrows it."
+     }
+    },
+    {
+     "name": "_odb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily opened object database. The repository owns one refcount and set_odb releases the previous count; weakptr access borrows it."
+     }
+    },
+    {
+     "name": "_refdb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily opened reference database. The repository owns one refcount and set_refdb releases the previous count; weakptr access borrows it."
+     }
+    },
+    {
+     "name": "attrcache",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Lazily allocated mutable attribute cache, atomically installed and owned until git_attr_cache_flush frees it."
+     }
+    },
+    {
+     "name": "commondir",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Owned NUL-terminated common-directory path when configured; absent on a new in-memory repository and released with git__free."
+     }
+    },
+    {
+     "name": "diff_drivers",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Lazily allocated mutable diff-driver registry, atomically installed and freed by git_repository_free."
+     }
+    },
+    {
+     "name": "gitdir",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Owned NUL-terminated repository path when configured; a repository returned by git_repository_new may not yet have one. Released with git__free."
+     }
+    },
+    {
+     "name": "gitlink",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional owned NUL-terminated path detached from git_str storage and released with git__free."
+     }
+    },
+    {
+     "name": "grafts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily allocated mutable graft map, released by git_repository__cleanup through git_grafts_free."
+     }
+    },
+    {
+     "name": "ident_email",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional duplicated identity email, atomically replaced by git_repository_set_ident and released with git__free."
+     }
+    },
+    {
+     "name": "ident_name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional duplicated identity name, atomically replaced by git_repository_set_ident and released with git__free."
+     }
+    },
+    {
+     "name": "namespace",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional duplicated namespace string, replaced by git_repository_set_namespace and released with git__free."
+     }
+    },
+    {
+     "name": "reserved_names.ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "Owned growable buffer of inline git_str values. repository_alloc allocates initial capacity before publishing the repository; git_repository_free disposes each live element then clears the buffer."
+     }
+    },
+    {
+     "name": "shallow_grafts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily allocated mutable shallow-graft map, released by git_repository__cleanup through git_grafts_free."
+     }
+    },
+    {
+     "name": "submodule_cache",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional mutable submodule hashmap explicitly initialized for repository operations and freed/cleared during repository cleanup."
+     }
+    },
+    {
+     "name": "workdir",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional owned NUL-terminated work-tree path; bare repositories keep it null, and setters replace/free it."
      }
     }
    ]
@@ -3467,373 +3834,6 @@
       "nullable": false,
       "mutable": false,
       "note": "Every constructed stream installs a process-code callback. Calls use it synchronously; the callback code has static lifetime and is not owned by the stream."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_reference_iterator",
-   "defined_in": "include/git2/sys/refdb_backend.h",
-   "_comment_agent": "A fully constructed iterator owns one git_refdb reference in db. Its three callbacks are required non-null static function pointers installed by the backend. The public iterator destructor first releases the db reference and then invokes free; next/next_name advance mutable iterator state.",
-   "fields": [
-    {
-     "name": "db",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": false,
-      "mutable": true,
-      "note": "git_refdb_iterator increments this reference before publishing the iterator; git_refdb_iterator_free decrements it before freeing the concrete iterator."
-     }
-    },
-    {
-     "name": "free",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "static"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required backend callback with static code lifetime; it destroys the concrete iterator allocation."
-     }
-    },
-    {
-     "name": "next",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "static"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required backend callback with static code lifetime; invocation advances mutable iterator state and yields an owned reference."
-     }
-    },
-    {
-     "name": "next_name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "static"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required backend callback with static code lifetime; invocation advances mutable iterator state and yields a name borrowed from iterator-managed storage until the next advance."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_head",
-   "defined_in": "include/git2/net.h",
-   "_comment_agent": "git_remote_head is a by-value advertised-reference record whose oid fields and local flag are inline. Persistent heads own their allocated name and optional symref_target, while temporary comparison/search heads can borrow name storage; callers receive views owned by the transport or remote rather than an independently disposable head.",
-   "fields": [
-    {
-     "name": "name",
-     "ptr": {
-      "scalar": null,
-      "array": null,
-      "string": true,
-      "owned": true,
-      "borrowed": {
-       "lifetime": "other"
-      },
-      "nullable": true,
-      "mutable": false,
-      "note": "Persistent local and smart-transport heads own duplicated name storage, but stack search keys and temporary oid heads borrow another object's name. Formed advertised heads normally have a name; zeroed temporary keys make null observable."
-     }
-    },
-    {
-     "name": "symref_target",
-     "ptr": {
-      "scalar": null,
-      "array": null,
-      "string": true,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": false,
-      "note": "Optional duplicated or detached target string released by the concrete head/packet owner together with the head."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_cached_obj",
-   "defined_in": "src/libgit2/cache.h",
-   "_comment_agent": "git_cached_obj is the common prefix of git_object and git_odb_object. Its refcount field is atomically incremented/decremented by git_cached_obj_incref/decref; the remaining fields are initialized before cache publication and contain no pointers.",
-   "fields": [
-    {
-     "name": "refcount",
-     "refcount": true
-    }
-   ]
-  },
-  {
-   "name": "git_repository",
-   "defined_in": "src/libgit2/repository.h",
-   "_comment_agent": "The public API exposes git_repository only as an opaque, uniquely owned allocation released by git_repository_free. Internally the repository owns one reference to each lazily populated database/config/index pointer, owns all cache and graft allocations, owns its duplicated path/identity strings, and owns the reserved-name array. Every pointer member is nullable during lazy initialization or for repositories without the corresponding path/cache, except reserved_names.ptr, which repository_alloc initializes before publishing a complete repository.",
-   "fields": [
-    {
-     "name": "_config",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": true,
-      "note": "Optional lazily opened mutable configuration. The repository owns one refcount and set_config releases the previous count; weakptr access borrows it."
-     }
-    },
-    {
-     "name": "_index",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": true,
-      "note": "Optional lazily opened mutable index. The repository owns one refcount and set_index releases the previous count; weakptr access borrows it."
-     }
-    },
-    {
-     "name": "_odb",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": true,
-      "note": "Optional lazily opened object database. The repository owns one refcount and set_odb releases the previous count; weakptr access borrows it."
-     }
-    },
-    {
-     "name": "_refdb",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": true,
-      "note": "Optional lazily opened reference database. The repository owns one refcount and set_refdb releases the previous count; weakptr access borrows it."
-     }
-    },
-    {
-     "name": "attrcache",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": true,
-      "note": "Lazily allocated mutable attribute cache, atomically installed and owned until git_attr_cache_flush frees it."
-     }
-    },
-    {
-     "name": "commondir",
-     "ptr": {
-      "scalar": null,
-      "array": null,
-      "string": true,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": false,
-      "note": "Owned NUL-terminated common-directory path when configured; absent on a new in-memory repository and released with git__free."
-     }
-    },
-    {
-     "name": "diff_drivers",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": true,
-      "note": "Lazily allocated mutable diff-driver registry, atomically installed and freed by git_repository_free."
-     }
-    },
-    {
-     "name": "gitdir",
-     "ptr": {
-      "scalar": null,
-      "array": null,
-      "string": true,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": false,
-      "note": "Owned NUL-terminated repository path when configured; a repository returned by git_repository_new may not yet have one. Released with git__free."
-     }
-    },
-    {
-     "name": "gitlink",
-     "ptr": {
-      "scalar": null,
-      "array": null,
-      "string": true,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": false,
-      "note": "Optional owned NUL-terminated path detached from git_str storage and released with git__free."
-     }
-    },
-    {
-     "name": "grafts",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": true,
-      "note": "Optional lazily allocated mutable graft map, released by git_repository__cleanup through git_grafts_free."
-     }
-    },
-    {
-     "name": "ident_email",
-     "ptr": {
-      "scalar": null,
-      "array": null,
-      "string": true,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": false,
-      "note": "Optional duplicated identity email, atomically replaced by git_repository_set_ident and released with git__free."
-     }
-    },
-    {
-     "name": "ident_name",
-     "ptr": {
-      "scalar": null,
-      "array": null,
-      "string": true,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": false,
-      "note": "Optional duplicated identity name, atomically replaced by git_repository_set_ident and released with git__free."
-     }
-    },
-    {
-     "name": "namespace",
-     "ptr": {
-      "scalar": null,
-      "array": null,
-      "string": true,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": false,
-      "note": "Optional duplicated namespace string, replaced by git_repository_set_namespace and released with git__free."
-     }
-    },
-    {
-     "name": "reserved_names.ptr",
-     "ptr": {
-      "scalar": null,
-      "array": {
-       "by_val": true
-      },
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": false,
-      "mutable": true,
-      "note": "Owned growable buffer of inline git_str values. repository_alloc allocates initial capacity before publishing the repository; git_repository_free disposes each live element then clears the buffer."
-     }
-    },
-    {
-     "name": "shallow_grafts",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": true,
-      "note": "Optional lazily allocated mutable shallow-graft map, released by git_repository__cleanup through git_grafts_free."
-     }
-    },
-    {
-     "name": "submodule_cache",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": true,
-      "note": "Optional mutable submodule hashmap explicitly initialized for repository operations and freed/cleared during repository cleanup."
-     }
-    },
-    {
-     "name": "workdir",
-     "ptr": {
-      "scalar": null,
-      "array": null,
-      "string": true,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": false,
-      "note": "Optional owned NUL-terminated work-tree path; bare repositories keep it null, and setters replace/free it."
      }
     }
    ]
@@ -5594,6 +5594,65 @@
    ]
   },
   {
+   "name": "git_cached_obj_decref",
+   "defined_in": "src/libgit2/cache.c",
+   "lifetime": {
+    "for": "_obj",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "_obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "Consumes one live git_cached_obj-compatible reference; on the final decrement dispatches destruction by the cache flags."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_cached_obj_incref",
+   "defined_in": "src/libgit2/cache.h",
+   "lifetime": {
+    "for": "_obj",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": false,
+     "upref": true
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "_obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:_obj"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required live git_cached_obj-compatible prefix; increments its atomic refcount without taking the caller's existing reference."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_checkout_perfdata_cb",
    "defined_in": null,
    "ptr_args": [
@@ -6774,7 +6833,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "Optional transient NUL string; NULL produces a parse error."
+      "note": "Optional transient NUL string. NULL is NOT an error here: git__parse_bool treats a missing value as the bare '[section] key' form and writes 1, so the call succeeds with *out = true. An empty string yields false; anything else falls through to git_config_parse_int32."
      }
     }
    ]
@@ -8223,9 +8282,9 @@
       "borrowed": {
        "lifetime": "arg:arg1"
       },
-      "nullable": false,
+      "nullable": true,
       "mutable": false,
-      "note": "Transient pathspec that matched the path."
+      "note": "Transient pathspec that matched the path, or NULL when the caller supplied no pathspec. Every index.c callsite (apply_each_file, git_index_update_all, git_index_add_all's helper) forwards the pointer git_pathspec__match filled in, and that routine returns a match with *matched_pathspec left NULL for an empty pathspec vector."
      }
     },
     {
@@ -10510,8 +10569,8 @@
        "lifetime": "arg:arg0"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Transient object-data buffer whose element count is the size argument."
+      "mutable": false,
+      "note": "Transient read-only object-data chunk whose element count is the size argument. The typedef spells it void* only because it is a generic write sink: pack-objects.c write_object passes its own stack header, po->delta->id.id inside the packbuilder's object array, the compression scratch buffer, or git_odb_object_data of a shared cache entry, and feeds the same bytes to git_hash_update right after the callback returns, so a callee write would corrupt the pack or shared ODB storage."
      }
     },
     {
@@ -12756,6 +12815,33 @@
    ]
   },
   {
+   "name": "git_reference_iterator_free",
+   "defined_in": "src/libgit2/refs.c",
+   "lifetime": {
+    "for": "iter",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "iter",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and destroys a complete iterator; null is explicitly accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_reference_lookup",
    "defined_in": "src/libgit2/refs.c",
    "ptr_args": [
@@ -12969,7 +13055,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Caller-owned writable byte buffer; size argument gives capacity and success writes a NUL-terminated name."
+      "note": "Caller-owned writable byte buffer; the size argument gives capacity and success writes a NUL-terminated name. Capacity must be at least 1: the implementation's fit check computes buffer_size - 1, which wraps to SIZE_MAX for a zero-length buffer and skips GIT_EBUFS, leaving git_str_copy_cstr to reject the zero capacity through GIT_ASSERT_ARG."
      }
     },
     {
@@ -13631,6 +13717,131 @@
    }
   },
   {
+   "name": "git_reference_target_peel",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:ref"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional inline peeled OID borrowed from the reference; absent for non-direct, unpeeled, or zero-peel references."
+    }
+   }
+  },
+  {
+   "name": "git_reference_type",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reflog_delete",
+   "defined_in": "src/libgit2/reflog.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reflog_drop",
+   "defined_in": "src/libgit2/reflog.c",
+   "ptr_args": [
+    {
+     "name": "reflog",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:reflog"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_reflog_entry__free",
    "defined_in": "src/libgit2/reflog.c",
    "lifetime": {
@@ -13658,6 +13869,185 @@
    ]
   },
   {
+   "name": "git_reflog_entry_byindex",
+   "defined_in": "src/libgit2/reflog.c",
+   "ptr_args": [
+    {
+     "name": "reflog",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:reflog"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:reflog"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional entry borrowed from the reflog vector; invalidated by mutation or destruction of the reflog."
+    }
+   }
+  },
+  {
+   "name": "git_reflog_entry_id_new",
+   "defined_in": "src/libgit2/reflog.c",
+   "ptr_args": [
+    {
+     "name": "entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:entry"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:entry"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Required inline new OID borrowed from the live reflog entry."
+    }
+   }
+  },
+  {
+   "name": "git_reflog_entry_id_old",
+   "defined_in": "src/libgit2/reflog.c",
+   "ptr_args": [
+    {
+     "name": "entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:entry"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:entry"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Required inline old OID borrowed from the live reflog entry."
+    }
+   }
+  },
+  {
+   "name": "git_reflog_entry_message",
+   "defined_in": "src/libgit2/reflog.c",
+   "ptr_args": [
+    {
+     "name": "entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:entry"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:entry"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional NUL-terminated message owned by and borrowed from the reflog entry."
+    }
+   }
+  },
+  {
+   "name": "git_reflog_entrycount",
+   "defined_in": "src/libgit2/reflog.c",
+   "ptr_args": [
+    {
+     "name": "reflog",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:reflog"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_reflog_free",
    "defined_in": "src/libgit2/reflog.c",
    "lifetime": {
@@ -13680,6 +14070,146 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a public reflog allocation and all of its owned fields; null is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reflog_read",
+   "defined_in": "src/libgit2/reflog.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "reflog",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:reflog"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot receiving a fresh owned reflog on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required repository borrowed during lookup; the resulting reflog retains its own refdb count."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reflog_rename",
+   "defined_in": "src/libgit2/reflog.c",
+   "ptr_args": [
+    {
+     "name": "new_name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "old_name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reflog_write",
+   "defined_in": "src/libgit2/reflog.c",
+   "ptr_args": [
+    {
+     "name": "reflog",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:reflog"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
      }
     }
    ]
@@ -13714,6 +14244,131 @@
    ]
   },
   {
+   "name": "git_refspec_direction",
+   "defined_in": "src/libgit2/refspec.c",
+   "ptr_args": [
+    {
+     "name": "spec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:spec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_refspec_dst",
+   "defined_in": "src/libgit2/refspec.c",
+   "ptr_args": [
+    {
+     "name": "refspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:refspec"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional destination string owned by and borrowed from the refspec."
+    }
+   }
+  },
+  {
+   "name": "git_refspec_dst_matches",
+   "defined_in": "src/libgit2/refspec.c",
+   "ptr_args": [
+    {
+     "name": "refname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "refspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_refspec_force",
+   "defined_in": "src/libgit2/refspec.c",
+   "ptr_args": [
+    {
+     "name": "refspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_refspec_free",
    "defined_in": "src/libgit2/refspec.c",
    "lifetime": {
@@ -13736,6 +14391,752 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a heap-allocated complete refspec, disposes its fields, and frees the header; NULL is accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_refspec_rtransform",
+   "defined_in": "src/libgit2/refspec.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required mutable buffer header; output bytes remain owned by the caller and are not retained by the callee."
+     }
+    },
+    {
+     "name": "spec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:spec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_refspec_src",
+   "defined_in": "src/libgit2/refspec.c",
+   "ptr_args": [
+    {
+     "name": "refspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:refspec"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional source string owned by and borrowed from the refspec."
+    }
+   }
+  },
+  {
+   "name": "git_refspec_src_matches",
+   "defined_in": "src/libgit2/refspec.c",
+   "ptr_args": [
+    {
+     "name": "refname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "refspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_refspec_string",
+   "defined_in": "src/libgit2/refspec.c",
+   "ptr_args": [
+    {
+     "name": "refspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:refspec"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Required original string owned by and borrowed from a fully formed refspec."
+    }
+   }
+  },
+  {
+   "name": "git_refspec_transform",
+   "defined_in": "src/libgit2/refspec.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required mutable buffer header; output bytes remain owned by the caller and are not retained by the callee."
+     }
+    },
+    {
+     "name": "spec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:spec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_add_fetch",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "refspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_add_push",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "refspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_connected",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_create",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot receiving a fresh owned remote on success; repository-backed results retain the repository pointer."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required repository borrowed and retained by the resulting remote; it must outlive that remote."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_create_anonymous",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot receiving a fresh owned remote on success; repository-backed results retain the repository pointer."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required repository borrowed and retained by the resulting remote; it must outlive that remote."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_create_detached",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot receiving a fresh owned remote on success; repository-backed results retain the repository pointer."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_create_with_fetchspec",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "fetch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:fetch"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot receiving a fresh owned remote on success; repository-backed results retain the repository pointer."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required repository borrowed and retained by the resulting remote; it must outlive that remote."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_default_branch",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required mutable buffer header; output bytes remain owned by the caller and are not retained by the callee."
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_delete",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_disconnect",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
      }
     }
    ]
@@ -13820,6 +15221,264 @@
    ]
   },
   {
+   "name": "git_remote_get_fetch_refspecs",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "array",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:array"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required mutable output header receiving newly owned strings on success; the caller retains and must dispose the header fields."
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_get_push_refspecs",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "array",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:array"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required mutable output header receiving newly owned strings on success; the caller retains and must dispose the header fields."
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_get_refspec",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:remote"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional refspec borrowed from the remote vector; invalidated by remote mutation or destruction."
+    }
+   }
+  },
+  {
+   "name": "git_remote_list",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remotes_list",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remotes_list"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required mutable output header receiving newly owned strings on success; the caller retains and must dispose the header fields."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_lookup",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot receiving a fresh owned remote on success; the result retains the repository pointer."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required repository borrowed and retained by the resulting remote; it must outlive that remote."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_name",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:remote"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional name owned by and borrowed from the remote; anonymous and detached remotes have NULL."
+    }
+   }
+  },
+  {
    "name": "git_remote_name_is_valid",
    "defined_in": "src/libgit2/remote.c",
    "ptr_args": [
@@ -13858,6 +15517,436 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_remote_oid_type",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable scalar out-slot initialized with the connected remote object format on success."
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_pushurl",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:remote"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional push URL owned by and borrowed from the remote."
+    }
+   }
+  },
+  {
+   "name": "git_remote_refspec_count",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_rename",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "new_name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required mutable output header receiving newly owned strings on success; the caller retains and must dispose the header fields."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_set_pushurl",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient NUL-terminated string; the callee does not retain it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_set_url",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient NUL-terminated string; the callee does not retain it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_stats",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:remote"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Required inline progress record borrowed from the remote."
+    }
+   }
+  },
+  {
+   "name": "git_remote_stop",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_url",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:remote"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional URL owned by and borrowed from the remote."
+    }
+   }
+  },
+  {
+   "name": "git_repository_commondir",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:repo"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Required NUL-terminated common-directory path owned by and borrowed from the repository."
+    }
+   }
   },
   {
    "name": "git_repository_config",
@@ -15434,2095 +17523,6 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes the concrete pack writepack, frees its indexer, then releases the allocation; null is accepted."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_reference_type",
-   "defined_in": "src/libgit2/refs.c",
-   "ptr_args": [
-    {
-     "name": "ref",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:ref"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_connected",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_create_anonymous",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "out",
-     "ptr": {
-      "scalar": {
-       "by_ref": {
-        "owned": true,
-        "borrowed": null
-       }
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:out"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required writable out-slot receiving a fresh owned remote on success; repository-backed results retain the repository pointer."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required repository borrowed and retained by the resulting remote; it must outlive that remote."
-     }
-    },
-    {
-     "name": "url",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:url"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_create",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:name"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "out",
-     "ptr": {
-      "scalar": {
-       "by_ref": {
-        "owned": true,
-        "borrowed": null
-       }
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:out"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required writable out-slot receiving a fresh owned remote on success; repository-backed results retain the repository pointer."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required repository borrowed and retained by the resulting remote; it must outlive that remote."
-     }
-    },
-    {
-     "name": "url",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:url"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_reflog_entrycount",
-   "defined_in": "src/libgit2/reflog.c",
-   "ptr_args": [
-    {
-     "name": "reflog",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:reflog"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_reflog_entry_id_new",
-   "defined_in": "src/libgit2/reflog.c",
-   "ptr_args": [
-    {
-     "name": "entry",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:entry"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": false,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:entry"
-     },
-     "nullable": false,
-     "mutable": false,
-     "note": "Required inline new OID borrowed from the live reflog entry."
-    }
-   }
-  },
-  {
-   "name": "git_remote_list",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "remotes_list",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remotes_list"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required mutable output header receiving newly owned strings on success; the caller retains and must dispose the header fields."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_reflog_drop",
-   "defined_in": "src/libgit2/reflog.c",
-   "ptr_args": [
-    {
-     "name": "reflog",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:reflog"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_set_url",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    },
-    {
-     "name": "url",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:url"
-      },
-      "nullable": true,
-      "mutable": false,
-      "note": "Optional transient NUL-terminated string; the callee does not retain it."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_reference_target_peel",
-   "defined_in": "src/libgit2/refs.c",
-   "ptr_args": [
-    {
-     "name": "ref",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:ref"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": false,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:ref"
-     },
-     "nullable": true,
-     "mutable": false,
-     "note": "Optional inline peeled OID borrowed from the reference; absent for non-direct, unpeeled, or zero-peel references."
-    }
-   }
-  },
-  {
-   "name": "git_remote_get_refspec",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": false,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:remote"
-     },
-     "nullable": true,
-     "mutable": false,
-     "note": "Optional refspec borrowed from the remote vector; invalidated by remote mutation or destruction."
-    }
-   }
-  },
-  {
-   "name": "git_remote_add_push",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "refspec",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:refspec"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_reflog_entry_id_old",
-   "defined_in": "src/libgit2/reflog.c",
-   "ptr_args": [
-    {
-     "name": "entry",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:entry"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": false,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:entry"
-     },
-     "nullable": false,
-     "mutable": false,
-     "note": "Required inline old OID borrowed from the live reflog entry."
-    }
-   }
-  },
-  {
-   "name": "git_remote_rename",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:name"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "new_name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:new_name"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "out",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:out"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required mutable output header receiving newly owned strings on success; the caller retains and must dispose the header fields."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_refspec_dst",
-   "defined_in": "src/libgit2/refspec.c",
-   "ptr_args": [
-    {
-     "name": "refspec",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:refspec"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": true,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:refspec"
-     },
-     "nullable": true,
-     "mutable": false,
-     "note": "Optional destination string owned by and borrowed from the refspec."
-    }
-   }
-  },
-  {
-   "name": "git_reflog_delete",
-   "defined_in": "src/libgit2/reflog.c",
-   "ptr_args": [
-    {
-     "name": "name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:name"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_set_pushurl",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    },
-    {
-     "name": "url",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:url"
-      },
-      "nullable": true,
-      "mutable": false,
-      "note": "Optional transient NUL-terminated string; the callee does not retain it."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_stats",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": false,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:remote"
-     },
-     "nullable": false,
-     "mutable": false,
-     "note": "Required inline progress record borrowed from the remote."
-    }
-   }
-  },
-  {
-   "name": "git_remote_oid_type",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "out",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:out"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required writable scalar out-slot initialized with the connected remote object format on success."
-     }
-    },
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_refspec_rtransform",
-   "defined_in": "src/libgit2/refspec.c",
-   "ptr_args": [
-    {
-     "name": "name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:name"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "out",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:out"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required mutable buffer header; output bytes remain owned by the caller and are not retained by the callee."
-     }
-    },
-    {
-     "name": "spec",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:spec"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_add_fetch",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "refspec",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:refspec"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_stop",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_refspec_transform",
-   "defined_in": "src/libgit2/refspec.c",
-   "ptr_args": [
-    {
-     "name": "name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:name"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "out",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:out"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required mutable buffer header; output bytes remain owned by the caller and are not retained by the callee."
-     }
-    },
-    {
-     "name": "spec",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:spec"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_reflog_entry_message",
-   "defined_in": "src/libgit2/reflog.c",
-   "ptr_args": [
-    {
-     "name": "entry",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:entry"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": true,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:entry"
-     },
-     "nullable": true,
-     "mutable": false,
-     "note": "Optional NUL-terminated message owned by and borrowed from the reflog entry."
-    }
-   }
-  },
-  {
-   "name": "git_remote_lookup",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:name"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "out",
-     "ptr": {
-      "scalar": {
-       "by_ref": {
-        "owned": true,
-        "borrowed": null
-       }
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:out"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required writable out-slot receiving a fresh owned remote on success; the result retains the repository pointer."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required repository borrowed and retained by the resulting remote; it must outlive that remote."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_default_branch",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "out",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:out"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required mutable buffer header; output bytes remain owned by the caller and are not retained by the callee."
-     }
-    },
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_refspec_count",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_create_with_fetchspec",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "fetch",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:fetch"
-      },
-      "nullable": true,
-      "mutable": false,
-      "note": "Optional transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:name"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "out",
-     "ptr": {
-      "scalar": {
-       "by_ref": {
-        "owned": true,
-        "borrowed": null
-       }
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:out"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required writable out-slot receiving a fresh owned remote on success; repository-backed results retain the repository pointer."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required repository borrowed and retained by the resulting remote; it must outlive that remote."
-     }
-    },
-    {
-     "name": "url",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:url"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_refspec_src_matches",
-   "defined_in": "src/libgit2/refspec.c",
-   "ptr_args": [
-    {
-     "name": "refname",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:refname"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "refspec",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:refspec"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_delete",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:name"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_get_fetch_refspecs",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "array",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:array"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required mutable output header receiving newly owned strings on success; the caller retains and must dispose the header fields."
-     }
-    },
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_get_push_refspecs",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "array",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:array"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required mutable output header receiving newly owned strings on success; the caller retains and must dispose the header fields."
-     }
-    },
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_refspec_dst_matches",
-   "defined_in": "src/libgit2/refspec.c",
-   "ptr_args": [
-    {
-     "name": "refname",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:refname"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "refspec",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:refspec"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_refspec_force",
-   "defined_in": "src/libgit2/refspec.c",
-   "ptr_args": [
-    {
-     "name": "refspec",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:refspec"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_reflog_write",
-   "defined_in": "src/libgit2/reflog.c",
-   "ptr_args": [
-    {
-     "name": "reflog",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:reflog"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_reflog_rename",
-   "defined_in": "src/libgit2/reflog.c",
-   "ptr_args": [
-    {
-     "name": "new_name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:new_name"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "old_name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:old_name"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_refspec_direction",
-   "defined_in": "src/libgit2/refspec.c",
-   "ptr_args": [
-    {
-     "name": "spec",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:spec"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_reflog_read",
-   "defined_in": "src/libgit2/reflog.c",
-   "ptr_args": [
-    {
-     "name": "name",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:name"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    },
-    {
-     "name": "reflog",
-     "ptr": {
-      "scalar": {
-       "by_ref": {
-        "owned": true,
-        "borrowed": null
-       }
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:reflog"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required writable out-slot receiving a fresh owned reflog on success."
-     }
-    },
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required repository borrowed during lookup; the resulting reflog retains its own refdb count."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_reflog_entry_byindex",
-   "defined_in": "src/libgit2/reflog.c",
-   "ptr_args": [
-    {
-     "name": "reflog",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:reflog"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": false,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:reflog"
-     },
-     "nullable": true,
-     "mutable": false,
-     "note": "Optional entry borrowed from the reflog vector; invalidated by mutation or destruction of the reflog."
-    }
-   }
-  },
-  {
-   "name": "git_remote_name",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": true,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:remote"
-     },
-     "nullable": true,
-     "mutable": false,
-     "note": "Optional name owned by and borrowed from the remote; anonymous and detached remotes have NULL."
-    }
-   }
-  },
-  {
-   "name": "git_refspec_src",
-   "defined_in": "src/libgit2/refspec.c",
-   "ptr_args": [
-    {
-     "name": "refspec",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:refspec"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": true,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:refspec"
-     },
-     "nullable": true,
-     "mutable": false,
-     "note": "Optional source string owned by and borrowed from the refspec."
-    }
-   }
-  },
-  {
-   "name": "git_remote_disconnect",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_remote_create_detached",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "out",
-     "ptr": {
-      "scalar": {
-       "by_ref": {
-        "owned": true,
-        "borrowed": null
-       }
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:out"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required writable out-slot receiving a fresh owned remote on success; repository-backed results retain the repository pointer."
-     }
-    },
-    {
-     "name": "url",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": true,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:url"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Required transient NUL-terminated string; the callee does not retain it."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_refspec_string",
-   "defined_in": "src/libgit2/refspec.c",
-   "ptr_args": [
-    {
-     "name": "refspec",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:refspec"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": true,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:refspec"
-     },
-     "nullable": false,
-     "mutable": false,
-     "note": "Required original string owned by and borrowed from a fully formed refspec."
-    }
-   }
-  },
-  {
-   "name": "git_repository_commondir",
-   "defined_in": "src/libgit2/repository.c",
-   "ptr_args": [
-    {
-     "name": "repo",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:repo"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": true,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:repo"
-     },
-     "nullable": false,
-     "mutable": false,
-     "note": "Required NUL-terminated common-directory path owned by and borrowed from the repository."
-    }
-   }
-  },
-  {
-   "name": "git_remote_pushurl",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": true,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:remote"
-     },
-     "nullable": true,
-     "mutable": false,
-     "note": "Optional push URL owned by and borrowed from the remote."
-    }
-   }
-  },
-  {
-   "name": "git_remote_url",
-   "defined_in": "src/libgit2/remote.c",
-   "ptr_args": [
-    {
-     "name": "remote",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:remote"
-      },
-      "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
-     }
-    }
-   ],
-   "ptr_ret": {
-    "ptr": {
-     "scalar": {
-      "by_val": true
-     },
-     "array": null,
-     "string": true,
-     "owned": false,
-     "borrowed": {
-      "lifetime": "arg:remote"
-     },
-     "nullable": true,
-     "mutable": false,
-     "note": "Optional URL owned by and borrowed from the remote."
-    }
-   }
-  },
-  {
-   "name": "git_reference_iterator_free",
-   "defined_in": "src/libgit2/refs.c",
-   "lifetime": {
-    "for": "iter",
-    "is_dropper": true,
-    "is_disposer": false,
-    "is_cloner": null
-   },
-   "ptr_args": [
-    {
-     "name": "iter",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": true,
-      "mutable": true,
-      "note": "Consumes and destroys a complete iterator; null is explicitly accepted as a no-op."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_cached_obj_decref",
-   "defined_in": "src/libgit2/cache.c",
-   "lifetime": {
-    "for": "_obj",
-    "is_dropper": true,
-    "is_disposer": false,
-    "is_cloner": null
-   },
-   "ptr_args": [
-    {
-     "name": "_obj",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": true,
-      "borrowed": null,
-      "nullable": false,
-      "mutable": true,
-      "note": "Consumes one live git_cached_obj-compatible reference; on the final decrement dispatches destruction by the cache flags."
-     }
-    }
-   ]
-  },
-  {
-   "name": "git_cached_obj_incref",
-   "defined_in": "src/libgit2/cache.h",
-   "lifetime": {
-    "for": "_obj",
-    "is_dropper": false,
-    "is_disposer": false,
-    "is_cloner": {
-     "deep": false,
-     "upref": true
-    }
-   },
-   "ptr_args": [
-    {
-     "name": "_obj",
-     "ptr": {
-      "scalar": {
-       "by_val": true
-      },
-      "array": null,
-      "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "arg:_obj"
-      },
-      "nullable": false,
-      "mutable": true,
-      "note": "Required live git_cached_obj-compatible prefix; increments its atomic refcount without taking the caller's existing reference."
      }
     }
    ]

@@ -129,9 +129,15 @@ pub fn git_reference_name_is_valid(refname: &core::ffi::CStr) -> Result<bool, i3
 /// Wraps: git_reference_normalize_name
 /// Normalizes `name` into `buffer` and returns the resulting C string.
 ///
-/// The numeric `flags` are libgit2's reference-format bit set. An empty
-/// output buffer is rejected without calling C, whose implementation assumes
-/// a positive capacity.
+/// The numeric `flags` are libgit2's reference-format bit set.
+///
+/// An empty output buffer is rejected as [`GIT_EBUFS`] without calling C,
+/// whose capacity check computes `buffer_size - 1` and so wraps to `SIZE_MAX`
+/// for a zero-length buffer; the call then reaches `git_str_copy_cstr`, which
+/// rejects a zero capacity through an argument assertion that aborts in a
+/// hard-assert build.
+///
+/// [`GIT_EBUFS`]: ffi::git_error_code_GIT_EBUFS
 pub fn git_reference_normalize_name<'a>(
     buffer: &'a mut [u8],
     name: &core::ffi::CStr,

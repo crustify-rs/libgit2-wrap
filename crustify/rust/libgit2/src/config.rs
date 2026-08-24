@@ -78,7 +78,11 @@ pub type GitConfigOwned = CBox<GitConfig>;
 ffibox::impl_dropped!(GitConfig, ffi::git_config, ffi::git_config_free);
 
 /// Wraps: git_config_parse_bool
-/// Parses a libgit2 boolean spelling. `None` produces libgit2's parse error.
+/// Parses a libgit2 boolean spelling.
+///
+/// `None` is not an error: `git__parse_bool` treats a missing value as the
+/// bare `[section] key` form and yields `true`. An empty string yields
+/// `false`, and anything else falls through to the integer parser.
 pub fn git_config_parse_bool(value: Option<&core::ffi::CStr>) -> Result<bool, i32> {
     let mut out = 0;
     let value = value.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
@@ -193,6 +197,16 @@ mod tests {
         assert_eq!(git_config_parse_bool(Some(c"off")), Ok(false));
         assert_eq!(git_config_parse_int32(Some(c"2k")), Ok(2048));
         assert_eq!(git_config_parse_int64(Some(c"3m")), Ok(3 * 1024 * 1024));
+    }
+
+    #[test]
+    fn absent_values_follow_each_parser_rather_than_the_pointer() {
+        // A valueless key is `true` for the boolean parser, ...
+        assert_eq!(git_config_parse_bool(None), Ok(true));
+        assert_eq!(git_config_parse_bool(Some(c"")), Ok(false));
+        // ... but the integer parsers reject a missing string outright.
+        assert!(git_config_parse_int32(None).is_err());
+        assert!(git_config_parse_int64(None).is_err());
     }
 
     #[test]

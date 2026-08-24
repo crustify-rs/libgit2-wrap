@@ -139,10 +139,15 @@ where
             return -1;
         }
         // SAFETY: the outer wrapper passes a live exclusive callback pointer
-        // and libgit2 supplies a transient writable run of `size` bytes.
+        // that outlives this synchronous invocation.
         let callback = unsafe { &mut *payload.cast::<C>() };
-        // SAFETY: as above; the slice is confined to this callback invocation.
-        let bytes = unsafe { core::slice::from_raw_parts_mut(buffer.cast::<u8>(), size) };
+        // SAFETY: libgit2 supplies a readable run of `size` bytes that stays
+        // live for the invocation. The borrow is shared because the chunk is
+        // storage libgit2 retains -- a stack header, the packbuilder's own
+        // delta-base OID, or a shared `git_odb_object` cache entry -- and
+        // hashes again after this callback returns; an exclusive slice would
+        // assert a uniqueness the C side does not grant.
+        let bytes = unsafe { core::slice::from_raw_parts(buffer.cast::<u8>(), size) };
         callback.call(bytes)
     }
 

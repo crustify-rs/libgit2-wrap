@@ -2,16 +2,24 @@
 
 /// Wraps: git_packbuilder_foreach_cb
 /// Safe callable surface for chunks emitted by a packbuilder.
+///
+/// The C typedef spells the chunk `void *`, but every emission site in
+/// `pack-objects.c` hands over storage libgit2 keeps and reads again: an
+/// object header on its own stack frame, the delta base OID inside the
+/// packbuilder's object array, or the data of a cached `git_odb_object` other
+/// handles may share. Each one is fed to `git_hash_update` immediately after
+/// the callback returns, so the chunk is read-only for the callee and is
+/// borrowed as a shared slice.
 pub trait GitPackbuilderForeachCallback {
     /// Receives a transient pack-data chunk. Nonzero stops iteration.
-    fn call(&mut self, buffer: &mut [u8]) -> i32;
+    fn call(&mut self, buffer: &[u8]) -> i32;
 }
 
 impl<F> GitPackbuilderForeachCallback for F
 where
-    F: FnMut(&mut [u8]) -> i32,
+    F: FnMut(&[u8]) -> i32,
 {
-    fn call(&mut self, buffer: &mut [u8]) -> i32 {
+    fn call(&mut self, buffer: &[u8]) -> i32 {
         self(buffer)
     }
 }
@@ -38,16 +46,15 @@ mod tests {
 
     #[test]
     fn callback_surfaces_preserve_arguments_and_results() {
-        let mut bytes = [1, 2, 3];
-        let mut chunks = |chunk: &mut [u8]| {
-            chunk[0] = 9;
+        let bytes = [1u8, 2, 3];
+        let mut seen = Vec::new();
+        let mut chunks = |chunk: &[u8]| {
+            seen.extend_from_slice(chunk);
             chunk.len() as i32
         };
-        assert_eq!(
-            GitPackbuilderForeachCallback::call(&mut chunks, &mut bytes),
-            3
-        );
-        assert_eq!(bytes[0], 9);
+        assert_eq!(GitPackbuilderForeachCallback::call(&mut chunks, &bytes), 3);
+        drop(chunks);
+        assert_eq!(seen, vec![1, 2, 3]);
 
         let mut progress = |stage, current, total| stage + current as i32 + total as i32;
         assert_eq!(

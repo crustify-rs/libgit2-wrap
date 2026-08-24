@@ -93,16 +93,21 @@ ffibox::impl_dropped!(
 
 /// Wraps: git_index_matched_path_cb
 /// Safe callable surface for pathspec matches during index updates.
+///
+/// `matched_pathspec` is `None` when the caller supplied no pathspec: every
+/// index callsite forwards the pointer `git_pathspec__match` filled in, and
+/// that routine reports a match with a null pattern for an empty pathspec
+/// list, as `git_index_add_all(index, NULL, ...)` produces.
 pub trait GitIndexMatchedPathCallback {
     /// Returns zero to apply, positive to skip, or negative to abort.
-    fn call(&mut self, path: &core::ffi::CStr, matched_pathspec: &core::ffi::CStr) -> i32;
+    fn call(&mut self, path: &core::ffi::CStr, matched_pathspec: Option<&core::ffi::CStr>) -> i32;
 }
 
 impl<F> GitIndexMatchedPathCallback for F
 where
-    F: FnMut(&core::ffi::CStr, &core::ffi::CStr) -> i32,
+    F: FnMut(&core::ffi::CStr, Option<&core::ffi::CStr>) -> i32,
 {
-    fn call(&mut self, path: &core::ffi::CStr, matched_pathspec: &core::ffi::CStr) -> i32 {
+    fn call(&mut self, path: &core::ffi::CStr, matched_pathspec: Option<&core::ffi::CStr>) -> i32 {
         self(path, matched_pathspec)
     }
 }
@@ -228,15 +233,31 @@ mod callback_tests {
 
     #[test]
     fn matched_path_callback_preserves_control_result() {
-        let mut callback = |path: &core::ffi::CStr, spec: &core::ffi::CStr| {
+        let mut callback = |path: &core::ffi::CStr, spec: Option<&core::ffi::CStr>| {
             assert_eq!(path, c"src/lib.rs");
-            assert_eq!(spec, c"src/*");
+            assert_eq!(spec, Some(c"src/*"));
             1
         };
         assert_eq!(
-            GitIndexMatchedPathCallback::call(&mut callback, c"src/lib.rs", c"src/*"),
+            GitIndexMatchedPathCallback::call(&mut callback, c"src/lib.rs", Some(c"src/*")),
             1
         );
+    }
+
+    #[test]
+    fn matched_path_callback_accepts_an_absent_pathspec() {
+        let mut seen = None;
+        let mut callback = |path: &core::ffi::CStr, spec: Option<&core::ffi::CStr>| {
+            seen = Some(spec.is_none());
+            assert_eq!(path, c"src/lib.rs");
+            0
+        };
+        assert_eq!(
+            GitIndexMatchedPathCallback::call(&mut callback, c"src/lib.rs", None),
+            0
+        );
+        drop(callback);
+        assert_eq!(seen, Some(true));
     }
 }
 

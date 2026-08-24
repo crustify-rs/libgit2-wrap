@@ -11,8 +11,10 @@ use crate::{
     strarray::GitStrArray,
 };
 
-/// Wraps: git_libgit2_opts
 /// A typed invocation of one of libgit2's scalar or string global options.
+///
+/// Each variant fixes one option key together with the exact promoted vararg
+/// types that key reads, which is what makes [`git_libgit2_opts`] safe.
 ///
 /// Options involving allocator callbacks or implementation-specific X.509
 /// pointers are deliberately absent until those dependency types have
@@ -85,6 +87,7 @@ const fn c_bool(value: bool) -> c_int {
     if value { 1 } else { 0 }
 }
 
+/// Wraps: git_libgit2_opts
 /// Applies a typed global option and preserves libgit2's status code.
 pub fn git_libgit2_opts(option: Libgit2Option<'_>) -> Result<(), i32> {
     use Libgit2Option::*;

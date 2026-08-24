@@ -2,7 +2,6 @@
 
 use crate::ffi;
 
-/// Wraps: git_libgit2_features
 /// Compile-time features present in the linked libgit2.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(transparent)]
@@ -34,6 +33,7 @@ impl Libgit2Features {
     }
 }
 
+/// Wraps: git_libgit2_features
 /// Returns the linked library's compile-time feature bit set.
 #[must_use]
 pub fn git_libgit2_features() -> Libgit2Features {
@@ -41,7 +41,6 @@ pub fn git_libgit2_features() -> Libgit2Features {
     Libgit2Features(unsafe { ffi::git_libgit2_features() })
 }
 
-/// Wraps: git_libgit2_version
 /// Runtime version of the linked libgit2 library.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct Libgit2Version {
@@ -50,6 +49,7 @@ pub struct Libgit2Version {
     pub revision: i32,
 }
 
+/// Wraps: git_libgit2_version
 /// Queries the runtime version of the linked libgit2 library.
 pub fn git_libgit2_version() -> Result<Libgit2Version, i32> {
     let (mut major, mut minor, mut revision) = (0, 0, 0);
