@@ -13493,6 +13493,180 @@
    ]
   },
   {
+   "name": "git_repository_config",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows an output slot and writes one newly owned config reference on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the repository and may lazily install its configuration cache; it does not consume the repository."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_discover",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "ceiling_dirs",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ceiling_dirs"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional NUL-terminated ceiling-directory list read only for the call."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a non-null initialized git_buf header and replaces its owned contents on success."
+     }
+    },
+    {
+     "name": "start_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:start_path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required NUL-terminated path read only for the call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_fetchhead_foreach_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Transient optional FETCH_HEAD reference name, valid only during callback invocation."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient required remote URL, valid only during callback invocation."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient pointer to one inline OID, valid only during callback invocation."
+     }
+    },
+    {
+     "name": "arg4",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg4"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional type-erased caller payload; callback code may mutate its concrete state."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_repository_free",
    "defined_in": "src/libgit2/repository.c",
    "lifetime": {
@@ -13515,6 +13689,640 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one repository allocation when non-null; cleans all repository-owned internals, zeros the header, and frees its storage. NULL is explicitly a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_get_namespace",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads the repository namespace pointer without mutating or retaining the repository."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:repo"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional repository-owned NUL string, valid only while the repository remains alive and unchanged."
+    }
+   }
+  },
+  {
+   "name": "git_repository_head",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "head_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:head_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows an output slot and writes one newly owned reference allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the repository and may lazily initialize reference-database state while resolving HEAD."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_head_detached",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the repository and may lazily initialize object/reference database state while inspecting HEAD."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_is_bare",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads the required repository bare flag without mutation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_is_empty",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the repository and may lazily initialize reference/config state while checking its initial branch."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_is_shallow",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads the repository common path and filesystem state without writing through the repository pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_is_worktree",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads the required repository worktree flag without mutation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_mergehead_foreach_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient pointer to one inline OID, valid only during callback invocation."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional type-erased caller payload; callback code may mutate its concrete state."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_message",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a non-null initialized git_buf header and replaces its owned contents with the message."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads the repository path without retaining or mutating the repository."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_message_remove",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads the repository path; it mutates filesystem state but does not write through the repository pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_oid_type",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Reads the object-ID type; the implementation explicitly accepts NULL and returns the zero/default sentinel."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_open",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required NUL-terminated repository path read only during the call."
+     }
+    },
+    {
+     "name": "repo_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows an output slot and writes one newly owned repository allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_open_bare",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "bare_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:bare_path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required NUL-terminated bare repository path read only during the call."
+     }
+    },
+    {
+     "name": "repo_ptr",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo_ptr"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows an output slot and writes one newly owned repository allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_open_ext",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "ceiling_dirs",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ceiling_dirs"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional NUL-terminated ceiling-directory list read only during discovery."
+     }
+    },
+    {
+     "name": "repo_ptr",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo_ptr"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "The implementation accepts a null output slot, but a useful successful call writes one newly owned repository allocation."
+     }
+    },
+    {
+     "name": "start_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:start_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated start path; NULL is supported with GIT_REPOSITORY_OPEN_FROM_ENV."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_open_from_worktree",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows an output slot and writes one newly owned repository allocation on success."
+     }
+    },
+    {
+     "name": "wt",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:wt"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads the required worktree gitlink path without mutating or retaining the worktree."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_path",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads the required repository path pointer without mutation."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:repo"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Repository-owned NUL path tied to the repository; NULL for pathless fake repositories created around an object database."
+    }
+   }
+  },
+  {
+   "name": "git_repository_refdb",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows an output slot and writes one newly owned refdb reference on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the repository and may lazily install its refdb cache; returned refdb/backend pointers retain a repository dependency."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_set_config",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:config"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrows the config for the call; the repository increments its refcount before retaining it."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Mutably borrows the repository while replacing its retained configuration reference."
      }
     }
    ]

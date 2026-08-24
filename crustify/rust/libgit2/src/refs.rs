@@ -233,7 +233,7 @@ mod tests {
     }
 }
 
-fn adopt_reference<'a>(
+pub(crate) fn adopt_reference<'a>(
     status: i32,
     raw: *mut ffi::git_reference,
 ) -> Result<GitReferenceTetheredOwned<'a>, i32> {

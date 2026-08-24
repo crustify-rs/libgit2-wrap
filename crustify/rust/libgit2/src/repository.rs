@@ -1,13 +1,19 @@
 //! Safe wrappers for libgit2 repository APIs.
 
 use core::ffi::{CStr, c_char, c_uint};
+use core::marker::PhantomData;
+use core::ops::{BitOr, BitOrAssign};
 use core::ptr::{addr_of, addr_of_mut};
 
 use ffibox::CBox;
 
+use crate::api::buffer::GitBufMut;
+use crate::config::{GitConfigMut, GitConfigOwned, GitConfigRef};
 use crate::ffi;
-use crate::oid::{InvalidOidType, OidType};
-use crate::refdb::{GitRefdbType, InvalidGitRefdbType};
+use crate::oid::{InvalidOidType, OidRef, OidType};
+use crate::refdb::{GitRefdbMut, GitRefdbOwned, GitRefdbRef, GitRefdbType, InvalidGitRefdbType};
+use crate::refs::{GitReferenceTetheredOwned, adopt_reference};
+use crate::worktree::GitWorktreeRef;
 
 ffibox::define_ctype!(
     /// Wraps: git_repository
@@ -23,7 +29,8 @@ ffibox::define_ctype!(
     ffi::git_repository
 );
 
-/// An owned libgit2 repository allocation.
+/// Wraps: git_repository_free
+/// An owned libgit2 repository allocation, released on drop.
 pub type GitRepositoryOwned = CBox<GitRepository>;
 
 // SAFETY: `git_repository_free` is the public destructor for a complete
@@ -425,6 +432,492 @@ mod init_options_tests {
         assert_eq!(
             options.as_ref().refdb_type().unwrap_err().value(),
             invalid_refdb
+        );
+    }
+}
+
+/// An owned configuration whose repository-dependent backends remain tied to
+/// the repository borrow that produced it.
+pub struct GitRepositoryConfigOwned<'repo> {
+    inner: GitConfigOwned,
+    _repository: PhantomData<GitRepositoryRef<'repo>>,
+}
+
+impl GitRepositoryConfigOwned<'_> {
+    /// Borrows the configuration.
+    #[must_use]
+    pub fn as_ref(&self) -> GitConfigRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the configuration exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitConfigMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+/// An owned reference database tied to the repository retained by its backend.
+pub struct GitRepositoryRefdbOwned<'repo> {
+    inner: GitRefdbOwned,
+    _repository: PhantomData<GitRepositoryRef<'repo>>,
+}
+
+impl GitRepositoryRefdbOwned<'_> {
+    /// Borrows the reference database.
+    #[must_use]
+    pub fn as_ref(&self) -> GitRefdbRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the reference database exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitRefdbMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+/// Wraps: git_repository_config
+/// Returns one owned count of the repository configuration.
+pub fn git_repository_config<'repo>(
+    repository: &'repo mut GitRepositoryMut<'_>,
+) -> Result<GitRepositoryConfigOwned<'repo>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and the exclusive repository handle
+    // is live. Success transfers one independently releasable config count.
+    let status = unsafe { ffi::git_repository_config(&mut output, repository.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: a successful call returns one live owned config count. Its
+    // repository-dependent backends are kept valid by the result lifetime.
+    let inner = unsafe { GitConfigOwned::from_raw(output) }
+        .expect("git_repository_config succeeded without a config");
+    Ok(GitRepositoryConfigOwned {
+        inner,
+        _repository: PhantomData,
+    })
+}
+
+/// Wraps: git_repository_discover
+/// Finds a repository and writes its Git-directory path into `output`.
+pub fn git_repository_discover(
+    output: &mut GitBufMut<'_>,
+    start_path: &CStr,
+    across_filesystems: bool,
+    ceiling_directories: Option<&CStr>,
+) -> Result<(), i32> {
+    let ceilings = ceiling_directories.map_or(core::ptr::null(), CStr::as_ptr);
+    // SAFETY: the buffer is live and exclusive, both string pointers are live
+    // or null as permitted, and libgit2 retains none of the arguments.
+    let status = unsafe {
+        ffi::git_repository_discover(
+            output.as_mut_ptr(),
+            start_path.as_ptr(),
+            i32::from(across_filesystems),
+            ceilings,
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_fetchhead_foreach_cb
+/// Safe callable surface for entries read from `FETCH_HEAD`.
+pub trait GitRepositoryFetchheadForeachCallback {
+    /// Receives one transient entry. A nonzero result stops iteration.
+    fn call(
+        &mut self,
+        reference_name: Option<&CStr>,
+        remote_url: &CStr,
+        oid: OidRef<'_>,
+        is_merge: bool,
+    ) -> i32;
+}
+
+impl<F> GitRepositoryFetchheadForeachCallback for F
+where
+    F: FnMut(Option<&CStr>, &CStr, OidRef<'_>, bool) -> i32,
+{
+    fn call(
+        &mut self,
+        reference_name: Option<&CStr>,
+        remote_url: &CStr,
+        oid: OidRef<'_>,
+        is_merge: bool,
+    ) -> i32 {
+        self(reference_name, remote_url, oid, is_merge)
+    }
+}
+
+/// Wraps: git_repository_get_namespace
+/// Borrows the active namespace, if one is configured.
+#[must_use]
+pub fn git_repository_get_namespace<'repo>(
+    repository: GitRepositoryRef<'repo>,
+) -> Option<&'repo CStr> {
+    // SAFETY: the repository is live for `'repo`; the returned pointer is null
+    // or a repository-owned NUL string with the same lifetime.
+    let namespace = unsafe { ffi::git_repository_get_namespace(repository.as_ptr().cast_mut()) };
+    if namespace.is_null() {
+        None
+    } else {
+        // SAFETY: justified by the libgit2 return contract above.
+        Some(unsafe { CStr::from_ptr(namespace) })
+    }
+}
+
+/// Wraps: git_repository_head
+/// Resolves `HEAD` and ties the returned reference to its repository.
+pub fn git_repository_head<'repo>(
+    repository: &'repo mut GitRepositoryMut<'_>,
+) -> Result<GitReferenceTetheredOwned<'repo>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and the repository is live and
+    // exclusive for cache initialization during reference resolution.
+    let status = unsafe { ffi::git_repository_head(&mut output, repository.as_mut_ptr()) };
+    adopt_reference(status, output)
+}
+
+/// Wraps: git_repository_head_detached
+/// Reports whether `HEAD` directly names an existing object.
+pub fn git_repository_head_detached(repository: &mut GitRepositoryMut<'_>) -> Result<bool, i32> {
+    // SAFETY: the repository is live and exclusive for any lazy database
+    // initialization performed while resolving HEAD.
+    let status = unsafe { ffi::git_repository_head_detached(repository.as_mut_ptr()) };
+    if status < 0 {
+        Err(status)
+    } else {
+        Ok(status != 0)
+    }
+}
+
+/// Wraps: git_repository_is_bare
+/// Reports whether the repository has no working directory.
+#[must_use]
+pub fn git_repository_is_bare(repository: GitRepositoryRef<'_>) -> bool {
+    // SAFETY: the required shared repository is live and retained only for the call.
+    unsafe { ffi::git_repository_is_bare(repository.as_ptr()) != 0 }
+}
+
+/// Wraps: git_repository_is_empty
+/// Reports whether the repository has no references and an unborn initial branch.
+pub fn git_repository_is_empty(repository: &mut GitRepositoryMut<'_>) -> Result<bool, i32> {
+    // SAFETY: the repository is live and exclusive for lazy reference/config
+    // initialization performed by the check.
+    let status = unsafe { ffi::git_repository_is_empty(repository.as_mut_ptr()) };
+    if status < 0 {
+        Err(status)
+    } else {
+        Ok(status != 0)
+    }
+}
+
+/// Wraps: git_repository_is_shallow
+/// Reports whether the repository has a nonempty shallow-boundary file.
+pub fn git_repository_is_shallow(repository: GitRepositoryRef<'_>) -> Result<bool, i32> {
+    // SAFETY: the shared repository and its common-directory string are live;
+    // the function writes only temporary and filesystem state.
+    let status = unsafe { ffi::git_repository_is_shallow(repository.as_ptr().cast_mut()) };
+    if status < 0 {
+        Err(status)
+    } else {
+        Ok(status != 0)
+    }
+}
+
+/// Wraps: git_repository_is_worktree
+/// Reports whether this repository represents a linked worktree.
+#[must_use]
+pub fn git_repository_is_worktree(repository: GitRepositoryRef<'_>) -> bool {
+    // SAFETY: the required shared repository is live and retained only for the call.
+    unsafe { ffi::git_repository_is_worktree(repository.as_ptr()) != 0 }
+}
+
+/// Wraps: git_repository_mergehead_foreach_cb
+/// Safe callable surface for object IDs read from `MERGE_HEAD`.
+pub trait GitRepositoryMergeheadForeachCallback {
+    /// Receives one transient merge-head object ID. Nonzero stops iteration.
+    fn call(&mut self, oid: OidRef<'_>) -> i32;
+}
+
+impl<F> GitRepositoryMergeheadForeachCallback for F
+where
+    F: FnMut(OidRef<'_>) -> i32,
+{
+    fn call(&mut self, oid: OidRef<'_>) -> i32 {
+        self(oid)
+    }
+}
+
+/// Wraps: git_repository_message
+/// Reads the prepared commit message into `output`.
+pub fn git_repository_message(
+    output: &mut GitBufMut<'_>,
+    repository: GitRepositoryRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: the output buffer is live and exclusive and the repository is a
+    // live shared input; neither pointer is retained.
+    let status =
+        unsafe { ffi::git_repository_message(output.as_mut_ptr(), repository.as_ptr().cast_mut()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_message_remove
+/// Removes the repository's prepared commit message.
+pub fn git_repository_message_remove(repository: GitRepositoryRef<'_>) -> Result<(), i32> {
+    // SAFETY: the shared repository and its path remain live for the call; the
+    // function mutates filesystem state but not repository memory.
+    let status = unsafe { ffi::git_repository_message_remove(repository.as_ptr().cast_mut()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_oid_type
+/// Returns the repository hash algorithm, or `None` for a null repository.
+pub fn git_repository_oid_type(
+    repository: Option<GitRepositoryRef<'_>>,
+) -> Result<Option<OidType>, InvalidOidType> {
+    let repository = repository.map_or(core::ptr::null_mut(), |repo| repo.as_ptr().cast_mut());
+    // SAFETY: the pointer is null or a live shared repository. This accessor
+    // only reads its scalar algorithm field.
+    let raw = unsafe { ffi::git_repository_oid_type(repository) };
+    if raw == 0 {
+        Ok(None)
+    } else {
+        OidType::try_from(raw).map(Some)
+    }
+}
+
+/// Flags controlling repository discovery and opening.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct GitRepositoryOpenFlags(u32);
+
+impl GitRepositoryOpenFlags {
+    /// No optional discovery behavior.
+    pub const EMPTY: Self = Self(0);
+    /// Do not search parent directories.
+    pub const NO_SEARCH: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_NO_SEARCH);
+    /// Permit discovery across filesystem boundaries.
+    pub const CROSS_FS: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_CROSS_FS);
+    /// Open as bare and defer configuration loading.
+    pub const BARE: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_BARE);
+    /// Do not append `.git` while searching.
+    pub const NO_DOTGIT: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_NO_DOTGIT);
+    /// Respect Git environment variables.
+    pub const FROM_ENV: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_FROM_ENV);
+    /// Every flag currently published by libgit2.
+    pub const ALL: Self = Self(
+        Self::NO_SEARCH.0 | Self::CROSS_FS.0 | Self::BARE.0 | Self::NO_DOTGIT.0 | Self::FROM_ENV.0,
+    );
+
+    /// Creates flags when every bit is published.
+    #[must_use]
+    pub const fn from_bits(bits: u32) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the raw C bit set.
+    #[must_use]
+    pub const fn bits(self) -> u32 {
+        self.0
+    }
+
+    /// Returns whether every bit in `other` is set.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+}
+
+impl BitOr for GitRepositoryOpenFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitRepositoryOpenFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+fn adopt_repository(status: i32, raw: *mut ffi::git_repository) -> Result<GitRepositoryOwned, i32> {
+    if status == 0 {
+        // SAFETY: successful open functions transfer one fully constructed
+        // repository allocation to their output slot.
+        Ok(unsafe { GitRepositoryOwned::from_raw(raw) }
+            .expect("repository open succeeded without returning a repository"))
+    } else {
+        if !raw.is_null() {
+            // SAFETY: a populated error output is still an owned complete
+            // repository allocation that the wrapper must release.
+            drop(unsafe { GitRepositoryOwned::from_raw(raw) });
+        }
+        Err(status)
+    }
+}
+
+/// Wraps: git_repository_open
+/// Opens the repository located exactly at `path`.
+pub fn git_repository_open(path: &CStr) -> Result<GitRepositoryOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and `path` is a live C string that
+    // libgit2 does not retain.
+    let status = unsafe { ffi::git_repository_open(&mut output, path.as_ptr()) };
+    adopt_repository(status, output)
+}
+
+/// Wraps: git_repository_open_bare
+/// Opens a bare repository directly and without discovery.
+pub fn git_repository_open_bare(path: &CStr) -> Result<GitRepositoryOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and `path` is a live C string that
+    // libgit2 does not retain.
+    let status = unsafe { ffi::git_repository_open_bare(&mut output, path.as_ptr()) };
+    adopt_repository(status, output)
+}
+
+/// Wraps: git_repository_open_ext
+/// Discovers and opens a repository with explicit search controls.
+pub fn git_repository_open_ext(
+    start_path: Option<&CStr>,
+    flags: GitRepositoryOpenFlags,
+    ceiling_directories: Option<&CStr>,
+) -> Result<GitRepositoryOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    let start_path = start_path.map_or(core::ptr::null(), CStr::as_ptr);
+    let ceilings = ceiling_directories.map_or(core::ptr::null(), CStr::as_ptr);
+    // SAFETY: the output slot is writable; both input pointers are null or
+    // live C strings and are not retained. Null start paths are supported by
+    // the `FROM_ENV` mode and rejected by libgit2 otherwise.
+    let status =
+        unsafe { ffi::git_repository_open_ext(&mut output, start_path, flags.bits(), ceilings) };
+    adopt_repository(status, output)
+}
+
+/// Wraps: git_repository_open_from_worktree
+/// Opens the repository associated with a linked worktree.
+pub fn git_repository_open_from_worktree(
+    worktree: GitWorktreeRef<'_>,
+) -> Result<GitRepositoryOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and the shared worktree is live;
+    // libgit2 reads its path and retains no worktree pointer.
+    let status = unsafe {
+        ffi::git_repository_open_from_worktree(&mut output, worktree.as_ptr().cast_mut())
+    };
+    adopt_repository(status, output)
+}
+
+/// Wraps: git_repository_path
+/// Borrows the repository's Git-directory path, when it has one.
+#[must_use]
+pub fn git_repository_path<'repo>(repository: GitRepositoryRef<'repo>) -> Option<&'repo CStr> {
+    // SAFETY: the repository is live for `'repo`; the returned pointer is null
+    // for a pathless fake repository or a repository-owned NUL string.
+    let path = unsafe { ffi::git_repository_path(repository.as_ptr()) };
+    if path.is_null() {
+        None
+    } else {
+        // SAFETY: justified by the libgit2 return contract above.
+        Some(unsafe { CStr::from_ptr(path) })
+    }
+}
+
+/// Wraps: git_repository_refdb
+/// Returns one owned refdb count tied to its backing repository.
+pub fn git_repository_refdb<'repo>(
+    repository: &'repo mut GitRepositoryMut<'_>,
+) -> Result<GitRepositoryRefdbOwned<'repo>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and the exclusive repository handle
+    // is live. Success transfers one independently releasable refdb count.
+    let status = unsafe { ffi::git_repository_refdb(&mut output, repository.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one live refdb count; the result lifetime keeps
+    // every repository pointer retained by the refdb and backend valid.
+    let inner = unsafe { GitRefdbOwned::from_raw(output) }
+        .expect("git_repository_refdb succeeded without a refdb");
+    Ok(GitRepositoryRefdbOwned {
+        inner,
+        _repository: PhantomData,
+    })
+}
+
+/// Wraps: git_repository_set_config
+/// Replaces the repository configuration, consuming a standalone config count.
+///
+/// Libgit2 retains a new internal count before this wrapper releases the
+/// supplied one. Consuming the owner prevents safe code from installing a
+/// repository-tethered configuration whose backend could outlive its original
+/// repository, and prevents simultaneous mutable access through a surviving
+/// external config owner.
+pub fn git_repository_set_config(
+    repository: &mut GitRepositoryMut<'_>,
+    config: GitConfigOwned,
+) -> Result<(), i32> {
+    // SAFETY: both handles are live, the repository is exclusive, and
+    // libgit2 increments the config count before retaining its pointer.
+    let status = unsafe {
+        ffi::git_repository_set_config(repository.as_mut_ptr(), config.as_ref().as_ptr().cast_mut())
+    };
+    // The caller's count is released here; on success the repository's count
+    // keeps the config alive, and on failure consuming the input is harmless.
+    drop(config);
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod symbol_tests {
+    use super::*;
+    use crate::oid::Oid;
+
+    #[test]
+    fn open_flags_validate_and_combine_bits() {
+        let flags = GitRepositoryOpenFlags::NO_SEARCH | GitRepositoryOpenFlags::CROSS_FS;
+        assert!(flags.contains(GitRepositoryOpenFlags::NO_SEARCH));
+        assert!(flags.contains(GitRepositoryOpenFlags::CROSS_FS));
+        assert_eq!(GitRepositoryOpenFlags::from_bits(flags.bits()), Some(flags));
+        assert_eq!(
+            GitRepositoryOpenFlags::from_bits(GitRepositoryOpenFlags::ALL.bits() << 1),
+            None
+        );
+    }
+
+    #[test]
+    fn callback_surfaces_preserve_safe_arguments() {
+        let oid = Oid::zeroed();
+        let raw = core::ptr::addr_of!(oid).cast::<ffi::git_oid>().cast_mut();
+        // SAFETY: `raw` addresses the live layout-compatible local OID for the
+        // duration of both callback invocations.
+        let oid = unsafe { OidRef::from_ptr(raw) }.expect("local address is non-null");
+
+        let mut fetch = |name: Option<&CStr>, url: &CStr, _: OidRef<'_>, merge: bool| {
+            i32::from(name == Some(c"refs/heads/main") && url == c"origin" && merge)
+        };
+        assert_eq!(
+            GitRepositoryFetchheadForeachCallback::call(
+                &mut fetch,
+                Some(c"refs/heads/main"),
+                c"origin",
+                oid,
+                true,
+            ),
+            1
+        );
+
+        let mut merge = |value: OidRef<'_>| i32::from(value.as_ptr() == oid.as_ptr());
+        assert_eq!(
+            GitRepositoryMergeheadForeachCallback::call(&mut merge, oid),
+            1
         );
     }
 }
