@@ -1020,6 +1020,77 @@
    ]
   },
   {
+   "name": "git_diff_format_email_options",
+   "defined_in": "include/git2/deprecated.h",
+   "_comment_agent": "All four pointers are non-owning inputs. The default initializer stores NULL in each slot; git_diff_format_email requires id, author and summary at call time while body remains optional. The pointed-to values are only read synchronously and are never retained or released by this options value.",
+   "fields": [
+    {
+     "name": "author",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed signature; default NULL, required by git_diff_format_email."
+     }
+    },
+    {
+     "name": "body",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed NUL-terminated commit body."
+     }
+    },
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed object ID; default NULL, required by git_diff_format_email."
+     }
+    },
+    {
+     "name": "summary",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed NUL-terminated summary; default NULL, required by git_diff_format_email."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_line",
    "defined_in": "include/git2/diff.h",
    "_comment_agent": "Review wave correction: borrowed.lifetime was recorded as 'self' (the enclosing git_diff_line). No borrowing path stores the bytes inside the line record; every one of them points into another object's storage (generated patch file content, print buffer, or caller buffer), so the field-oriented source is 'other'. The owned path (parsed patches) is unchanged and is what patch_parsed__free releases. Verified against src/libgit2/patch_parse.c:659,701,1154-1156, src/libgit2/diff_xdiff.c:67-80, src/libgit2/diff_print.c:677 and src/libgit2/apply.c:46-55.",
@@ -1039,6 +1110,98 @@
       "nullable": true,
       "mutable": false,
       "note": "Counted, non-NUL-terminated bytes; content_len is the byte count and the pointer is never written through. Runtime-conditional ownership. Owned path: patch_parse.c stores git__strndup results (parse_hunk_body, parse_hunk_body_line) and patch_parsed__free releases each line->content. Borrowed path: the storage always belongs to some OTHER object, never to the enclosing git_diff_line -- diff_xdiff.c's diff_update_lines points at the xdiff mmbuffer backed by the generated patch's loaded ofile/nfile content, diff_print.c's diff_print_patch_file_binary points at the print info's git_str buffer, and apply.c's patch_line_init points at the caller's input buffer. Public observations therefore bind the bytes to the containing patch or to the callback invocation, not to the line record itself. Zero-initialized and empty construction paths permit NULL with length zero."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_similarity_metric",
+   "defined_in": "include/git2/diff.h",
+   "_comment_agent": "A metric is a borrowed callback table. payload is an opaque application cookie passed unchanged to every callback; signatures returned by file_signature/buffer_signature are owned by that callback protocol and later released through free_signature, not by the metric struct itself. A valid installed metric supplies all four callbacks.",
+   "fields": [
+    {
+     "name": "buffer_signature",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required code pointer; creates an owned opaque signature token from borrowed buffer input."
+     }
+    },
+    {
+     "name": "file_signature",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required code pointer; creates an owned opaque signature token from a borrowed file/path input."
+     }
+    },
+    {
+     "name": "free_signature",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required code pointer; releases signature tokens using the paired payload."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque borrowed callback cookie, passed through unchanged; callbacks may mutate its referent."
+     }
+    },
+    {
+     "name": "similarity",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required code pointer in every valid installed metric."
      }
     }
    ]

@@ -504,3 +504,417 @@ mod parse_options_tests {
         assert_eq!(options.oid_type().unwrap_err().value(), invalid);
     }
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_diff_similarity_metric
+    /// A layout-compatible borrowed table of similarity callbacks.
+    DiffSimilarityMetric,
+    DiffSimilarityMetricRef,
+    DiffSimilarityMetricMut,
+    ffi::git_diff_similarity_metric
+);
+
+// SAFETY: the table owns neither its callback code nor its opaque payload, so
+// disposing an inline table requires no action.
+unsafe impl CValued for DiffSimilarityMetric {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+/// The C ABI for a callback that creates a signature from a file path.
+pub type DiffFileSignatureCallback = unsafe extern "C" fn(
+    *mut *mut core::ffi::c_void,
+    *const ffi::git_diff_file,
+    *const core::ffi::c_char,
+    *mut core::ffi::c_void,
+) -> core::ffi::c_int;
+
+/// The C ABI for a callback that creates a signature from buffered content.
+pub type DiffBufferSignatureCallback = unsafe extern "C" fn(
+    *mut *mut core::ffi::c_void,
+    *const ffi::git_diff_file,
+    *const core::ffi::c_char,
+    usize,
+    *mut core::ffi::c_void,
+) -> core::ffi::c_int;
+
+/// The C ABI for a callback that releases an opaque signature.
+pub type DiffFreeSignatureCallback =
+    unsafe extern "C" fn(*mut core::ffi::c_void, *mut core::ffi::c_void);
+
+/// The C ABI for a callback that compares two opaque signatures.
+pub type DiffSimilarityCallback = unsafe extern "C" fn(
+    *mut core::ffi::c_int,
+    *mut core::ffi::c_void,
+    *mut core::ffi::c_void,
+    *mut core::ffi::c_void,
+) -> core::ffi::c_int;
+
+/// A failure to invoke a similarity-metric callback safely.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DiffSimilarityError {
+    /// The file-signature callback is absent.
+    MissingFileSignature,
+    /// The buffer-signature callback is absent.
+    MissingBufferSignature,
+    /// The signature destructor is absent.
+    MissingFreeSignature,
+    /// The comparison callback is absent.
+    MissingSimilarity,
+    /// A callback reported a libgit2 error code.
+    Callback(core::ffi::c_int),
+    /// A signature came from a different metric table.
+    ForeignSignature,
+}
+
+/// An opaque callback-produced signature tied to its metric table.
+pub struct DiffSimilaritySignature<'a> {
+    ptr: NonNull<core::ffi::c_void>,
+    metric: NonNull<ffi::git_diff_similarity_metric>,
+    payload: *mut core::ffi::c_void,
+    free: DiffFreeSignatureCallback,
+    _lifetime: core::marker::PhantomData<DiffSimilarityMetricRef<'a>>,
+}
+
+impl Drop for DiffSimilaritySignature<'_> {
+    fn drop(&mut self) {
+        // SAFETY: this token was produced by one of the table's signature
+        // callbacks and carries that same table's required destructor and
+        // payload. It is consumed exactly once here.
+        unsafe { (self.free)(self.ptr.as_ptr(), self.payload) }
+    }
+}
+
+impl<'a> DiffSimilarityMetricRef<'a> {
+    /// Field: git_diff_similarity_metric.payload
+    /// Returns whether the metric carries an application payload.
+    #[must_use]
+    pub fn has_payload(&self) -> bool {
+        // SAFETY: this live shared handle permits a raw-place pointer read.
+        !unsafe { addr_of!((*self.as_ptr()).payload).read() }.is_null()
+    }
+
+    /// Field: git_diff_similarity_metric.file_signature
+    /// Creates an owned opaque signature for a file path.
+    pub fn file_signature(
+        &self,
+        file: crate::diff::DiffFileRef<'_>,
+        fullpath: &core::ffi::CStr,
+    ) -> Result<Option<DiffSimilaritySignature<'a>>, DiffSimilarityError> {
+        // SAFETY: this live shared handle permits raw-place reads of the
+        // initialized callback table.
+        let (callback, free, payload) = unsafe {
+            (
+                addr_of!((*self.as_ptr()).file_signature).read(),
+                addr_of!((*self.as_ptr()).free_signature).read(),
+                addr_of!((*self.as_ptr()).payload).read(),
+            )
+        };
+        let callback = callback.ok_or(DiffSimilarityError::MissingFileSignature)?;
+        let free = free.ok_or(DiffSimilarityError::MissingFreeSignature)?;
+        let mut signature = core::ptr::null_mut();
+        // SAFETY: all borrowed inputs remain live for this synchronous call,
+        // `signature` is a valid output slot, and the table's validity
+        // contract couples the callback to its payload.
+        let error = unsafe { callback(&mut signature, file.as_ptr(), fullpath.as_ptr(), payload) };
+        self.finish_signature(error, signature, free, payload)
+    }
+
+    /// Field: git_diff_similarity_metric.buffer_signature
+    /// Creates an owned opaque signature for buffered file content.
+    pub fn buffer_signature(
+        &self,
+        file: crate::diff::DiffFileRef<'_>,
+        buffer: &[u8],
+    ) -> Result<Option<DiffSimilaritySignature<'a>>, DiffSimilarityError> {
+        // SAFETY: this live shared handle permits raw-place reads of the
+        // initialized callback table.
+        let (callback, free, payload) = unsafe {
+            (
+                addr_of!((*self.as_ptr()).buffer_signature).read(),
+                addr_of!((*self.as_ptr()).free_signature).read(),
+                addr_of!((*self.as_ptr()).payload).read(),
+            )
+        };
+        let callback = callback.ok_or(DiffSimilarityError::MissingBufferSignature)?;
+        let free = free.ok_or(DiffSimilarityError::MissingFreeSignature)?;
+        let mut signature = core::ptr::null_mut();
+        // SAFETY: the file and buffer remain live for this synchronous call,
+        // `signature` is a valid output slot, and the table's validity
+        // contract couples the callback to its payload.
+        let error = unsafe {
+            callback(
+                &mut signature,
+                file.as_ptr(),
+                buffer.as_ptr().cast(),
+                buffer.len(),
+                payload,
+            )
+        };
+        self.finish_signature(error, signature, free, payload)
+    }
+
+    /// Field: git_diff_similarity_metric.free_signature
+    /// Returns whether callback-produced signatures have a destructor.
+    #[must_use]
+    pub fn has_free_signature(&self) -> bool {
+        // SAFETY: this live shared handle permits a raw-place callback read.
+        unsafe { addr_of!((*self.as_ptr()).free_signature).read() }.is_some()
+    }
+
+    /// Field: git_diff_similarity_metric.similarity
+    /// Computes the score for two signatures produced by this table.
+    pub fn similarity(
+        &self,
+        left: &DiffSimilaritySignature<'a>,
+        right: &DiffSimilaritySignature<'a>,
+    ) -> Result<core::ffi::c_int, DiffSimilarityError> {
+        if left.metric.as_ptr().cast_const() != self.as_ptr()
+            || right.metric.as_ptr().cast_const() != self.as_ptr()
+        {
+            return Err(DiffSimilarityError::ForeignSignature);
+        }
+        // SAFETY: this live shared handle permits raw-place reads of the
+        // initialized callback table.
+        let (callback, payload) = unsafe {
+            (
+                addr_of!((*self.as_ptr()).similarity).read(),
+                addr_of!((*self.as_ptr()).payload).read(),
+            )
+        };
+        let callback = callback.ok_or(DiffSimilarityError::MissingSimilarity)?;
+        let mut score = 0;
+        // SAFETY: both opaque tokens were produced by this exact metric and
+        // remain live for the synchronous comparison; `score` is writable.
+        let error = unsafe { callback(&mut score, left.ptr.as_ptr(), right.ptr.as_ptr(), payload) };
+        if error < 0 {
+            Err(DiffSimilarityError::Callback(error))
+        } else {
+            Ok(score)
+        }
+    }
+
+    fn finish_signature(
+        &self,
+        error: core::ffi::c_int,
+        signature: *mut core::ffi::c_void,
+        free: DiffFreeSignatureCallback,
+        payload: *mut core::ffi::c_void,
+    ) -> Result<Option<DiffSimilaritySignature<'a>>, DiffSimilarityError> {
+        if error < 0 {
+            if let Some(signature) = NonNull::new(signature) {
+                // SAFETY: even on failure libgit2's callback protocol cleans
+                // up a non-null output with the table's paired destructor.
+                unsafe { free(signature.as_ptr(), payload) }
+            }
+            return Err(DiffSimilarityError::Callback(error));
+        }
+        Ok(NonNull::new(signature).map(|ptr| DiffSimilaritySignature {
+            ptr,
+            metric: NonNull::new(self.as_ptr().cast_mut())
+                .expect("a live borrowed handle is non-null"),
+            payload,
+            free,
+            _lifetime: core::marker::PhantomData,
+        }))
+    }
+}
+
+impl DiffSimilarityMetricMut<'_> {
+    /// Stores an opaque borrowed callback payload.
+    ///
+    /// # Safety
+    ///
+    /// A non-null payload must remain valid for every callback invocation
+    /// through this table, including invocations after this handle is gone.
+    pub unsafe fn set_borrowed_payload(&mut self, payload: Option<NonNull<core::ffi::c_void>>) {
+        let payload = payload.map_or(core::ptr::null_mut(), NonNull::as_ptr);
+        // SAFETY: this exclusive handle permits the write and the caller
+        // upholds the erased borrow's lifetime and callback-specific validity.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).payload).write(payload) }
+    }
+
+    /// Installs the file-signature callback.
+    ///
+    /// # Safety
+    ///
+    /// The callback must obey its C ABI contract and be compatible with the
+    /// installed payload and signature destructor.
+    pub unsafe fn set_file_signature(&mut self, callback: DiffFileSignatureCallback) {
+        // SAFETY: this exclusive handle permits the callback-slot write; the
+        // caller supplies the semantic callback contract.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).file_signature).write(Some(callback)) }
+    }
+
+    /// Installs the buffer-signature callback.
+    ///
+    /// # Safety
+    ///
+    /// The callback must obey its C ABI contract and be compatible with the
+    /// installed payload and signature destructor.
+    pub unsafe fn set_buffer_signature(&mut self, callback: DiffBufferSignatureCallback) {
+        // SAFETY: this exclusive handle permits the callback-slot write; the
+        // caller supplies the semantic callback contract.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).buffer_signature).write(Some(callback)) }
+    }
+
+    /// Installs the signature destructor.
+    ///
+    /// # Safety
+    ///
+    /// The callback must release every non-null token produced by both
+    /// installed signature callbacks, using the installed payload.
+    pub unsafe fn set_free_signature(&mut self, callback: DiffFreeSignatureCallback) {
+        // SAFETY: this exclusive handle permits the callback-slot write; the
+        // caller supplies the semantic callback contract.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).free_signature).write(Some(callback)) }
+    }
+
+    /// Installs the signature-comparison callback.
+    ///
+    /// # Safety
+    ///
+    /// The callback must accept tokens made by both signature callbacks and
+    /// obey its C ABI contract with the installed payload.
+    pub unsafe fn set_similarity(&mut self, callback: DiffSimilarityCallback) {
+        // SAFETY: this exclusive handle permits the callback-slot write; the
+        // caller supplies the semantic callback contract.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).similarity).write(Some(callback)) }
+    }
+}
+
+#[cfg(test)]
+mod similarity_metric_tests {
+    use core::mem::{align_of, size_of};
+
+    use ffibox::{CCell, CValued};
+
+    use super::*;
+
+    #[derive(Default)]
+    struct Payload {
+        calls: usize,
+        frees: usize,
+    }
+
+    unsafe extern "C" fn file_signature(
+        out: *mut *mut core::ffi::c_void,
+        _file: *const ffi::git_diff_file,
+        fullpath: *const core::ffi::c_char,
+        payload: *mut core::ffi::c_void,
+    ) -> core::ffi::c_int {
+        // SAFETY: the test installs this callback with valid pointers and a
+        // NUL-terminated path for the duration of each invocation.
+        unsafe {
+            assert_eq!(core::ffi::CStr::from_ptr(fullpath), c"file");
+            (*payload.cast::<Payload>()).calls += 1;
+            *out = payload;
+        }
+        0
+    }
+
+    unsafe extern "C" fn buffer_signature(
+        out: *mut *mut core::ffi::c_void,
+        _file: *const ffi::git_diff_file,
+        buffer: *const core::ffi::c_char,
+        len: usize,
+        payload: *mut core::ffi::c_void,
+    ) -> core::ffi::c_int {
+        // SAFETY: the test passes three initialized bytes and valid output and
+        // payload pointers for this synchronous callback.
+        unsafe {
+            assert_eq!(
+                core::slice::from_raw_parts(buffer.cast::<u8>(), len),
+                b"buf"
+            );
+            (*payload.cast::<Payload>()).calls += 1;
+            *out = payload;
+        }
+        0
+    }
+
+    unsafe extern "C" fn free_signature(
+        signature: *mut core::ffi::c_void,
+        payload: *mut core::ffi::c_void,
+    ) {
+        assert_eq!(signature, payload);
+        // SAFETY: the test payload remains live and exclusively accessed by
+        // these sequential callbacks.
+        unsafe { (*payload.cast::<Payload>()).frees += 1 }
+    }
+
+    unsafe extern "C" fn similarity(
+        score: *mut core::ffi::c_int,
+        left: *mut core::ffi::c_void,
+        right: *mut core::ffi::c_void,
+        payload: *mut core::ffi::c_void,
+    ) -> core::ffi::c_int {
+        assert_eq!(left, payload);
+        assert_eq!(right, payload);
+        // SAFETY: the wrapper supplies a valid writable score slot.
+        unsafe { *score = 91 }
+        0
+    }
+
+    #[test]
+    fn metric_preserves_layout_and_inline_ownership() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_valued<T: CValued>() {}
+
+        assert_cell::<DiffSimilarityMetric>();
+        assert_valued::<DiffSimilarityMetric>();
+        assert_eq!(
+            size_of::<DiffSimilarityMetric>(),
+            size_of::<ffi::git_diff_similarity_metric>()
+        );
+        assert_eq!(
+            align_of::<DiffSimilarityMetric>(),
+            align_of::<ffi::git_diff_similarity_metric>()
+        );
+        assert_eq!(
+            size_of::<DiffSimilarityMetricRef<'_>>(),
+            size_of::<*const ffi::git_diff_similarity_metric>()
+        );
+        assert_eq!(
+            size_of::<DiffSimilarityMetricMut<'_>>(),
+            size_of::<*mut ffi::git_diff_similarity_metric>()
+        );
+    }
+
+    #[test]
+    fn callbacks_create_compare_and_release_opaque_signatures() {
+        let mut payload = Payload::default();
+        let mut metric = CVal::new(DiffSimilarityMetric::zeroed());
+        {
+            let mut metric_mut = metric.as_mut();
+            // SAFETY: the payload outlives `metric`, and these four callbacks
+            // implement one compatible signature protocol.
+            unsafe {
+                metric_mut.set_borrowed_payload(NonNull::new(
+                    addr_of_mut!(payload).cast::<core::ffi::c_void>(),
+                ));
+                metric_mut.set_file_signature(file_signature);
+                metric_mut.set_buffer_signature(buffer_signature);
+                metric_mut.set_free_signature(free_signature);
+                metric_mut.set_similarity(similarity);
+            }
+        }
+
+        // SAFETY: bindgen's diff-file layout consists only of integer,
+        // pointer and inline object-ID fields for which all-zero is valid
+        // initialized storage; the callbacks do not inspect the file.
+        let mut raw_file: ffi::git_diff_file = unsafe { core::mem::zeroed() };
+        // SAFETY: `raw_file` remains live and is not mutated while the shared
+        // handle is used.
+        let file = unsafe { crate::diff::DiffFileRef::from_ptr(addr_of_mut!(raw_file)) }.unwrap();
+        let metric_ref = metric.as_ref();
+        assert!(metric_ref.has_payload());
+        assert!(metric_ref.has_free_signature());
+
+        let from_file = metric_ref.file_signature(file, c"file").unwrap().unwrap();
+        let from_buffer = metric_ref.buffer_signature(file, b"buf").unwrap().unwrap();
+        assert_eq!(metric_ref.similarity(&from_file, &from_buffer), Ok(91));
+        assert_eq!(payload.calls, 2);
+        drop((from_file, from_buffer));
+        assert_eq!(payload.frees, 2);
+    }
+}

@@ -30,6 +30,8 @@
 ^git_diff_binary_t$
 ^git_diff_binary_file$
 ^git_diff_file$
+^git_diff_format_email_options$
+^GIT_DIFF_FORMAT_EMAIL_OPTIONS_VERSION$
 ^git_diff_format_t$
 ^git_diff$
 ^git_diff_free$
@@ -42,6 +44,7 @@
 ^git_diff_line_t$
 ^git_diff_option_t$
 ^git_diff_parse_options$
+^git_diff_similarity_metric$
 ^GIT_DIFF_PARSE_OPTIONS_VERSION$
 ^GIT_DIFF_HUNK_HEADER_SIZE$
 ^git_libgit2_(init|shutdown)$
