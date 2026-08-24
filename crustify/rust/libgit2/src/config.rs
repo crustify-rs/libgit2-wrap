@@ -210,6 +210,14 @@ mod tests {
     }
 
     #[test]
+    fn config_error_result_releases_a_typed_owner() {
+        let _init = Libgit2Init::acquire();
+        let config = git_config_new().expect("an empty config can be allocated");
+
+        assert!(matches!(config_result(-123, Some(config)), Err(-123)));
+    }
+
+    #[test]
     fn config_snapshot_returns_an_independent_owner() {
         let _init = Libgit2Init::acquire();
         let mut raw = core::ptr::null_mut();
@@ -378,17 +386,11 @@ mod entry_tests {
     }
 }
 
-fn config_result(status: i32, raw: *mut ffi::git_config) -> Result<GitConfigOwned, i32> {
+fn config_result(status: i32, config: Option<GitConfigOwned>) -> Result<GitConfigOwned, i32> {
     if status == 0 {
-        // SAFETY: success transfers one complete config reference.
-        Ok(unsafe { GitConfigOwned::from_raw(raw) }
-            .expect("libgit2 succeeded without returning a config"))
+        Ok(config.expect("libgit2 succeeded without returning a config"))
     } else {
-        if !raw.is_null() {
-            // SAFETY: a populated error output remains an owned count that the
-            // caller must release.
-            drop(unsafe { GitConfigOwned::from_raw(raw) });
-        }
+        drop(config);
         Err(status)
     }
 }
@@ -572,6 +574,9 @@ pub fn git_config_new() -> Result<GitConfigOwned, i32> {
     let mut out = core::ptr::null_mut();
     // SAFETY: `out` is a writable owner output slot.
     let status = unsafe { ffi::git_config_new(&mut out) };
+    // SAFETY: `out` is null or the complete config count produced by this FFI
+    // call. Adopting it here keeps the raw ownership conversion at the seam.
+    let out = unsafe { GitConfigOwned::from_raw(out) };
     config_result(status, out)
 }
 
@@ -581,6 +586,9 @@ pub fn git_config_open_default() -> Result<GitConfigOwned, i32> {
     let mut out = core::ptr::null_mut();
     // SAFETY: `out` is a writable owner output slot.
     let status = unsafe { ffi::git_config_open_default(&mut out) };
+    // SAFETY: `out` is null or the complete config count produced by this FFI
+    // call. Adopting it here keeps the raw ownership conversion at the seam.
+    let out = unsafe { GitConfigOwned::from_raw(out) };
     config_result(status, out)
 }
 
@@ -591,6 +599,9 @@ pub fn git_config_open_global(config: GitConfigRef<'_>) -> Result<GitConfigOwned
     // SAFETY: `config` is live and source inspection shows it is only read;
     // `out` is writable. The returned config refcounts its backend instance.
     let status = unsafe { ffi::git_config_open_global(&mut out, config.as_ptr().cast_mut()) };
+    // SAFETY: `out` is null or the complete config count produced by this FFI
+    // call. Adopting it here keeps the raw ownership conversion at the seam.
+    let out = unsafe { GitConfigOwned::from_raw(out) };
     config_result(status, out)
 }
 
@@ -603,6 +614,9 @@ pub fn git_config_open_level(
     let mut out = core::ptr::null_mut();
     // SAFETY: `parent` is live, `out` is writable, and a checked level is passed.
     let status = unsafe { ffi::git_config_open_level(&mut out, parent.as_ptr(), level.as_raw()) };
+    // SAFETY: `out` is null or the complete config count produced by this FFI
+    // call. Adopting it here keeps the raw ownership conversion at the seam.
+    let out = unsafe { GitConfigOwned::from_raw(out) };
     config_result(status, out)
 }
 
@@ -612,6 +626,9 @@ pub fn git_config_open_ondisk(path: &CStr) -> Result<GitConfigOwned, i32> {
     let mut out = core::ptr::null_mut();
     // SAFETY: `path` is live and `out` is writable.
     let status = unsafe { ffi::git_config_open_ondisk(&mut out, path.as_ptr()) };
+    // SAFETY: `out` is null or the complete config count produced by this FFI
+    // call. Adopting it here keeps the raw ownership conversion at the seam.
+    let out = unsafe { GitConfigOwned::from_raw(out) };
     config_result(status, out)
 }
 
