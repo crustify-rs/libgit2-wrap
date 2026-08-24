@@ -1837,8 +1837,32 @@
   {
    "name": "git_packbuilder",
    "defined_in": "src/libgit2/pack-objects.h",
-   "_comment_agent": "The public API treats git_packbuilder as opaque. Its complete internal pointer-field footprint was inspected to establish the retained repository/callback borrows and owned ODB, name, and object-list storage.",
+   "_comment_agent": "The public API treats git_packbuilder as opaque. Its complete internal pointer-field footprint was inspected to establish the retained repository/callback borrows and owned ODB, name, and object-list storage. Reviewed against pack-objects.c: git__calloc zero-initializes every slot, so odb is absent until git_repository_odb succeeds and git_packbuilder_free guards it, and the two mutex-guarded counters carry their lock binding.",
    "fields": [
+    {
+     "name": "delta_cache_size",
+     "locked_by": {
+      "lock": "cache_mutex",
+      "lock_op": [
+       "git_packbuilder__cache_lock"
+      ],
+      "unlock_op": [
+       "git_packbuilder__cache_unlock"
+      ]
+     }
+    },
+    {
+     "name": "nr_deltified",
+     "locked_by": {
+      "lock": "progress_mutex",
+      "lock_op": [
+       "git_packbuilder__progress_lock"
+      ],
+      "unlock_op": [
+       "git_packbuilder__progress_unlock"
+      ]
+     }
+    },
     {
      "name": "object_list",
      "ptr": {
@@ -1864,9 +1888,9 @@
       "string": false,
       "owned": true,
       "borrowed": null,
-      "nullable": false,
+      "nullable": true,
       "mutable": true,
-      "note": "git_repository_odb gives the builder an owned reference; pack operations use it and git_packbuilder_free releases that reference with git_odb_free."
+      "note": "git_repository_odb gives the builder an owned reference; pack operations use it and git_packbuilder_free releases that reference with git_odb_free. The git__calloc'd slot stays NULL until that call succeeds, which is why git_packbuilder_free tests it before releasing."
      }
     },
     {

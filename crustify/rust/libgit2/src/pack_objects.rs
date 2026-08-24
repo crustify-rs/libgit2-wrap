@@ -29,10 +29,19 @@ ffibox::define_ctype!(
 /// An owned libgit2 packfile builder.
 pub type GitPackbuilderOwned = CBox<GitPackbuilder>;
 
+/// The progress callback a [`RepositoryPackbuilder`] hands to libgit2.
+///
+/// Boxing it once more gives the trait object a thin, address-stable slot to
+/// be pointed at, which is what libgit2's `void *` payload requires.
+type ProgressPayload = Box<dyn GitPackbuilderProgressCallback + Send>;
+
 /// A packbuilder tied to the repository pointer retained by libgit2.
+///
+/// `inner` is declared before `progress` so that `git_packbuilder_free` runs
+/// while the payload libgit2 still references is alive.
 pub struct RepositoryPackbuilder<'repo> {
     inner: GitPackbuilderOwned,
-    progress: Option<Box<Box<dyn GitPackbuilderProgressCallback + Send>>>,
+    progress: Option<Box<ProgressPayload>>,
     _repository: PhantomData<GitRepositoryRef<'repo>>,
 }
 
@@ -118,6 +127,48 @@ mod tests {
         // SAFETY: `raw` came from this `Box::into_raw`, no handle remains, and
         // the cast recovers the allocation's original type.
         drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_packbuilder>>()) });
+    }
+
+    #[test]
+    fn progress_payload_dispatches_through_the_owned_callback() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicI32, Ordering};
+
+        let observed = Arc::new(AtomicI32::new(0));
+        let sink = Arc::clone(&observed);
+        let callback: ProgressPayload = Box::new(move |stage: i32, current: u32, total: u32| {
+            sink.store(stage + current as i32 + total as i32, Ordering::SeqCst);
+            0
+        });
+        let mut stored = Some(Box::new(callback));
+
+        let payload = progress_payload(stored.as_mut());
+        assert!(!payload.is_null());
+
+        // SAFETY: `payload` was derived from `stored`, which is live and not
+        // borrowed elsewhere for this call — the contract the wrapper upholds
+        // for libgit2 by owning the box for as long as the registration lasts.
+        let status = unsafe { progress_trampoline(1, 2, 3, payload.cast()) };
+        assert_eq!(status, 0);
+        assert_eq!(observed.load(Ordering::SeqCst), 6);
+
+        // The pointer stays usable across calls: the box has not moved.
+        // SAFETY: as above.
+        let status = unsafe { progress_trampoline(4, 5, 6, payload.cast()) };
+        assert_eq!(status, 0);
+        assert_eq!(observed.load(Ordering::SeqCst), 15);
+
+        drop(stored);
+    }
+
+    #[test]
+    fn a_cleared_progress_callback_registers_no_payload() {
+        assert!(progress_payload(None).is_null());
+
+        // SAFETY: a null payload is what a cleared registration installs; the
+        // trampoline must reject it instead of dereferencing it.
+        let status = unsafe { progress_trampoline(0, 0, 0, core::ptr::null_mut()) };
+        assert_eq!(status, -1);
     }
 }
 
@@ -290,48 +341,69 @@ pub fn git_packbuilder_object_count(builder: GitPackbuilderRef<'_>) -> usize {
     unsafe { ffi::git_packbuilder_object_count(builder.as_ptr().cast_mut()) }
 }
 
+/// Derives the payload pointer libgit2 records from the callback box the
+/// wrapper owns, cast to `void *` only at the FFI call.
+///
+/// The pointer is taken from an exclusive borrow, because
+/// [`progress_trampoline`] writes through it, and the caller takes it only
+/// once the box has reached its final home in the wrapper, because moving the
+/// box afterwards would invalidate the pointer libgit2 kept.
+fn progress_payload(stored: Option<&mut Box<ProgressPayload>>) -> *mut ProgressPayload {
+    stored.map_or(core::ptr::null_mut(), |callback| {
+        core::ptr::from_mut::<ProgressPayload>(callback.as_mut())
+    })
+}
+
+/// The C entry point registered with libgit2 for progress reporting.
+unsafe extern "C" fn progress_trampoline(
+    stage: i32,
+    current: u32,
+    total: u32,
+    payload: *mut c_void,
+) -> i32 {
+    if payload.is_null() {
+        return -1;
+    }
+    // SAFETY: `payload` is the pointer `progress_payload` derived from the
+    // boxed callback its wrapper still owns, so it addresses one initialized
+    // `ProgressPayload` and carries provenance for writing to it. Libgit2
+    // reports progress under the packbuilder's progress mutex, so at most one
+    // such exclusive borrow exists at a time.
+    let callback = unsafe { &mut *payload.cast::<ProgressPayload>() };
+    callback.call(stage, current, total)
+}
+
 /// Wraps: git_packbuilder_set_callbacks
 /// Installs or clears a thread-safe, `'static` progress callback.
 pub fn git_packbuilder_set_callbacks(
     builder: &mut RepositoryPackbuilder<'_>,
     callback: Option<Box<dyn GitPackbuilderProgressCallback + Send>>,
 ) -> Result<(), i32> {
-    unsafe extern "C" fn trampoline(
-        stage: i32,
-        current: u32,
-        total: u32,
-        payload: *mut c_void,
-    ) -> i32 {
-        if payload.is_null() {
-            return -1;
-        }
-        // SAFETY: `payload` points to the heap-stable boxed trait object held
-        // by the live builder wrapper. Libgit2 serializes progress callbacks.
-        let callback =
-            unsafe { &mut *payload.cast::<Box<dyn GitPackbuilderProgressCallback + Send>>() };
-        callback.call(stage, current, total)
-    }
-
-    let stored = callback.map(Box::new);
-    let payload = stored.as_ref().map_or(core::ptr::null_mut(), |callback| {
-        core::ptr::from_ref::<Box<dyn GitPackbuilderProgressCallback + Send>>(callback.as_ref())
-            .cast_mut()
-            .cast()
-    });
-    let function = if stored.is_some() {
-        Some(trampoline as unsafe extern "C" fn(_, _, _, _) -> _)
-    } else {
+    // Install the replacement first, so the registered payload is derived
+    // from the box that stays put, and keep the previous callback boxed until
+    // libgit2 accepts the new one: a rejected call leaves libgit2 pointing at
+    // the payload it already holds.
+    let previous = core::mem::replace(&mut builder.progress, callback.map(Box::new));
+    let payload = progress_payload(builder.progress.as_mut());
+    let function: ffi::git_packbuilder_progress = if payload.is_null() {
         None
+    } else {
+        Some(progress_trampoline)
     };
-    let mut handle = builder.as_mut();
-    // SAFETY: `payload` is null or points to heap-stable storage installed in
-    // `builder`; it remains there until a later successful replacement or drop.
-    let status =
-        unsafe { ffi::git_packbuilder_set_callbacks(handle.as_mut_ptr(), function, payload) };
+    let mut handle = builder.inner.as_mut();
+    // SAFETY: the handle exclusively borrows the live builder, and `payload`
+    // is null or addresses the callback box this wrapper owns and keeps at a
+    // stable address until a later successful replacement or its own drop.
+    let status = unsafe {
+        ffi::git_packbuilder_set_callbacks(handle.as_mut_ptr(), function, payload.cast())
+    };
     if status == 0 {
-        builder.progress = stored;
+        drop(previous);
         Ok(())
     } else {
+        // Libgit2 refused the call without touching its registration, so the
+        // payload it still points at goes back into the wrapper unchanged.
+        builder.progress = previous;
         Err(status)
     }
 }
