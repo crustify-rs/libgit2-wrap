@@ -724,6 +724,64 @@
    ]
   },
   {
+   "name": "git_config_iterator",
+   "defined_in": "include/git2/sys/config.h",
+   "_comment_agent": "Every fully constructed config iterator is a polymorphic base header whose required static next/free callbacks advance or release its concrete allocation. Internal iterators leave backend null and flags zero after calloc; the sys API permits custom iterators to borrow an originating mutable backend through backend.",
+   "fields": [
+    {
+     "name": "backend",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional originating backend pointer for custom iterators. In-tree iterators are calloc-initialized and leave it null; the sys header directs custom backends to store their borrowed backend here, without transferring ownership."
+     }
+    },
+    {
+     "name": "free",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required static concrete destructor installed by every completed iterator constructor and invoked unconditionally for a non-null iterator."
+     }
+    },
+    {
+     "name": "next",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required static synchronous callback installed by every completed iterator; it mutates iterator state and returns a backend entry borrowed until the next advance or iterator destruction."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_credential",
    "defined_in": "include/git2/sys/credential.h",
    "_comment_agent": "git_credential is a polymorphic public base header. Every fully constructed credential installs a non-null immutable finalizer callback with static code lifetime; the callback frees the concrete allocation and any secret-bearing fields. credtype is a by-value tag holding exactly one published GIT_CREDENTIAL_* kind: every constructor assigns a single constant, and every consumer either switches on the exact value or tests it as one bit against an allowed-types mask, so an empty or combined value is a malformed header rather than a multi-kind credential.",
@@ -1015,6 +1073,30 @@
       "nullable": true,
       "mutable": false,
       "note": "Borrows a NUL-terminated path kept alive by the enclosing diff or patch. It may be null for an absent/partially initialized side and can point into another owning allocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_find_options",
+   "defined_in": "include/git2/diff.h",
+   "_comment_agent": "git_diff_find_options is a by-value, non-owning public options record. A custom metric is optional and synchronously borrowed: normalize_find_opts shallow-copies it, invokes its callbacks during git_diff_find_similar, and frees only an internally allocated default metric when the caller supplied none.",
+   "fields": [
+    {
+     "name": "metric",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional custom callback table borrowed by the options value. The table is shallow-copied into normalized stack options, read synchronously, never retained or freed, and must remain live while options using it are passed to libgit2."
      }
     }
    ]

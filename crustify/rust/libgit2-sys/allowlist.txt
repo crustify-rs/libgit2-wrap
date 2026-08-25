@@ -20,6 +20,7 @@
 ^git_config_level_t$
 ^git_config_entry$
 ^git_config_backend_entry$
+^git_config_iterator$
 ^git_config_entry_free$
 ^git_credential$
 ^git_credential_free$
@@ -45,6 +46,8 @@
 ^git_diff_option_t$
 ^git_diff_parse_options$
 ^git_diff_similarity_metric$
+^git_diff_find_options$
+^GIT_DIFF_FIND_OPTIONS_VERSION$
 ^GIT_DIFF_PARSE_OPTIONS_VERSION$
 ^GIT_DIFF_HUNK_HEADER_SIZE$
 ^git_libgit2_(init|shutdown)$

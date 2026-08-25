@@ -918,3 +918,239 @@ mod similarity_metric_tests {
         assert_eq!(payload.frees, 2);
     }
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_diff_find_options
+    /// Layout-compatible options controlling rename and copy detection.
+    DiffFindOptions,
+    DiffFindOptionsRef,
+    DiffFindOptionsMut,
+    ffi::git_diff_find_options
+);
+
+// SAFETY: this options record owns no resources. A custom metric is borrowed
+// and libgit2 never releases it when disposing the by-value options storage.
+unsafe impl CValued for DiffFindOptions {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+impl DiffFindOptions {
+    /// Constructs options with the current ABI version and libgit2 defaults.
+    #[must_use]
+    pub fn new() -> CVal<Self> {
+        let mut options = CVal::new(Self::zeroed());
+        options
+            .as_mut()
+            .set_version(ffi::GIT_DIFF_FIND_OPTIONS_VERSION);
+        options
+    }
+}
+
+impl<'a> DiffFindOptionsRef<'a> {
+    /// Field: git_diff_find_options.version
+    /// Returns the ABI version stored in this options value.
+    #[must_use]
+    pub fn version(&self) -> core::ffi::c_uint {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).version).read() }
+    }
+
+    /// Field: git_diff_find_options.flags
+    /// Returns the raw combination of published `git_diff_find_t` bits.
+    #[must_use]
+    pub fn flags(&self) -> u32 {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+    }
+
+    /// Field: git_diff_find_options.rename_threshold
+    /// Returns the rename similarity threshold.
+    #[must_use]
+    pub fn rename_threshold(&self) -> u16 {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).rename_threshold).read() }
+    }
+
+    /// Field: git_diff_find_options.rename_from_rewrite_threshold
+    /// Returns the similarity threshold for rename sources from rewrites.
+    #[must_use]
+    pub fn rename_from_rewrite_threshold(&self) -> u16 {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).rename_from_rewrite_threshold).read() }
+    }
+
+    /// Field: git_diff_find_options.copy_threshold
+    /// Returns the copy similarity threshold.
+    #[must_use]
+    pub fn copy_threshold(&self) -> u16 {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).copy_threshold).read() }
+    }
+
+    /// Field: git_diff_find_options.break_rewrite_threshold
+    /// Returns the threshold below which rewrites are split.
+    #[must_use]
+    pub fn break_rewrite_threshold(&self) -> u16 {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).break_rewrite_threshold).read() }
+    }
+
+    /// Field: git_diff_find_options.rename_limit
+    /// Returns the maximum number of rename matches to consider.
+    #[must_use]
+    pub fn rename_limit(&self) -> usize {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).rename_limit).read() }
+    }
+
+    /// Field: git_diff_find_options.metric
+    /// Borrows the custom similarity metric, when one is installed.
+    #[must_use]
+    pub fn metric(&self) -> Option<DiffSimilarityMetricRef<'a>> {
+        // SAFETY: this live shared handle permits a raw-place pointer read.
+        let metric = unsafe { addr_of!((*self.as_ptr()).metric).read() };
+        // SAFETY: a non-null metric in a valid options record remains live for
+        // the record's borrow by the field's construction contract.
+        unsafe { DiffSimilarityMetricRef::from_ptr(metric) }
+    }
+}
+
+impl DiffFindOptionsMut<'_> {
+    /// Sets the options ABI version.
+    pub fn set_version(&mut self, version: core::ffi::c_uint) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+
+    /// Sets the raw combination of published `git_diff_find_t` bits.
+    pub fn set_flags(&mut self, flags: u32) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+    }
+
+    /// Sets the rename similarity threshold.
+    pub fn set_rename_threshold(&mut self, threshold: u16) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).rename_threshold).write(threshold) }
+    }
+
+    /// Sets the similarity threshold for rename sources from rewrites.
+    pub fn set_rename_from_rewrite_threshold(&mut self, threshold: u16) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).rename_from_rewrite_threshold).write(threshold) }
+    }
+
+    /// Sets the copy similarity threshold.
+    pub fn set_copy_threshold(&mut self, threshold: u16) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).copy_threshold).write(threshold) }
+    }
+
+    /// Sets the threshold below which rewrites are split.
+    pub fn set_break_rewrite_threshold(&mut self, threshold: u16) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).break_rewrite_threshold).write(threshold) }
+    }
+
+    /// Sets the maximum number of rename matches to consider.
+    pub fn set_rename_limit(&mut self, limit: usize) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).rename_limit).write(limit) }
+    }
+
+    /// Installs a borrowed custom similarity metric.
+    ///
+    /// # Safety
+    ///
+    /// The metric and every payload its callbacks use must remain valid until
+    /// this options record is cleared or is no longer passed to libgit2.
+    pub unsafe fn set_metric(&mut self, metric: DiffSimilarityMetricRef<'_>) {
+        // SAFETY: this live exclusive handle permits the pointer write and the
+        // caller upholds the stored borrow's lifetime and callback invariants.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).metric).write(metric.as_ptr().cast_mut()) }
+    }
+
+    /// Selects libgit2's default similarity metric.
+    pub fn clear_metric(&mut self) {
+        // SAFETY: this live exclusive handle permits a raw-place pointer write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).metric).write(core::ptr::null_mut()) }
+    }
+}
+
+#[cfg(test)]
+mod find_options_tests {
+    use core::mem::{align_of, size_of};
+
+    use ffibox::{CCell, CValued};
+
+    use super::*;
+
+    #[test]
+    fn find_options_preserve_layout_and_inline_ownership() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_valued<T: CValued>() {}
+
+        assert_cell::<DiffFindOptions>();
+        assert_valued::<DiffFindOptions>();
+        assert_eq!(
+            size_of::<DiffFindOptions>(),
+            size_of::<ffi::git_diff_find_options>()
+        );
+        assert_eq!(
+            align_of::<DiffFindOptions>(),
+            align_of::<ffi::git_diff_find_options>()
+        );
+        assert_eq!(
+            size_of::<DiffFindOptionsRef<'_>>(),
+            size_of::<*const ffi::git_diff_find_options>()
+        );
+        assert_eq!(
+            size_of::<CVal<DiffFindOptions>>(),
+            size_of::<ffi::git_diff_find_options>()
+        );
+    }
+
+    #[test]
+    fn find_options_default_and_scalar_fields_round_trip() {
+        let mut options = DiffFindOptions::new();
+        assert_eq!(
+            options.as_ref().version(),
+            ffi::GIT_DIFF_FIND_OPTIONS_VERSION
+        );
+        assert_eq!(options.as_ref().flags(), 0);
+        assert!(options.as_ref().metric().is_none());
+
+        {
+            let mut options = options.as_mut();
+            options.set_flags(0x42);
+            options.set_rename_threshold(51);
+            options.set_rename_from_rewrite_threshold(52);
+            options.set_copy_threshold(53);
+            options.set_break_rewrite_threshold(54);
+            options.set_rename_limit(999);
+        }
+
+        let options = options.as_ref();
+        assert_eq!(options.flags(), 0x42);
+        assert_eq!(options.rename_threshold(), 51);
+        assert_eq!(options.rename_from_rewrite_threshold(), 52);
+        assert_eq!(options.copy_threshold(), 53);
+        assert_eq!(options.break_rewrite_threshold(), 54);
+        assert_eq!(options.rename_limit(), 999);
+    }
+
+    #[test]
+    fn custom_metric_borrow_round_trips_without_ownership_transfer() {
+        let metric = CVal::new(DiffSimilarityMetric::zeroed());
+        let mut options = DiffFindOptions::new();
+        // SAFETY: `metric` remains live until after `options` is no longer
+        // accessed, and the test does not invoke its empty callback slots.
+        unsafe { options.as_mut().set_metric(metric.as_ref()) };
+        assert_eq!(
+            options.as_ref().metric().unwrap().as_ptr(),
+            metric.as_ref().as_ptr()
+        );
+        options.as_mut().clear_metric();
+        assert!(options.as_ref().metric().is_none());
+    }
+}
