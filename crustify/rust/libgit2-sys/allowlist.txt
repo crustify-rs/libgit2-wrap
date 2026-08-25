@@ -119,6 +119,7 @@
 ^git_blame$
 ^git_blame_hunk$
 ^git_blame_free$
+^git_blame_flag_t$
 ^git_buf$
 ^git_buf_dispose$
 ^git_cert$
@@ -434,3 +435,4 @@
 ^GIT_SUBMODULE_UPDATE_OPTIONS_VERSION$
 ^(git_clone|git_clone_init_options|git_submodule_clone|git_submodule_update)$
 ^GIT_TRANSPORT_VERSION$
+^_LIBSSH2_(SESSION|USERAUTH_KBDINT_PROMPT|USERAUTH_KBDINT_RESPONSE)$

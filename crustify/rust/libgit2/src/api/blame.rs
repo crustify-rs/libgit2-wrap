@@ -1,6 +1,7 @@
 //! Safe wrappers for libgit2 blame APIs.
 
 use core::ffi::CStr;
+use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use core::ptr::addr_of;
 
 use crate::api::types::GitSignatureRef;
@@ -253,5 +254,167 @@ mod tests {
         assert!(hunk.orig_signature().is_none());
         assert!(hunk.orig_committer().is_none());
         assert!(!hunk.boundary());
+    }
+}
+
+/// Wraps: git_blame_flag_t
+/// A checked set of flags controlling libgit2 blame traversal.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitBlameFlags(ffi::git_blame_flag_t);
+
+impl GitBlameFlags {
+    /// Perform normal blame traversal without optional behavior.
+    pub const NORMAL: Self = Self(ffi::git_blame_flag_t_GIT_BLAME_NORMAL);
+    /// Track lines moved within the same file.
+    pub const TRACK_COPIES_SAME_FILE: Self =
+        Self(ffi::git_blame_flag_t_GIT_BLAME_TRACK_COPIES_SAME_FILE);
+    /// Track lines moved between files in the same commit.
+    pub const TRACK_COPIES_SAME_COMMIT_MOVES: Self =
+        Self(ffi::git_blame_flag_t_GIT_BLAME_TRACK_COPIES_SAME_COMMIT_MOVES);
+    /// Track lines copied between files in the same commit.
+    pub const TRACK_COPIES_SAME_COMMIT_COPIES: Self =
+        Self(ffi::git_blame_flag_t_GIT_BLAME_TRACK_COPIES_SAME_COMMIT_COPIES);
+    /// Track lines copied from files in any commit.
+    pub const TRACK_COPIES_ANY_COMMIT_COPIES: Self =
+        Self(ffi::git_blame_flag_t_GIT_BLAME_TRACK_COPIES_ANY_COMMIT_COPIES);
+    /// Follow only the first parent of each commit.
+    pub const FIRST_PARENT: Self = Self(ffi::git_blame_flag_t_GIT_BLAME_FIRST_PARENT);
+    /// Canonicalize authors and committers through the repository mailmap.
+    pub const USE_MAILMAP: Self = Self(ffi::git_blame_flag_t_GIT_BLAME_USE_MAILMAP);
+    /// Ignore whitespace-only differences.
+    pub const IGNORE_WHITESPACE: Self = Self(ffi::git_blame_flag_t_GIT_BLAME_IGNORE_WHITESPACE);
+    /// Every blame flag published by this version of libgit2.
+    pub const ALL: Self = Self(
+        Self::TRACK_COPIES_SAME_FILE.0
+            | Self::TRACK_COPIES_SAME_COMMIT_MOVES.0
+            | Self::TRACK_COPIES_SAME_COMMIT_COPIES.0
+            | Self::TRACK_COPIES_ANY_COMMIT_COPIES.0
+            | Self::FIRST_PARENT.0
+            | Self::USE_MAILMAP.0
+            | Self::IGNORE_WHITESPACE.0,
+    );
+
+    /// Converts raw bits when every bit is published by libgit2.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_blame_flag_t) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 flag bits.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_blame_flag_t {
+        self.0
+    }
+
+    /// Returns whether no optional behavior is enabled.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every flag in `other` is enabled.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any flag in `other` is enabled.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl From<GitBlameFlags> for ffi::git_blame_flag_t {
+    fn from(flags: GitBlameFlags) -> Self {
+        flags.bits()
+    }
+}
+
+impl TryFrom<ffi::git_blame_flag_t> for GitBlameFlags {
+    type Error = ffi::git_blame_flag_t;
+
+    fn try_from(bits: ffi::git_blame_flag_t) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl BitOr for GitBlameFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitBlameFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitBlameFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitBlameFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for GitBlameFlags {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(!self.0 & Self::ALL.0)
+    }
+}
+
+#[cfg(test)]
+mod blame_flag_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn published_blame_flags_combine_and_validate() {
+        let flags = GitBlameFlags::FIRST_PARENT | GitBlameFlags::IGNORE_WHITESPACE;
+        assert!(flags.contains(GitBlameFlags::FIRST_PARENT));
+        assert!(flags.intersects(GitBlameFlags::IGNORE_WHITESPACE));
+        assert!(!flags.is_empty());
+        assert_eq!(GitBlameFlags::try_from(flags.bits()), Ok(flags));
+        assert!(
+            (!flags).contains(GitBlameFlags::USE_MAILMAP)
+                && !(!flags).intersects(GitBlameFlags::FIRST_PARENT)
+        );
+    }
+
+    #[test]
+    fn unknown_blame_flag_bits_are_rejected() {
+        let unknown = GitBlameFlags::ALL.bits() + 1;
+        assert_eq!(GitBlameFlags::from_bits(unknown), None);
+        assert_eq!(GitBlameFlags::try_from(unknown), Err(unknown));
+    }
+
+    #[test]
+    fn blame_flags_preserve_the_c_enum_layout() {
+        assert_eq!(
+            size_of::<GitBlameFlags>(),
+            size_of::<ffi::git_blame_flag_t>()
+        );
+        assert_eq!(
+            align_of::<GitBlameFlags>(),
+            align_of::<ffi::git_blame_flag_t>()
+        );
     }
 }

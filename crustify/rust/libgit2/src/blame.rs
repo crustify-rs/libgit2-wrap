@@ -4,7 +4,7 @@ use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CDropped, define_ctype};
 
-use crate::api::blame::GitBlameHunkRef;
+use crate::api::blame::{GitBlameFlags, GitBlameHunkRef};
 use crate::ffi;
 use crate::oid::{OidMut, OidRef};
 
@@ -110,12 +110,12 @@ define_ctype!(
 
 impl<'a> GitBlameOptionsRef<'a> {
     /// Field: git_blame_options.flags
-    /// Returns the raw bit set of `git_blame_flag_t` options.
-    #[must_use]
-    pub fn flags(&self) -> core::ffi::c_uint {
+    /// Returns the checked set of `git_blame_flag_t` options.
+    pub fn flags(&self) -> Result<GitBlameFlags, ffi::git_blame_flag_t> {
         // SAFETY: this live shared handle permits a raw-place read of the
         // initialized scalar without forming a reference to C-visible memory.
-        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+        let bits = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        GitBlameFlags::try_from(bits)
     }
 
     /// Field: git_blame_options.version
@@ -172,11 +172,11 @@ impl<'a> GitBlameOptionsRef<'a> {
 }
 
 impl GitBlameOptionsMut<'_> {
-    /// Replaces the raw bit set of `git_blame_flag_t` options.
-    pub fn set_flags(&mut self, flags: core::ffi::c_uint) {
+    /// Replaces the checked set of `git_blame_flag_t` options.
+    pub fn set_flags(&mut self, flags: GitBlameFlags) {
         // SAFETY: this exclusive handle permits a raw-place write of the
         // scalar without forming a reference to C-visible memory.
-        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
     }
 
     /// Sets the ABI version of this options value.
@@ -253,7 +253,9 @@ mod options_tests {
             .expect("the address of a stack value is non-null");
 
         options.set_version(1);
-        options.set_flags(0b101);
+        let flags =
+            GitBlameFlags::TRACK_COPIES_SAME_FILE | GitBlameFlags::TRACK_COPIES_SAME_COMMIT_COPIES;
+        options.set_flags(flags);
         options.set_min_match_characters(42);
         options.set_min_line(7);
         options.set_max_line(19);
@@ -262,12 +264,28 @@ mod options_tests {
 
         let shared = options.as_ref();
         assert_eq!(shared.version(), 1);
-        assert_eq!(shared.flags(), 0b101);
+        assert_eq!(shared.flags(), Ok(flags));
         assert_eq!(shared.min_match_characters(), 42);
         assert_eq!(shared.min_line(), 7);
         assert_eq!(shared.max_line(), 19);
         assert_eq!(shared.newest_commit().oid_type(), Ok(OidType::Sha256));
         assert_eq!(shared.oldest_commit().oid_type(), Ok(OidType::Sha1));
+    }
+
+    #[test]
+    fn blame_options_reject_unknown_flag_bits() {
+        let unknown = GitBlameFlags::ALL.bits() + 1;
+        let mut raw = ffi::git_blame_options {
+            flags: unknown,
+            // SAFETY: every bit pattern of the remaining integer fields and
+            // embedded `git_oid` byte arrays is valid, and the test reads only
+            // the initialized `flags` member.
+            ..unsafe { core::mem::zeroed() }
+        };
+
+        // SAFETY: `raw` is initialized and remains live for this shared handle.
+        let options = unsafe { GitBlameOptionsRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(options.flags(), Err(unknown));
     }
 }
 
