@@ -2,6 +2,7 @@
 
 use core::ffi::CStr;
 use core::marker::PhantomData;
+use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use core::ptr::NonNull;
 
 use crate::api::buffer::GitBufMut;
@@ -2065,5 +2066,261 @@ mod fetch_and_push_options_tests {
         let mut push = GitPushOptions::new();
         push.as_mut().proxy_options_mut().set_url(Some(&url));
         assert_eq!(push.as_ref().proxy_options().url(), Some(url.as_c_str()));
+    }
+}
+
+/// Wraps: git_remote_create_flags
+/// A checked set of options controlling how a remote is created.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitRemoteCreateFlags(crate::ffi::git_remote_create_flags);
+
+impl GitRemoteCreateFlags {
+    /// Apply libgit2's normal remote-creation behavior.
+    pub const EMPTY: Self = Self(0);
+    /// Ignore `url.<base>.insteadOf` configuration while resolving the URL.
+    pub const SKIP_INSTEAD_OF: Self =
+        Self(crate::ffi::git_remote_create_flags_GIT_REMOTE_CREATE_SKIP_INSTEADOF);
+    /// Do not derive a default fetch refspec from the remote name.
+    pub const SKIP_DEFAULT_FETCHSPEC: Self =
+        Self(crate::ffi::git_remote_create_flags_GIT_REMOTE_CREATE_SKIP_DEFAULT_FETCHSPEC);
+    /// Every remote-creation option published by this libgit2 version.
+    pub const ALL: Self = Self(Self::SKIP_INSTEAD_OF.0 | Self::SKIP_DEFAULT_FETCHSPEC.0);
+
+    /// Converts raw bits when every bit is a published remote-creation option.
+    #[must_use]
+    pub const fn from_bits(bits: crate::ffi::git_remote_create_flags) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 option bits.
+    #[must_use]
+    pub const fn bits(self) -> crate::ffi::git_remote_create_flags {
+        self.0
+    }
+
+    /// Returns whether no remote-creation option is enabled.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every option in `other` is enabled.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any option in `other` is enabled.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl From<GitRemoteCreateFlags> for crate::ffi::git_remote_create_flags {
+    fn from(flags: GitRemoteCreateFlags) -> Self {
+        flags.bits()
+    }
+}
+
+impl TryFrom<crate::ffi::git_remote_create_flags> for GitRemoteCreateFlags {
+    type Error = crate::ffi::git_remote_create_flags;
+
+    fn try_from(bits: crate::ffi::git_remote_create_flags) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl BitOr for GitRemoteCreateFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitRemoteCreateFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitRemoteCreateFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitRemoteCreateFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for GitRemoteCreateFlags {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(!self.0 & Self::ALL.0)
+    }
+}
+
+/// Wraps: git_remote_update_flags
+/// A checked set of options controlling reference updates after a fetch.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitRemoteUpdateFlags(crate::ffi::git_remote_update_flags);
+
+impl GitRemoteUpdateFlags {
+    /// Do not request either optional reference-update behavior.
+    pub const EMPTY: Self = Self(0);
+    /// Write fetched references to `FETCH_HEAD`.
+    pub const FETCH_HEAD: Self =
+        Self(crate::ffi::git_remote_update_flags_GIT_REMOTE_UPDATE_FETCHHEAD);
+    /// Report unchanged tips to the update-reference callback.
+    pub const REPORT_UNCHANGED: Self =
+        Self(crate::ffi::git_remote_update_flags_GIT_REMOTE_UPDATE_REPORT_UNCHANGED);
+    /// Every reference-update option published by this libgit2 version.
+    pub const ALL: Self = Self(Self::FETCH_HEAD.0 | Self::REPORT_UNCHANGED.0);
+
+    /// Converts raw bits when every bit is a published reference-update option.
+    #[must_use]
+    pub const fn from_bits(bits: crate::ffi::git_remote_update_flags) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 option bits.
+    #[must_use]
+    pub const fn bits(self) -> crate::ffi::git_remote_update_flags {
+        self.0
+    }
+
+    /// Returns whether no reference-update option is enabled.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every option in `other` is enabled.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any option in `other` is enabled.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl From<GitRemoteUpdateFlags> for crate::ffi::git_remote_update_flags {
+    fn from(flags: GitRemoteUpdateFlags) -> Self {
+        flags.bits()
+    }
+}
+
+impl TryFrom<crate::ffi::git_remote_update_flags> for GitRemoteUpdateFlags {
+    type Error = crate::ffi::git_remote_update_flags;
+
+    fn try_from(bits: crate::ffi::git_remote_update_flags) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl BitOr for GitRemoteUpdateFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitRemoteUpdateFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitRemoteUpdateFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitRemoteUpdateFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for GitRemoteUpdateFlags {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(!self.0 & Self::ALL.0)
+    }
+}
+
+#[cfg(test)]
+mod remote_flag_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn remote_create_flags_compose_and_validate() {
+        let flags =
+            GitRemoteCreateFlags::SKIP_INSTEAD_OF | GitRemoteCreateFlags::SKIP_DEFAULT_FETCHSPEC;
+        assert_eq!(flags, GitRemoteCreateFlags::ALL);
+        assert!(flags.contains(GitRemoteCreateFlags::SKIP_INSTEAD_OF));
+        assert!(flags.intersects(GitRemoteCreateFlags::SKIP_DEFAULT_FETCHSPEC));
+        assert_eq!(GitRemoteCreateFlags::from_bits(flags.bits()), Some(flags));
+        assert_eq!(GitRemoteCreateFlags::from_bits(1 << 2), None);
+        assert_eq!(!GitRemoteCreateFlags::EMPTY, GitRemoteCreateFlags::ALL);
+    }
+
+    #[test]
+    fn remote_update_flags_compose_and_validate() {
+        let mut flags = GitRemoteUpdateFlags::EMPTY;
+        assert!(flags.is_empty());
+        flags |= GitRemoteUpdateFlags::FETCH_HEAD;
+        flags |= GitRemoteUpdateFlags::REPORT_UNCHANGED;
+        assert_eq!(flags, GitRemoteUpdateFlags::ALL);
+        assert_eq!(GitRemoteUpdateFlags::try_from(flags.bits()), Ok(flags));
+        assert_eq!(GitRemoteUpdateFlags::try_from(1 << 2), Err(1 << 2));
+    }
+
+    #[test]
+    fn remote_flag_sets_match_their_c_enum_layouts() {
+        assert_eq!(
+            size_of::<GitRemoteCreateFlags>(),
+            size_of::<crate::ffi::git_remote_create_flags>()
+        );
+        assert_eq!(
+            align_of::<GitRemoteCreateFlags>(),
+            align_of::<crate::ffi::git_remote_create_flags>()
+        );
+        assert_eq!(
+            size_of::<GitRemoteUpdateFlags>(),
+            size_of::<crate::ffi::git_remote_update_flags>()
+        );
+        assert_eq!(
+            align_of::<GitRemoteUpdateFlags>(),
+            align_of::<crate::ffi::git_remote_update_flags>()
+        );
     }
 }

@@ -99,6 +99,8 @@
 ^git_remote_autotag_option_t$
 ^git_remote_completion_t$
 ^git_remote_redirect_t$
+^git_remote_create_flags$
+^git_remote_update_flags$
 ^git_remote_connect_options_init$
 ^GIT_REMOTE_CONNECT_OPTIONS_VERSION$
 ^git_index$
@@ -175,6 +177,8 @@
 ^git_repository$
 ^git_repository_free$
 ^git_repository_init_flag_t$
+^git_repository_init_mode_t$
+^git_repository_item_t$
 ^git_repository_init_options$
 ^git_pathspec$
 ^git_pathspec_free$

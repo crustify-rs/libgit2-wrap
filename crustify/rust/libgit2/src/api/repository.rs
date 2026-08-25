@@ -156,3 +156,220 @@ mod tests {
         );
     }
 }
+
+/// Wraps: git_repository_init_mode_t
+/// A standard shared-repository permission mode.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum GitRepositoryInitMode {
+    /// Use permissions derived from the process umask.
+    #[default]
+    Umask = ffi::git_repository_init_mode_t_GIT_REPOSITORY_INIT_SHARED_UMASK,
+    /// Make the repository group-writable and preserve group assignment.
+    Group = ffi::git_repository_init_mode_t_GIT_REPOSITORY_INIT_SHARED_GROUP,
+    /// Also make the repository world-readable.
+    All = ffi::git_repository_init_mode_t_GIT_REPOSITORY_INIT_SHARED_ALL,
+}
+
+impl GitRepositoryInitMode {
+    /// Returns the underlying C enum value.
+    #[must_use]
+    pub const fn as_raw(self) -> ffi::git_repository_init_mode_t {
+        self as ffi::git_repository_init_mode_t
+    }
+}
+
+/// A raw repository-initialization mode that is not one of libgit2's standard modes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidGitRepositoryInitMode(ffi::git_repository_init_mode_t);
+
+impl InvalidGitRepositoryInitMode {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_repository_init_mode_t {
+        self.0
+    }
+}
+
+impl From<GitRepositoryInitMode> for ffi::git_repository_init_mode_t {
+    fn from(mode: GitRepositoryInitMode) -> Self {
+        mode.as_raw()
+    }
+}
+
+impl TryFrom<ffi::git_repository_init_mode_t> for GitRepositoryInitMode {
+    type Error = InvalidGitRepositoryInitMode;
+
+    fn try_from(raw: ffi::git_repository_init_mode_t) -> Result<Self, Self::Error> {
+        match raw {
+            ffi::git_repository_init_mode_t_GIT_REPOSITORY_INIT_SHARED_UMASK => Ok(Self::Umask),
+            ffi::git_repository_init_mode_t_GIT_REPOSITORY_INIT_SHARED_GROUP => Ok(Self::Group),
+            ffi::git_repository_init_mode_t_GIT_REPOSITORY_INIT_SHARED_ALL => Ok(Self::All),
+            value => Err(InvalidGitRepositoryInitMode(value)),
+        }
+    }
+}
+
+/// Wraps: git_repository_item_t
+/// A checked item in libgit2's repository layout.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum GitRepositoryItem {
+    /// The repository's Git directory.
+    GitDir = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_GITDIR,
+    /// The repository's working directory.
+    WorkDir = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_WORKDIR,
+    /// The shared common directory.
+    CommonDir = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_COMMONDIR,
+    /// The index file.
+    Index = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_INDEX,
+    /// The object database directory.
+    Objects = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_OBJECTS,
+    /// The references directory.
+    Refs = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_REFS,
+    /// The packed-references file.
+    PackedRefs = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_PACKED_REFS,
+    /// The legacy remotes directory.
+    Remotes = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_REMOTES,
+    /// The repository configuration file.
+    Config = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_CONFIG,
+    /// The repository information directory.
+    Info = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_INFO,
+    /// The hooks directory.
+    Hooks = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_HOOKS,
+    /// The reflog directory.
+    Logs = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_LOGS,
+    /// The submodule metadata directory.
+    Modules = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_MODULES,
+    /// The linked-worktree metadata directory.
+    Worktrees = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_WORKTREES,
+    /// The worktree-specific configuration file.
+    WorktreeConfig = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_WORKTREE_CONFIG,
+}
+
+impl GitRepositoryItem {
+    /// Returns the underlying C enum value.
+    #[must_use]
+    pub const fn as_raw(self) -> ffi::git_repository_item_t {
+        self as ffi::git_repository_item_t
+    }
+}
+
+/// A raw repository-layout item not published for use by callers.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidGitRepositoryItem(ffi::git_repository_item_t);
+
+impl InvalidGitRepositoryItem {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_repository_item_t {
+        self.0
+    }
+}
+
+impl From<GitRepositoryItem> for ffi::git_repository_item_t {
+    fn from(item: GitRepositoryItem) -> Self {
+        item.as_raw()
+    }
+}
+
+impl TryFrom<ffi::git_repository_item_t> for GitRepositoryItem {
+    type Error = InvalidGitRepositoryItem;
+
+    fn try_from(raw: ffi::git_repository_item_t) -> Result<Self, Self::Error> {
+        match raw {
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_GITDIR => Ok(Self::GitDir),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_WORKDIR => Ok(Self::WorkDir),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_COMMONDIR => Ok(Self::CommonDir),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_INDEX => Ok(Self::Index),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_OBJECTS => Ok(Self::Objects),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_REFS => Ok(Self::Refs),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_PACKED_REFS => Ok(Self::PackedRefs),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_REMOTES => Ok(Self::Remotes),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_CONFIG => Ok(Self::Config),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_INFO => Ok(Self::Info),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_HOOKS => Ok(Self::Hooks),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_LOGS => Ok(Self::Logs),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_MODULES => Ok(Self::Modules),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_WORKTREES => Ok(Self::Worktrees),
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_WORKTREE_CONFIG => {
+                Ok(Self::WorktreeConfig)
+            }
+            value => Err(InvalidGitRepositoryItem(value)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod repository_enum_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn standard_repository_modes_round_trip() {
+        for mode in [
+            GitRepositoryInitMode::Umask,
+            GitRepositoryInitMode::Group,
+            GitRepositoryInitMode::All,
+        ] {
+            let raw = ffi::git_repository_init_mode_t::from(mode);
+            assert_eq!(GitRepositoryInitMode::try_from(raw), Ok(mode));
+        }
+        let custom = 0o755;
+        assert_eq!(
+            GitRepositoryInitMode::try_from(custom).unwrap_err().value(),
+            custom
+        );
+    }
+
+    #[test]
+    fn repository_items_round_trip_and_reject_the_private_sentinel() {
+        let items = [
+            GitRepositoryItem::GitDir,
+            GitRepositoryItem::WorkDir,
+            GitRepositoryItem::CommonDir,
+            GitRepositoryItem::Index,
+            GitRepositoryItem::Objects,
+            GitRepositoryItem::Refs,
+            GitRepositoryItem::PackedRefs,
+            GitRepositoryItem::Remotes,
+            GitRepositoryItem::Config,
+            GitRepositoryItem::Info,
+            GitRepositoryItem::Hooks,
+            GitRepositoryItem::Logs,
+            GitRepositoryItem::Modules,
+            GitRepositoryItem::Worktrees,
+            GitRepositoryItem::WorktreeConfig,
+        ];
+        for item in items {
+            let raw = ffi::git_repository_item_t::from(item);
+            assert_eq!(GitRepositoryItem::try_from(raw), Ok(item));
+        }
+        let sentinel = ffi::git_repository_item_t_GIT_REPOSITORY_ITEM__LAST;
+        assert_eq!(
+            GitRepositoryItem::try_from(sentinel).unwrap_err().value(),
+            sentinel
+        );
+    }
+
+    #[test]
+    fn repository_enums_match_their_c_layouts() {
+        assert_eq!(
+            size_of::<GitRepositoryInitMode>(),
+            size_of::<ffi::git_repository_init_mode_t>()
+        );
+        assert_eq!(
+            align_of::<GitRepositoryInitMode>(),
+            align_of::<ffi::git_repository_init_mode_t>()
+        );
+        assert_eq!(
+            size_of::<GitRepositoryItem>(),
+            size_of::<ffi::git_repository_item_t>()
+        );
+        assert_eq!(
+            align_of::<GitRepositoryItem>(),
+            align_of::<ffi::git_repository_item_t>()
+        );
+    }
+}
