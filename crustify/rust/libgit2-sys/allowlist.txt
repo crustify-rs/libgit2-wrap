@@ -449,3 +449,8 @@
 ^(git_clone|git_clone_init_options|git_submodule_clone|git_submodule_update)$
 ^GIT_TRANSPORT_VERSION$
 ^_LIBSSH2_(SESSION|USERAUTH_KBDINT_PROMPT|USERAUTH_KBDINT_RESPONSE)$
+^git_attr_foreach_cb$
+^git_blob_data_is_binary$
+^git_libgit2_prerelease$
+^git_reference_foreach_name_cb$
+^git_status_cb$

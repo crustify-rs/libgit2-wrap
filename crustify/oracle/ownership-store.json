@@ -7065,6 +7065,63 @@
    ]
   },
   {
+   "name": "git_attr_foreach_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Each invocation borrows a non-null attribute-name C string only for the call."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Each invocation borrows either a repository-cache C string or one of libgit2's immutable attribute sentinel pointers; ownership is never transferred."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller payload is passed through for each synchronous invocation and may be null; callbacks commonly mutate the pointed-to state."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_attr_get",
    "defined_in": "src/libgit2/attr.c",
    "ptr_args": [
@@ -7662,6 +7719,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Consumes and frees the write stream on every return path."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_data_is_binary",
+   "defined_in": "src/libgit2/blob.c",
+   "ptr_args": [
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:str"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed byte buffer of the separate len; no terminator is required, nothing is retained, and null is accepted when len is zero."
      }
     }
    ]
@@ -17451,6 +17531,26 @@
    "defined_in": "src/libgit2/settings.c"
   },
   {
+   "name": "git_libgit2_prerelease",
+   "defined_in": "src/libgit2/libgit2.c",
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "static"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Returns either null for a final release or an immutable compile-time NUL-terminated version string with static lifetime."
+    }
+   }
+  },
+  {
    "name": "git_libgit2_version",
    "defined_in": "src/libgit2/libgit2.c",
    "ptr_args": [
@@ -25244,6 +25344,46 @@
    ]
   },
   {
+   "name": "git_reference_foreach_name_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Each invocation borrows a non-null reference-name C string owned by the iterator only for the call."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller payload is passed through for synchronous callbacks and may be null; callbacks may mutate its state."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_reference_free",
    "defined_in": "src/libgit2/refs.c",
    "lifetime": {
@@ -32822,6 +32962,46 @@
      "note": "Optional immutable entry stored inside and owned by status."
     }
    }
+  },
+  {
+   "name": "git_status_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Each invocation borrows a non-null status path C string from the temporary status list only for the call."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller payload is passed through for synchronous callbacks and may be null; callbacks may mutate its state."
+     }
+    }
+   ]
   },
   {
    "name": "git_status_file",

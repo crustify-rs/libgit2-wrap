@@ -1,5 +1,6 @@
 //! Safe wrappers for libgit2 refs APIs.
 
+use core::ffi::CStr;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 use crate::ffi;
@@ -111,6 +112,25 @@ impl Not for GitReferenceFormatFlags {
     }
 }
 
+/// Wraps: git_reference_foreach_name_cb
+/// Safe callable surface for one transient reference name.
+pub trait GitReferenceForeachNameCallback {
+    /// Receives a reference name borrowed for this invocation.
+    ///
+    /// Returning nonzero stops iteration and propagates that value to the
+    /// caller.
+    fn call(&mut self, name: &CStr) -> i32;
+}
+
+impl<F> GitReferenceForeachNameCallback for F
+where
+    F: FnMut(&CStr) -> i32,
+{
+    fn call(&mut self, name: &CStr) -> i32 {
+        self(name)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
@@ -152,6 +172,15 @@ mod tests {
         assert_eq!(
             !GitReferenceFormatFlags::ALLOW_ONELEVEL,
             GitReferenceFormatFlags::REFSPEC_PATTERN | GitReferenceFormatFlags::REFSPEC_SHORTHAND
+        );
+    }
+
+    #[test]
+    fn closure_implements_reference_name_callback() {
+        let mut seen = |name: &CStr| i32::from(name == c"refs/heads/main");
+        assert_eq!(
+            GitReferenceForeachNameCallback::call(&mut seen, c"refs/heads/main"),
+            1
         );
     }
 }

@@ -232,3 +232,24 @@ pub fn git_blob_rawsize(blob: GitBlobRef<'_>) -> u64 {
     // SAFETY: `blob` is live and the accessor only reads its size.
     unsafe { ffi::git_blob_rawsize(blob.as_ptr()) }
 }
+
+/// Wraps: git_blob_data_is_binary
+/// Reports whether libgit2's content heuristic classifies `data` as binary.
+#[must_use]
+pub fn git_blob_data_is_binary(data: &[u8]) -> bool {
+    // SAFETY: `data` supplies exactly its readable length, and libgit2 retains
+    // neither the byte pointer nor the temporary string view it constructs.
+    unsafe { ffi::git_blob_data_is_binary(data.as_ptr().cast(), data.len()) != 0 }
+}
+
+#[cfg(test)]
+mod binary_data_tests {
+    use super::*;
+
+    #[test]
+    fn binary_data_classifier_accepts_slices() {
+        assert!(!git_blob_data_is_binary(b"ordinary text\n"));
+        assert!(git_blob_data_is_binary(b"text\0binary"));
+        assert!(!git_blob_data_is_binary(&[]));
+    }
+}

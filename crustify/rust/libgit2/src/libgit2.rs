@@ -2,6 +2,25 @@
 
 use crate::ffi;
 
+/// One owned count in libgit2's process-global initialization state.
+///
+/// Pass the token to [`git_libgit2_shutdown`] after every libgit2 object and
+/// borrow that may depend on this count is gone. Dropping the token instead
+/// deliberately leaks the count, which keeps the global state initialized.
+#[derive(Debug)]
+#[must_use = "dropping this token leaves its libgit2 initialization count active"]
+pub struct Libgit2Init {
+    initial_count: usize,
+}
+
+impl Libgit2Init {
+    /// Returns the initialization count reported when this token was acquired.
+    #[must_use]
+    pub const fn initial_count(&self) -> usize {
+        self.initial_count
+    }
+}
+
 /// Compile-time features present in the linked libgit2.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(transparent)]
@@ -66,6 +85,57 @@ pub fn git_libgit2_version() -> Result<Libgit2Version, i32> {
     }
 }
 
+/// Wraps: git_libgit2_init
+/// Acquires one process-global libgit2 initialization count.
+pub fn git_libgit2_init() -> Result<Libgit2Init, i32> {
+    // SAFETY: initialization takes no arguments, is internally synchronized,
+    // and a successful count is balanced by the returned owning token.
+    let count = unsafe { ffi::git_libgit2_init() };
+    if count <= 0 {
+        Err(count)
+    } else {
+        Ok(Libgit2Init {
+            initial_count: usize::try_from(count).expect("a positive C int fits usize"),
+        })
+    }
+}
+
+/// Wraps: git_libgit2_prerelease
+/// Returns the linked library's static prerelease label, if this is not a
+/// final release.
+#[must_use]
+pub fn git_libgit2_prerelease() -> Option<&'static core::ffi::CStr> {
+    // SAFETY: libgit2 returns null or a pointer to an immutable compile-time
+    // NUL-terminated string that remains valid for the process lifetime.
+    let prerelease = unsafe { ffi::git_libgit2_prerelease() };
+    if prerelease.is_null() {
+        None
+    } else {
+        // SAFETY: the non-null result has the static C-string contract above.
+        Some(unsafe { core::ffi::CStr::from_ptr(prerelease) })
+    }
+}
+
+/// Wraps: git_libgit2_shutdown
+/// Consumes one initialization token and returns the number of counts left.
+///
+/// # Safety
+///
+/// If this may release the final process-global count, every libgit2 object,
+/// borrowed result and concurrent operation that relies on initialized global
+/// state must already be gone. That global relationship cannot be expressed by
+/// the token's type.
+pub unsafe fn git_libgit2_shutdown(_initialization: Libgit2Init) -> Result<usize, i32> {
+    // SAFETY: the caller supplies the global quiescence obligation, while the
+    // consumed token proves this call owns one unmatched successful init.
+    let remaining = unsafe { ffi::git_libgit2_shutdown() };
+    if remaining < 0 {
+        Err(remaining)
+    } else {
+        Ok(usize::try_from(remaining).expect("a nonnegative C int fits usize"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -81,5 +151,19 @@ mod tests {
         let features = git_libgit2_features();
         assert!(features.contains(Libgit2Features::HTTP_PARSER));
         assert!(features.contains(Libgit2Features::REGEX));
+    }
+
+    #[test]
+    fn initialization_token_balances_explicit_shutdown() {
+        let initialization = git_libgit2_init().unwrap();
+        assert!(initialization.initial_count() > 0);
+        // SAFETY: this test has created no libgit2 object or borrowed result,
+        // so its initialization count can be released immediately.
+        unsafe { git_libgit2_shutdown(initialization) }.unwrap();
+    }
+
+    #[test]
+    fn release_prerelease_label_is_optional_static_data() {
+        assert_eq!(git_libgit2_prerelease(), None);
     }
 }

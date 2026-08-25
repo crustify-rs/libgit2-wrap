@@ -7,7 +7,7 @@ use core::ptr::{NonNull, addr_of, addr_of_mut};
 use ffibox::{CCell, CPtr, CType, CVal, CValued};
 
 use crate::ffi;
-use crate::status::{InvalidStatusShow, StatusShow};
+use crate::status::{InvalidStatusShow, Status, StatusShow};
 use crate::strarray::GitStrArrayRef;
 use crate::tree::GitTreeRef;
 
@@ -658,5 +658,40 @@ mod entry_tests {
             Ok(crate::diff::Delta::Modified)
         );
         assert!(entry.index_to_workdir().is_none());
+    }
+}
+
+/// Wraps: git_status_cb
+/// Safe callable surface for one transient status entry.
+pub trait GitStatusCallback {
+    /// Receives the entry path and its typed status flags.
+    ///
+    /// The path is borrowed only for this invocation. Returning nonzero stops
+    /// iteration and propagates that value to the caller.
+    fn call(&mut self, path: &core::ffi::CStr, status: Status) -> i32;
+}
+
+impl<F> GitStatusCallback for F
+where
+    F: FnMut(&core::ffi::CStr, Status) -> i32,
+{
+    fn call(&mut self, path: &core::ffi::CStr, status: Status) -> i32 {
+        self(path, status)
+    }
+}
+
+#[cfg(test)]
+mod callback_tests {
+    use super::*;
+
+    #[test]
+    fn closure_implements_status_callback() {
+        let mut seen = |path: &core::ffi::CStr, status: Status| {
+            i32::from(path == c"changed.txt" && status.contains(Status::WT_MODIFIED))
+        };
+        assert_eq!(
+            GitStatusCallback::call(&mut seen, c"changed.txt", Status::WT_MODIFIED),
+            1
+        );
     }
 }
