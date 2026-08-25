@@ -373,3 +373,244 @@ mod repository_enum_tests {
         );
     }
 }
+/// Wraps: git_repository_open_flag_t
+/// A checked set of repository discovery and opening controls.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitRepositoryOpenFlags(ffi::git_repository_open_flag_t);
+
+impl GitRepositoryOpenFlags {
+    /// Use libgit2's default discovery behavior.
+    pub const EMPTY: Self = Self(0);
+    /// Do not search parent directories.
+    pub const NO_SEARCH: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_NO_SEARCH);
+    /// Permit discovery across filesystem boundaries.
+    pub const CROSS_FS: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_CROSS_FS);
+    /// Open as bare and defer configuration loading.
+    pub const BARE: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_BARE);
+    /// Do not append `.git` while searching.
+    pub const NO_DOTGIT: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_NO_DOTGIT);
+    /// Respect Git environment variables.
+    pub const FROM_ENV: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_FROM_ENV);
+    /// Every opening flag published by this libgit2 version.
+    pub const ALL: Self = Self(
+        Self::NO_SEARCH.0 | Self::CROSS_FS.0 | Self::BARE.0 | Self::NO_DOTGIT.0 | Self::FROM_ENV.0,
+    );
+
+    /// Converts raw bits when every bit is published by this libgit2 version.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_repository_open_flag_t) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 flag bits.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_repository_open_flag_t {
+        self.0
+    }
+
+    /// Returns whether no optional behavior is enabled.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every flag in `other` is enabled.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any flag in `other` is enabled.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl From<GitRepositoryOpenFlags> for ffi::git_repository_open_flag_t {
+    fn from(flags: GitRepositoryOpenFlags) -> Self {
+        flags.bits()
+    }
+}
+
+impl TryFrom<ffi::git_repository_open_flag_t> for GitRepositoryOpenFlags {
+    type Error = ffi::git_repository_open_flag_t;
+
+    fn try_from(bits: ffi::git_repository_open_flag_t) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl BitOr for GitRepositoryOpenFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitRepositoryOpenFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitRepositoryOpenFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitRepositoryOpenFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for GitRepositoryOpenFlags {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(!self.0 & Self::ALL.0)
+    }
+}
+
+/// Wraps: git_repository_state_t
+/// A validated operation currently in progress in a repository.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum GitRepositoryState {
+    /// No operation is in progress.
+    None = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_NONE,
+    /// A merge is in progress.
+    Merge = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_MERGE,
+    /// A single revert is in progress.
+    Revert = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_REVERT,
+    /// A revert sequence is in progress.
+    RevertSequence = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_REVERT_SEQUENCE,
+    /// A single cherry-pick is in progress.
+    CherryPick = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_CHERRYPICK,
+    /// A cherry-pick sequence is in progress.
+    CherryPickSequence = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_CHERRYPICK_SEQUENCE,
+    /// A bisect is in progress.
+    Bisect = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_BISECT,
+    /// A rebase is in progress.
+    Rebase = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_REBASE,
+    /// An interactive rebase is in progress.
+    RebaseInteractive = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_REBASE_INTERACTIVE,
+    /// A merge-style rebase is in progress.
+    RebaseMerge = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_REBASE_MERGE,
+    /// Mailbox patches are being applied.
+    ApplyMailbox = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_APPLY_MAILBOX,
+    /// Mailbox patches are being applied as a rebase.
+    ApplyMailboxOrRebase = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_APPLY_MAILBOX_OR_REBASE,
+}
+
+/// A raw repository state not published by this libgit2 version.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidGitRepositoryState(ffi::git_repository_state_t);
+
+impl InvalidGitRepositoryState {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_repository_state_t {
+        self.0
+    }
+}
+
+impl From<GitRepositoryState> for ffi::git_repository_state_t {
+    fn from(state: GitRepositoryState) -> Self {
+        state as Self
+    }
+}
+
+impl TryFrom<ffi::git_repository_state_t> for GitRepositoryState {
+    type Error = InvalidGitRepositoryState;
+
+    fn try_from(state: ffi::git_repository_state_t) -> Result<Self, Self::Error> {
+        match state {
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_NONE => Ok(Self::None),
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_MERGE => Ok(Self::Merge),
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_REVERT => Ok(Self::Revert),
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_REVERT_SEQUENCE => {
+                Ok(Self::RevertSequence)
+            }
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_CHERRYPICK => Ok(Self::CherryPick),
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_CHERRYPICK_SEQUENCE => {
+                Ok(Self::CherryPickSequence)
+            }
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_BISECT => Ok(Self::Bisect),
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_REBASE => Ok(Self::Rebase),
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_REBASE_INTERACTIVE => {
+                Ok(Self::RebaseInteractive)
+            }
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_REBASE_MERGE => Ok(Self::RebaseMerge),
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_APPLY_MAILBOX => {
+                Ok(Self::ApplyMailbox)
+            }
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_APPLY_MAILBOX_OR_REBASE => {
+                Ok(Self::ApplyMailboxOrRebase)
+            }
+            value => Err(InvalidGitRepositoryState(value)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod repository_open_and_state_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn repository_open_flags_compose_and_validate() {
+        let flags = GitRepositoryOpenFlags::NO_SEARCH | GitRepositoryOpenFlags::CROSS_FS;
+        assert!(flags.contains(GitRepositoryOpenFlags::NO_SEARCH));
+        assert!(flags.intersects(GitRepositoryOpenFlags::CROSS_FS));
+        assert_eq!(GitRepositoryOpenFlags::from_bits(flags.bits()), Some(flags));
+        assert_eq!(GitRepositoryOpenFlags::from_bits(1 << 5), None);
+        assert_eq!((!GitRepositoryOpenFlags::FROM_ENV).bits(), 0b0_1111);
+    }
+
+    #[test]
+    fn repository_states_round_trip_and_reject_unknown_values() {
+        for raw in ffi::git_repository_state_t_GIT_REPOSITORY_STATE_NONE
+            ..=ffi::git_repository_state_t_GIT_REPOSITORY_STATE_APPLY_MAILBOX_OR_REBASE
+        {
+            let state = GitRepositoryState::try_from(raw).expect("published states are dense");
+            assert_eq!(ffi::git_repository_state_t::from(state), raw);
+        }
+        let unknown = ffi::git_repository_state_t_GIT_REPOSITORY_STATE_APPLY_MAILBOX_OR_REBASE + 1;
+        assert_eq!(
+            GitRepositoryState::try_from(unknown).unwrap_err().value(),
+            unknown
+        );
+    }
+
+    #[test]
+    fn repository_types_match_the_c_enum_layouts() {
+        assert_eq!(
+            size_of::<GitRepositoryOpenFlags>(),
+            size_of::<ffi::git_repository_open_flag_t>()
+        );
+        assert_eq!(
+            align_of::<GitRepositoryOpenFlags>(),
+            align_of::<ffi::git_repository_open_flag_t>()
+        );
+        assert_eq!(
+            size_of::<GitRepositoryState>(),
+            size_of::<ffi::git_repository_state_t>()
+        );
+        assert_eq!(
+            align_of::<GitRepositoryState>(),
+            align_of::<ffi::git_repository_state_t>()
+        );
+    }
+}

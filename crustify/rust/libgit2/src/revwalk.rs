@@ -6,6 +6,7 @@ use core::marker::PhantomData;
 use ffibox::CBox;
 
 use crate::api::revwalk::GitRevwalkHideCallback;
+pub use crate::api::revwalk::GitSortFlags;
 use crate::ffi;
 use crate::oid::{Oid, OidRef};
 use crate::repository::{GitRepositoryMut, GitRepositoryRef};
@@ -171,10 +172,13 @@ pub fn git_revwalk_simplify_first_parent(walk: &mut GitRevwalkMut<'_>) -> Result
 
 /// Wraps: git_revwalk_sorting
 /// Replaces the walk's `GIT_SORT_*` bit set.
-pub fn git_revwalk_sorting(walk: &mut GitRevwalkMut<'_>, sort_mode: u32) -> Result<(), i32> {
+pub fn git_revwalk_sorting(
+    walk: &mut GitRevwalkMut<'_>,
+    sort_mode: GitSortFlags,
+) -> Result<(), i32> {
     // SAFETY: the walker is live and exclusively borrowed; the C API accepts
     // the bit set as an unsigned scalar and retains no pointer.
-    status_result(unsafe { ffi::git_revwalk_sorting(walk.as_mut_ptr(), sort_mode) })
+    status_result(unsafe { ffi::git_revwalk_sorting(walk.as_mut_ptr(), sort_mode.bits()) })
 }
 
 fn status_result(status: i32) -> Result<(), i32> {
@@ -270,7 +274,10 @@ mod tests {
         assert!(unsafe { ffi::git_libgit2_init() } > 0);
         let mut repository = crate::repository::git_repository_open(c"../../..").unwrap();
         let mut walker = git_revwalk_new(repository.as_mut()).unwrap();
-        assert_eq!(git_revwalk_sorting(&mut walker.as_mut(), 0), Ok(()));
+        assert_eq!(
+            git_revwalk_sorting(&mut walker.as_mut(), GitSortFlags::NONE),
+            Ok(())
+        );
         assert_eq!(
             git_revwalk_simplify_first_parent(&mut walker.as_mut()),
             Ok(())

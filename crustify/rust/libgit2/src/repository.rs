@@ -2,14 +2,15 @@
 
 use core::ffi::{CStr, c_char, c_uint};
 use core::marker::PhantomData;
-use core::ops::{BitOr, BitOrAssign};
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CBox, CVal, CValued};
 
 use crate::annotated_commit::AnnotatedCommitRef;
 use crate::api::buffer::GitBufMut;
-use crate::api::repository::GitRepositoryInitFlags;
+pub use crate::api::repository::{
+    GitRepositoryInitFlags, GitRepositoryOpenFlags, GitRepositoryState,
+};
 use crate::config::{GitConfigMut, GitConfigOwned, GitConfigRef};
 use crate::ffi;
 use crate::index::{GitIndex, GitIndexOwned, GitIndexRef};
@@ -712,66 +713,6 @@ pub fn git_repository_oid_type(
     }
 }
 
-/// Flags controlling repository discovery and opening.
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub struct GitRepositoryOpenFlags(u32);
-
-impl GitRepositoryOpenFlags {
-    /// No optional discovery behavior.
-    pub const EMPTY: Self = Self(0);
-    /// Do not search parent directories.
-    pub const NO_SEARCH: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_NO_SEARCH);
-    /// Permit discovery across filesystem boundaries.
-    pub const CROSS_FS: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_CROSS_FS);
-    /// Open as bare and defer configuration loading.
-    pub const BARE: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_BARE);
-    /// Do not append `.git` while searching.
-    pub const NO_DOTGIT: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_NO_DOTGIT);
-    /// Respect Git environment variables.
-    pub const FROM_ENV: Self = Self(ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_FROM_ENV);
-    /// Every flag currently published by libgit2.
-    pub const ALL: Self = Self(
-        Self::NO_SEARCH.0 | Self::CROSS_FS.0 | Self::BARE.0 | Self::NO_DOTGIT.0 | Self::FROM_ENV.0,
-    );
-
-    /// Creates flags when every bit is published.
-    #[must_use]
-    pub const fn from_bits(bits: u32) -> Option<Self> {
-        if bits & !Self::ALL.0 == 0 {
-            Some(Self(bits))
-        } else {
-            None
-        }
-    }
-
-    /// Returns the raw C bit set.
-    #[must_use]
-    pub const fn bits(self) -> u32 {
-        self.0
-    }
-
-    /// Returns whether every bit in `other` is set.
-    #[must_use]
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-}
-
-impl BitOr for GitRepositoryOpenFlags {
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self::Output {
-        Self(self.0 | rhs.0)
-    }
-}
-
-impl BitOrAssign for GitRepositoryOpenFlags {
-    fn bitor_assign(&mut self, rhs: Self) {
-        self.0 |= rhs.0;
-    }
-}
-
 fn adopt_repository(
     status: i32,
     repository: Option<GitRepositoryOwned>,
@@ -1103,11 +1044,18 @@ pub fn git_repository_set_workdir(
 
 /// Wraps: git_repository_state
 /// Reports the current libgit2 repository-state code.
-pub fn git_repository_state(repository: &mut GitRepositoryMut<'_>) -> Result<i32, i32> {
+pub fn git_repository_state(
+    repository: &mut GitRepositoryMut<'_>,
+) -> Result<GitRepositoryState, i32> {
     // SAFETY: the repository is live and exclusive for any lazy reference
     // database initialization performed while inspecting state.
     let state = unsafe { ffi::git_repository_state(repository.as_mut_ptr()) };
-    if state < 0 { Err(state) } else { Ok(state) }
+    if state < 0 {
+        Err(state)
+    } else {
+        GitRepositoryState::try_from(state as ffi::git_repository_state_t)
+            .map_err(|invalid| invalid.value() as i32)
+    }
 }
 
 /// Wraps: git_repository_state_cleanup

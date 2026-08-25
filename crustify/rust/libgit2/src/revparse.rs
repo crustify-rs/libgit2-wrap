@@ -2,11 +2,11 @@
 
 use core::ffi::CStr;
 use core::marker::PhantomData;
-use core::ops::{BitOr, BitOrAssign};
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CVal, CValued};
 
+pub use crate::api::revparse::{GitRevspecFlags, InvalidGitRevspecFlags};
 use crate::ffi;
 use crate::object::{GitObjectOwned, GitObjectRef, RepositoryObject, adopt_repository_object};
 use crate::refs::{GitReferenceTetheredOwned, adopt_optional_reference};
@@ -24,79 +24,6 @@ ffibox::define_ctype!(
 /// A by-value revision parse result whose object fields are released on drop.
 pub type GitRevspecOwned = CVal<GitRevspec>;
 
-/// Field: git_revspec.flags
-/// The intent and range semantics reported for a parsed revision expression.
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub struct GitRevspecFlags(u32);
-
-impl GitRevspecFlags {
-    /// No parse intent has been recorded yet.
-    pub const EMPTY: Self = Self(0);
-    /// The expression identifies one object.
-    pub const SINGLE: Self = Self(ffi::git_revspec_t_GIT_REVSPEC_SINGLE);
-    /// The expression identifies a range.
-    pub const RANGE: Self = Self(ffi::git_revspec_t_GIT_REVSPEC_RANGE);
-    /// The range uses symmetric-difference merge-base semantics.
-    pub const MERGE_BASE: Self = Self(ffi::git_revspec_t_GIT_REVSPEC_MERGE_BASE);
-    /// Every flag published by libgit2.
-    pub const ALL: Self = Self(Self::SINGLE.0 | Self::RANGE.0 | Self::MERGE_BASE.0);
-
-    /// Converts raw bits when every set bit is published by libgit2.
-    #[must_use]
-    pub const fn from_bits(bits: u32) -> Option<Self> {
-        if bits & !Self::ALL.0 == 0 {
-            Some(Self(bits))
-        } else {
-            None
-        }
-    }
-
-    /// Returns the underlying C bit set.
-    #[must_use]
-    pub const fn bits(self) -> u32 {
-        self.0
-    }
-
-    /// Returns whether no flag is set.
-    #[must_use]
-    pub const fn is_empty(self) -> bool {
-        self.0 == 0
-    }
-
-    /// Returns whether every bit in `other` is set.
-    #[must_use]
-    pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
-    }
-}
-
-impl BitOr for GitRevspecFlags {
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self::Output {
-        Self(self.0 | rhs.0)
-    }
-}
-
-impl BitOrAssign for GitRevspecFlags {
-    fn bitor_assign(&mut self, rhs: Self) {
-        self.0 |= rhs.0;
-    }
-}
-
-/// Raw `git_revspec.flags` bits not published by libgit2.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct InvalidGitRevspecFlags(u32);
-
-impl InvalidGitRevspecFlags {
-    /// Returns the unrecognized bit set.
-    #[must_use]
-    pub const fn value(self) -> u32 {
-        self.0
-    }
-}
-
 impl GitRevspec {
     /// Constructs an empty result ready for `git_revparse` to fill.
     #[must_use]
@@ -107,12 +34,13 @@ impl GitRevspec {
 }
 
 impl<'a> GitRevspecRef<'a> {
+    /// Field: git_revspec.flags
     /// Returns the validated parse-intent flags.
     pub fn flags(&self) -> Result<GitRevspecFlags, InvalidGitRevspecFlags> {
         // SAFETY: this live shared handle permits a raw-place read of the
         // initialized scalar without forming a reference to C-visible memory.
         let bits = unsafe { addr_of!((*self.as_ptr()).flags).read() };
-        GitRevspecFlags::from_bits(bits).ok_or(InvalidGitRevspecFlags(bits))
+        GitRevspecFlags::try_from(bits)
     }
 
     /// Field: git_revspec.from
