@@ -10,11 +10,11 @@
 - **agent backend** — `codex`
 - **model** — `openai/gpt-5.6-sol`
 - **`--billing`** — `api`
-- **`--max-types`** — `2`
+- **`--max-types`** — `4`
 - **`--max-syms`** — `50`
 - **`--max-loc`** — `1000`
-- **`--min-fields`** — `10` first half, `20` second half (the oracle default moved)
-- **`--parallel-max`** — `8` first half (`4` then `2` for its remediations), `16` second half
+- **`--min-fields`** — `20`
+- **`--parallel-max`** — `16`
 - **branch** — `crustify/src-gpt-5.6-sol`, tip `767afe807`
 - **deps** — crustify-cli `51d44d1` (`docs/results-template-ub`), ffibox `600399f` (`main`)
 
@@ -28,7 +28,7 @@
 - **`--max-types`** — `15`
 - **`--max-syms`** — `150`
 - **`--max-loc`** — `3000`
-- **`--min-fields`** — `30`
+- **`--min-fields`** — `60`
 - **`--parallel-max`** — `16`
 - **branch** — `crustify/src-gpt-5.6-sol`, tip `767afe807`
 - **agents** — `25`, over `4` session(s); first half only
@@ -88,8 +88,8 @@ in Notes.
 - **C LoC** — `171,084`
 - **ported types** — `0`
 - **ported symbols** — `0`
-- **wrapped types** — `170` (`64.6`% of the API)
-- **wrapped symbols** — `638` (`605` functions + `33` callbacks; `63.4`% of the API)
+- **wrapped types** — `170` (`64.6`% of API)
+- **wrapped symbols** — `638` (`63.4`% of API)
 - **remaining types** — `92` with no anchor
 - **remaining symbols** — `387` with no anchor
 
@@ -411,6 +411,18 @@ Deterministic `crustify-audit unsafe`; no model.
 | `void_ptr_smell` | `0` | `0` | `0` | `*c_void` elsewhere; `void_ptr_sites` names each one |
 
 ## Notes
+
+### The settings blocks are forward-looking
+
+`Campaign` and `Review pass` record the caps the campaign is configured with,
+not a per-wave history. The waves that have already run used narrower ones: the
+first half `--max-types 2 --min-fields 10 --parallel-max 8`, dropping to `4`
+then `2` concurrent for its two remediation waves; the second half
+`--max-types 2 --min-fields 20 --parallel-max 16`, the `--min-fields` move
+being the oracle's default changing under it rather than a deliberate choice.
+The first-half review ran `--min-fields 30`, the second-half review `60`.
+Per-batch unit counts in the tables below reflect what each wave actually
+packed.
 
 ### How test LoC is counted
 
