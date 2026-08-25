@@ -2240,6 +2240,47 @@
    ]
   },
   {
+   "name": "git_filter_options",
+   "defined_in": "include/git2/filter.h",
+   "_comment_agent": "git_filter_options owns only its inline attr_commit_id. The conditional pointer slot is a nullable, non-owning deprecated git_oid input in the configured build and an unused reserved placeholder under hard deprecation.",
+   "fields": [
+    {
+     "name": "commit_id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Deprecated optional caller-owned object ID. filter_list_check_attributes and git_blob_filter only copy from it synchronously into attr_commit_id; they never mutate, retain, or release it. The non-hard-deprecation ABI exposes this member in the slot named reserved by hard-deprecation builds."
+     }
+    },
+    {
+     "name": "reserved",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": null,
+      "note": "Hard-deprecation-only ABI placeholder occupying the deprecated commit_id slot. No code reads through, retains, mutates, or releases it; safe construction leaves it null."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_index",
    "defined_in": "src/libgit2/index.h",
    "_comment_agent": "git_index is publicly opaque but internally refcounted. tree points into the sibling tree_pool arena; comparator slots always borrow static functions; index_file_path owns an optional strdup allocation.",
@@ -3062,6 +3103,30 @@
       "nullable": true,
       "mutable": true,
       "note": "Borrowed repository pointer set for repository-backed objects and null for objects parsed directly from raw data. The repository must outlive the object; freeing or closing it invalidates the object. Accessors expose a mutable repository pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_id_options",
+   "defined_in": "include/git2/object.h",
+   "_comment_agent": "git_object_id_options is a non-owning configuration header. Its optional filters pointer aliases a caller-owned list for synchronous hashing and is never mutated, retained, or freed by the options value.",
+   "fields": [
+    {
+     "name": "filters",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned filter list. normalize_options aliases it into a stack copy and ID calculation only reads/applies the list synchronously; the options value never retains or releases it."
      }
     }
    ]

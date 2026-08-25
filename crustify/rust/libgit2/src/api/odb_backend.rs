@@ -3,7 +3,7 @@
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use core::ptr::NonNull;
 
-use ffibox::CBox;
+use ffibox::{CBox, CVal, CValued};
 
 use crate::ffi;
 use crate::indexer::IndexerProgressMut;
@@ -943,5 +943,260 @@ mod loose_flag_tests {
             align_of::<GitOdbBackendLooseFlags>(),
             align_of::<ffi::git_odb_backend_loose_flag_t>()
         );
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_odb_backend_loose_options
+    /// Layout-compatible configuration for a loose-object backend.
+    GitOdbBackendLooseOptions,
+    GitOdbBackendLooseOptionsRef,
+    GitOdbBackendLooseOptionsMut,
+    ffi::git_odb_backend_loose_options
+);
+
+// SAFETY: this options value contains only scalar configuration and owns no
+// resource, so disposing inline storage requires no action.
+unsafe impl CValued for GitOdbBackendLooseOptions {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+impl GitOdbBackendLooseOptions {
+    /// Constructs options equivalent to `GIT_ODB_BACKEND_LOOSE_OPTIONS_INIT`.
+    #[must_use]
+    pub fn new() -> CVal<Self> {
+        let mut options = CVal::new(Self::zeroed());
+        {
+            let mut view = options.as_mut();
+            view.set_version(ffi::GIT_ODB_BACKEND_LOOSE_OPTIONS_VERSION);
+            view.set_compression_level(-1);
+        }
+        options
+    }
+}
+
+impl GitOdbBackendLooseOptionsRef<'_> {
+    /// Field: git_odb_backend_loose_options.flags
+    /// Returns the checked loose-backend option flags.
+    pub fn flags(&self) -> Result<GitOdbBackendLooseFlags, ffi::git_odb_backend_loose_flag_t> {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        let bits = unsafe { core::ptr::addr_of!((*self.as_ptr()).flags).read() };
+        GitOdbBackendLooseFlags::try_from(bits)
+    }
+
+    /// Field: git_odb_backend_loose_options.version
+    /// Returns the options ABI version.
+    #[must_use]
+    pub fn version(&self) -> core::ffi::c_uint {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).version).read() }
+    }
+
+    /// Field: git_odb_backend_loose_options.oid_type
+    /// Returns the selected object-ID format, or `None` for libgit2's default.
+    pub fn oid_type(&self) -> Result<Option<OidType>, InvalidOidType> {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        let raw = unsafe { core::ptr::addr_of!((*self.as_ptr()).oid_type).read() };
+        if raw == 0 {
+            Ok(None)
+        } else {
+            OidType::try_from(raw).map(Some)
+        }
+    }
+
+    /// Field: git_odb_backend_loose_options.file_mode
+    /// Returns the requested file permissions, or zero for defaults.
+    #[must_use]
+    pub fn file_mode(&self) -> core::ffi::c_uint {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).file_mode).read() }
+    }
+
+    /// Field: git_odb_backend_loose_options.dir_mode
+    /// Returns the requested directory permissions, or zero for defaults.
+    #[must_use]
+    pub fn dir_mode(&self) -> core::ffi::c_uint {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).dir_mode).read() }
+    }
+
+    /// Field: git_odb_backend_loose_options.compression_level
+    /// Returns the zlib compression level, with `-1` selecting the default.
+    #[must_use]
+    pub fn compression_level(&self) -> core::ffi::c_int {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).compression_level).read() }
+    }
+}
+
+impl GitOdbBackendLooseOptionsMut<'_> {
+    /// Replaces the loose-backend option flags.
+    pub fn set_flags(&mut self, flags: GitOdbBackendLooseFlags) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
+    }
+
+    /// Replaces the options ABI version.
+    pub fn set_version(&mut self, version: core::ffi::c_uint) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+
+    /// Selects an object-ID format, or the libgit2 default with `None`.
+    pub fn set_oid_type(&mut self, oid_type: Option<OidType>) {
+        let raw = oid_type.map_or(0, Into::into);
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).oid_type).write(raw) }
+    }
+
+    /// Selects file permissions, or backend defaults with zero.
+    pub fn set_file_mode(&mut self, mode: core::ffi::c_uint) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).file_mode).write(mode) }
+    }
+
+    /// Selects directory permissions, or backend defaults with zero.
+    pub fn set_dir_mode(&mut self, mode: core::ffi::c_uint) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).dir_mode).write(mode) }
+    }
+
+    /// Selects the zlib compression level (`-1` for the backend default).
+    pub fn set_compression_level(&mut self, level: core::ffi::c_int) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).compression_level).write(level) }
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_odb_backend_pack_options
+    /// Layout-compatible configuration for packfile object backends.
+    GitOdbBackendPackOptions,
+    GitOdbBackendPackOptionsRef,
+    GitOdbBackendPackOptionsMut,
+    ffi::git_odb_backend_pack_options
+);
+
+// SAFETY: this options value contains only scalar configuration and owns no
+// resource, so disposing inline storage requires no action.
+unsafe impl CValued for GitOdbBackendPackOptions {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+impl GitOdbBackendPackOptions {
+    /// Constructs options equivalent to `GIT_ODB_BACKEND_PACK_OPTIONS_INIT`.
+    #[must_use]
+    pub fn new() -> CVal<Self> {
+        let mut options = CVal::new(Self::zeroed());
+        options
+            .as_mut()
+            .set_version(ffi::GIT_ODB_BACKEND_PACK_OPTIONS_VERSION);
+        options
+    }
+}
+
+impl GitOdbBackendPackOptionsRef<'_> {
+    /// Field: git_odb_backend_pack_options.version
+    /// Returns the options ABI version.
+    #[must_use]
+    pub fn version(&self) -> core::ffi::c_uint {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { core::ptr::addr_of!((*self.as_ptr()).version).read() }
+    }
+
+    /// Field: git_odb_backend_pack_options.oid_type
+    /// Returns the selected object-ID format, or `None` for libgit2's default.
+    pub fn oid_type(&self) -> Result<Option<OidType>, InvalidOidType> {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        let raw = unsafe { core::ptr::addr_of!((*self.as_ptr()).oid_type).read() };
+        if raw == 0 {
+            Ok(None)
+        } else {
+            OidType::try_from(raw).map(Some)
+        }
+    }
+}
+
+impl GitOdbBackendPackOptionsMut<'_> {
+    /// Replaces the options ABI version.
+    pub fn set_version(&mut self, version: core::ffi::c_uint) {
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+
+    /// Selects an object-ID format, or the libgit2 default with `None`.
+    pub fn set_oid_type(&mut self, oid_type: Option<OidType>) {
+        let raw = oid_type.map_or(0, Into::into);
+        // SAFETY: this live exclusive handle permits a raw-place scalar write.
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).oid_type).write(raw) }
+    }
+}
+
+#[cfg(test)]
+mod backend_options_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn loose_options_preserve_layout_defaults_and_mutation() {
+        assert_eq!(
+            size_of::<GitOdbBackendLooseOptions>(),
+            size_of::<ffi::git_odb_backend_loose_options>()
+        );
+        assert_eq!(
+            align_of::<GitOdbBackendLooseOptions>(),
+            align_of::<ffi::git_odb_backend_loose_options>()
+        );
+        assert_eq!(
+            size_of::<GitOdbBackendLooseOptionsRef<'_>>(),
+            size_of::<*const ffi::git_odb_backend_loose_options>()
+        );
+
+        let mut options = GitOdbBackendLooseOptions::new();
+        let mut view = options.as_mut();
+        assert_eq!(
+            view.as_ref().version(),
+            ffi::GIT_ODB_BACKEND_LOOSE_OPTIONS_VERSION
+        );
+        assert_eq!(view.as_ref().flags(), Ok(GitOdbBackendLooseFlags::NONE));
+        assert_eq!(view.as_ref().compression_level(), -1);
+        assert_eq!(view.as_ref().dir_mode(), 0);
+        assert_eq!(view.as_ref().file_mode(), 0);
+        assert_eq!(view.as_ref().oid_type(), Ok(None));
+
+        view.set_flags(GitOdbBackendLooseFlags::FSYNC);
+        view.set_compression_level(9);
+        view.set_dir_mode(0o755);
+        view.set_file_mode(0o644);
+        view.set_oid_type(Some(OidType::Sha256));
+
+        assert_eq!(view.as_ref().flags(), Ok(GitOdbBackendLooseFlags::FSYNC));
+        assert_eq!(view.as_ref().compression_level(), 9);
+        assert_eq!(view.as_ref().dir_mode(), 0o755);
+        assert_eq!(view.as_ref().file_mode(), 0o644);
+        assert_eq!(view.as_ref().oid_type(), Ok(Some(OidType::Sha256)));
+    }
+
+    #[test]
+    fn pack_options_preserve_layout_defaults_and_mutation() {
+        assert_eq!(
+            size_of::<GitOdbBackendPackOptions>(),
+            size_of::<ffi::git_odb_backend_pack_options>()
+        );
+        assert_eq!(
+            align_of::<GitOdbBackendPackOptions>(),
+            align_of::<ffi::git_odb_backend_pack_options>()
+        );
+
+        let mut options = GitOdbBackendPackOptions::new();
+        let mut view = options.as_mut();
+        assert_eq!(
+            view.as_ref().version(),
+            ffi::GIT_ODB_BACKEND_PACK_OPTIONS_VERSION
+        );
+        assert_eq!(view.as_ref().oid_type(), Ok(None));
+        view.set_oid_type(Some(OidType::Sha1));
+        assert_eq!(view.as_ref().oid_type(), Ok(Some(OidType::Sha1)));
     }
 }

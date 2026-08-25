@@ -102,6 +102,8 @@
 ^git_error$
 ^git_fetch_prune_t$
 ^git_filter_mode_t$
+^git_filter_options$
+^GIT_FILTER_OPTIONS_VERSION$
 ^git_fetch_options$
 ^GIT_FETCH_OPTIONS_VERSION$
 ^git_remote$
@@ -169,6 +171,8 @@
 ^git_object_dup$
 ^git_object_free$
 ^git_object_t$
+^git_object_id_options$
+^GIT_OBJECT_ID_OPTIONS_VERSION$
 ^git_odb$
 ^git_odb_free$
 ^git_odb_backend$
@@ -347,6 +351,10 @@
 ^git_oid_fromstrn$
 ^git_oid_is_zero$
 ^git_oid_tostr$
+^git_odb_backend_loose_options$
+^GIT_ODB_BACKEND_LOOSE_OPTIONS_VERSION$
+^git_odb_backend_pack_options$
+^GIT_ODB_BACKEND_PACK_OPTIONS_VERSION$
 ^git_packbuilder_foreach$
 ^git_packbuilder_hash$
 ^git_packbuilder_insert$
