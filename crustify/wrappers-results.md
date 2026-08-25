@@ -15,7 +15,7 @@
 - **`--max-loc`** — `1000`
 - **`--min-fields`** — `20`
 - **`--parallel-max`** — `16`
-- **branch** — `crustify/src-gpt-5.6-sol`, tip `767afe807`
+- **branch** — `crustify/src-gpt-5.6-sol`, tip `3d930bef6`
 - **deps** — crustify-cli `51d44d1` (`docs/results-template-ub`), ffibox `600399f` (`main`)
 
 ## Review pass
@@ -30,8 +30,8 @@
 - **`--max-loc`** — `3000`
 - **`--min-fields`** — `60`
 - **`--parallel-max`** — `16`
-- **branch** — `crustify/src-gpt-5.6-sol`, tip `767afe807`
-- **agents** — `25`, over `4` session(s); first half only
+- **branch** — `crustify/src-gpt-5.6-sol`, tip `3d930bef6`
+- **agents** — `44`, over `5` session(s); both halves
 
 `rv`-prefixed columns below carry the review pass; the unprefixed ones remain
 the campaign's.
@@ -103,8 +103,9 @@ via `claude`. Each row names the model that produced it.
 | `5-first-half` | wrap | `115` | `288` | `3h14m00s` | `$362.45` (`gpt-5.6-sol`) | `$2.68` | `$0.19` | — | — |
 | `4-review-first-half` | review | `115` | `288` | `1h20m44s` | `$257.58` (`claude-opus-5`) | `$1.91` | `$0.13` | — | — |
 | `4-second-half` | wrap | `55` | `350` | `3h16m09s` | `$303.91` (`gpt-5.6-sol`) | `$3.40` | `$0.33` | — | — |
+| `1-review-second-half` | review | `55` | `350` | `2h39m47s` | `$198.27` (`claude-opus-5`) | `$1.47` | `$0.34` | — | — |
 | orchestrator | orchestration | `—` | `—` | — | `not metered`+ (`claude-opus-5`) | — | — | — | — |
-| **Σ recorded agents** | | **`170`** | **`638`** | **`8h22m02s`** | **`$941.34`** | **`$4.21`** | **`$0.35`** | | **—** |
+| **Σ recorded agents** | | **`170`** | **`638`** | **`11h01m49s`** | **`$1,139.61`** | **`$4.68`** | **`$0.54`** | | **—** |
 
 ## Raw lifetime discovery
 
@@ -307,7 +308,17 @@ No port wave ran; this is a `wrap` campaign.
 | `4` | `+103/-19` | `$8.14` | `12m23s` | `$2.04` |
 | `2` | `+195/-9` | `$7.04` | `12m44s` | `$3.52` |
 | `1` | `+5/-4` | `$3.21` | `5m28s` | `$3.21` |
-| **Σ `120`** | **`+2387/-367`** | **`$220.12`** | — | **`$1.83`** |
+| `15` | `+49/-2` | `$9.16` | `11m19s` | `$0.61` |
+| `1` | `+27/-1` | `$2.91` | `7m03s` | `$2.91` |
+| `4` | `+190/-25` | `$7.88` | `13m54s` | `$1.97` |
+| `11` | `+164/-27` | `$11.50` | `14m50s` | `$1.05` |
+| `3` | `+307/-1` | `$7.63` | `12m09s` | `$2.54` |
+| `6` | `+166/-6` | `$8.94` | `11m55s` | `$1.49` |
+| `2` | `+154/-10` | `$11.09` | `15m40s` | `$5.55` |
+| `8` | `+323/-42` | `$11.77` | `15m21s` | `$1.47` |
+| `3` | `+157/-3` | `$5.99` | `10m24s` | `$2.00` |
+| `2` | `+97/-2` | `$4.00` | `6m27s` | `$2.00` |
+| **Σ `175`** | **`+4021/-486`** | **`$300.98`** | — | **`$1.72`** |
 
 ### Batches — symbols
 
@@ -351,7 +362,16 @@ No port wave ran; this is a `wrap` campaign.
 | `150` | — | — | `3m35s` | — |
 | `90` | `+39/-1` | `$10.63` | `13m35s` | `$0.12` |
 | `150` | `+170/-25` | `$19.81` | `19m43s` | `$0.13` |
-| **Σ `413`** | **`+310/-59`** | **`$45.00`** | — | **`$0.11`** |
+| `1` | `+61/-2` | `$5.23` | `10m43s` | `$5.23` |
+| `96` | `+138/-29` | `$15.34` | `25m10s` | `$0.16` |
+| `150` | `+166/-16` | `$15.30` | `19m06s` | `$0.10` |
+| `10` | `+142/-2` | `$7.34` | `12m29s` | `$0.73` |
+| `27` | `+276/-19` | `$15.46` | `21m37s` | `$0.57` |
+| `35` | `+272/-44` | `$20.47` | `26m16s` | `$0.58` |
+| `22` | `+301/-29` | `$18.22` | `22m37s` | `$0.83` |
+| `3` | `+283/-30` | `$11.21` | `19m11s` | `$3.74` |
+| `4` | `+335/-3` | `$8.83` | `14m23s` | `$2.21` |
+| **Σ `761`** | **`+2284/-233`** | **`$162.42`** | — | **`$0.21`** |
 
 ## Safety audit
 
@@ -491,39 +511,52 @@ judged by `25` review agents under `--max-types 15 --max-syms 150`. That is why
 the review batches are their own tables rather than `rv` columns on the wrap
 tables, and why no row-for-row mapping between them exists.
 
-### The second half was never reviewed
+### Both halves are reviewed, under different caps
 
-The review pass covers the first half only. `Batches — review types` and
-`Batches — review symbols` therefore describe `403` of the campaign's `808`
-units, and the `Safety audit` snapshots below bracket the review, not the
-campaign. The second half's own review needs separate approval and has not run.
+The first half was judged at `--max-types 15 --max-syms 150 --min-fields 30`,
+the second at the same types and symbol caps but `--min-fields 60`. The wider
+floor packs harder: `19` batches covered the second half's `403` judged units
+against `21` batches for the first half's `373`.
+
+The two passes did not behave alike. The first-half review broke three gates it
+inherited green — `18` clippy errors and three unformatted files — and pushed
+two categorical audit targets off zero, which cost a further remediation wave.
+The second-half review broke only formatting, in seven files, and moved no audit
+target at all: the non-seam raw-pointer remainder held at exactly `15` and
+unsafe density was flat, `26.76`% to `26.71`%. It added `48` tests.
+
+Each review drops the lifecycle primitives its schedule would otherwise
+duplicate — `28` from the first half, `2` from the second
+(`git_config_iterator_free`, `git_odb_object_free`). Those units are judged
+inside their owning type's batch and carry no row of their own, which is why a
+review's judged count is below the wave's emitted count.
 
 ### Campaign-end audit
 
 The `Safety audit` table brackets the review pass, so its "after" column is the
 tree at `d71102b84` — before the second half existed. The campaign's final tree
-at `767afe807` measures:
+at `3d930bef6` measures:
 
-| metric | after review (`d71102b84`) | campaign end (`767afe807`) |
+| metric | after first-half review (`d71102b84`) | campaign end (`3d930bef6`) |
 |---|---|---|
-| `code_lines` | `7,423` | `18,452` |
-| unsafe loc | `2,164` | `4,938` |
-| % of loc | `29.15`% | `26.76`% |
-| `unsafe_blocks` | `1,303` | `2,758` |
-| `unsafe_fns` / seam | `498` / `398` | `799` / `633` |
-| `ffi_calls` | `366` | `705` |
-| `wrapper_newtypes` / declared | `79` / `79` | `119` / `119` |
-| raw-ptr positions / seam | `565` / `557` | `945` / `930` |
+| `code_lines` | `7,423` | `18,508` |
+| unsafe loc | `2,164` | `4,944` |
+| % of loc | `29.15`% | `26.71`% |
+| `unsafe_blocks` | `1,303` | `2,769` |
+| `unsafe_fns` / seam | `498` / `398` | `809` / `638` |
+| `ffi_calls` | `366` | `703` |
+| `wrapper_newtypes` / declared | `79` / `79` | `120` / `120` |
+| raw-ptr positions / seam | `565` / `557` | `952` / `937` |
 | **non-seam remainder** | **`8`** | **`15`** |
 
 The tree grew `2.5x` while unsafe density FELL, from
-`29.15`% to `26.76`%.
+`29.15`% to `26.71`%.
 
 ### Seven of eight categorical targets end at zero
 
 `wrapper_declared_nonconformant`, `wrapper_newtypes_undeclared`,
 `raw_ptr_wrapped`, `ref_to_type_wrapper`, `field_ref_wrapped`,
-`field_proj_outside_impl` and `void_ptr_smell` all read `0` at `767afe807`.
+`field_proj_outside_impl` and `void_ptr_smell` all read `0` at `3d930bef6`.
 `raw_ptr_in_wrapper` reads `1`.
 
 The second half's first merged scan was much worse — `raw_ptr_wrapped` `8`,
