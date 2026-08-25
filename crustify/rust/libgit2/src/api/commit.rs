@@ -145,3 +145,132 @@ mod tests {
         assert!(parents.get(1).is_none());
     }
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_commit_header
+    /// A layout-compatible custom commit-header descriptor.
+    ///
+    /// Both pointer fields borrow NUL-terminated strings owned by the caller.
+    /// Libgit2 reads them synchronously while creating a commit and neither
+    /// retains nor frees them.
+    GitCommitHeader,
+    GitCommitHeaderRef,
+    GitCommitHeaderMut,
+    crate::ffi::git_commit_header
+);
+
+impl<'a> GitCommitHeaderRef<'a> {
+    /// Field: git_commit_header.value
+    /// Borrows the header value, or returns `None` for a defensively handled
+    /// null field in an incomplete C value.
+    #[must_use]
+    pub fn value(&self) -> Option<&'a core::ffi::CStr> {
+        let header = self.as_ptr();
+        // SAFETY: raw-place projection reads the initialized pointer without
+        // forming a reference to the C-visible header.
+        let value = unsafe { core::ptr::addr_of!((*header).value).read() };
+        if value.is_null() {
+            None
+        } else {
+            // SAFETY: a valid header points to a NUL-terminated string that
+            // remains live for the header handle's borrow.
+            Some(unsafe { core::ffi::CStr::from_ptr(value) })
+        }
+    }
+
+    /// Field: git_commit_header.field
+    /// Borrows the header name, or returns `None` for a defensively handled
+    /// null field in an incomplete C value.
+    #[must_use]
+    pub fn field(&self) -> Option<&'a core::ffi::CStr> {
+        let header = self.as_ptr();
+        // SAFETY: raw-place projection reads the initialized pointer without
+        // forming a reference to the C-visible header.
+        let field = unsafe { core::ptr::addr_of!((*header).field).read() };
+        if field.is_null() {
+            None
+        } else {
+            // SAFETY: a valid header points to a NUL-terminated string that
+            // remains live for the header handle's borrow.
+            Some(unsafe { core::ffi::CStr::from_ptr(field) })
+        }
+    }
+}
+
+impl GitCommitHeaderMut<'_> {
+    /// Replaces the borrowed header value.
+    ///
+    /// # Safety
+    ///
+    /// `value` must remain live and NUL-terminated for every later use of the
+    /// underlying `git_commit_header`, not merely for this mutable reborrow.
+    pub unsafe fn set_value(&mut self, value: &core::ffi::CStr) {
+        // SAFETY: the exclusive handle permits the pointer-field write; the
+        // caller supplies the stored referent's unexpressible lifetime.
+        unsafe {
+            core::ptr::addr_of_mut!((*self.as_mut_ptr()).value).write(value.as_ptr());
+        }
+    }
+
+    /// Replaces the borrowed header name.
+    ///
+    /// # Safety
+    ///
+    /// `field` must remain live and NUL-terminated for every later use of the
+    /// underlying `git_commit_header`, not merely for this mutable reborrow.
+    pub unsafe fn set_field(&mut self, field: &core::ffi::CStr) {
+        // SAFETY: the exclusive handle permits the pointer-field write; the
+        // caller supplies the stored referent's unexpressible lifetime.
+        unsafe {
+            core::ptr::addr_of_mut!((*self.as_mut_ptr()).field).write(field.as_ptr());
+        }
+    }
+}
+
+#[cfg(test)]
+mod commit_header_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn commit_header_accessors_borrow_both_strings() {
+        let mut raw = crate::ffi::git_commit_header {
+            field: c"x-signature".as_ptr(),
+            value: c"signed value".as_ptr(),
+        };
+        // SAFETY: `raw` and both static C strings remain live for the handle.
+        let header = unsafe { GitCommitHeaderRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(header.field(), Some(c"x-signature"));
+        assert_eq!(header.value(), Some(c"signed value"));
+    }
+
+    #[test]
+    fn commit_header_mutation_replaces_borrowed_strings() {
+        let mut raw = crate::ffi::git_commit_header {
+            field: c"old-field".as_ptr(),
+            value: c"old-value".as_ptr(),
+        };
+        // SAFETY: `raw` remains exclusively accessible through this handle.
+        let mut header = unsafe { GitCommitHeaderMut::from_ptr(&raw mut raw) }.unwrap();
+        // SAFETY: these static C strings outlive the underlying header.
+        unsafe {
+            header.set_field(c"new-field");
+            header.set_value(c"new-value");
+        }
+        assert_eq!(header.as_ref().field(), Some(c"new-field"));
+        assert_eq!(header.as_ref().value(), Some(c"new-value"));
+    }
+
+    #[test]
+    fn commit_header_wrapper_matches_the_c_layout() {
+        assert_eq!(
+            size_of::<GitCommitHeader>(),
+            size_of::<crate::ffi::git_commit_header>()
+        );
+        assert_eq!(
+            align_of::<GitCommitHeader>(),
+            align_of::<crate::ffi::git_commit_header>()
+        );
+    }
+}

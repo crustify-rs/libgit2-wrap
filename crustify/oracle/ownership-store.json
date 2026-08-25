@@ -1033,6 +1033,67 @@
    ]
   },
   {
+   "name": "git_commit_header",
+   "defined_in": "include/git2/commit.h",
+   "_comment_agent": "git_commit_header is a by-value descriptor that borrows two required NUL-terminated strings. git_commit__create_buffer_internal reads both synchronously while formatting the extra-header array; neither pointer is retained or freed.",
+   "fields": [
+    {
+     "name": "field",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required borrowed NUL-terminated field name; callers keep the storage alive while the header descriptor is used. Formatting only reads it."
+     }
+    },
+    {
+     "name": "value",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required borrowed NUL-terminated header value; callers keep the storage alive while the header descriptor is used. Formatting only reads it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commitbuilder",
+   "defined_in": "src/libgit2/commit.c",
+   "_comment_agent": "git_commitbuilder is a transient callback-only accessor. Its sole field points to the stack git_str buffer owned by git_commit__create_internal; the callback may mutate that buffer only during the synchronous invocation and never owns it.",
+   "fields": [
+    {
+     "name": "contents",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Non-null mutable borrow of git_commit__create_internal's stack git_str for the signing callback duration; git_commitbuilder_add_header swaps its contents but does not free the git_str header."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_config",
    "defined_in": "src/libgit2/config.h",
    "_comment_agent": "git_config is refcounted through rc: git_config_new initializes one count, repository storage increments it, and git_config_free decrements it before releasing the object.",
@@ -10710,6 +10771,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and releases one fully constructed git_commit_graph and its owned filename/file; NULL is explicitly accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_graph_writer_free",
+   "defined_in": "src/libgit2/commit_graph.c",
+   "lifetime": {
+    "for": "w",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "w",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes a complete writer allocation; NULL is a no-op. It frees every packed commit, disposes the vector and path buffer, then releases the writer storage."
      }
     }
    ]

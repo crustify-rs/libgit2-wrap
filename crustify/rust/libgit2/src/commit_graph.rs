@@ -1,6 +1,8 @@
 //! Safe wrappers for libgit2 commit_graph APIs.
 
-use ffibox::{CBox, define_ctype};
+use core::ptr::NonNull;
+
+use ffibox::{CBox, CDropped, define_ctype};
 
 use crate::ffi;
 
@@ -29,6 +31,36 @@ ffibox::impl_dropped!(
     ffi::git_commit_graph,
     ffi::git_commit_graph_free
 );
+
+define_ctype!(
+    /// Wraps: git_commit_graph_writer
+    /// An opaque writer for commit-graph files.
+    ///
+    /// The public C API constructs complete writer allocations and releases
+    /// them with `git_commit_graph_writer_free`. Its internal path buffer,
+    /// packed-commit vector, and object-ID type remain hidden behind this
+    /// layout-compatible handle.
+    GitCommitGraphWriter,
+    GitCommitGraphWriterRef,
+    GitCommitGraphWriterMut,
+    ffi::git_commit_graph_writer
+);
+
+/// An owned commit-graph writer allocation.
+pub type GitCommitGraphWriterOwned = CBox<GitCommitGraphWriter>;
+
+/// Wraps: git_commit_graph_writer_free
+// SAFETY: `git_commit_graph_writer_free` is the public destructor for a
+// complete writer allocation. It accepts null, although `CBox` supplies one
+// live non-null allocation exactly once, and disposes every owned field before
+// freeing the writer storage.
+unsafe impl CDropped for GitCommitGraphWriter {
+    unsafe fn c_drop(writer: NonNull<Self>) {
+        // SAFETY: the trait contract supplies one complete owned writer and
+        // this wrapper is transparent over `ffi::git_commit_graph_writer`.
+        unsafe { ffi::git_commit_graph_writer_free(writer.as_ptr().cast()) }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -77,5 +109,23 @@ mod tests {
             assert!(GitCommitGraphMut::from_ptr(ptr::null_mut()).is_none());
             assert!(GitCommitGraphOwned::from_raw(ptr::null_mut()).is_none());
         }
+    }
+
+    #[test]
+    fn writer_wrapper_matches_the_opaque_c_type() {
+        assert_eq!(
+            size_of::<GitCommitGraphWriter>(),
+            size_of::<ffi::git_commit_graph_writer>()
+        );
+        assert_eq!(
+            align_of::<GitCommitGraphWriter>(),
+            align_of::<ffi::git_commit_graph_writer>()
+        );
+    }
+
+    #[test]
+    fn writer_registers_its_public_destructor() {
+        fn requires_drop<T: CDropped>() {}
+        requires_drop::<GitCommitGraphWriter>();
     }
 }

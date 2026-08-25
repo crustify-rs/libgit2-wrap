@@ -530,3 +530,35 @@ pub fn git_commit_tree_id<'a>(commit: GitCommitRef<'a>) -> crate::oid::OidRef<'a
     // SAFETY: the returned field remains live for the commit borrow.
     unsafe { crate::oid::OidRef::from_ptr(raw.cast_mut()) }.expect("a live commit has a tree ID")
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_commitbuilder
+    /// A transient, opaque accessor passed to commit-signing callbacks.
+    ///
+    /// The builder borrows the in-progress commit buffer for exactly the
+    /// callback invocation. It is never independently allocated or freed;
+    /// callback wrappers should therefore expose only `GitCommitbuilderMut`.
+    GitCommitbuilder,
+    GitCommitbuilderRef,
+    GitCommitbuilderMut,
+    ffi::git_commitbuilder
+);
+
+#[cfg(test)]
+mod commitbuilder_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn commitbuilder_wrapper_matches_the_opaque_public_type() {
+        assert_eq!(
+            size_of::<GitCommitbuilder>(),
+            size_of::<ffi::git_commitbuilder>()
+        );
+        assert_eq!(
+            align_of::<GitCommitbuilder>(),
+            align_of::<ffi::git_commitbuilder>()
+        );
+    }
+}
