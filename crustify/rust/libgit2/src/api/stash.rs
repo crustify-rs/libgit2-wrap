@@ -81,10 +81,32 @@ mod tests {
 /// Wraps: git_stash_save_options
 /// Layout-compatible stash-save options whose configured pointers borrow
 /// caller-owned values for the options lifetime.
+///
+/// `'data` is invariant. The setters store a `&'data` referent into the C
+/// struct while the getters hand one back out, so a covariant `'data` would
+/// let safe code shrink the parameter on the exclusive handle, install a
+/// shorter-lived string or signature, and then read it back through a handle
+/// still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::stash::GitStashSaveOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitStashSaveOptionsMut<'object, 'static>,
+/// ) -> GitStashSaveOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitStashSaveOptions<'data> {
     inner: CType<ffi::git_stash_save_options>,
-    _data: PhantomData<&'data ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitStashSaveOptions`].
@@ -351,6 +373,20 @@ mod save_options_tests {
         assert_eq!(view.paths().count(), 1);
         assert_eq!(view.paths().strings().unwrap().get(0), Some(c"tracked.txt"));
         assert_eq!(view.stasher().unwrap().as_ptr(), signature_ptr);
+    }
+
+    #[test]
+    fn save_options_keep_a_scoped_data_borrow_across_shorter_object_borrows() {
+        // The `compile_fail` doctest on `GitStashSaveOptions` covers the
+        // direction that must be rejected. This covers the direction that must
+        // keep working: `'data` is a local scope rather than `'static`, and
+        // the value is reborrowed for several shorter `'object` lifetimes.
+        let message = std::ffi::CString::new("scoped").unwrap();
+        let mut options = GitStashSaveOptions::new();
+        options.as_mut().set_message(Some(message.as_c_str()));
+        assert_eq!(options.as_ref().message(), Some(message.as_c_str()));
+        options.as_mut().set_flags(3);
+        assert_eq!(options.as_ref().message(), Some(message.as_c_str()));
     }
 }
 
