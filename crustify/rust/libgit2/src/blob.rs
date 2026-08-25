@@ -132,6 +132,7 @@ pub fn git_blob_create_fromstream_commit(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
     use core::ptr;
@@ -192,4 +193,42 @@ mod tests {
         // the cast recovers the allocation's original type.
         drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_blob>>()) });
     }
+}
+
+/// Wraps: git_blob_is_binary
+/// Reports whether libgit2's content heuristic classifies the blob as binary.
+#[must_use]
+pub fn git_blob_is_binary(blob: GitBlobRef<'_>) -> bool {
+    // SAFETY: `blob` is live and the operation only reads immutable content.
+    unsafe { ffi::git_blob_is_binary(blob.as_ptr()) != 0 }
+}
+
+/// Wraps: git_blob_rawcontent
+/// Borrows the blob's immutable bytes.
+#[must_use]
+pub fn git_blob_rawcontent<'a>(blob: GitBlobRef<'a>) -> &'a [u8] {
+    // SAFETY: both accessors only read the live blob; libgit2 keeps its object
+    // bytes immutable and alive for the blob borrow.
+    let (data, size) = unsafe {
+        (
+            ffi::git_blob_rawcontent(blob.as_ptr()).cast::<u8>(),
+            ffi::git_blob_rawsize(blob.as_ptr()),
+        )
+    };
+    let size = usize::try_from(size).expect("a blob size must fit the address space");
+    if size == 0 {
+        return &[];
+    }
+    assert!(!data.is_null(), "a nonempty blob must have content");
+    // SAFETY: a nonempty blob exposes exactly `size` initialized immutable
+    // bytes at `data`, all kept alive by the input handle's `'a` lifetime.
+    unsafe { core::slice::from_raw_parts(data, size) }
+}
+
+/// Wraps: git_blob_rawsize
+/// Returns the blob's content length in bytes.
+#[must_use]
+pub fn git_blob_rawsize(blob: GitBlobRef<'_>) -> u64 {
+    // SAFETY: `blob` is live and the accessor only reads its size.
+    unsafe { ffi::git_blob_rawsize(blob.as_ptr()) }
 }

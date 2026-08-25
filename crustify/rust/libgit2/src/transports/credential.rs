@@ -230,6 +230,7 @@ impl GitCredentialRef<'_> {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod credential_tests {
     use core::mem::{align_of, size_of};
     use core::sync::atomic::{AtomicUsize, Ordering};
@@ -313,5 +314,136 @@ mod credential_tests {
         assert!(credential.as_ref().has_deallocator());
         drop(credential);
         assert_eq!(DROP_COUNT.load(Ordering::SeqCst), 1);
+    }
+}
+
+fn credential_result(
+    status: i32,
+    raw: *mut ffi::git_credential,
+) -> Result<GitCredentialOwned, i32> {
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: successful credential constructors transfer one fully formed
+    // credential allocation to their caller.
+    unsafe { GitCredentialOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+fn optional_string(value: Option<&core::ffi::CStr>) -> *const core::ffi::c_char {
+    value.map_or(core::ptr::null(), core::ffi::CStr::as_ptr)
+}
+
+/// Wraps: git_cred_default_new
+/// Creates a platform-default credential.
+pub fn git_cred_default_new() -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is a writable owner slot.
+    let status = unsafe { ffi::git_cred_default_new(&mut out) };
+    credential_result(status, out)
+}
+
+/// Wraps: git_cred_has_username
+/// Reports whether the credential carries a username.
+#[must_use]
+pub fn git_cred_has_username(credential: GitCredentialRef<'_>) -> bool {
+    // SAFETY: the credential is live and this query only reads its header.
+    unsafe { ffi::git_cred_has_username(credential.as_ptr().cast_mut()) != 0 }
+}
+
+/// Wraps: git_cred_ssh_key_from_agent
+/// Creates an SSH-agent credential for `username`.
+pub fn git_cred_ssh_key_from_agent(username: &core::ffi::CStr) -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and `username` is live for the call.
+    let status = unsafe { ffi::git_cred_ssh_key_from_agent(&mut out, username.as_ptr()) };
+    credential_result(status, out)
+}
+
+/// Wraps: git_cred_ssh_key_memory_new
+/// Creates an SSH credential from in-memory key text.
+pub fn git_cred_ssh_key_memory_new(
+    username: &core::ffi::CStr,
+    public_key: Option<&core::ffi::CStr>,
+    private_key: &core::ffi::CStr,
+    passphrase: Option<&core::ffi::CStr>,
+) -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and every non-null string is live for the
+    // synchronous constructor, which copies the values it retains.
+    let status = unsafe {
+        ffi::git_cred_ssh_key_memory_new(
+            &mut out,
+            username.as_ptr(),
+            optional_string(public_key),
+            private_key.as_ptr(),
+            optional_string(passphrase),
+        )
+    };
+    credential_result(status, out)
+}
+
+/// Wraps: git_cred_ssh_key_new
+/// Creates an SSH credential from key paths.
+pub fn git_cred_ssh_key_new(
+    username: &core::ffi::CStr,
+    public_key: Option<&core::ffi::CStr>,
+    private_key: &core::ffi::CStr,
+    passphrase: Option<&core::ffi::CStr>,
+) -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and every non-null path or passphrase is live
+    // for the synchronous constructor, which copies retained values.
+    let status = unsafe {
+        ffi::git_cred_ssh_key_new(
+            &mut out,
+            username.as_ptr(),
+            optional_string(public_key),
+            private_key.as_ptr(),
+            optional_string(passphrase),
+        )
+    };
+    credential_result(status, out)
+}
+
+/// Wraps: git_cred_username_new
+/// Creates a username-only credential.
+pub fn git_cred_username_new(username: &core::ffi::CStr) -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and `username` is live for the call.
+    let status = unsafe { ffi::git_cred_username_new(&mut out, username.as_ptr()) };
+    credential_result(status, out)
+}
+
+/// Wraps: git_cred_userpass_plaintext_new
+/// Creates a plaintext username/password credential.
+pub fn git_cred_userpass_plaintext_new(
+    username: &core::ffi::CStr,
+    password: &core::ffi::CStr,
+) -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and both strings are live for the call.
+    let status = unsafe {
+        ffi::git_cred_userpass_plaintext_new(&mut out, username.as_ptr(), password.as_ptr())
+    };
+    credential_result(status, out)
+}
+
+#[cfg(test)]
+mod constructor_tests {
+    use super::*;
+
+    #[test]
+    fn username_constructor_returns_the_requested_kind() {
+        // SAFETY: libgit2 initialization is process-global and refcounted;
+        // this successful acquisition is balanced after the credential drops.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let credential = git_cred_username_new(c"alice").expect("username credential");
+        assert_eq!(
+            credential.as_ref().credential_type(),
+            Some(GitCredentialType::USERNAME)
+        );
+        drop(credential);
+        // SAFETY: balances the successful initialization above.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }

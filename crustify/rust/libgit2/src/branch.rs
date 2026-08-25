@@ -283,6 +283,7 @@ pub fn git_branch_upstream_remote(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
     use core::mem::{align_of, size_of};
@@ -344,4 +345,29 @@ mod tests {
     fn failed_reference_result_accepts_an_empty_typed_owner() {
         assert!(matches!(reference_result(-123, None), Err(-123)));
     }
+}
+
+/// Wraps: git_branch_create
+/// Creates a branch tied to the repository that owns its reference database.
+pub fn git_branch_create<'repo>(
+    repo: crate::repository::GitRepositoryRef<'repo>,
+    branch_name: &core::ffi::CStr,
+    target: crate::commit::GitCommitRef<'_>,
+    force: bool,
+) -> Result<crate::refs::GitReferenceTetheredOwned<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: the handles and name are live for the call, `out` is writable,
+    // and success returns one reference whose repository borrow is retained.
+    let status = unsafe {
+        ffi::git_branch_create(
+            core::ptr::addr_of_mut!(out),
+            repo.as_ptr().cast_mut(),
+            branch_name.as_ptr(),
+            target.as_ptr(),
+            i32::from(force),
+        )
+    };
+    // SAFETY: `out` is null or a fresh reference owner from this constructor.
+    let reference = unsafe { crate::refs::GitReferenceOwned::from_raw(out) };
+    crate::refs::adopt_reference(status, reference)
 }

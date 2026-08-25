@@ -329,3 +329,14 @@
 ^GIT_STASH_SAVE_OPTIONS_VERSION$
 ^git_status_options$
 ^GIT_STATUS_OPTIONS_VERSION$
+^git_checkout_notify_cb$
+^git_commit_create_cb$
+^git_credential_acquire_cb$
+^git_blame_(file|init_options)$
+^git_blob_(id|is_binary|lookup|rawcontent|rawsize)$
+^git_branch_create$
+^git_commit_(amend|author|author_with_mailmap|body|committer|committer_with_mailmap|create|create_buffer|header_field|id|lookup|lookup_prefix|message|message_encoding|message_raw|parent|parent_id|parentcount|raw_header|summary|time|time_offset|tree|tree_id)$
+^git_config_get_entry$
+^git_cred_(default_new|has_username|ssh_key_from_agent|ssh_key_memory_new|ssh_key_new|username_new|userpass_plaintext_new)$
+^git_index_(add|add_all|add_bypath|add_frombuffer|clear|conflict_get)$
+^git_index_add_option_t$

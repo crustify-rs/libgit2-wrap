@@ -100,6 +100,7 @@ pub fn git_commit_extract_signature(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
 
@@ -155,4 +156,387 @@ mod tests {
         // the cast recovers the allocation's original type.
         drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_commit>>()) });
     }
+}
+
+fn optional_string(value: Option<&core::ffi::CStr>) -> *const core::ffi::c_char {
+    value.map_or(core::ptr::null(), core::ffi::CStr::as_ptr)
+}
+
+fn optional_signature(
+    value: Option<crate::api::types::GitSignatureRef<'_>>,
+) -> *const ffi::git_signature {
+    value.map_or(core::ptr::null(), |signature| signature.as_ptr())
+}
+
+fn optional_tree(value: Option<crate::tree::GitTreeRef<'_>>) -> *const ffi::git_tree {
+    value.map_or(core::ptr::null(), |tree| tree.as_ptr())
+}
+
+fn status_result(status: i32) -> Result<(), i32> {
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+fn parent_pointers(parents: &[GitCommitRef<'_>]) -> Vec<*const ffi::git_commit> {
+    parents.iter().map(GitCommitRef::as_ptr).collect()
+}
+
+/// Wraps: git_commit_amend
+/// Amends a commit, retaining each omitted field from the original.
+#[allow(clippy::too_many_arguments)]
+pub fn git_commit_amend(
+    id: &mut crate::oid::OidMut<'_>,
+    commit: GitCommitRef<'_>,
+    update_ref: Option<&core::ffi::CStr>,
+    author: Option<crate::api::types::GitSignatureRef<'_>>,
+    committer: Option<crate::api::types::GitSignatureRef<'_>>,
+    message_encoding: Option<&core::ffi::CStr>,
+    message: Option<&core::ffi::CStr>,
+    tree: Option<crate::tree::GitTreeRef<'_>>,
+) -> Result<(), i32> {
+    // SAFETY: `id` is writable; every handle and non-null string is live for
+    // the call, and libgit2 retains none of the borrowed inputs.
+    let status = unsafe {
+        ffi::git_commit_amend(
+            id.as_mut_ptr(),
+            commit.as_ptr(),
+            optional_string(update_ref),
+            optional_signature(author),
+            optional_signature(committer),
+            optional_string(message_encoding),
+            optional_string(message),
+            optional_tree(tree),
+        )
+    };
+    status_result(status)
+}
+
+/// Wraps: git_commit_author
+/// Borrows the commit's author signature.
+#[must_use]
+pub fn git_commit_author<'a>(commit: GitCommitRef<'a>) -> crate::api::types::GitSignatureRef<'a> {
+    // SAFETY: a parsed live commit has an initialized author field.
+    let raw = unsafe { ffi::git_commit_author(commit.as_ptr()) };
+    // SAFETY: the signature is embedded in and kept alive by `commit`.
+    unsafe { crate::api::types::GitSignatureRef::from_ptr(raw.cast_mut()) }
+        .expect("a live commit has an author")
+}
+
+fn mapped_signature(
+    commit: GitCommitRef<'_>,
+    mailmap: Option<crate::mailmap::GitMailmapRef<'_>>,
+    author: bool,
+) -> Result<crate::api::types::GitSignatureOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    let mailmap = mailmap.map_or(core::ptr::null(), |value| value.as_ptr());
+    // SAFETY: `out` is writable and both optional/shared inputs are live; the
+    // selected function transfers a freshly allocated signature on success.
+    let status = unsafe {
+        if author {
+            ffi::git_commit_author_with_mailmap(&mut out, commit.as_ptr(), mailmap)
+        } else {
+            ffi::git_commit_committer_with_mailmap(&mut out, commit.as_ptr(), mailmap)
+        }
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one fully initialized signature owner.
+    unsafe { crate::api::types::GitSignatureOwned::from_raw(out) }
+        .ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_commit_author_with_mailmap
+/// Resolves and owns the commit's author signature.
+pub fn git_commit_author_with_mailmap(
+    commit: GitCommitRef<'_>,
+    mailmap: Option<crate::mailmap::GitMailmapRef<'_>>,
+) -> Result<crate::api::types::GitSignatureOwned, i32> {
+    mapped_signature(commit, mailmap, true)
+}
+
+/// Wraps: git_commit_body
+/// Borrows the lazily parsed body, if present.
+#[must_use]
+pub fn git_commit_body<'a>(mut commit: GitCommitMut<'a>) -> Option<&'a core::ffi::CStr> {
+    // SAFETY: the exclusive handle permits the function to populate its lazy
+    // cache; any returned pointer is then kept alive by the commit.
+    let raw = unsafe { ffi::git_commit_body(commit.as_mut_ptr()) };
+    if raw.is_null() {
+        None
+    } else {
+        // SAFETY: the non-null result is NUL-terminated and commit-owned.
+        Some(unsafe { core::ffi::CStr::from_ptr(raw) })
+    }
+}
+
+/// Wraps: git_commit_committer
+/// Borrows the commit's committer signature.
+#[must_use]
+pub fn git_commit_committer<'a>(
+    commit: GitCommitRef<'a>,
+) -> crate::api::types::GitSignatureRef<'a> {
+    // SAFETY: a parsed live commit has an initialized committer field.
+    let raw = unsafe { ffi::git_commit_committer(commit.as_ptr()) };
+    // SAFETY: the signature is embedded in and kept alive by `commit`.
+    unsafe { crate::api::types::GitSignatureRef::from_ptr(raw.cast_mut()) }
+        .expect("a live commit has a committer")
+}
+
+/// Wraps: git_commit_committer_with_mailmap
+/// Resolves and owns the commit's committer signature.
+pub fn git_commit_committer_with_mailmap(
+    commit: GitCommitRef<'_>,
+    mailmap: Option<crate::mailmap::GitMailmapRef<'_>>,
+) -> Result<crate::api::types::GitSignatureOwned, i32> {
+    mapped_signature(commit, mailmap, false)
+}
+
+/// Wraps: git_commit_create
+/// Creates a commit and writes its ID into `id`.
+#[allow(clippy::too_many_arguments)]
+pub fn git_commit_create(
+    id: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    update_ref: Option<&core::ffi::CStr>,
+    author: crate::api::types::GitSignatureRef<'_>,
+    committer: crate::api::types::GitSignatureRef<'_>,
+    message_encoding: Option<&core::ffi::CStr>,
+    message: &core::ffi::CStr,
+    tree: crate::tree::GitTreeRef<'_>,
+    parents: &[GitCommitRef<'_>],
+) -> Result<(), i32> {
+    let mut parent_pointers = parent_pointers(parents);
+    // SAFETY: the output and repository are exclusive, every borrowed input
+    // is live, and the pointer array contains exactly `parents.len()` entries.
+    let status = unsafe {
+        ffi::git_commit_create(
+            id.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            optional_string(update_ref),
+            author.as_ptr(),
+            committer.as_ptr(),
+            optional_string(message_encoding),
+            message.as_ptr(),
+            tree.as_ptr(),
+            parent_pointers.len(),
+            parent_pointers.as_mut_ptr(),
+        )
+    };
+    status_result(status)
+}
+
+/// Wraps: git_commit_create_buffer
+/// Serializes a commit into `out` without writing the object database.
+#[allow(clippy::too_many_arguments)]
+pub fn git_commit_create_buffer(
+    out: &mut crate::api::buffer::GitBufMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    author: crate::api::types::GitSignatureRef<'_>,
+    committer: crate::api::types::GitSignatureRef<'_>,
+    message_encoding: Option<&core::ffi::CStr>,
+    message: &core::ffi::CStr,
+    tree: crate::tree::GitTreeRef<'_>,
+    parents: &[GitCommitRef<'_>],
+) -> Result<(), i32> {
+    let mut parent_pointers = parent_pointers(parents);
+    // SAFETY: both mutable handles are exclusive, all shared inputs are live,
+    // and the temporary parent array matches its supplied count.
+    let status = unsafe {
+        ffi::git_commit_create_buffer(
+            out.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            author.as_ptr(),
+            committer.as_ptr(),
+            optional_string(message_encoding),
+            message.as_ptr(),
+            tree.as_ptr(),
+            parent_pointers.len(),
+            parent_pointers.as_mut_ptr(),
+        )
+    };
+    status_result(status)
+}
+
+/// Wraps: git_commit_header_field
+/// Copies one commit header field into `out`.
+pub fn git_commit_header_field(
+    out: &mut crate::api::buffer::GitBufMut<'_>,
+    commit: GitCommitRef<'_>,
+    field: &core::ffi::CStr,
+) -> Result<(), i32> {
+    // SAFETY: `out` is exclusive and both shared inputs are live for the call.
+    status_result(unsafe {
+        ffi::git_commit_header_field(out.as_mut_ptr(), commit.as_ptr(), field.as_ptr())
+    })
+}
+
+unsafe fn commit_string<'a>(raw: *const core::ffi::c_char) -> Option<&'a core::ffi::CStr> {
+    if raw.is_null() {
+        None
+    } else {
+        // SAFETY: callers only pass commit-owned NUL-terminated pointers and
+        // bind `'a` to the commit handle that keeps them alive.
+        Some(unsafe { core::ffi::CStr::from_ptr(raw) })
+    }
+}
+
+/// Wraps: git_commit_message
+/// Borrows the normalized commit message, if present.
+#[must_use]
+pub fn git_commit_message<'a>(commit: GitCommitRef<'a>) -> Option<&'a core::ffi::CStr> {
+    // SAFETY: `commit` is live and the accessor only reads commit-owned data.
+    // SAFETY: the returned string is commit-owned and bounded by `'a`.
+    unsafe { commit_string(ffi::git_commit_message(commit.as_ptr())) }
+}
+
+/// Wraps: git_commit_message_encoding
+/// Borrows the declared message encoding, if the header supplied one.
+#[must_use]
+pub fn git_commit_message_encoding<'a>(commit: GitCommitRef<'a>) -> Option<&'a core::ffi::CStr> {
+    // SAFETY: `commit` is live and the accessor only reads commit-owned data.
+    // SAFETY: the returned string is commit-owned and bounded by `'a`.
+    unsafe { commit_string(ffi::git_commit_message_encoding(commit.as_ptr())) }
+}
+
+/// Wraps: git_commit_message_raw
+/// Borrows the unmodified commit message, if present.
+#[must_use]
+pub fn git_commit_message_raw<'a>(commit: GitCommitRef<'a>) -> Option<&'a core::ffi::CStr> {
+    // SAFETY: `commit` is live and the accessor only reads commit-owned data.
+    // SAFETY: the returned string is commit-owned and bounded by `'a`.
+    unsafe { commit_string(ffi::git_commit_message_raw(commit.as_ptr())) }
+}
+
+/// An owned parent commit tied to the commit whose repository it shares.
+pub struct CommitParent<'a> {
+    inner: GitCommitOwned,
+    _commit: core::marker::PhantomData<GitCommitRef<'a>>,
+}
+
+impl CommitParent<'_> {
+    /// Borrows the parent commit.
+    #[must_use]
+    pub fn as_ref(&self) -> GitCommitRef<'_> {
+        self.inner.as_ref()
+    }
+}
+
+/// Wraps: git_commit_parent
+/// Loads parent `index` and ties it to the source commit's repository.
+pub fn git_commit_parent<'a>(
+    commit: GitCommitRef<'a>,
+    index: u32,
+) -> Result<CommitParent<'a>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and `commit` is live. Success transfers one
+    // parent cache reference sharing the source commit's repository.
+    let status = unsafe { ffi::git_commit_parent(&mut out, commit.as_ptr(), index) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one initialized commit owner.
+    let inner = unsafe { GitCommitOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(CommitParent {
+        inner,
+        _commit: core::marker::PhantomData,
+    })
+}
+
+/// Wraps: git_commit_parent_id
+/// Borrows a parent ID, returning `None` when `index` is out of range.
+#[must_use]
+pub fn git_commit_parent_id<'a>(
+    commit: GitCommitRef<'a>,
+    index: u32,
+) -> Option<crate::oid::OidRef<'a>> {
+    // SAFETY: `commit` is live; C returns null or an inline commit-owned ID.
+    let raw = unsafe { ffi::git_commit_parent_id(commit.as_ptr(), index) };
+    // SAFETY: a non-null returned field stays live for the commit borrow.
+    unsafe { crate::oid::OidRef::from_ptr(raw.cast_mut()) }
+}
+
+/// Wraps: git_commit_parentcount
+/// Returns the number of parents.
+#[must_use]
+pub fn git_commit_parentcount(commit: GitCommitRef<'_>) -> u32 {
+    // SAFETY: `commit` is live and the accessor only reads its parent vector.
+    unsafe { ffi::git_commit_parentcount(commit.as_ptr()) }
+}
+
+/// Wraps: git_commit_raw_header
+/// Borrows the commit's complete raw header.
+#[must_use]
+pub fn git_commit_raw_header<'a>(commit: GitCommitRef<'a>) -> &'a core::ffi::CStr {
+    // SAFETY: a parsed live commit owns a NUL-terminated raw header.
+    let raw = unsafe { ffi::git_commit_raw_header(commit.as_ptr()) };
+    // SAFETY: the returned string is commit-owned and bounded by `'a`.
+    unsafe { commit_string(raw) }.expect("a live commit has a raw header")
+}
+
+/// Wraps: git_commit_summary
+/// Borrows the lazily parsed one-line summary, if present.
+#[must_use]
+pub fn git_commit_summary<'a>(mut commit: GitCommitMut<'a>) -> Option<&'a core::ffi::CStr> {
+    // SAFETY: the exclusive handle permits lazy cache initialization.
+    // SAFETY: the returned string is commit-owned and bounded by `'a`.
+    unsafe { commit_string(ffi::git_commit_summary(commit.as_mut_ptr())) }
+}
+
+/// Wraps: git_commit_time
+/// Returns the committer timestamp in seconds since the Unix epoch.
+#[must_use]
+pub fn git_commit_time(commit: GitCommitRef<'_>) -> i64 {
+    // SAFETY: `commit` is live and the accessor only reads its signature.
+    unsafe { ffi::git_commit_time(commit.as_ptr()) }
+}
+
+/// Wraps: git_commit_time_offset
+/// Returns the committer timezone offset in minutes.
+#[must_use]
+pub fn git_commit_time_offset(commit: GitCommitRef<'_>) -> i32 {
+    // SAFETY: `commit` is live and the accessor only reads its signature.
+    unsafe { ffi::git_commit_time_offset(commit.as_ptr()) }
+}
+
+/// An owned tree tied to the commit whose repository it shares.
+pub struct CommitTree<'a> {
+    inner: crate::tree::GitTreeOwned,
+    _commit: core::marker::PhantomData<GitCommitRef<'a>>,
+}
+
+impl CommitTree<'_> {
+    /// Borrows the tree.
+    #[must_use]
+    pub fn as_ref(&self) -> crate::tree::GitTreeRef<'_> {
+        self.inner.as_ref()
+    }
+}
+
+/// Wraps: git_commit_tree
+/// Loads the commit's tree and ties it to the commit's repository.
+pub fn git_commit_tree<'a>(commit: GitCommitRef<'a>) -> Result<CommitTree<'a>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and `commit` is live; success transfers one
+    // tree cache reference sharing the source commit's repository.
+    let status = unsafe { ffi::git_commit_tree(&mut out, commit.as_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one initialized owned tree reference.
+    let inner =
+        unsafe { crate::tree::GitTreeOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(CommitTree {
+        inner,
+        _commit: core::marker::PhantomData,
+    })
+}
+
+/// Wraps: git_commit_tree_id
+/// Borrows the commit's tree ID.
+#[must_use]
+pub fn git_commit_tree_id<'a>(commit: GitCommitRef<'a>) -> crate::oid::OidRef<'a> {
+    // SAFETY: a parsed live commit has a non-null inline tree ID.
+    let raw = unsafe { ffi::git_commit_tree_id(commit.as_ptr()) };
+    // SAFETY: the returned field remains live for the commit borrow.
+    unsafe { crate::oid::OidRef::from_ptr(raw.cast_mut()) }.expect("a live commit has a tree ID")
 }

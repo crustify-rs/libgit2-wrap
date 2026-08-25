@@ -188,6 +188,7 @@ impl Not for GitCheckoutStrategy {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use core::mem::{align_of, size_of};
 
@@ -250,5 +251,58 @@ mod tests {
         ] {
             assert!(GitCheckoutStrategy::ALL.contains(strategy));
         }
+    }
+}
+
+/// Wraps: git_checkout_notify_cb
+/// Safe callable surface for checkout notifications.
+pub trait GitCheckoutNotifyCallback {
+    /// Handles one checkout notification and returns zero to continue.
+    fn notify(
+        &mut self,
+        why: crate::checkout::CheckoutNotify,
+        path: Option<&core::ffi::CStr>,
+        baseline: Option<crate::diff::DiffFileRef<'_>>,
+        target: Option<crate::diff::DiffFileRef<'_>>,
+        workdir: Option<crate::diff::DiffFileRef<'_>>,
+    ) -> i32;
+}
+
+impl<F> GitCheckoutNotifyCallback for F
+where
+    F: FnMut(
+        crate::checkout::CheckoutNotify,
+        Option<&core::ffi::CStr>,
+        Option<crate::diff::DiffFileRef<'_>>,
+        Option<crate::diff::DiffFileRef<'_>>,
+        Option<crate::diff::DiffFileRef<'_>>,
+    ) -> i32,
+{
+    fn notify(
+        &mut self,
+        why: crate::checkout::CheckoutNotify,
+        path: Option<&core::ffi::CStr>,
+        baseline: Option<crate::diff::DiffFileRef<'_>>,
+        target: Option<crate::diff::DiffFileRef<'_>>,
+        workdir: Option<crate::diff::DiffFileRef<'_>>,
+    ) -> i32 {
+        self(why, path, baseline, target, workdir)
+    }
+}
+
+#[cfg(test)]
+mod callback_surface_tests {
+    use super::*;
+
+    #[test]
+    fn closures_implement_checkout_notifications() {
+        fn accepts<C: GitCheckoutNotifyCallback>(_callback: C) {}
+        accepts(
+            |_: crate::checkout::CheckoutNotify,
+             _: Option<&core::ffi::CStr>,
+             _: Option<crate::diff::DiffFileRef<'_>>,
+             _: Option<crate::diff::DiffFileRef<'_>>,
+             _: Option<crate::diff::DiffFileRef<'_>>| 0,
+        );
     }
 }

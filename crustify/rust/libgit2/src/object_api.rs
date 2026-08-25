@@ -1,9 +1,140 @@
 //! Safe wrappers for libgit2 object_api APIs.
 
+use core::marker::PhantomData;
+
 use crate::ffi;
 use crate::oid::OidRef;
 use crate::repository::GitRepositoryRef;
 use crate::tree::{GitTreeOwned, GitTreeRef, RepositoryTree};
+
+/// An owned blob tied to the repository that backs its object cache.
+pub struct RepositoryBlob<'repo> {
+    inner: crate::blob::GitBlobOwned,
+    _repository: PhantomData<crate::repository::GitRepositoryRef<'repo>>,
+}
+
+impl RepositoryBlob<'_> {
+    /// Borrows the blob.
+    #[must_use]
+    pub fn as_ref(&self) -> crate::blob::GitBlobRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the blob exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> crate::blob::GitBlobMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+/// An owned commit tied to the repository that backs its object cache.
+pub struct RepositoryCommit<'repo> {
+    inner: crate::commit::GitCommitOwned,
+    _repository: PhantomData<crate::repository::GitRepositoryRef<'repo>>,
+}
+
+impl RepositoryCommit<'_> {
+    /// Borrows the commit.
+    #[must_use]
+    pub fn as_ref(&self) -> crate::commit::GitCommitRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the commit exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> crate::commit::GitCommitMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+/// Wraps: git_blob_id
+/// Borrows a blob's inline object identifier.
+#[must_use]
+pub fn git_blob_id<'a>(blob: crate::blob::GitBlobRef<'a>) -> crate::oid::OidRef<'a> {
+    // SAFETY: a live blob has a non-null inline ID kept alive by the blob.
+    let id = unsafe { ffi::git_blob_id(blob.as_ptr()) };
+    // SAFETY: the returned inline field is live for the input borrow.
+    unsafe { crate::oid::OidRef::from_ptr(id.cast_mut()) }.expect("a live blob has an object ID")
+}
+
+/// Wraps: git_blob_lookup
+/// Looks up a blob and ties it to its repository.
+pub fn git_blob_lookup<'repo>(
+    repo: crate::repository::GitRepositoryRef<'repo>,
+    id: crate::oid::OidRef<'_>,
+) -> Result<RepositoryBlob<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and both input handles are live; success
+    // transfers one blob cache reference tied to `repo`.
+    let status = unsafe { ffi::git_blob_lookup(&mut out, repo.as_ptr().cast_mut(), id.as_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one fully initialized owned blob reference.
+    let inner =
+        unsafe { crate::blob::GitBlobOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(RepositoryBlob {
+        inner,
+        _repository: PhantomData,
+    })
+}
+
+/// Wraps: git_commit_id
+/// Borrows a commit's inline object identifier.
+#[must_use]
+pub fn git_commit_id<'a>(commit: crate::commit::GitCommitRef<'a>) -> crate::oid::OidRef<'a> {
+    // SAFETY: a live commit has a non-null inline ID kept alive by the commit.
+    let id = unsafe { ffi::git_commit_id(commit.as_ptr()) };
+    // SAFETY: the returned inline field is live for the input borrow.
+    unsafe { crate::oid::OidRef::from_ptr(id.cast_mut()) }.expect("a live commit has an object ID")
+}
+
+/// Wraps: git_commit_lookup
+/// Looks up a commit and ties it to its repository.
+pub fn git_commit_lookup<'repo>(
+    repo: crate::repository::GitRepositoryRef<'repo>,
+    id: crate::oid::OidRef<'_>,
+) -> Result<RepositoryCommit<'repo>, i32> {
+    commit_lookup_impl(repo, id, None)
+}
+
+/// Wraps: git_commit_lookup_prefix
+/// Looks up a commit using the first `hex_len` hexadecimal ID digits.
+pub fn git_commit_lookup_prefix<'repo>(
+    repo: crate::repository::GitRepositoryRef<'repo>,
+    id: crate::oid::OidRef<'_>,
+    hex_len: usize,
+) -> Result<RepositoryCommit<'repo>, i32> {
+    commit_lookup_impl(repo, id, Some(hex_len))
+}
+
+fn commit_lookup_impl<'repo>(
+    repo: crate::repository::GitRepositoryRef<'repo>,
+    id: crate::oid::OidRef<'_>,
+    prefix: Option<usize>,
+) -> Result<RepositoryCommit<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and both handles are live. Both constructors
+    // transfer one commit cache reference on success.
+    let status = unsafe {
+        match prefix {
+            Some(len) => {
+                ffi::git_commit_lookup_prefix(&mut out, repo.as_ptr().cast_mut(), id.as_ptr(), len)
+            }
+            None => ffi::git_commit_lookup(&mut out, repo.as_ptr().cast_mut(), id.as_ptr()),
+        }
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one fully initialized owned commit reference.
+    let inner = unsafe { crate::commit::GitCommitOwned::from_raw(out) }
+        .ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(RepositoryCommit {
+        inner,
+        _repository: PhantomData,
+    })
+}
 
 /// Wraps: git_tree_id
 /// Borrows the tree's inline object ID.

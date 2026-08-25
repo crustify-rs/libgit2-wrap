@@ -481,6 +481,7 @@ mod entry_tests {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use core::mem::{align_of, size_of};
     use core::ptr;
@@ -646,5 +647,246 @@ mod tests {
         // borrowed index, which outlives it.
         drop(iterator);
         drop(index);
+    }
+}
+
+/// Wraps: git_index_add
+/// Copies an entry, including its path, into the index.
+pub fn git_index_add(index: &mut GitIndexMut<'_>, entry: IndexEntryRef<'_>) -> Result<(), i32> {
+    // SAFETY: the index is exclusively borrowed, the entry is live, and C
+    // copies every retained field before returning.
+    let status = unsafe { ffi::git_index_add(index.as_mut_ptr(), entry.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Checked bit set controlling bulk index additions.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct GitIndexAddOptions(ffi::git_index_add_option_t);
+
+impl GitIndexAddOptions {
+    /// Default matching and ignore behavior.
+    pub const DEFAULT: Self = Self(ffi::git_index_add_option_t_GIT_INDEX_ADD_DEFAULT);
+    /// Add ignored files too.
+    pub const FORCE: Self = Self(ffi::git_index_add_option_t_GIT_INDEX_ADD_FORCE);
+    /// Treat pathspec entries as exact paths.
+    pub const DISABLE_PATHSPEC_MATCH: Self =
+        Self(ffi::git_index_add_option_t_GIT_INDEX_ADD_DISABLE_PATHSPEC_MATCH);
+    /// Report an exact ignored path as an error.
+    pub const CHECK_PATHSPEC: Self = Self(ffi::git_index_add_option_t_GIT_INDEX_ADD_CHECK_PATHSPEC);
+
+    /// Builds a set if it contains only published bits.
+    pub const fn from_bits(bits: ffi::git_index_add_option_t) -> Option<Self> {
+        let all = Self::FORCE.0 | Self::DISABLE_PATHSPEC_MATCH.0 | Self::CHECK_PATHSPEC.0;
+        if bits & !all == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying C bit set.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_index_add_option_t {
+        self.0
+    }
+}
+
+impl core::ops::BitOr for GitIndexAddOptions {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+unsafe extern "C" fn matched_path_trampoline(
+    path: *const core::ffi::c_char,
+    matched: *const core::ffi::c_char,
+    payload: *mut core::ffi::c_void,
+) -> i32 {
+    if path.is_null() || payload.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: `git_index_add_all` receives `payload` as the address of a live
+    // stack-stored trait-object reference and invokes this trampoline only
+    // synchronously before that storage goes away.
+    let callback = unsafe { &mut *payload.cast::<&mut dyn GitIndexMatchedPathCallback>() };
+    // SAFETY: libgit2 supplies a non-null NUL-terminated path for the call.
+    let path = unsafe { CStr::from_ptr(path) };
+    let matched = if matched.is_null() {
+        None
+    } else {
+        // SAFETY: a non-null match is a NUL-terminated pathspec string live
+        // for this callback invocation.
+        Some(unsafe { CStr::from_ptr(matched) })
+    };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        GitIndexMatchedPathCallback::call(*callback, path, matched)
+    }))
+    .unwrap_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_index_add_all
+/// Adds matching work-directory paths, optionally consulting `callback`.
+pub fn git_index_add_all(
+    index: &mut GitIndexMut<'_>,
+    pathspec: Option<crate::strarray::GitStrArrayRef<'_>>,
+    flags: GitIndexAddOptions,
+    callback: Option<&mut dyn GitIndexMatchedPathCallback>,
+) -> Result<(), i32> {
+    let pathspec = pathspec.map_or(core::ptr::null(), |value| value.as_ptr());
+    let mut callback = callback;
+    let (function, payload) = match callback.as_mut() {
+        Some(callback) => (
+            Some(matched_path_trampoline as unsafe extern "C" fn(_, _, _) -> _),
+            core::ptr::from_mut(callback).cast::<core::ffi::c_void>(),
+        ),
+        None => (None, core::ptr::null_mut()),
+    };
+    // SAFETY: the index is exclusive, `pathspec` is null or live, and the
+    // callback payload remains live for the synchronous traversal.
+    let status = unsafe {
+        ffi::git_index_add_all(
+            index.as_mut_ptr(),
+            pathspec,
+            flags.bits(),
+            function,
+            payload,
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_index_add_bypath
+/// Adds a work-directory file by repository-relative path.
+pub fn git_index_add_bypath(index: &mut GitIndexMut<'_>, path: &CStr) -> Result<(), i32> {
+    // SAFETY: the index is exclusive and `path` is live for the call.
+    let status = unsafe { ffi::git_index_add_bypath(index.as_mut_ptr(), path.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_index_add_frombuffer
+/// Adds an entry whose blob contents come from `buffer`.
+pub fn git_index_add_frombuffer(
+    index: &mut GitIndexMut<'_>,
+    entry: IndexEntryRef<'_>,
+    buffer: &[u8],
+) -> Result<(), i32> {
+    // SAFETY: the index is exclusive, the entry is live, and `buffer` exposes
+    // exactly the readable byte count supplied to C; nothing is retained.
+    let status = unsafe {
+        ffi::git_index_add_frombuffer(
+            index.as_mut_ptr(),
+            entry.as_ptr(),
+            buffer.as_ptr().cast(),
+            buffer.len(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_index_clear
+/// Removes every entry from the index.
+pub fn git_index_clear(index: &mut GitIndexMut<'_>) -> Result<(), i32> {
+    // SAFETY: the index is exclusively borrowed for the mutation.
+    let status = unsafe { ffi::git_index_clear(index.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// The three optional index entries representing one conflict.
+pub struct GitIndexConflict<'a> {
+    /// Common ancestor entry.
+    pub ancestor: Option<IndexEntryRef<'a>>,
+    /// Entry from our side.
+    pub ours: Option<IndexEntryRef<'a>>,
+    /// Entry from their side.
+    pub theirs: Option<IndexEntryRef<'a>>,
+}
+
+/// Wraps: git_index_conflict_get
+/// Borrows the conflict entries for `path` until the index can next mutate.
+pub fn git_index_conflict_get<'a>(
+    index: GitIndexRef<'a>,
+    path: &CStr,
+) -> Result<GitIndexConflict<'a>, i32> {
+    let (mut ancestor, mut ours, mut theirs) =
+        (core::ptr::null(), core::ptr::null(), core::ptr::null());
+    // SAFETY: the output slots are writable, the index and path are live, and
+    // the shared index borrow prevents mutation while returned entries live.
+    let status = unsafe {
+        ffi::git_index_conflict_get(
+            &mut ancestor,
+            &mut ours,
+            &mut theirs,
+            index.as_ptr().cast_mut(),
+            path.as_ptr(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: each non-null result points into `index` and stays live for its
+    // shared `'a` borrow; null denotes a missing side of the conflict.
+    Ok(unsafe {
+        GitIndexConflict {
+            ancestor: IndexEntryRef::from_ptr(ancestor.cast_mut()),
+            ours: IndexEntryRef::from_ptr(ours.cast_mut()),
+            theirs: IndexEntryRef::from_ptr(theirs.cast_mut()),
+        }
+    })
+}
+
+/// An owned conflict iterator carrying its exclusive index borrow.
+pub struct GitIndexConflicts<'index> {
+    inner: GitIndexConflictIteratorOwned,
+    _index: core::marker::PhantomData<GitIndexMut<'index>>,
+}
+
+impl GitIndexConflicts<'_> {
+    /// Borrows the iterator.
+    #[must_use]
+    pub fn as_ref(&self) -> GitIndexConflictIteratorRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the iterator exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitIndexConflictIteratorMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+/// Wraps: git_index_conflict_iterator_new
+/// Creates a conflict iterator and holds the index exclusively until drop.
+pub fn git_index_conflict_iterator_new<'index>(
+    mut index: GitIndexMut<'index>,
+) -> Result<GitIndexConflicts<'index>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and the returned type carries the exclusive
+    // index borrow that the iterator stores without retaining.
+    let status = unsafe { ffi::git_index_conflict_iterator_new(&mut out, index.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one fully initialized iterator allocation.
+    let inner = unsafe { GitIndexConflictIteratorOwned::from_raw(out) }
+        .ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(GitIndexConflicts {
+        inner,
+        _index: core::marker::PhantomData,
+    })
+}
+
+#[cfg(test)]
+mod new_wrapper_tests {
+    use super::*;
+
+    #[test]
+    fn index_add_options_validate_bits() {
+        let options = GitIndexAddOptions::FORCE | GitIndexAddOptions::CHECK_PATHSPEC;
+        assert_eq!(GitIndexAddOptions::from_bits(options.bits()), Some(options));
+        assert_eq!(GitIndexAddOptions::from_bits(1 << 31), None);
+        assert_eq!(GitIndexAddOptions::DEFAULT.bits(), 0);
     }
 }

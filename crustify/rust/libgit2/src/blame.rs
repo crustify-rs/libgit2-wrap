@@ -346,3 +346,65 @@ pub fn git_blame_get_hunk_count(blame: GitBlameRef<'_>) -> u32 {
     // reads its hunk vector.
     unsafe { ffi::git_blame_get_hunk_count(blame.as_ptr().cast_mut()) }
 }
+
+/// An owned blame result tied to the repository whose history it reads.
+pub struct GitRepositoryBlame<'repo> {
+    inner: ffibox::CBox<GitBlame>,
+    _repository: core::marker::PhantomData<crate::repository::GitRepositoryRef<'repo>>,
+}
+
+impl GitRepositoryBlame<'_> {
+    /// Borrows the result.
+    #[must_use]
+    pub fn as_ref(&self) -> GitBlameRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the result exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitBlameMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+/// Wraps: git_blame_file
+/// Computes blame data and ties the returned owner to `repo`.
+pub fn git_blame_file<'repo>(
+    repo: crate::repository::GitRepositoryRef<'repo>,
+    path: &core::ffi::CStr,
+    options: Option<GitBlameOptionsRef<'_>>,
+) -> Result<GitRepositoryBlame<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    let options = options.map_or(core::ptr::null_mut(), |value| value.as_ptr().cast_mut());
+    // SAFETY: `out` is writable, both borrows and `path` are live for the
+    // synchronous call, and success transfers one blame owner tied to `repo`.
+    let status = unsafe {
+        ffi::git_blame_file(
+            core::ptr::addr_of_mut!(out),
+            repo.as_ptr().cast_mut(),
+            path.as_ptr(),
+            options,
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns a fresh, fully initialized blame allocation.
+    let inner = unsafe { ffibox::CBox::from_raw(out) }
+        .expect("libgit2 succeeded without returning blame data");
+    Ok(GitRepositoryBlame {
+        inner,
+        _repository: core::marker::PhantomData,
+    })
+}
+
+/// Wraps: git_blame_init_options
+/// Initializes an options value for the requested ABI version.
+pub fn git_blame_init_options(
+    options: &mut GitBlameOptionsMut<'_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: `options` exclusively exposes a writable options header.
+    let status = unsafe { ffi::git_blame_init_options(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}

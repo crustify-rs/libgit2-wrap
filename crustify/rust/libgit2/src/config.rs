@@ -746,3 +746,20 @@ pub fn git_config_snapshot(config: GitConfigRef<'_>) -> Result<GitConfigOwned, i
     // `GitConfig` drop contract.
     unsafe { GitConfigOwned::from_raw(out) }.ok_or(-1)
 }
+
+/// Wraps: git_config_get_entry
+/// Looks up a configuration entry and returns its independently releasable owner.
+pub fn git_config_get_entry(
+    config: GitConfigRef<'_>,
+    name: &CStr,
+) -> Result<GitConfigEntryOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable, the config and name are live for the call,
+    // and success transfers one backend-entry owner to the caller.
+    let status = unsafe { ffi::git_config_get_entry(&mut out, config.as_ptr(), name.as_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns a fully formed caller-owned config entry.
+    unsafe { GitConfigEntryOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}

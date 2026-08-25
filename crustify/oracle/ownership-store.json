@@ -5172,6 +5172,83 @@
    ]
   },
   {
+   "name": "git_blame_file",
+   "defined_in": "src/libgit2/blame.c",
+   "ptr_args": [
+    {
+     "name": "options",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:options"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_blame_free",
    "defined_in": "src/libgit2/blame.c",
    "lifetime": {
@@ -5217,6 +5294,29 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blame_init_options",
+   "defined_in": "src/libgit2/blame.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
      }
     }
    ]
@@ -5508,6 +5608,267 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one blob cache reference through git_object_free; null is accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_id",
+   "defined_in": "src/libgit2/object_api.c",
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:obj"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_blob_is_binary",
+   "defined_in": "src/libgit2/blob.c",
+   "ptr_args": [
+    {
+     "name": "blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blob"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_lookup",
+   "defined_in": "src/libgit2/object_api.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_rawcontent",
+   "defined_in": "src/libgit2/blob.c",
+   "ptr_args": [
+    {
+     "name": "blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blob"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": null,
+     "array": {
+      "by_val": true
+     },
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:blob"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_blob_rawsize",
+   "defined_in": "src/libgit2/blob.c",
+   "ptr_args": [
+    {
+     "name": "blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blob"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_branch_create",
+   "defined_in": "src/libgit2/branch.c",
+   "ptr_args": [
+    {
+     "name": "branch_name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:branch_name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "ref_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref_out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "repository",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repository"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
      }
     }
    ]
@@ -6399,6 +6760,97 @@
    ]
   },
   {
+   "name": "git_checkout_notify_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "arg3",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg3"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "arg4",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg4"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "arg5",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg5"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback payload, borrowed for synchronous callback use."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_checkout_perfdata_cb",
    "defined_in": null,
    "ptr_args": [
@@ -6474,6 +6926,799 @@
       "nullable": true,
       "mutable": true,
       "note": "Opaque caller payload borrowed for the callback invocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_amend",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "author",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:author"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "commit_to_amend",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit_to_amend"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:committer"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:message"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "message_encoding",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:message_encoding"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:tree"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "update_ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:update_ref"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_author",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:commit"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_commit_author_with_mailmap",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "mailmap",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:mailmap"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_body",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:commit"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_commit_committer",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:commit"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_commit_committer_with_mailmap",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "mailmap",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:mailmap"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_create",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "author",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:author"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:committer"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:message"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "message_encoding",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:message_encoding"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:tree"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "update_ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:update_ref"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_create_buffer",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "author",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:author"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:committer"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:message"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "message_encoding",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:message_encoding"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:tree"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_create_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "arg3",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg3"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "arg4",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg4"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "arg5",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg5"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "arg7",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "arg:arg7"
+        }
+       }
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg7"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "arg8",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg8"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback payload, borrowed for synchronous callback use."
      }
     }
    ]
@@ -6738,6 +7983,650 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_commit_header_field",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "field",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:field"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_id",
+   "defined_in": "src/libgit2/object_api.c",
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:obj"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_commit_lookup",
+   "defined_in": "src/libgit2/object_api.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_lookup_prefix",
+   "defined_in": "src/libgit2/object_api.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_message",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:commit"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_commit_message_encoding",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:commit"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_commit_message_raw",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:commit"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_commit_parent",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "parent",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:parent"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_parent_id",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:commit"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_commit_parentcount",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_raw_header",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:commit"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_commit_summary",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:commit"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_commit_time",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_time_offset",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_tree",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "tree_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:tree_out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_tree_id",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:commit"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
   },
   {
    "name": "git_config_add_file_ondisk",
@@ -7069,6 +8958,66 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_get_entry",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:config"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
      }
     }
    ]
@@ -7944,6 +9893,466 @@
       "nullable": false,
       "mutable": true,
       "note": "Non-null borrowed output slot receives one fresh owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_cred_default_new",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_cred_has_username",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "cred",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cred"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_cred_ssh_key_from_agent",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:username"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_cred_ssh_key_memory_new",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "passphrase",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:passphrase"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "privatekey",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:privatekey"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "publickey",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:publickey"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:username"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_cred_ssh_key_new",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "passphrase",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:passphrase"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "privatekey",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:privatekey"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "publickey",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:publickey"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:username"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_cred_username_new",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:username"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_cred_userpass_plaintext_new",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "password",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:password"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:username"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_credential_acquire_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "arg4",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg4"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback payload, borrowed for synchronous callback use."
      }
     }
    ]
@@ -8965,6 +11374,346 @@
    ]
   },
   {
+   "name": "git_index_add",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "source_entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:source_entry"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_add_all",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cb"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer invoked only during the synchronous operation."
+     }
+    },
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "paths",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:paths"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback payload, borrowed for synchronous callback use."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_add_bypath",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_add_frombuffer",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "buffer",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:buffer"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Counted readable byte array; borrowed only for the call."
+     }
+    },
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "source_entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:source_entry"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_clear",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_conflict_get",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "ancestor_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": false,
+        "borrowed": {
+         "lifetime": "arg:index"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ancestor_out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Writable out-slot receiving an index-owned borrowed entry tied to the index."
+     }
+    },
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "our_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": false,
+        "borrowed": {
+         "lifetime": "arg:index"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:our_out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Writable out-slot receiving an index-owned borrowed entry tied to the index."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "NUL-terminated input string; borrowed only for the call."
+     }
+    },
+    {
+     "name": "their_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": false,
+        "borrowed": {
+         "lifetime": "arg:index"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:their_out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Writable out-slot receiving an index-owned borrowed entry tied to the index."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_index_conflict_iterator_free",
    "defined_in": "src/libgit2/index.c",
    "lifetime": {
@@ -8987,6 +11736,49 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees the iterator allocation; NULL is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_conflict_iterator_new",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    },
+    {
+     "name": "iterator_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:iterator_out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
      }
     }
    ]
