@@ -162,10 +162,6 @@ fn optional_string(value: Option<&core::ffi::CStr>) -> *const core::ffi::c_char 
     value.map_or(core::ptr::null(), core::ffi::CStr::as_ptr)
 }
 
-fn optional_tree(value: Option<crate::tree::GitTreeRef<'_>>) -> *const ffi::git_tree {
-    value.map_or(core::ptr::null(), |tree| tree.as_ptr())
-}
-
 fn status_result(status: i32) -> Result<(), i32> {
     if status == 0 { Ok(()) } else { Err(status) }
 }
@@ -198,7 +194,7 @@ pub fn git_commit_amend(
             committer.map_or(core::ptr::null(), |signature| signature.as_ptr()),
             optional_string(message_encoding),
             optional_string(message),
-            optional_tree(tree),
+            tree.map_or(core::ptr::null(), |tree| tree.as_ptr()),
         )
     };
     status_result(status)
