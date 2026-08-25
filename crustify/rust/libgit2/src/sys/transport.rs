@@ -912,6 +912,14 @@ mod tests {
 ffibox::define_ctype!(
     /// Wraps: git_fetch_negotiation
     /// Layout-compatible state passed to a fetch-negotiation callback.
+    ///
+    /// A negotiation borrows its advertised-head array from the remote and
+    /// owns its shallow-root run, which `git_fetch_negotiate` allocates
+    /// through libgit2's allocator and releases once the callback returns.
+    /// Constructing an exclusive handle asserts that ownership, since
+    /// [`take_shallow_roots`](GitFetchNegotiationMut::take_shallow_roots) and
+    /// [`replace_shallow_roots`](GitFetchNegotiationMut::replace_shallow_roots)
+    /// move that run out under it.
     GitFetchNegotiation,
     GitFetchNegotiationRef,
     GitFetchNegotiationMut,
@@ -1033,8 +1041,10 @@ impl GitFetchNegotiationMut<'_> {
     /// Stores a borrowed pointer array of advertised remote heads.
     ///
     /// # Safety
-    /// The pointer array and every head must remain live and immutable until
-    /// no C code can inspect this negotiation.
+    /// The pointer array and every head must remain live and immutable for
+    /// every later use of this negotiation — by C, and by
+    /// [`refs`](GitFetchNegotiationRef::refs), which hands the stored
+    /// pointers back as borrowed handles.
     pub unsafe fn set_refs<'a>(&mut self, refs: &'a [crate::util::net::RemoteHeadRef<'a>]) {
         let p = self.as_mut_ptr();
         // SAFETY: caller supplies the referent lifetime; transparent handles

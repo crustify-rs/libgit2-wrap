@@ -1000,7 +1000,7 @@
   {
    "name": "git_config_backend_entry",
    "defined_in": "include/git2/sys/config.h",
-   "_comment_agent": "git_config_backend_entry embeds git_config_entry as its first member and installs a required static finalizer callback. Ownership is released by dispatching that callback, directly or through git_config_entry_free.",
+   "_comment_agent": "git_config_backend_entry embeds git_config_entry as its first member and installs a required static finalizer callback. Ownership is released by dispatching that callback, directly or through git_config_entry_free. Reviewed 2026-08-25: config_file, config_mem and config_list all install git_config_list_entry_free, which drops one reference on the owning git_config_list rather than freeing the entry allocation, so an owning wrapper models a claim on the entry.",
    "fields": [
     {
      "name": "free",
@@ -1016,7 +1016,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Every fully constructed backend entry installs a static concrete finalizer. git_config_entry_free casts the embedded base entry back to git_config_backend_entry and invokes this callback unconditionally."
+      "note": "Every fully constructed backend entry installs a static concrete finalizer. git_config_entry_free casts the embedded base entry back to git_config_backend_entry and invokes this callback unconditionally. It releases the caller's claim rather than necessarily freeing the entry: config_file, config_mem and config_list all install git_config_list_entry_free, which drops one reference on the git_config_list the entry is embedded in."
      }
     }
    ]
@@ -1644,7 +1644,7 @@
   {
    "name": "git_diff_similarity_metric",
    "defined_in": "include/git2/diff.h",
-   "_comment_agent": "A metric is a borrowed callback table. payload is an opaque application cookie passed unchanged to every callback; signatures returned by file_signature/buffer_signature are owned by that callback protocol and later released through free_signature, not by the metric struct itself. A valid installed metric supplies all four callbacks.",
+   "_comment_agent": "A metric is a borrowed callback table. payload is an opaque application cookie passed unchanged to every callback; signatures returned by file_signature/buffer_signature are owned by that callback protocol and later released through free_signature, not by the metric struct itself. A valid installed metric supplies all four callbacks. Reviewed 2026-08-25: a signature token transfers to the caller only when its producing callback returns zero; similarity_sig leaves a token published alongside a failure to the callback.",
    "fields": [
     {
      "name": "buffer_signature",
@@ -1660,7 +1660,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Required code pointer; creates an owned opaque signature token from borrowed buffer input."
+      "note": "Required code pointer; creates an owned opaque signature token from borrowed buffer input. As with file_signature, the token transfers on success only."
      }
     },
     {
@@ -1677,7 +1677,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Required code pointer; creates an owned opaque signature token from a borrowed file/path input."
+      "note": "Required code pointer; creates an owned opaque signature token from a borrowed file/path input. The token transfers to the caller on a zero return only: similarity_sig propagates a nonzero status and never releases the slot, and git_diff_find_similar__hashsig_for_file frees its own partial signature without writing the output."
      }
     },
     {
@@ -2105,7 +2105,7 @@
       },
       "nullable": true,
       "mutable": true,
-      "note": "Optional borrowed object database. indexer_new copies the pointer without up-ref and thin-pack repair uses it after options return, so it must outlive every indexer built from these options."
+      "note": "Optional borrowed object database. indexer_new copies the pointer without up-ref and thin-pack repair uses it after options return, so it must outlive every indexer built from these options and every later read of the options value itself, which hands the same pointer back."
      }
     },
     {
@@ -2681,7 +2681,7 @@
   {
    "name": "git_odb_backend",
    "defined_in": "include/git2/sys/odb_backend.h",
-   "_comment_agent": "git_odb_backend is a public polymorphic vtable. Its callback pointers are fixed borrowed code pointers (all operations optional except free); odb is a nullable mutable back-reference to the database that owns the backend.",
+   "_comment_agent": "git_odb_backend is a public polymorphic vtable. Its callback pointers are fixed borrowed code pointers (all operations optional except free); odb is a nullable mutable back-reference to the database that owns the backend. Reviewed 2026-08-25 against src/libgit2/odb.c: read/read_prefix transfer their git_odb_backend_data_alloc buffer to the caller on a zero return only, so a wrapper must not release a buffer published by a failing callback.",
    "fields": [
     {
      "name": "exists",
@@ -2799,7 +2799,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous. Its published buffer must come from git_odb_backend_data_alloc and transfers to the caller ONLY on a zero return: odb_read_1 propagates a nonzero status without touching the output slot, and frees the buffer with git__free only once a successful read handed it over."
      }
     },
     {
@@ -2833,7 +2833,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous. As with read, the git_odb_backend_data_alloc buffer transfers on a zero return only; read_prefix_1 leaves a buffer published alongside a failure to the backend."
      }
     },
     {

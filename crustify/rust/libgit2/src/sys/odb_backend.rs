@@ -212,6 +212,10 @@ impl GitOdbBackendMut<'_> {
 
     /// Field: git_odb_backend.read
     /// Reads and takes ownership of a complete object body.
+    ///
+    /// The callback transfers its `git_odb_backend_data_alloc` buffer only
+    /// when it succeeds; a buffer published alongside a failure stays with the
+    /// backend, exactly as `odb_read_1` treats it.
     pub fn read(
         &mut self,
         oid: OidRef<'_>,
@@ -234,11 +238,9 @@ impl GitOdbBackendMut<'_> {
             )
         };
         if status != 0 {
-            if !data.is_null() {
-                // SAFETY: a callback that publishes data, even on failure,
-                // must use the backend allocator required by the public API.
-                unsafe { ffi::crustify_git__free(data) };
-            }
+            // A failing callback transfers nothing: `odb_read_1` returns the
+            // status without touching a buffer the callback may have published,
+            // so releasing one here could free storage the backend still owns.
             return Err(GitOdbBackendError::Libgit2(status));
         }
         // SAFETY: the successful backend callback transfers a unique run of
@@ -253,6 +255,9 @@ impl GitOdbBackendMut<'_> {
 
     /// Field: git_odb_backend.read_prefix
     /// Resolves an ID prefix and reads the matching object body.
+    ///
+    /// Ownership of the object body transfers on success only, as in
+    /// [`read`](Self::read).
     pub fn read_prefix(
         &mut self,
         short_id: OidRef<'_>,
@@ -283,10 +288,8 @@ impl GitOdbBackendMut<'_> {
             )
         };
         if status != 0 {
-            if !data.is_null() {
-                // SAFETY: as in `read`, for a published backend allocation.
-                unsafe { ffi::crustify_git__free(data) };
-            }
+            // As in `read`: `read_prefix_1` leaves a buffer published by a
+            // failing callback alone, so this wrapper does not release it.
             return Err(GitOdbBackendError::Libgit2(status));
         }
         // SAFETY: the successful backend callback transfers a unique run of
@@ -657,7 +660,7 @@ unsafe extern "C" fn progress_trampoline<C: GitIndexerProgressCallback>(
 #[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
-    use core::sync::atomic::{AtomicUsize, Ordering};
+    use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
     use ffibox::{CCell, CDropped};
 
@@ -665,6 +668,7 @@ mod tests {
 
     static FREES: AtomicUsize = AtomicUsize::new(0);
     static WRITES: AtomicUsize = AtomicUsize::new(0);
+    static PUBLISHED: AtomicPtr<c_void> = AtomicPtr::new(null_mut());
 
     unsafe extern "C" fn test_free(backend: *mut ffi::git_odb_backend) {
         FREES.fetch_add(1, Ordering::SeqCst);
@@ -689,6 +693,42 @@ mod tests {
     ) -> c_int {
         WRITES.store(len, Ordering::SeqCst);
         0
+    }
+
+    /// A failing read that also publishes a buffer, to prove the wrapper does
+    /// not adopt one the C protocol never transfers.
+    unsafe extern "C" fn test_failing_read(
+        data: *mut *mut c_void,
+        len: *mut usize,
+        kind: *mut ffi::git_object_t,
+        _backend: *mut ffi::git_odb_backend,
+        _oid: *const ffi::git_oid,
+    ) -> c_int {
+        // SAFETY: the wrapper supplies three writable output slots, and this
+        // callback keeps ownership of the leaked buffer it publishes.
+        unsafe {
+            *data = PUBLISHED.load(Ordering::SeqCst);
+            *len = 3;
+            *kind = ffi::git_object_t_GIT_OBJECT_BLOB;
+        }
+        -1
+    }
+
+    unsafe extern "C" fn test_failing_read_prefix(
+        oid: *mut ffi::git_oid,
+        data: *mut *mut c_void,
+        len: *mut usize,
+        kind: *mut ffi::git_object_t,
+        backend: *mut ffi::git_odb_backend,
+        short_id: *const ffi::git_oid,
+        _prefix_len: usize,
+    ) -> c_int {
+        // SAFETY: the wrapper supplies a writable object-ID slot alongside the
+        // three outputs the shared read callback fills in.
+        unsafe { core::ptr::write_bytes(oid, 0, 1) };
+        // SAFETY: the wrapper's outputs and backend handle are those the read
+        // callback expects, and it retains none of them.
+        unsafe { test_failing_read(data, len, kind, backend, short_id) }
     }
 
     fn test_backend() -> ffi::git_odb_backend {
@@ -773,6 +813,36 @@ mod tests {
 
         let missing = GitOdbBackendData::from_callback_bytes(None, 1);
         assert!(matches!(missing, Err(GitOdbBackendError::MissingData)));
+    }
+
+    #[test]
+    fn a_failing_read_leaves_a_published_buffer_with_the_backend() {
+        let bytes = Box::into_raw(Box::new(*b"abc"));
+        PUBLISHED.store(bytes.cast(), Ordering::SeqCst);
+
+        let mut raw = test_backend();
+        raw.read = Some(test_failing_read);
+        raw.read_prefix = Some(test_failing_read_prefix);
+        let oid = Oid::zeroed();
+        // SAFETY: `raw` is fully initialized and exclusively borrowed here.
+        let mut backend = unsafe { GitOdbBackendMut::from_ptr(&raw mut raw) }.unwrap();
+        // SAFETY: `oid` stays live and immutable for both synchronous calls.
+        let oid = unsafe { OidRef::from_ptr((&raw const oid).cast_mut().cast()) }.unwrap();
+
+        assert_eq!(
+            backend.read(oid).err(),
+            Some(GitOdbBackendError::Libgit2(-1))
+        );
+        assert_eq!(
+            backend.read_prefix(oid, 2).err(),
+            Some(GitOdbBackendError::Libgit2(-1))
+        );
+
+        // The buffer was neither freed nor adopted, so the callback's owner
+        // still reclaims it. Freeing it twice would fail under the sanitizers.
+        // SAFETY: this reclaims the single leaked allocation published above.
+        assert_eq!(*unsafe { Box::from_raw(bytes) }, *b"abc");
+        PUBLISHED.store(null_mut(), Ordering::SeqCst);
     }
 
     #[test]

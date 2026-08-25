@@ -17,12 +17,17 @@ ffibox::define_ctype!(
 );
 
 /// An owned backend entry whose concrete finalizer is stored in the entry.
+///
+/// The finalizer releases the caller's claim on the entry rather than
+/// necessarily freeing its storage: every in-tree backend installs
+/// `git_config_list_entry_free`, which drops one reference on the
+/// configuration list the entry is embedded in.
 pub type GitConfigBackendEntryOwned = CBox<GitConfigBackendEntry>;
 
 /// Field: git_config_backend_entry.free
 // SAFETY: adopting an owned backend entry requires a fully initialized
-// concrete entry whose mandatory callback finalizes that allocation exactly
-// once. `CBox` invokes it once and never accesses the entry afterward.
+// concrete entry whose mandatory callback releases that entry exactly once.
+// `CBox` invokes it once and never accesses the entry afterward.
 unsafe impl CDropped for GitConfigBackendEntry {
     unsafe fn c_drop(entry: NonNull<Self>) {
         let entry = entry.as_ptr().cast::<ffi::git_config_backend_entry>();
@@ -32,7 +37,7 @@ unsafe impl CDropped for GitConfigBackendEntry {
         let free = unsafe { addr_of!((*entry).free).read() }
             .expect("a valid backend entry has a free callback");
         // SAFETY: this is the concrete finalizer installed in the uniquely
-        // owned entry, and the `CDropped` contract grants its final call.
+        // claimed entry, and the `CDropped` contract grants its final call.
         unsafe { free(entry) }
     }
 }

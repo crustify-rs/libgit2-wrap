@@ -41,6 +41,7 @@ impl<'a> GitIndexerOptionsRef<'a> {
     }
 
     /// Field: git_indexer_options.odb
+    /// Borrows the optional object database installed in these options.
     #[must_use]
     pub fn odb(&self) -> Option<GitOdbRef<'a>> {
         // SAFETY: raw-place projection copies the initialized pointer.
@@ -103,8 +104,11 @@ impl GitIndexerOptionsMut<'_> {
     /// Stores an optional borrowed object database.
     ///
     /// # Safety
-    /// A non-null database must remain live and unaliased until every indexer
-    /// constructed from these options is destroyed; libgit2 does not up-ref it.
+    /// A non-null database must remain live and unaliased for every later use
+    /// of this options value — including [`odb`](GitIndexerOptionsRef::odb),
+    /// which hands the stored pointer back as a borrowed handle — and until
+    /// every indexer constructed from these options is destroyed. libgit2
+    /// copies the pointer without up-referencing it.
     pub unsafe fn set_odb(&mut self, mut odb: Option<GitOdbMut<'_>>) {
         let odb = odb
             .as_mut()
