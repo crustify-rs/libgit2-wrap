@@ -3,11 +3,14 @@
 use core::ffi::CStr;
 use core::marker::PhantomData;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
-use core::ptr::NonNull;
+use core::ptr::{NonNull, addr_of, addr_of_mut};
+
+use ffibox::{CVal, CValued};
 
 use crate::api::buffer::GitBufMut;
 use crate::ffi;
 use crate::remote::GitPushUpdateRef;
+use crate::repository::GitRepositoryRef;
 use crate::util::net::Direction;
 
 /// Wraps: git_url_resolve_cb
@@ -2428,5 +2431,252 @@ mod fetch_depth_tests {
             align_of::<GitFetchDepth>(),
             align_of::<ffi::git_fetch_depth_t>()
         );
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_remote_create_options
+    /// Borrowing options that control remote creation.
+    GitRemoteCreateOptions,
+    GitRemoteCreateOptionsRef,
+    GitRemoteCreateOptionsMut,
+    ffi::git_remote_create_options
+);
+
+// SAFETY: the options record borrows its repository and strings and owns no
+// resource, so disposing an inline value releases nothing.
+unsafe impl CValued for GitRemoteCreateOptions {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+impl GitRemoteCreateOptions {
+    /// Constructs options equivalent to `GIT_REMOTE_CREATE_OPTIONS_INIT`.
+    #[must_use]
+    pub fn new() -> CVal<Self> {
+        let mut options = CVal::new(Self::zeroed());
+        options
+            .as_mut()
+            .set_version(ffi::GIT_REMOTE_CREATE_OPTIONS_VERSION);
+        options
+    }
+}
+
+impl<'a> GitRemoteCreateOptionsRef<'a> {
+    /// Field: git_remote_create_options.flags
+    /// Returns the checked remote-creation flags.
+    pub fn flags(&self) -> Result<GitRemoteCreateFlags, ffi::git_remote_create_flags> {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        let raw = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        GitRemoteCreateFlags::try_from(raw)
+    }
+
+    /// Field: git_remote_create_options.version
+    /// Returns the ABI version stored in this options value.
+    #[must_use]
+    pub fn version(&self) -> core::ffi::c_uint {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).version).read() }
+    }
+
+    /// Field: git_remote_create_options.name
+    /// Borrows the optional NUL-terminated remote name.
+    #[must_use]
+    pub fn name(&self) -> Option<&'a CStr> {
+        // SAFETY: this live shared handle permits reading the initialized
+        // pointer field without forming a reference to C-visible storage.
+        let name = unsafe { addr_of!((*self.as_ptr()).name).read() };
+        if name.is_null() {
+            None
+        } else {
+            // SAFETY: a valid options record keeps a non-null name live,
+            // immutable and NUL-terminated for this handle's lifetime.
+            Some(unsafe { CStr::from_ptr(name) })
+        }
+    }
+
+    /// Field: git_remote_create_options.fetchspec
+    /// Borrows the optional NUL-terminated fetch refspec.
+    #[must_use]
+    pub fn fetchspec(&self) -> Option<&'a CStr> {
+        // SAFETY: this live shared handle permits reading the initialized
+        // pointer field without forming a reference to C-visible storage.
+        let fetchspec = unsafe { addr_of!((*self.as_ptr()).fetchspec).read() };
+        if fetchspec.is_null() {
+            None
+        } else {
+            // SAFETY: a valid options record keeps a non-null refspec live,
+            // immutable and NUL-terminated for this handle's lifetime.
+            Some(unsafe { CStr::from_ptr(fetchspec) })
+        }
+    }
+
+    /// Field: git_remote_create_options.repository
+    /// Borrows the optional repository that will own the created remote.
+    #[must_use]
+    pub fn repository(&self) -> Option<GitRepositoryRef<'a>> {
+        // SAFETY: this live shared handle permits reading the initialized
+        // pointer field without forming a reference to C-visible storage.
+        let repository = unsafe { addr_of!((*self.as_ptr()).repository).read() };
+        // SAFETY: a non-null repository in a valid options record remains live
+        // for the enclosing options borrow.
+        unsafe { GitRepositoryRef::from_ptr(repository) }
+    }
+}
+
+impl GitRemoteCreateOptionsMut<'_> {
+    /// Sets the remote-creation flags.
+    pub fn set_flags(&mut self, flags: GitRemoteCreateFlags) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write, and
+        // the checked flag set contains only published bits.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
+    }
+
+    /// Sets the ABI version expected by libgit2.
+    pub fn set_version(&mut self, version: core::ffi::c_uint) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+
+    /// Stores a borrowed NUL-terminated remote name.
+    ///
+    /// # Safety
+    ///
+    /// A non-null `name` must remain live and immutable for every later use
+    /// of this options value, including uses after this handle is released.
+    pub unsafe fn set_borrowed_name(&mut self, name: Option<&CStr>) {
+        let name = name.map_or(core::ptr::null(), CStr::as_ptr);
+        // SAFETY: this exclusive handle permits the field write, and the
+        // caller upholds the stored borrow's lifetime and validity.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).name).write(name) }
+    }
+
+    /// Clears the optional remote name.
+    pub fn clear_name(&mut self) {
+        // SAFETY: a null pointer creates no stored lifetime obligation.
+        unsafe { self.set_borrowed_name(None) }
+    }
+
+    /// Stores a borrowed NUL-terminated fetch refspec.
+    ///
+    /// # Safety
+    ///
+    /// A non-null `fetchspec` must remain live and immutable for every later
+    /// use of this options value, including uses after this handle is released.
+    pub unsafe fn set_borrowed_fetchspec(&mut self, fetchspec: Option<&CStr>) {
+        let fetchspec = fetchspec.map_or(core::ptr::null(), CStr::as_ptr);
+        // SAFETY: this exclusive handle permits the field write, and the
+        // caller upholds the stored borrow's lifetime and validity.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).fetchspec).write(fetchspec) }
+    }
+
+    /// Clears the optional fetch refspec.
+    pub fn clear_fetchspec(&mut self) {
+        // SAFETY: a null pointer creates no stored lifetime obligation.
+        unsafe { self.set_borrowed_fetchspec(None) }
+    }
+
+    /// Stores a borrowed repository for the created remote.
+    ///
+    /// # Safety
+    ///
+    /// A non-null `repository` must remain live for every later use of this
+    /// options value and for every remote created from it. The caller must
+    /// also respect libgit2's mutation and synchronization requirements while
+    /// the repository is used through this pointer.
+    pub unsafe fn set_borrowed_repository(&mut self, repository: Option<GitRepositoryRef<'_>>) {
+        let repository = repository.map_or(core::ptr::null_mut(), |repository| {
+            repository.as_ptr().cast_mut()
+        });
+        // SAFETY: this exclusive handle permits the field write, and the
+        // caller upholds the stored repository's lifetime and access rules.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).repository).write(repository) }
+    }
+
+    /// Clears the optional repository.
+    pub fn clear_repository(&mut self) {
+        // SAFETY: a null pointer creates no stored lifetime or aliasing
+        // obligation.
+        unsafe { self.set_borrowed_repository(None) }
+    }
+}
+
+#[cfg(test)]
+mod remote_create_options_tests {
+    use core::mem::{align_of, size_of};
+
+    use ffibox::{CCell, CValued};
+
+    use super::*;
+
+    #[test]
+    fn remote_create_options_match_the_c_layout() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_valued<T: CValued>() {}
+
+        assert_cell::<GitRemoteCreateOptions>();
+        assert_valued::<GitRemoteCreateOptions>();
+        assert_eq!(
+            size_of::<GitRemoteCreateOptions>(),
+            size_of::<ffi::git_remote_create_options>()
+        );
+        assert_eq!(
+            align_of::<GitRemoteCreateOptions>(),
+            align_of::<ffi::git_remote_create_options>()
+        );
+        assert_eq!(
+            size_of::<GitRemoteCreateOptionsRef<'_>>(),
+            size_of::<*const ffi::git_remote_create_options>()
+        );
+        assert_eq!(
+            size_of::<GitRemoteCreateOptionsMut<'_>>(),
+            size_of::<*mut ffi::git_remote_create_options>()
+        );
+    }
+
+    #[test]
+    fn default_and_borrowed_fields_round_trip_through_handles() {
+        let name = c"origin";
+        let fetchspec = c"+refs/heads/*:refs/remotes/origin/*";
+        let mut options = GitRemoteCreateOptions::new();
+
+        assert_eq!(
+            options.as_ref().version(),
+            ffi::GIT_REMOTE_CREATE_OPTIONS_VERSION
+        );
+        assert_eq!(options.as_ref().flags(), Ok(GitRemoteCreateFlags::EMPTY));
+        assert_eq!(options.as_ref().name(), None);
+        assert_eq!(options.as_ref().fetchspec(), None);
+        assert!(options.as_ref().repository().is_none());
+
+        options.as_mut().set_flags(GitRemoteCreateFlags::ALL);
+        // SAFETY: both static C strings outlive every use of `options` below.
+        unsafe {
+            options.as_mut().set_borrowed_name(Some(name));
+            options.as_mut().set_borrowed_fetchspec(Some(fetchspec));
+        }
+        assert_eq!(options.as_ref().flags(), Ok(GitRemoteCreateFlags::ALL));
+        assert_eq!(options.as_ref().name(), Some(name));
+        assert_eq!(options.as_ref().fetchspec(), Some(fetchspec));
+
+        options.as_mut().clear_name();
+        options.as_mut().clear_fetchspec();
+        options.as_mut().clear_repository();
+        assert_eq!(options.as_ref().name(), None);
+        assert_eq!(options.as_ref().fetchspec(), None);
+        assert!(options.as_ref().repository().is_none());
+    }
+
+    #[test]
+    fn flags_getter_rejects_unknown_bits() {
+        let mut raw = ffi::git_remote_create_options {
+            version: ffi::GIT_REMOTE_CREATE_OPTIONS_VERSION,
+            repository: core::ptr::null_mut(),
+            name: core::ptr::null(),
+            fetchspec: core::ptr::null(),
+            flags: 1 << 2,
+        };
+        // SAFETY: `raw` remains live and initialized for this sole handle.
+        let options = unsafe { GitRemoteCreateOptionsRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(options.flags(), Err(1 << 2));
     }
 }

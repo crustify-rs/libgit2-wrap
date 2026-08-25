@@ -4811,6 +4811,60 @@
    "fields": []
   },
   {
+   "name": "git_remote_create_options",
+   "defined_in": "include/git2/remote.h",
+   "_comment_agent": "All three pointer fields are optional borrows. The options value has no disposer; git_remote_create_with_opts consumes strings during the call and associates a resulting remote with the supplied repository without transferring repository ownership.",
+   "fields": [
+    {
+     "name": "fetchspec",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated refspec; git_remote_create_with_opts parses/copies it during the call and never stores this pointer."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated remote name; git_remote_create_with_opts validates and duplicates it and never stores this pointer."
+     }
+    },
+    {
+     "name": "repository",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional borrowed repository; creation reads and mutates repository configuration, and the resulting remote records the same repository pointer while repository lifetime is maintained by the caller-facing API contract. The options record itself never releases it."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_remote_head",
    "defined_in": "include/git2/net.h",
    "_comment_agent": "git_remote_head is a by-value advertised-reference record whose oid fields and local flag are inline; it has no destructor of its own, so the concrete owner (git_pkt_ref via git_pkt_free, the local transport's free_head, or a remote's reference vector) releases the record together with its strings. Persistent heads own their allocated name and optional symref_target, while temporary comparison/search heads borrow name storage; callers receive views owned by the transport or remote rather than an independently disposable head.",

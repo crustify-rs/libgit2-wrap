@@ -112,6 +112,8 @@
 ^git_remote_completion_t$
 ^git_remote_redirect_t$
 ^git_remote_create_flags$
+^git_remote_create_options$
+^GIT_REMOTE_CREATE_OPTIONS_VERSION$
 ^git_remote_update_flags$
 ^git_remote_connect_options_init$
 ^GIT_REMOTE_CONNECT_OPTIONS_VERSION$
@@ -174,6 +176,7 @@
 ^git_odb_object_dup$
 ^git_odb_object_free$
 ^git_odb_options$
+^git_odb_expand_id$
 ^GIT_ODB_OPTIONS_VERSION$
 ^git_oid$
 ^git_oid_t$
