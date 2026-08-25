@@ -890,6 +890,10 @@ pub fn git_tree_entrycount(tree: GitTreeRef<'_>) -> usize {
 
 /// Wraps: git_tree_walk
 /// Traverses a tree synchronously through a safe callback.
+///
+/// The callback's control results are mode-dependent: see
+/// [`GitTreewalkCallback::call`]. A negative result stops the traversal and is
+/// returned unchanged as the error.
 pub fn git_tree_walk<C>(
     tree: GitTreeRef<'_>,
     mode: TreeWalkMode,
@@ -1040,5 +1044,301 @@ mod callback_surface_tests {
         // SAFETY: no handle remains in use and this recovers the allocation's
         // original type from `Box::into_raw`.
         drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_tree_entry>>()) });
+    }
+}
+
+#[cfg(test)]
+mod live_repository_tests {
+    use core::ptr::addr_of_mut;
+
+    use super::*;
+    use crate::object_api::{git_tree_id, git_tree_lookup};
+    use crate::oid::{Oid, git_oid_equal, git_oid_fromstrn};
+    use crate::repository::git_repository_open;
+
+    /// A refcounted hold on the process-global libgit2 initialization.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and refcounted;
+            // `Drop` below balances this successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard; every repository opened under it is dropped first.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// A hand-built bare repository this test writes tree objects into.
+    struct BareRepo(std::path::PathBuf);
+
+    impl BareRepo {
+        fn create(tag: &str) -> Self {
+            let path =
+                std::env::temp_dir().join(format!("crustify-tree-{}-{tag}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(path.join("objects/info")).expect("a loose-object directory");
+            std::fs::create_dir_all(path.join("objects/pack")).expect("a pack directory");
+            std::fs::create_dir_all(path.join("refs/heads")).expect("a refs directory");
+            std::fs::write(path.join("HEAD"), b"ref: refs/heads/main\n").expect("a HEAD file");
+            std::fs::write(
+                path.join("config"),
+                b"[core]\n\trepositoryformatversion = 0\n\tbare = true\n",
+            )
+            .expect("a config file");
+            Self(path)
+        }
+
+        fn c_path(&self) -> std::ffi::CString {
+            std::ffi::CString::new(self.0.to_str().expect("a UTF-8 temporary path"))
+                .expect("a path without interior NUL")
+        }
+    }
+
+    impl Drop for BareRepo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// A gitlink object ID. `check_entry` skips the object-database existence
+    /// check for `GIT_FILEMODE_COMMIT`, so this tree can be built without ever
+    /// writing a commit.
+    fn gitlink_id() -> Oid {
+        git_oid_fromstrn(b"1111111111111111111111111111111111111111").expect("a valid hex ID")
+    }
+
+    /// Writes `refs/heads`-free tree objects: a `sub` tree holding one gitlink
+    /// named `link`, and a root tree holding that subtree plus a `top` gitlink.
+    fn write_trees(repository: &crate::repository::GitRepositoryOwned) -> Oid {
+        let mut link = gitlink_id();
+        // SAFETY: `link` is a live initialized `git_oid` on this frame and
+        // outlives the shared handle borrowed from it below.
+        let link = unsafe { OidRef::from_ptr(addr_of_mut!(link).cast()) }
+            .expect("the address of a stack value is non-null");
+
+        let mut sub = git_treebuilder_new(repository.as_ref(), None).expect("a subtree builder");
+        let mut sub_oid = {
+            let mut handle = sub.as_mut();
+            let inserted = git_treebuilder_insert(&mut handle, c"link", link, GitFileMode::COMMIT)
+                .expect("the gitlink entry is accepted");
+            assert_eq!(git_tree_entry_name(inserted), c"link");
+            git_treebuilder_write(&mut handle).expect("the subtree is written")
+        };
+        // SAFETY: `sub_oid` is a live initialized `git_oid` on this frame and
+        // outlives the shared handle borrowed from it below.
+        let sub_oid = unsafe { OidRef::from_ptr(addr_of_mut!(sub_oid).cast()) }
+            .expect("the address of a stack value is non-null");
+
+        let mut root = git_treebuilder_new(repository.as_ref(), None).expect("a root builder");
+        let mut handle = root.as_mut();
+        git_treebuilder_insert(&mut handle, c"sub", sub_oid, GitFileMode::TREE)
+            .expect("the written subtree is a valid tree entry");
+        git_treebuilder_insert(&mut handle, c"top", link, GitFileMode::COMMIT)
+            .expect("the gitlink entry is accepted");
+        git_treebuilder_write(&mut handle).expect("the root tree is written")
+    }
+
+    #[test]
+    fn tree_entry_getters_borrow_from_the_tree_that_owns_them() {
+        let _init = Libgit2Init::acquire();
+        let dir = BareRepo::create("entry-getters");
+        let repository = git_repository_open(&dir.c_path()).expect("the bare repository opens");
+
+        let mut root_oid = write_trees(&repository);
+        // SAFETY: `root_oid` is live and initialized for the rest of this test.
+        let root_oid = unsafe { OidRef::from_ptr(addr_of_mut!(root_oid).cast()) }
+            .expect("the address of a stack value is non-null");
+
+        let owned = git_tree_lookup(repository.as_ref(), root_oid).expect("the root tree loads");
+        let tree = owned.as_ref();
+
+        assert_eq!(git_tree_entrycount(tree), 2);
+        assert!(git_oid_equal(git_tree_id(tree), root_oid));
+
+        // Git sorts a tree entry as if its name carried a trailing slash, so
+        // `sub/` precedes `top`.
+        let names: Vec<_> = (0..git_tree_entrycount(tree))
+            .map(|index| {
+                let entry = git_tree_entry_byindex(tree, index).expect("an in-range entry");
+                git_tree_entry_name(entry).to_owned()
+            })
+            .collect();
+        assert_eq!(names, [c"sub".to_owned(), c"top".to_owned()]);
+        assert!(
+            git_tree_entry_byindex(tree, 2).is_none(),
+            "the C getter bounds-checks the index rather than reading past the array"
+        );
+
+        let by_name = git_tree_entry_byname(tree, c"sub").expect("the named entry exists");
+        assert_eq!(git_tree_entry_filemode(by_name), GitFileMode::TREE);
+        assert!(git_tree_entry_byname(tree, c"absent").is_none());
+
+        // Every getter hands back the same tree-owned storage, which is what
+        // ties `GitTreeEntryRef` to the tree borrow rather than to an owner.
+        let by_index = git_tree_entry_byindex(tree, 0).expect("the first entry");
+        assert_eq!(by_index.as_ptr(), by_name.as_ptr());
+        let by_id = git_tree_entry_byid(tree, git_tree_entry_id(by_name)).expect("a matching ID");
+        assert_eq!(by_id.as_ptr(), by_name.as_ptr());
+
+        let mut absent =
+            git_oid_fromstrn(b"9999999999999999999999999999999999999999").expect("a valid hex ID");
+        // SAFETY: `absent` is a live initialized `git_oid` on this frame.
+        let absent = unsafe { OidRef::from_ptr(addr_of_mut!(absent).cast()) }
+            .expect("the address of a stack value is non-null");
+        assert!(git_tree_entry_byid(tree, absent).is_none());
+    }
+
+    #[test]
+    fn bypath_returns_an_entry_that_outlives_the_tree_it_was_found_in() {
+        let _init = Libgit2Init::acquire();
+        let dir = BareRepo::create("bypath");
+        let repository = git_repository_open(&dir.c_path()).expect("the bare repository opens");
+
+        let mut root_oid = write_trees(&repository);
+        // SAFETY: `root_oid` is live and initialized for the rest of this test.
+        let root_oid = unsafe { OidRef::from_ptr(addr_of_mut!(root_oid).cast()) }
+            .expect("the address of a stack value is non-null");
+
+        let nested = {
+            let owned =
+                git_tree_lookup(repository.as_ref(), root_oid).expect("the root tree loads");
+            let tree = owned.as_ref();
+            assert_eq!(
+                git_tree_entry_bypath(tree, c"sub/absent").unwrap_err(),
+                ffi::git_error_code_GIT_ENOTFOUND
+            );
+            git_tree_entry_bypath(tree, c"sub/link").expect("the nested entry resolves")
+        };
+
+        // The tree the entry was found in is gone; `git_tree_entry_bypath`
+        // returned a self-contained allocation, so this reads live storage and
+        // the owning handle's drop is the only release of it.
+        assert_eq!(git_tree_entry_name(nested.as_ref()), c"link");
+        assert_eq!(
+            git_tree_entry_filemode(nested.as_ref()),
+            GitFileMode::COMMIT
+        );
+
+        let copy = nested.clone();
+        assert_ne!(copy.as_ref().as_ptr(), nested.as_ref().as_ptr());
+        assert_eq!(git_tree_entry_name(copy.as_ref()), c"link");
+    }
+
+    #[test]
+    fn tree_walk_reports_the_relative_root_and_honours_its_control_results() {
+        let _init = Libgit2Init::acquire();
+        let dir = BareRepo::create("walk");
+        let repository = git_repository_open(&dir.c_path()).expect("the bare repository opens");
+
+        let mut root_oid = write_trees(&repository);
+        // SAFETY: `root_oid` is live and initialized for the rest of this test.
+        let root_oid = unsafe { OidRef::from_ptr(addr_of_mut!(root_oid).cast()) }
+            .expect("the address of a stack value is non-null");
+        let owned = git_tree_lookup(repository.as_ref(), root_oid).expect("the root tree loads");
+        let tree = owned.as_ref();
+
+        let mut visited = Vec::new();
+        let mut record = |root: &CStr, entry: GitTreeEntryRef<'_>| {
+            visited.push((root.to_owned(), git_tree_entry_name(entry).to_owned()));
+            0
+        };
+        assert_eq!(git_tree_walk(tree, TreeWalkMode::Pre, &mut record), Ok(()));
+        assert_eq!(
+            visited,
+            [
+                (c"".to_owned(), c"sub".to_owned()),
+                (c"sub/".to_owned(), c"link".to_owned()),
+                (c"".to_owned(), c"top".to_owned()),
+            ]
+        );
+
+        // A positive result skips the entry — including its children — but
+        // only in pre-order.
+        let mut pre = Vec::new();
+        let mut skip_subtrees = |_: &CStr, entry: GitTreeEntryRef<'_>| {
+            let name = git_tree_entry_name(entry).to_owned();
+            let is_tree = git_tree_entry_filemode(entry) == GitFileMode::TREE;
+            pre.push(name);
+            i32::from(is_tree)
+        };
+        assert_eq!(
+            git_tree_walk(tree, TreeWalkMode::Pre, &mut skip_subtrees),
+            Ok(())
+        );
+        assert_eq!(pre, [c"sub".to_owned(), c"top".to_owned()]);
+
+        let mut post = Vec::new();
+        let mut always_skip = |_: &CStr, entry: GitTreeEntryRef<'_>| {
+            post.push(git_tree_entry_name(entry).to_owned());
+            1
+        };
+        assert_eq!(
+            git_tree_walk(tree, TreeWalkMode::Post, &mut always_skip),
+            Ok(())
+        );
+        assert_eq!(
+            post,
+            [c"link".to_owned(), c"sub".to_owned(), c"top".to_owned()],
+            "post-order discards a positive result instead of skipping"
+        );
+
+        // A negative result stops the walk and reaches the caller unchanged.
+        let mut seen = 0;
+        let mut stop = |_: &CStr, _: GitTreeEntryRef<'_>| {
+            seen += 1;
+            -9
+        };
+        assert_eq!(git_tree_walk(tree, TreeWalkMode::Pre, &mut stop), Err(-9));
+        assert_eq!(seen, 1);
+    }
+
+    #[test]
+    fn a_builder_copies_its_source_tree_and_frees_the_entries_its_filter_drops() {
+        let _init = Libgit2Init::acquire();
+        let dir = BareRepo::create("builder");
+        let repository = git_repository_open(&dir.c_path()).expect("the bare repository opens");
+
+        let mut root_oid = write_trees(&repository);
+        // SAFETY: `root_oid` is live and initialized for the rest of this test.
+        let root_oid = unsafe { OidRef::from_ptr(addr_of_mut!(root_oid).cast()) }
+            .expect("the address of a stack value is non-null");
+        let owned = git_tree_lookup(repository.as_ref(), root_oid).expect("the root tree loads");
+
+        let mut builder = git_treebuilder_new(repository.as_ref(), Some(owned.as_ref()))
+            .expect("a builder seeded from the root tree");
+        assert_eq!(git_treebuilder_entrycount(builder.as_ref()), 2);
+
+        // The builder deep-copied the tree's entries: dropping the tree leaves
+        // every builder entry readable, and the builder alone frees them.
+        drop(owned);
+        assert!(git_treebuilder_get(builder.as_ref(), c"sub").is_some());
+
+        let mut removed = Vec::new();
+        let mut drop_gitlinks = |entry: GitTreeEntryRef<'_>| {
+            let is_gitlink = git_tree_entry_filemode(entry) == GitFileMode::COMMIT;
+            if is_gitlink {
+                removed.push(git_tree_entry_name(entry).to_owned());
+            }
+            is_gitlink
+        };
+        assert_eq!(
+            git_treebuilder_filter(&mut builder.as_mut(), &mut drop_gitlinks),
+            Ok(())
+        );
+        assert_eq!(removed, [c"top".to_owned()]);
+        assert_eq!(git_treebuilder_entrycount(builder.as_ref()), 1);
+        assert!(git_treebuilder_get(builder.as_ref(), c"top").is_none());
+        assert!(git_treebuilder_get(builder.as_ref(), c"sub").is_some());
+
+        assert_eq!(git_treebuilder_clear(&mut builder.as_mut()), Ok(()));
+        assert_eq!(git_treebuilder_entrycount(builder.as_ref()), 0);
     }
 }

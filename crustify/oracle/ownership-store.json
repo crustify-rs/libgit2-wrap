@@ -36630,11 +36630,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:out"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; no pointee ownership transfers."
+      "mutable": true,
+      "note": "Delegates to git_object_lookup, which stores this repository in `object->repo` (object.c:141) without a reference count and caches the parsed object in `repo->objects`, so the repository is written through and must outlive the tree written to `out`, not merely the call."
      }
     }
    ]
@@ -37035,11 +37035,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:builder_p"
       },
       "nullable": false,
       "mutable": false,
-      "note": "Repository borrowed and retained by the resulting builder; a safe owner must tether its lifetime."
+      "note": "Stored in `bld->repo` (tree.c) without a reference count and dereferenced by every later builder operation, so the repository must outlive the builder written to `builder_p`, not merely the call; `git_treebuilder_free` never releases it. This constructor itself only reads the repository: with a source tree it appends entries with validation off, so `check_entry` never runs here."
      }
     },
     {

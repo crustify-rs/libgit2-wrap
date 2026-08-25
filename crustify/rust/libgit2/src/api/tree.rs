@@ -25,7 +25,13 @@ where
 pub trait GitTreewalkCallback {
     /// Receives the entry's relative root and borrowed entry.
     ///
-    /// A positive result skips the entry and a negative result stops the walk.
+    /// A negative result stops the walk and is reported to its caller. A
+    /// positive result skips the entry and its children in
+    /// [`TreeWalkMode::Pre`]; `tree_walk` discards it in
+    /// [`TreeWalkMode::Post`], where the children have already been visited.
+    ///
+    /// [`TreeWalkMode::Pre`]: crate::tree::TreeWalkMode::Pre
+    /// [`TreeWalkMode::Post`]: crate::tree::TreeWalkMode::Post
     fn call(&mut self, root: &CStr, entry: GitTreeEntryRef<'_>) -> i32;
 }
 
