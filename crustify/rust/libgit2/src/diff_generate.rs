@@ -35,24 +35,6 @@ fn diff_result<'repo>(
     }
 }
 
-#[cfg(test)]
-mod owner_result_tests {
-    use super::*;
-
-    #[test]
-    fn typed_diff_result_rejects_a_null_success_output() {
-        assert!(matches!(
-            diff_result::<'static>(0, None),
-            Err(crate::ffi::git_error_code_GIT_ERROR)
-        ));
-    }
-
-    #[test]
-    fn typed_diff_result_preserves_a_constructor_error() {
-        assert!(matches!(diff_result::<'static>(-7, None), Err(-7)));
-    }
-}
-
 /// Wraps: git_diff_index_to_index
 /// Creates a generated diff between two index snapshots.
 pub fn git_diff_index_to_index<'repo>(
@@ -204,4 +186,22 @@ pub fn git_diff_tree_to_workdir_with_index<'repo>(
         (status, crate::diff::DiffOwned::from_raw(out))
     };
     diff_result(status, inner)
+}
+
+#[cfg(test)]
+mod owner_result_tests {
+    use super::*;
+
+    #[test]
+    fn typed_diff_result_rejects_a_null_success_output() {
+        assert!(matches!(
+            diff_result::<'static>(0, None),
+            Err(crate::ffi::git_error_code_GIT_ERROR)
+        ));
+    }
+
+    #[test]
+    fn typed_diff_result_preserves_a_constructor_error() {
+        assert!(matches!(diff_result::<'static>(-7, None), Err(-7)));
+    }
 }

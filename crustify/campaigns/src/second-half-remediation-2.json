@@ -1,0 +1,285 @@
+{
+  "schema_version": 2,
+  "oracle_target": "src",
+  "api_headers_only": true,
+  "budgets": {
+    "max_syms": 50,
+    "max_loc": 1000,
+    "max_types": 2,
+    "min_fields": 20
+  },
+  "summary": {
+    "unit_count": 2,
+    "layer_count": 2,
+    "batch_count": 2,
+    "file_count": 2
+  },
+  "plan_items": [
+    {
+      "name": "git_tree",
+      "defined_in": "src/libgit2/tree.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 1,
+      "loc": 6,
+      "deps": {
+        "types": [
+          {
+            "name": "git_object",
+            "defined_in": "src/libgit2/object.h"
+          }
+        ],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    },
+    {
+      "name": "git_diff_options",
+      "defined_in": "include/git2/diff.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 3,
+      "loc": 14,
+      "deps": {
+        "types": [
+          {
+            "name": "git_diff",
+            "defined_in": "src/libgit2/diff.h"
+          },
+          {
+            "name": "git_diff_delta",
+            "defined_in": "include/git2/diff.h"
+          },
+          {
+            "name": "git_oid_t",
+            "defined_in": "include/git2/oid.h"
+          },
+          {
+            "name": "git_strarray",
+            "defined_in": "include/git2/strarray.h"
+          },
+          {
+            "name": "git_submodule_ignore_t",
+            "defined_in": "include/git2/types.h"
+          }
+        ],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": []
+    }
+  ],
+  "dependency_nodes": [
+    {
+      "name": "git_diff",
+      "defined_in": "src/libgit2/diff.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 0,
+      "loc": 16,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": [],
+      "in_scope": true
+    },
+    {
+      "name": "git_diff_delta",
+      "defined_in": "include/git2/diff.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 2,
+      "loc": 6,
+      "deps": {
+        "types": [
+          {
+            "name": "git_delta_t",
+            "defined_in": "include/git2/diff.h"
+          },
+          {
+            "name": "git_diff_file",
+            "defined_in": "include/git2/diff.h"
+          }
+        ],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": [],
+      "in_scope": true
+    },
+    {
+      "name": "git_object",
+      "defined_in": "src/libgit2/object.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 0,
+      "loc": 2,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": [],
+      "in_scope": true
+    },
+    {
+      "name": "git_oid_t",
+      "defined_in": "include/git2/oid.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": [],
+      "in_scope": true
+    },
+    {
+      "name": "git_strarray",
+      "defined_in": "include/git2/strarray.h",
+      "kind": "type",
+      "source_kind": "struct",
+      "layer": 0,
+      "loc": 2,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": [],
+      "in_scope": true
+    },
+    {
+      "name": "git_submodule_ignore_t",
+      "defined_in": "include/git2/types.h",
+      "kind": "type",
+      "source_kind": "enum",
+      "layer": 0,
+      "loc": 0,
+      "deps": {
+        "types": [],
+        "symbols": []
+      },
+      "fallback": [],
+      "back_fill": [],
+      "generates": [],
+      "in_scope": true
+    }
+  ],
+  "steps": [
+    {
+      "layers": [
+        1
+      ],
+      "unit_count": 1,
+      "batches": [
+        {
+          "kind": "type",
+          "source_file": "src/libgit2/tree.h",
+          "items": [
+            {
+              "name": "git_tree",
+              "defined_in": "src/libgit2/tree.h",
+              "kind": "type",
+              "source_kind": "struct",
+              "layer": 1,
+              "loc": 6,
+              "deps": {
+                "types": [
+                  {
+                    "name": "git_object",
+                    "defined_in": "src/libgit2/object.h"
+                  }
+                ],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "layers": [
+        3
+      ],
+      "unit_count": 1,
+      "batches": [
+        {
+          "kind": "type",
+          "source_file": "include/git2/diff.h",
+          "items": [
+            {
+              "name": "git_diff_options",
+              "defined_in": "include/git2/diff.h",
+              "kind": "type",
+              "source_kind": "struct",
+              "layer": 3,
+              "loc": 14,
+              "deps": {
+                "types": [
+                  {
+                    "name": "git_diff",
+                    "defined_in": "src/libgit2/diff.h"
+                  },
+                  {
+                    "name": "git_diff_delta",
+                    "defined_in": "include/git2/diff.h"
+                  },
+                  {
+                    "name": "git_oid_t",
+                    "defined_in": "include/git2/oid.h"
+                  },
+                  {
+                    "name": "git_strarray",
+                    "defined_in": "include/git2/strarray.h"
+                  },
+                  {
+                    "name": "git_submodule_ignore_t",
+                    "defined_in": "include/git2/types.h"
+                  }
+                ],
+                "symbols": []
+              },
+              "fallback": [],
+              "back_fill": [],
+              "generates": [],
+              "field_anchors": [
+                "flags",
+                "payload",
+                "version",
+                "oid_type",
+                "max_size",
+                "progress_cb",
+                "new_prefix",
+                "old_prefix",
+                "id_abbrev",
+                "interhunk_lines",
+                "context_lines",
+                "notify_cb",
+                "pathspec",
+                "ignore_submodules"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
