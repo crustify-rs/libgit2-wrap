@@ -1400,6 +1400,94 @@
    ]
   },
   {
+   "name": "git_diff_options",
+   "defined_in": "include/git2/diff.h",
+   "_comment_agent": "git_diff_options is an inline non-owning configuration header. Callback code, callback state, prefixes, and the by-value pathspec view remain caller-owned; libgit2 copies data needed by a constructed diff.",
+   "fields": [
+    {
+     "name": "new_prefix",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL string; diff construction copies it into the diff pool before retaining the normalized option view."
+     }
+    },
+    {
+     "name": "notify_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the options and invoked synchronously; code storage is never owned or mutated."
+     }
+    },
+    {
+     "name": "old_prefix",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL string; diff construction copies it into the diff pool before retaining the normalized option view."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque application state borrowed by the options and passed synchronously to notify/progress callbacks; never freed by the options or diff machinery."
+     }
+    },
+    {
+     "name": "progress_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the options and invoked synchronously; code storage is never owned or mutated."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_similarity_metric",
    "defined_in": "include/git2/diff.h",
    "_comment_agent": "A metric is a borrowed callback table. payload is an opaque application cookie passed unchanged to every callback; signatures returned by file_signature/buffer_signature are owned by that callback protocol and later released through free_signature, not by the metric struct itself. A valid installed metric supplies all four callbacks.",
@@ -2178,6 +2266,45 @@
       "nullable": true,
       "mutable": false,
       "note": "The result owns len bytes produced by xdl_merge or git__malloc; git_merge_file_result_free releases the allocation with git__free. Empty or unmerged results may use null."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_merge_options",
+   "defined_in": "include/git2/merge.h",
+   "_comment_agent": "git_merge_options is an inline non-owning configuration header. The normalizer duplicates the default-driver string and borrows a caller-supplied similarity table; it owns only internally synthesized fallback state.",
+   "fields": [
+    {
+     "name": "default_driver",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL string. merge_normalize_opts duplicates a supplied driver before retaining it and later frees only that duplicate."
+     }
+    },
+    {
+     "name": "metric",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned callback table. A supplied table is read and invoked but never modified or freed; only an internally allocated fallback table is freed."
      }
     }
    ]

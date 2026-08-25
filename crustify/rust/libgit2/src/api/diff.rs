@@ -1,12 +1,15 @@
 //! Safe wrappers for libgit2 diff APIs.
 
+use core::marker::PhantomData;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
-use ffibox::{CVal, CValued};
+use ffibox::{CCell, CPtr, CType, CVal, CValued};
 
+use crate::api::types::{GitSubmoduleIgnore, InvalidGitSubmoduleIgnore};
 use crate::ffi;
 use crate::oid::{InvalidOidType, OidType};
+use crate::strarray::GitStrArrayRef;
 
 /// Wraps: git_diff_line_t
 /// A validated origin code for a line or header emitted by libgit2.
@@ -1268,5 +1271,596 @@ impl DiffDeltaMut<'_> {
     pub fn set_file_count(&mut self, file_count: u16) {
         // SAFETY: this exclusive handle permits a raw-place scalar write.
         unsafe { addr_of_mut!((*self.as_mut_ptr()).nfiles).write(file_count) }
+    }
+}
+
+/// A callback receiver installed in [`GitDiffOptions`].
+///
+/// Both callbacks share one receiver because the C options use one payload
+/// slot. Return values retain the C API's convention: zero continues, a
+/// positive notification result skips its delta, and a negative value aborts.
+pub trait GitDiffOptionsCallbacks {
+    /// Receives the typed delta that libgit2 is considering adding.
+    fn notify(
+        &mut self,
+        diff: crate::diff::DiffRef<'_>,
+        delta: DiffDeltaRef<'_>,
+        matched_pathspec: Option<&core::ffi::CStr>,
+    ) -> core::ffi::c_int;
+
+    /// Receives progress before one file comparison.
+    fn progress(
+        &mut self,
+        diff: crate::diff::DiffRef<'_>,
+        old_path: Option<&core::ffi::CStr>,
+        new_path: Option<&core::ffi::CStr>,
+    ) -> core::ffi::c_int;
+}
+
+/// Wraps: git_diff_options
+/// Layout-compatible diff options borrowing strings, pathspec storage, and
+/// callback state for `'data`.
+#[repr(transparent)]
+pub struct GitDiffOptions<'data> {
+    inner: CType<ffi::git_diff_options>,
+    _data: PhantomData<&'data mut ()>,
+}
+
+/// Shared borrow of [`GitDiffOptions`].
+#[repr(transparent)]
+pub struct GitDiffOptionsRef<'object, 'data>(CPtr<'object, GitDiffOptions<'data>>);
+
+impl Clone for GitDiffOptionsRef<'_, '_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl Copy for GitDiffOptionsRef<'_, '_> {}
+
+/// Exclusive borrow of [`GitDiffOptions`].
+#[repr(transparent)]
+pub struct GitDiffOptionsMut<'object, 'data>(GitDiffOptionsRef<'object, 'data>);
+
+// SAFETY: the layout type is transparent over the matching bindgen struct;
+// both handles are pointer-sized and access C-visible storage only through
+// raw-place projections. The shared handle exposes no writes.
+unsafe impl<'data> CCell for GitDiffOptions<'data> {
+    type C = ffi::git_diff_options;
+    type Ref<'object>
+        = GitDiffOptionsRef<'object, 'data>
+    where
+        Self: 'object;
+    type Mut<'object>
+        = GitDiffOptionsMut<'object, 'data>
+    where
+        Self: 'object;
+
+    unsafe fn ref_from_raw<'object>(p: NonNull<Self>) -> Self::Ref<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller guarantees that `p` is a live shared object.
+        GitDiffOptionsRef(unsafe { CPtr::new(p) })
+    }
+
+    unsafe fn mut_from_raw<'object>(p: NonNull<Self>) -> Self::Mut<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller additionally guarantees exclusive access.
+        GitDiffOptionsMut(GitDiffOptionsRef(unsafe { CPtr::new(p) }))
+    }
+}
+
+// SAFETY: this options header only borrows its pointer fields and owns no
+// resource, so disposing its inline storage requires no action.
+unsafe impl CValued for GitDiffOptions<'_> {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+impl<'data> GitDiffOptions<'data> {
+    /// Constructs options equivalent to `GIT_DIFF_OPTIONS_INIT`.
+    #[must_use]
+    pub fn new() -> CVal<Self> {
+        // SAFETY: every field of the C options struct admits the all-zero bit
+        // pattern; published nonzero defaults are installed below.
+        let inner = unsafe { CType::zeroed() };
+        let mut options = CVal::new(Self {
+            inner,
+            _data: PhantomData,
+        });
+        {
+            let mut view = options.as_mut();
+            view.set_version(ffi::GIT_DIFF_OPTIONS_VERSION);
+            view.set_ignore_submodules(GitSubmoduleIgnore::Unspecified);
+            view.set_context_lines(3);
+        }
+        options
+    }
+}
+
+impl<'object, 'data> GitDiffOptionsRef<'object, 'data> {
+    /// Borrows a raw C options pointer, returning `None` for null.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must identify an initialized options value that lives for
+    /// `'object`. Every borrowed field must remain valid for `'data`, which
+    /// must outlive `'object`, and callback state must remain exclusive.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_diff_options) -> Option<Self> {
+        NonNull::new(ptr.cast::<GitDiffOptions<'data>>()).map(|ptr| {
+            // SAFETY: the caller supplies the required live shared object.
+            Self(unsafe { CPtr::new(ptr) })
+        })
+    }
+
+    /// Returns the C pointer for read-only FFI calls.
+    #[must_use]
+    pub fn as_ptr(&self) -> *const ffi::git_diff_options {
+        self.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Field: git_diff_options.flags
+    /// Returns the checked set of configured diff flags.
+    pub fn flags(&self) -> Result<DiffOptions, ffi::git_diff_option_t> {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        let flags = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        DiffOptions::try_from(flags)
+    }
+
+    /// Field: git_diff_options.payload
+    /// Reports whether callback state is installed.
+    #[must_use]
+    pub fn has_callback_payload(&self) -> bool {
+        // SAFETY: this live shared handle permits the pointer raw-place read.
+        !unsafe { addr_of!((*self.as_ptr()).payload).read() }.is_null()
+    }
+
+    /// Field: git_diff_options.version
+    /// Returns the options ABI version.
+    #[must_use]
+    pub fn version(&self) -> core::ffi::c_uint {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        unsafe { addr_of!((*self.as_ptr()).version).read() }
+    }
+
+    /// Field: git_diff_options.oid_type
+    /// Returns the selected object-ID algorithm, or `None` for repository or
+    /// library defaults.
+    pub fn oid_type(&self) -> Result<Option<OidType>, InvalidOidType> {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        let oid_type = unsafe { addr_of!((*self.as_ptr()).oid_type).read() };
+        if oid_type == 0 {
+            Ok(None)
+        } else {
+            OidType::try_from(oid_type).map(Some)
+        }
+    }
+
+    /// Field: git_diff_options.max_size
+    /// Returns the automatic binary-detection threshold in bytes.
+    #[must_use]
+    pub fn max_size(&self) -> ffi::git_off_t {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        unsafe { addr_of!((*self.as_ptr()).max_size).read() }
+    }
+
+    /// Field: git_diff_options.progress_cb
+    /// Reports whether a progress callback is installed.
+    #[must_use]
+    pub fn has_progress_callback(&self) -> bool {
+        // SAFETY: this live shared handle permits the callback-slot read.
+        unsafe { addr_of!((*self.as_ptr()).progress_cb).read() }.is_some()
+    }
+
+    /// Field: git_diff_options.new_prefix
+    /// Borrows the optional prefix for new paths.
+    #[must_use]
+    pub fn new_prefix(&self) -> Option<&'object core::ffi::CStr> {
+        // SAFETY: this live shared handle permits the pointer raw-place read.
+        let prefix = unsafe { addr_of!((*self.as_ptr()).new_prefix).read() };
+        if prefix.is_null() {
+            None
+        } else {
+            // SAFETY: the wrapper contract keeps the borrowed NUL string live
+            // for at least this object borrow.
+            Some(unsafe { core::ffi::CStr::from_ptr(prefix) })
+        }
+    }
+
+    /// Field: git_diff_options.old_prefix
+    /// Borrows the optional prefix for old paths.
+    #[must_use]
+    pub fn old_prefix(&self) -> Option<&'object core::ffi::CStr> {
+        // SAFETY: this live shared handle permits the pointer raw-place read.
+        let prefix = unsafe { addr_of!((*self.as_ptr()).old_prefix).read() };
+        if prefix.is_null() {
+            None
+        } else {
+            // SAFETY: the wrapper contract keeps the borrowed NUL string live
+            // for at least this object borrow.
+            Some(unsafe { core::ffi::CStr::from_ptr(prefix) })
+        }
+    }
+
+    /// Field: git_diff_options.id_abbrev
+    /// Returns the requested object-ID abbreviation length.
+    #[must_use]
+    pub fn id_abbrev(&self) -> u16 {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        unsafe { addr_of!((*self.as_ptr()).id_abbrev).read() }
+    }
+
+    /// Field: git_diff_options.interhunk_lines
+    /// Returns the maximum unchanged lines merged between adjacent hunks.
+    #[must_use]
+    pub fn interhunk_lines(&self) -> u32 {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        unsafe { addr_of!((*self.as_ptr()).interhunk_lines).read() }
+    }
+
+    /// Field: git_diff_options.context_lines
+    /// Returns the unchanged context lines surrounding each hunk.
+    #[must_use]
+    pub fn context_lines(&self) -> u32 {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        unsafe { addr_of!((*self.as_ptr()).context_lines).read() }
+    }
+
+    /// Field: git_diff_options.notify_cb
+    /// Reports whether a delta-notification callback is installed.
+    #[must_use]
+    pub fn has_notify_callback(&self) -> bool {
+        // SAFETY: this live shared handle permits the callback-slot read.
+        unsafe { addr_of!((*self.as_ptr()).notify_cb).read() }.is_some()
+    }
+
+    /// Field: git_diff_options.pathspec
+    /// Borrows the inline pathspec-array header.
+    #[must_use]
+    pub fn pathspec(&self) -> GitStrArrayRef<'object> {
+        // SAFETY: raw-place projection locates the initialized inline header
+        // without forming a reference to C-visible storage.
+        let pathspec = unsafe { addr_of!((*self.as_ptr()).pathspec).cast_mut() };
+        // SAFETY: the projected header lives for this options borrow.
+        unsafe { GitStrArrayRef::from_ptr(pathspec) }.expect("an inline field is non-null")
+    }
+
+    /// Field: git_diff_options.ignore_submodules
+    /// Returns the checked submodule-ignore override.
+    pub fn ignore_submodules(&self) -> Result<GitSubmoduleIgnore, InvalidGitSubmoduleIgnore> {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        let value = unsafe { addr_of!((*self.as_ptr()).ignore_submodules).read() };
+        GitSubmoduleIgnore::try_from(value)
+    }
+}
+
+impl<'object, 'data> GitDiffOptionsMut<'object, 'data> {
+    /// Exclusively borrows a raw C options pointer, returning `None` for null.
+    ///
+    /// # Safety
+    ///
+    /// The shared-handle requirements apply, and no other access path may use
+    /// the options value for `'object`.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_diff_options) -> Option<Self> {
+        // SAFETY: the caller supplies a live exclusively accessible object.
+        unsafe { GitDiffOptionsRef::from_ptr(ptr) }.map(Self)
+    }
+
+    /// Returns the writable C pointer for FFI calls and raw-place writes.
+    #[must_use]
+    pub fn as_mut_ptr(&mut self) -> *mut ffi::git_diff_options {
+        self.0.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Reborrows this exclusive handle as shared.
+    #[must_use]
+    pub fn as_ref(&self) -> GitDiffOptionsRef<'_, 'data> {
+        GitDiffOptionsRef(self.0.0)
+    }
+
+    /// Replaces the configured diff flags.
+    pub fn set_flags(&mut self, flags: DiffOptions) {
+        // SAFETY: this exclusive handle permits the scalar write, and the
+        // wrapper contains only published flag bits.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
+    }
+
+    /// Sets the options ABI version.
+    pub fn set_version(&mut self, version: core::ffi::c_uint) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+
+    /// Selects an object-ID algorithm, or repository/library defaults.
+    pub fn set_oid_type(&mut self, oid_type: Option<OidType>) {
+        let oid_type = oid_type.map_or(0, ffi::git_oid_t::from);
+        // SAFETY: this exclusive handle permits the scalar write, and the
+        // value is zero or a published object-ID enum value.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).oid_type).write(oid_type) }
+    }
+
+    /// Sets the automatic binary-detection threshold in bytes.
+    pub fn set_max_size(&mut self, max_size: ffi::git_off_t) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).max_size).write(max_size) }
+    }
+
+    /// Stores optional borrowed prefixes for old and new paths.
+    pub fn set_prefixes(
+        &mut self,
+        old_prefix: Option<&'data core::ffi::CStr>,
+        new_prefix: Option<&'data core::ffi::CStr>,
+    ) {
+        let old_prefix = old_prefix.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+        let new_prefix = new_prefix.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+        let options = self.as_mut_ptr();
+        // SAFETY: this exclusive handle permits both pointer writes, and the
+        // wrapper lifetime keeps each non-null NUL string live.
+        unsafe {
+            addr_of_mut!((*options).old_prefix).write(old_prefix);
+            addr_of_mut!((*options).new_prefix).write(new_prefix);
+        }
+    }
+
+    /// Sets the object-ID abbreviation length.
+    pub fn set_id_abbrev(&mut self, id_abbrev: u16) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).id_abbrev).write(id_abbrev) }
+    }
+
+    /// Sets the maximum unchanged lines merged between adjacent hunks.
+    pub fn set_interhunk_lines(&mut self, lines: u32) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).interhunk_lines).write(lines) }
+    }
+
+    /// Sets the unchanged context lines surrounding each hunk.
+    pub fn set_context_lines(&mut self, lines: u32) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).context_lines).write(lines) }
+    }
+
+    /// Borrows a pathspec-array header and copies its non-owning C view.
+    pub fn set_pathspec(&mut self, pathspec: GitStrArrayRef<'data>) {
+        // SAFETY: `pathspec` identifies a live initialized header. Copying the
+        // C header transfers no ownership.
+        let pathspec = unsafe { pathspec.as_ptr().read() };
+        // SAFETY: this exclusive handle permits replacing the inline header,
+        // and the wrapper lifetime retains its borrowed storage.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).pathspec).write(pathspec) }
+    }
+
+    /// Sets the submodule-ignore override.
+    pub fn set_ignore_submodules(&mut self, value: GitSubmoduleIgnore) {
+        // SAFETY: this exclusive handle permits the scalar write, and `value`
+        // is one of the published enum values.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).ignore_submodules).write(value.into()) }
+    }
+
+    /// Installs typed notification and progress callbacks with shared state.
+    ///
+    /// # Safety
+    ///
+    /// Neither callback method may unwind across the C boundary. The options
+    /// value must not be used by a C operation that invokes these callbacks
+    /// concurrently or after the `'data` borrow has ended.
+    pub unsafe fn set_callbacks<C: GitDiffOptionsCallbacks>(&mut self, callbacks: &'data mut C) {
+        unsafe extern "C" fn notify<C: GitDiffOptionsCallbacks>(
+            diff: *const ffi::git_diff,
+            delta: *const ffi::git_diff_delta,
+            matched_pathspec: *const core::ffi::c_char,
+            payload: *mut core::ffi::c_void,
+        ) -> core::ffi::c_int {
+            // SAFETY: installation stores a live exclusive `C` in `payload`.
+            let Some(callbacks) = (unsafe { payload.cast::<C>().as_mut() }) else {
+                return -1;
+            };
+            // SAFETY: libgit2 supplies a live diff for this synchronous call.
+            let Some(diff) = (unsafe { crate::diff::DiffRef::from_ptr(diff.cast_mut()) }) else {
+                return -1;
+            };
+            // SAFETY: libgit2 supplies a live initialized delta for this
+            // synchronous call.
+            let Some(delta) = (unsafe { DiffDeltaRef::from_ptr(delta.cast_mut()) }) else {
+                return -1;
+            };
+            let matched_pathspec = if matched_pathspec.is_null() {
+                None
+            } else {
+                // SAFETY: a non-null matched path from libgit2 is a live NUL
+                // string for this synchronous callback.
+                Some(unsafe { core::ffi::CStr::from_ptr(matched_pathspec) })
+            };
+            callbacks.notify(diff, delta, matched_pathspec)
+        }
+
+        unsafe extern "C" fn progress<C: GitDiffOptionsCallbacks>(
+            diff: *const ffi::git_diff,
+            old_path: *const core::ffi::c_char,
+            new_path: *const core::ffi::c_char,
+            payload: *mut core::ffi::c_void,
+        ) -> core::ffi::c_int {
+            // SAFETY: installation stores a live exclusive `C` in `payload`.
+            let Some(callbacks) = (unsafe { payload.cast::<C>().as_mut() }) else {
+                return -1;
+            };
+            // SAFETY: libgit2 supplies a live diff for this synchronous call.
+            let Some(diff) = (unsafe { crate::diff::DiffRef::from_ptr(diff.cast_mut()) }) else {
+                return -1;
+            };
+            let path = |path: *const core::ffi::c_char| {
+                if path.is_null() {
+                    None
+                } else {
+                    // SAFETY: non-null paths supplied by libgit2 are live NUL
+                    // strings for this synchronous callback.
+                    Some(unsafe { core::ffi::CStr::from_ptr(path) })
+                }
+            };
+            callbacks.progress(diff, path(old_path), path(new_path))
+        }
+
+        let options = self.as_mut_ptr();
+        // SAFETY: this exclusive handle permits all three writes. The caller
+        // upholds the callback boundary contract, while `'data` retains the
+        // receiver's exclusive borrow.
+        unsafe {
+            addr_of_mut!((*options).notify_cb).write(Some(notify::<C>));
+            addr_of_mut!((*options).progress_cb).write(Some(progress::<C>));
+            addr_of_mut!((*options).payload)
+                .write(core::ptr::from_mut(callbacks).cast::<core::ffi::c_void>());
+        }
+    }
+
+    /// Clears both callbacks and their shared payload.
+    pub fn clear_callbacks(&mut self) {
+        let options = self.as_mut_ptr();
+        // SAFETY: this exclusive handle permits all three writes; the null
+        // representation carries no callback lifetime obligation.
+        unsafe {
+            addr_of_mut!((*options).notify_cb).write(None);
+            addr_of_mut!((*options).progress_cb).write(None);
+            addr_of_mut!((*options).payload).write(core::ptr::null_mut());
+        }
+    }
+}
+
+#[cfg(test)]
+mod diff_options_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn options_preserve_layout_and_defaults() {
+        assert_eq!(
+            size_of::<GitDiffOptions<'static>>(),
+            size_of::<ffi::git_diff_options>()
+        );
+        assert_eq!(
+            align_of::<GitDiffOptions<'static>>(),
+            align_of::<ffi::git_diff_options>()
+        );
+        assert_eq!(
+            size_of::<GitDiffOptionsRef<'static, 'static>>(),
+            size_of::<*const ffi::git_diff_options>()
+        );
+
+        let options = GitDiffOptions::new();
+        let view = options.as_ref();
+        assert_eq!(view.version(), ffi::GIT_DIFF_OPTIONS_VERSION);
+        assert_eq!(view.flags(), Ok(DiffOptions::NORMAL));
+        assert_eq!(
+            view.ignore_submodules(),
+            Ok(GitSubmoduleIgnore::Unspecified)
+        );
+        assert_eq!(view.context_lines(), 3);
+        assert_eq!(view.interhunk_lines(), 0);
+        assert_eq!(view.oid_type(), Ok(None));
+        assert!(view.pathspec().strings().is_none());
+        assert!(!view.has_notify_callback());
+        assert!(!view.has_progress_callback());
+        assert!(!view.has_callback_payload());
+    }
+
+    #[derive(Default)]
+    struct Callbacks {
+        notified: bool,
+        progressed: bool,
+        status: Option<crate::diff::Delta>,
+    }
+
+    impl GitDiffOptionsCallbacks for Callbacks {
+        fn notify(
+            &mut self,
+            _diff: crate::diff::DiffRef<'_>,
+            delta: DiffDeltaRef<'_>,
+            _matched_pathspec: Option<&core::ffi::CStr>,
+        ) -> core::ffi::c_int {
+            self.notified = true;
+            self.status = delta.status().ok();
+            0
+        }
+
+        fn progress(
+            &mut self,
+            _diff: crate::diff::DiffRef<'_>,
+            old_path: Option<&core::ffi::CStr>,
+            new_path: Option<&core::ffi::CStr>,
+        ) -> core::ffi::c_int {
+            self.progressed = old_path == Some(c"old") && new_path == Some(c"new");
+            0
+        }
+    }
+
+    #[test]
+    fn borrowed_fields_and_typed_callbacks_round_trip() {
+        let mut entries = [c"src/*.c".as_ptr().cast_mut()];
+        let mut pathspec = ffi::git_strarray {
+            strings: entries.as_mut_ptr(),
+            count: entries.len(),
+        };
+        // SAFETY: the stack header and pointer run stay live for the options;
+        // the only string has static storage.
+        let pathspec = unsafe { GitStrArrayRef::from_ptr(addr_of_mut!(pathspec)) }.unwrap();
+        let mut callbacks = Callbacks::default();
+        let mut options = GitDiffOptions::new();
+        {
+            let mut view = options.as_mut();
+            view.set_flags(DiffOptions::INCLUDE_UNTRACKED | DiffOptions::PATIENCE);
+            view.set_oid_type(Some(OidType::Sha256));
+            view.set_max_size(-1);
+            view.set_prefixes(Some(c"a/"), Some(c"b/"));
+            view.set_id_abbrev(12);
+            view.set_interhunk_lines(4);
+            view.set_context_lines(8);
+            view.set_pathspec(pathspec);
+            // SAFETY: these test callbacks do not panic and are invoked only
+            // synchronously below while their receiver is exclusively held.
+            unsafe { view.set_callbacks(&mut callbacks) };
+        }
+
+        let view = options.as_ref();
+        assert_eq!(
+            view.flags(),
+            Ok(DiffOptions::INCLUDE_UNTRACKED | DiffOptions::PATIENCE)
+        );
+        assert_eq!(view.oid_type(), Ok(Some(OidType::Sha256)));
+        assert_eq!(view.max_size(), -1);
+        assert_eq!(view.old_prefix(), Some(c"a/"));
+        assert_eq!(view.new_prefix(), Some(c"b/"));
+        assert_eq!(view.id_abbrev(), 12);
+        assert_eq!(view.interhunk_lines(), 4);
+        assert_eq!(view.context_lines(), 8);
+        assert_eq!(view.pathspec().strings().unwrap().get(0), Some(c"src/*.c"));
+
+        // Use layout-compatible wrapped storage for the callback's opaque diff.
+        let mut diff = crate::diff::Diff::zeroed();
+        // SAFETY: all-zero is valid for the delta's integer, pointer and inline
+        // object-ID fields, and status is replaced with a published value.
+        let mut delta: ffi::git_diff_delta = unsafe { core::mem::zeroed() };
+        delta.status = ffi::git_delta_t_GIT_DELTA_ADDED;
+        // SAFETY: the callback slots and payload were installed as one typed
+        // protocol; all transient inputs remain live for both calls.
+        unsafe {
+            addr_of!((*view.as_ptr()).notify_cb).read().unwrap()(
+                addr_of_mut!(diff).cast(),
+                addr_of!(delta),
+                c"src/*.c".as_ptr(),
+                addr_of!((*view.as_ptr()).payload).read(),
+            );
+            addr_of!((*view.as_ptr()).progress_cb).read().unwrap()(
+                addr_of_mut!(diff).cast(),
+                c"old".as_ptr(),
+                c"new".as_ptr(),
+                addr_of!((*view.as_ptr()).payload).read(),
+            );
+        }
+        drop(options);
+        assert!(callbacks.notified);
+        assert!(callbacks.progressed);
+        assert_eq!(callbacks.status, Some(crate::diff::Delta::Added));
     }
 }

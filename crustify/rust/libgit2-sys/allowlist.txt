@@ -44,6 +44,8 @@
 ^git_diff_line$
 ^git_diff_line_t$
 ^git_diff_option_t$
+^git_diff_options$
+^GIT_DIFF_OPTIONS_VERSION$
 ^git_diff_parse_options$
 ^git_diff_similarity_metric$
 ^git_diff_find_options$
@@ -77,6 +79,9 @@
 ^git_revwalk$
 ^git_revwalk_free$
 ^git_merge_file_favor_t$
+^git_merge_flag_t$
+^git_merge_options$
+^GIT_MERGE_OPTIONS_VERSION$
 ^git_merge_file_input$
 ^git_diff_stats_format_t$
 ^git_direction$
