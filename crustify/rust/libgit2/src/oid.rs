@@ -1,5 +1,6 @@
 //! Safe wrappers for libgit2 oid APIs.
 
+use core::marker::PhantomData;
 use core::mem::{offset_of, size_of};
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
@@ -404,8 +405,70 @@ ffibox::define_ctype!(
     ffi::git_oid_shorten
 );
 
-/// An exclusively owned object-ID prefix shortener.
-pub type GitOidShortenOwned = ffibox::CBox<GitOidShorten>;
+/// An exclusively owned object-ID prefix shortener that borrows every object
+/// ID added to it for `'ids`.
+///
+/// `git_oid_shorten_add` does not copy its `text_oid`: `push_leaf` stores
+/// `&text_oid[i + 1]` into the new trie leaf's `tail`, and a later
+/// `git_oid_shorten_add` reads `tail[0]` and `&tail[1]` back when it splits
+/// that leaf. Every added string therefore has to stay live for as long as the
+/// shortener does, which is what `'ids` records. A plain
+/// `ffibox::CBox<GitOidShorten>` cannot state that, so this owner carries the
+/// borrow instead of exposing `git_oid_shorten_add` on the bare handle.
+///
+/// `'ids` is invariant: [`git_oid_shorten_add`] installs a `&'ids` referent
+/// into an existing shortener, so shrinking `'ids` on a live owner would let
+/// safe code register a shorter-lived string than the trie outlives.
+///
+/// ```compile_fail
+/// use libgit2::oid::GitOidShortenOwned;
+///
+/// fn shrink<'short>(shortener: GitOidShortenOwned<'static>) -> GitOidShortenOwned<'short> {
+///     shortener
+/// }
+/// ```
+pub struct GitOidShortenOwned<'ids> {
+    shortener: ffibox::CBox<GitOidShorten>,
+    // The canonical invariance marker: a function type is contravariant in its
+    // argument and covariant in its result, so naming `'ids` in both positions
+    // pins it. `&'ids ()` and `&'ids mut ()` are both covariant and would not.
+    _ids: PhantomData<fn(&'ids ()) -> &'ids ()>,
+}
+
+impl<'ids> GitOidShortenOwned<'ids> {
+    /// Adopts a shortener allocated by libgit2, returning `None` for null.
+    ///
+    /// # Safety
+    /// `ptr` must be a live, fully constructed shortener whose ownership
+    /// transfers to the returned value, and every object ID already added to
+    /// it must remain live and unmodified for `'ids`.
+    #[must_use]
+    pub unsafe fn from_raw(ptr: *mut ffi::git_oid_shorten) -> Option<Self> {
+        // SAFETY: the caller transfers unique ownership of a live shortener.
+        unsafe { ffibox::CBox::from_raw(ptr) }.map(|shortener| Self {
+            shortener,
+            _ids: PhantomData,
+        })
+    }
+
+    /// Surrenders ownership, returning the raw shortener for C to free.
+    #[must_use]
+    pub fn into_raw(self) -> *mut ffi::git_oid_shorten {
+        self.shortener.into_raw()
+    }
+
+    /// Borrows the shortener for shared access.
+    #[must_use]
+    pub fn as_ref(&self) -> GitOidShortenRef<'_> {
+        self.shortener.as_ref()
+    }
+
+    /// Borrows the shortener for exclusive access.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitOidShortenMut<'_> {
+        self.shortener.as_mut()
+    }
+}
 
 /// Wraps: git_oid_shorten_free
 // SAFETY: `git_oid_shorten_free` is the public destructor for a complete
@@ -453,7 +516,7 @@ mod shorten_tests {
             size_of::<*mut ffi::git_oid_shorten>()
         );
         assert_eq!(
-            size_of::<GitOidShortenOwned>(),
+            size_of::<GitOidShortenOwned<'_>>(),
             size_of::<*mut ffi::git_oid_shorten>()
         );
     }
@@ -508,20 +571,42 @@ mod shorten_tests {
 
         let mut shortener = git_oid_shorten_new(4).expect("shortener allocation");
         assert_eq!(
-            git_oid_shorten_add(
-                &mut shortener.as_mut(),
-                c"0000000000000000000000000000000000000000"
-            ),
+            git_oid_shorten_add(&mut shortener, c"0000000000000000000000000000000000000000"),
             Ok(4)
         );
         assert_eq!(
-            git_oid_shorten_add(&mut shortener.as_mut(), c"too-short"),
+            git_oid_shorten_add(&mut shortener, c"too-short"),
             Err(ffi::git_error_code_GIT_EINVALID)
         );
         drop(shortener);
 
         // SAFETY: balances the successful initialization above after every
         // libgit2 allocation owned by the test has been released.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
+    fn the_shortener_reads_back_every_object_id_it_retained() {
+        // SAFETY: process-global initialization is refcounted and balanced
+        // once the shortener allocation has been released.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        // `push_leaf` stores a pointer into each added string's tail, and the
+        // second insertion below splits the first one's leaf, so it reads the
+        // first `CString`'s bytes back. The owner's `'ids` is what keeps them
+        // live: these two allocations must outlive `shortener`, and they do
+        // because they are declared before it.
+        let first = std::ffi::CString::new("0000000000000000000000000000000000000000").unwrap();
+        let second = std::ffi::CString::new("0000000000000000000000000000000000000001").unwrap();
+
+        let mut shortener = git_oid_shorten_new(4).expect("shortener allocation");
+        assert_eq!(git_oid_shorten_add(&mut shortener, &first), Ok(4));
+        // 40 shared digits, so the unique prefix grows to the full width.
+        assert_eq!(git_oid_shorten_add(&mut shortener, &second), Ok(40));
+        drop(shortener);
+
+        // SAFETY: balances the successful initialization above after the
+        // shortener allocation has been released.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
@@ -566,25 +651,40 @@ pub fn git_oid_pathfmt(out: &mut [u8], oid: OidRef<'_>) -> Result<usize, i32> {
 /// Wraps: git_oid_shorten_add
 /// Adds one complete 40-digit SHA-1 object ID and returns the unique prefix
 /// length calculated so far.
-pub fn git_oid_shorten_add(
-    shortener: &mut GitOidShortenMut<'_>,
-    text_oid: &core::ffi::CStr,
+///
+/// `text_oid` is **retained** by the shortener, not copied: the trie leaf that
+/// the insertion pushes keeps a `const char *` into the tail of this string,
+/// and a later insertion that splits the leaf reads it back. `'ids` therefore
+/// binds every added object ID to the shortener for as long as it lives.
+///
+/// A `text_oid` that is not exactly 40 bytes long is rejected as
+/// `GIT_EINVALID` without calling libgit2, since C requires the full
+/// hexadecimal width and reports a short string as a plain `-1`.
+pub fn git_oid_shorten_add<'ids>(
+    shortener: &mut GitOidShortenOwned<'ids>,
+    text_oid: &'ids core::ffi::CStr,
 ) -> Result<usize, i32> {
     if text_oid.to_bytes().len() != 40 {
         return Err(ffi::git_error_code_GIT_EINVALID);
     }
     // SAFETY: the exclusive shortener is live and `text_oid` provides all 40
-    // readable digits required by the C loop. The input is not retained.
-    let result = unsafe { ffi::git_oid_shorten_add(shortener.as_mut_ptr(), text_oid.as_ptr()) };
+    // readable digits required by the C loop. The trie retains a pointer into
+    // `text_oid`, which `'ids` keeps live for at least as long as the owner.
+    let result =
+        unsafe { ffi::git_oid_shorten_add(shortener.as_mut().as_mut_ptr(), text_oid.as_ptr()) };
     usize::try_from(result).map_err(|_| result)
 }
 
 /// Wraps: git_oid_shorten_new
 /// Allocates an empty object-ID prefix shortener.
+///
+/// The fresh shortener holds no object ID yet, so `'ids` is chosen by the
+/// first [`git_oid_shorten_add`] at the call site.
 #[must_use]
-pub fn git_oid_shorten_new(min_length: usize) -> Option<GitOidShortenOwned> {
+pub fn git_oid_shorten_new<'ids>(min_length: usize) -> Option<GitOidShortenOwned<'ids>> {
     // SAFETY: a non-null result transfers unique ownership of a fully
-    // initialized shortener allocation to the caller.
+    // initialized shortener allocation to the caller, and an empty trie
+    // borrows nothing yet.
     unsafe { GitOidShortenOwned::from_raw(ffi::git_oid_shorten_new(min_length)) }
 }
 

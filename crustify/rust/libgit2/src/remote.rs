@@ -11,7 +11,7 @@ use crate::api::proxy::GitProxyOptionsRef;
 use crate::api::remote::{
     GitFetchOptionsRef, GitPushOptionsRef, GitRemoteCallbacksMut, GitRemoteCallbacksRef,
     GitRemoteConnectOptionsMut, GitRemoteConnectOptionsRef, GitRemoteCreateOptions,
-    GitRemoteCreateOptionsRef,
+    GitRemoteCreateOptionsRef, GitRemoteUpdateFlags,
 };
 use crate::ffi;
 use crate::indexer::IndexerProgressRef;
@@ -1307,7 +1307,7 @@ pub fn git_remote_prune(
 pub fn git_remote_update_tips(
     remote: &mut GitRemoteMut<'_>,
     callbacks: Option<GitRemoteCallbacksRef<'_, '_>>,
-    update_flags: core::ffi::c_uint,
+    update_flags: GitRemoteUpdateFlags,
     download_tags: GitRemoteAutotagOption,
     reflog_message: Option<&CStr>,
 ) -> Result<(), i32> {
@@ -1317,7 +1317,7 @@ pub fn git_remote_update_tips(
         ffi::git_remote_update_tips(
             remote.as_mut_ptr(),
             callbacks.map_or(core::ptr::null(), |callbacks| callbacks.as_ptr()),
-            update_flags,
+            update_flags.bits(),
             download_tags.into(),
             reflog_message.map_or(core::ptr::null(), CStr::as_ptr),
         )

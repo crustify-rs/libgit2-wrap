@@ -168,7 +168,7 @@ impl<'data> GitSubmoduleUpdateOptions<'data> {
                 .set_version(ffi::GIT_CHECKOUT_OPTIONS_VERSION);
             let mut fetch = view.fetch_options_mut();
             fetch.set_version(ffi::GIT_FETCH_OPTIONS_VERSION as core::ffi::c_int);
-            fetch.set_update_flags(1);
+            fetch.set_update_flags(crate::api::remote::GitRemoteUpdateFlags::FETCH_HEAD);
             fetch
                 .callbacks_mut()
                 .set_version(ffi::GIT_REMOTE_CALLBACKS_VERSION);

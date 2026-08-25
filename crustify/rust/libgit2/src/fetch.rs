@@ -22,6 +22,7 @@ pub fn git_fetch_options_init<'data>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::remote::GitRemoteUpdateFlags;
 
     #[test]
     fn current_initializer_writes_published_fetch_defaults() {
@@ -29,7 +30,7 @@ mod tests {
             .expect("the published fetch-options version initializes");
         let options = options.as_ref();
         assert_eq!(options.version(), ffi::GIT_FETCH_OPTIONS_VERSION as i32);
-        assert_eq!(options.update_flags(), 1);
+        assert_eq!(options.update_flags(), Ok(GitRemoteUpdateFlags::FETCH_HEAD));
         assert_eq!(
             options.callbacks().version(),
             ffi::GIT_REMOTE_CALLBACKS_VERSION

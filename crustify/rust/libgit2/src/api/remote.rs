@@ -1292,9 +1292,8 @@ impl<'data> GitFetchOptions<'data> {
         {
             let mut view = options.as_mut();
             view.set_version(crate::ffi::GIT_FETCH_OPTIONS_VERSION as core::ffi::c_int);
-            // `GIT_REMOTE_UPDATE_FETCHHEAD` is bit zero of the public update
-            // flags stored in this historically scalar field.
-            view.set_update_flags(1);
+            // `GIT_FETCH_OPTIONS_INIT` selects `GIT_REMOTE_UPDATE_FETCHHEAD`.
+            view.set_update_flags(GitRemoteUpdateFlags::FETCH_HEAD);
             view.callbacks_mut()
                 .set_version(crate::ffi::GIT_REMOTE_CALLBACKS_VERSION);
             view.proxy_options_mut()
@@ -1397,11 +1396,17 @@ impl<'object, 'data> GitFetchOptionsRef<'object, 'data> {
     }
 
     /// Field: git_fetch_options.update_fetchhead
-    /// Returns the `git_remote_update_flags` bit set for reference updates.
-    #[must_use]
-    pub fn update_flags(&self) -> core::ffi::c_uint {
+    /// Returns the checked reference-update options, rejecting bits this
+    /// libgit2 version does not publish.
+    ///
+    /// The field is spelled `unsigned int` and named for the boolean it once
+    /// was, but libgit2 documents it as a `git_remote_update_flags` bit set.
+    pub fn update_flags(
+        &self,
+    ) -> Result<GitRemoteUpdateFlags, crate::ffi::git_remote_update_flags> {
         // SAFETY: this live shared handle permits the scalar raw-place read.
-        unsafe { core::ptr::addr_of!((*self.as_ptr()).update_fetchhead).read() }
+        let bits = unsafe { core::ptr::addr_of!((*self.as_ptr()).update_fetchhead).read() };
+        GitRemoteUpdateFlags::try_from(bits)
     }
 
     /// Field: git_fetch_options.prune
@@ -1448,10 +1453,13 @@ impl<'object, 'data> GitFetchOptionsMut<'object, 'data> {
         unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).depth).write(depth.value()) }
     }
 
-    /// Replaces the `git_remote_update_flags` bit set.
-    pub fn set_update_flags(&mut self, flags: core::ffi::c_uint) {
-        // SAFETY: this exclusive handle permits the scalar write.
-        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).update_fetchhead).write(flags) }
+    /// Replaces the reference-update options.
+    pub fn set_update_flags(&mut self, flags: GitRemoteUpdateFlags) {
+        // SAFETY: this exclusive handle permits the scalar write, and the
+        // wrapper contains only published C bits.
+        unsafe {
+            core::ptr::addr_of_mut!((*self.as_mut_ptr()).update_fetchhead).write(flags.bits())
+        }
     }
 
     /// Replaces the tag-download policy.
@@ -1927,7 +1935,7 @@ mod fetch_and_push_options_tests {
             fetch.download_tags(),
             Ok(crate::remote::GitRemoteAutotagOption::Unspecified)
         );
-        assert_eq!(fetch.update_flags(), 1);
+        assert_eq!(fetch.update_flags(), Ok(GitRemoteUpdateFlags::FETCH_HEAD));
         assert_eq!(fetch.follow_redirects(), Ok(None));
         assert_eq!(
             fetch.callbacks().version(),
@@ -1965,7 +1973,7 @@ mod fetch_and_push_options_tests {
             view.set_depth(GitFetchDepth::new(7).unwrap());
             view.set_prune(crate::remote::GitFetchPrune::Prune);
             view.set_download_tags(crate::remote::GitRemoteAutotagOption::All);
-            view.set_update_flags(2);
+            view.set_update_flags(GitRemoteUpdateFlags::REPORT_UNCHANGED);
             view.set_follow_redirects(Some(crate::remote::GitRemoteRedirect::Initial));
             view.set_custom_headers(headers.as_ref());
             view.callbacks_mut().set_version(17);
@@ -1979,7 +1987,10 @@ mod fetch_and_push_options_tests {
             view.download_tags(),
             Ok(crate::remote::GitRemoteAutotagOption::All)
         );
-        assert_eq!(view.update_flags(), 2);
+        assert_eq!(
+            view.update_flags(),
+            Ok(GitRemoteUpdateFlags::REPORT_UNCHANGED)
+        );
         assert_eq!(
             view.follow_redirects(),
             Ok(Some(crate::remote::GitRemoteRedirect::Initial))

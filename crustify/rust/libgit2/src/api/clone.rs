@@ -172,7 +172,7 @@ impl<'data> GitCloneOptions<'data> {
 
 fn initialize_fetch_options(mut options: GitFetchOptionsMut<'_, '_>) {
     options.set_version(ffi::GIT_FETCH_OPTIONS_VERSION as c_int);
-    options.set_update_flags(1);
+    options.set_update_flags(crate::api::remote::GitRemoteUpdateFlags::FETCH_HEAD);
     options
         .callbacks_mut()
         .set_version(ffi::GIT_REMOTE_CALLBACKS_VERSION);

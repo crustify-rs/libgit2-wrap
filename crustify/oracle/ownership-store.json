@@ -7226,6 +7226,32 @@
      }
     }
    ]
+  },
+  {
+   "name": "trie_node",
+   "defined_in": "src/libgit2/oid.c",
+   "_comment_agent": "trie_node is the git_oid_shorten trie's node/leaf union: children is an inline 16-way index array, and tail is a leaf-only borrowed pointer into a caller-owned object-ID string. Retaining that borrow is what forces a Rust shortener wrapper to carry a lifetime for every added string.",
+   "fields": [
+    {
+     "name": "tail",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed suffix of the caller's text_oid, never copied and never freed: push_leaf assigns leaf->tail = oid, which git_oid_shorten_add passes as &text_oid[i+1]; git_oid_shorten_free releases only the nodes buffer and the header. Null once the leaf is promoted to an inner node (git_oid_shorten_add clears node->tail before splitting). The referent belongs to the caller of git_oid_shorten_add and must outlive the owning git_oid_shorten."
+     },
+     "refcount": false,
+     "locked_by": null
+    }
+   ]
   }
  ],
  "symbols": [
@@ -30587,7 +30613,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Exclusive shortener state mutated during insertion."
+      "note": "Exclusive shortener state mutated during insertion; it also takes custody of the text_oid borrow, so it outlives every added string."
      }
     },
     {
@@ -30600,11 +30626,11 @@
       "string": true,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:text_oid"
+       "lifetime": "arg:os"
       },
       "nullable": true,
       "mutable": false,
-      "note": "Optional borrowed 40-digit NUL string; null only queries current length."
+      "note": "Borrowed 40-digit NUL string, RETAINED by os rather than copied: push_leaf stores &text_oid[i+1] into the new leaf's trie_node.tail (src/libgit2/oid.c:351), and a later git_oid_shorten_add that splits that leaf reads tail[0] and &tail[1] back (oid.c:463-465). The borrow therefore lasts as long as os, not just the call; verified with an ASan probe that frees the first string and reports heap-use-after-free at oid.c:465 on the second add. Null does not insert and only queries the current min_length."
      }
     }
    ]
