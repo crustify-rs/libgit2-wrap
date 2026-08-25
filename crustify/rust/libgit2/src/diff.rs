@@ -7,7 +7,7 @@ use ffibox::{CBox, CDropped};
 
 use crate::api::buffer::GitBufMut;
 use crate::api::deprecated::{DiffFormatEmailOptionsMut, DiffFormatEmailOptionsRef};
-use crate::api::diff::{DiffDeltaRef, DiffLineOrigin, InvalidDiffLineOrigin};
+use crate::api::diff::{DiffBinaryRef, DiffDeltaRef, DiffLineOrigin, InvalidDiffLineOrigin};
 use crate::ffi;
 
 pub(crate) struct DiffCallbacks<'a> {
@@ -54,18 +54,16 @@ pub(crate) unsafe extern "C" fn diff_binary_trampoline(
     };
     // SAFETY: both records are live initialized callback inputs.
     let delta = unsafe { DiffDeltaRef::from_ptr(delta.cast_mut()) }.expect("checked non-null");
-    // SAFETY: raw-place projection copies the initialized flag.
-    let contains_data = unsafe { core::ptr::addr_of!((*binary).contains_data).read() } != 0;
-    // SAFETY: raw-place projections address live inline binary-file members.
-    let old_file =
-        unsafe { DiffBinaryFileRef::from_ptr(core::ptr::addr_of!((*binary).old_file).cast_mut()) }
-            .expect("an inline field is non-null");
-    // SAFETY: as above, for the new-file member.
-    let new_file =
-        unsafe { DiffBinaryFileRef::from_ptr(core::ptr::addr_of!((*binary).new_file).cast_mut()) }
-            .expect("an inline field is non-null");
+    // SAFETY: libgit2 supplies a live initialized binary record for this
+    // synchronous invocation.
+    let binary = unsafe { DiffBinaryRef::from_ptr(binary.cast_mut()) }.expect("checked non-null");
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        callback.call(delta, contains_data, old_file, new_file)
+        callback.call(
+            delta,
+            binary.contains_data(),
+            binary.old_file(),
+            binary.new_file(),
+        )
     }))
     .unwrap_or(ffi::git_error_code_GIT_ERROR)
 }

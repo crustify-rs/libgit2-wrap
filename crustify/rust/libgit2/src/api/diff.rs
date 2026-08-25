@@ -1983,3 +1983,150 @@ mod scheduled_callback_tests {
                    _: crate::diff::DiffLineRef<'_>| 0);
     }
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_diff_binary
+    /// A borrowed description of both sides of a binary diff.
+    DiffBinary,
+    DiffBinaryRef,
+    DiffBinaryMut,
+    ffi::git_diff_binary
+);
+
+impl<'a> DiffBinaryRef<'a> {
+    /// Field: git_diff_binary.new_file
+    /// Borrows the inline description of the new side.
+    #[must_use]
+    pub fn new_file(&self) -> crate::diff::DiffBinaryFileRef<'a> {
+        // SAFETY: raw-place projection reaches the initialized inline field
+        // without forming a reference to C-visible memory.
+        let file = unsafe { addr_of!((*self.as_ptr()).new_file) }.cast_mut();
+        // SAFETY: the inline field is non-null and remains live for the
+        // enclosing binary record's shared borrow.
+        unsafe { crate::diff::DiffBinaryFileRef::from_ptr(file) }
+            .expect("an inline field is non-null")
+    }
+
+    /// Field: git_diff_binary.old_file
+    /// Borrows the inline description of the old side.
+    #[must_use]
+    pub fn old_file(&self) -> crate::diff::DiffBinaryFileRef<'a> {
+        // SAFETY: raw-place projection reaches the initialized inline field
+        // without forming a reference to C-visible memory.
+        let file = unsafe { addr_of!((*self.as_ptr()).old_file) }.cast_mut();
+        // SAFETY: the inline field is non-null and remains live for the
+        // enclosing binary record's shared borrow.
+        unsafe { crate::diff::DiffBinaryFileRef::from_ptr(file) }
+            .expect("an inline field is non-null")
+    }
+
+    /// Field: git_diff_binary.contains_data
+    /// Returns whether the record carries compressed binary content.
+    #[must_use]
+    pub fn contains_data(&self) -> bool {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).contains_data).read() != 0 }
+    }
+}
+
+impl DiffBinaryMut<'_> {
+    /// Borrows the inline description of the new side exclusively.
+    #[must_use]
+    pub fn new_file_mut(&mut self) -> crate::diff::DiffBinaryFileMut<'_> {
+        // SAFETY: raw-place projection through this exclusive handle reaches
+        // the initialized inline field without forming a reference.
+        let file = unsafe { addr_of_mut!((*self.as_mut_ptr()).new_file) };
+        // SAFETY: the field is non-null and exclusively borrowed for the
+        // returned handle's lifetime.
+        unsafe { crate::diff::DiffBinaryFileMut::from_ptr(file) }
+            .expect("an inline field is non-null")
+    }
+
+    /// Borrows the inline description of the old side exclusively.
+    #[must_use]
+    pub fn old_file_mut(&mut self) -> crate::diff::DiffBinaryFileMut<'_> {
+        // SAFETY: raw-place projection through this exclusive handle reaches
+        // the initialized inline field without forming a reference.
+        let file = unsafe { addr_of_mut!((*self.as_mut_ptr()).old_file) };
+        // SAFETY: the field is non-null and exclusively borrowed for the
+        // returned handle's lifetime.
+        unsafe { crate::diff::DiffBinaryFileMut::from_ptr(file) }
+            .expect("an inline field is non-null")
+    }
+
+    /// Sets whether the record carries compressed binary content.
+    pub fn set_contains_data(&mut self, contains_data: bool) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe {
+            addr_of_mut!((*self.as_mut_ptr()).contains_data)
+                .write(core::ffi::c_uint::from(contains_data));
+        }
+    }
+}
+
+#[cfg(test)]
+mod diff_binary_tests {
+    use core::mem::{align_of, size_of};
+
+    use ffibox::CCell;
+
+    use super::*;
+
+    #[test]
+    fn binary_record_preserves_layout_and_handle_shape() {
+        fn assert_cell<T: CCell>() {}
+
+        assert_cell::<DiffBinary>();
+        assert_eq!(size_of::<DiffBinary>(), size_of::<ffi::git_diff_binary>());
+        assert_eq!(align_of::<DiffBinary>(), align_of::<ffi::git_diff_binary>());
+        assert_eq!(
+            size_of::<DiffBinaryRef<'_>>(),
+            size_of::<*const ffi::git_diff_binary>()
+        );
+        assert_eq!(
+            size_of::<DiffBinaryMut<'_>>(),
+            size_of::<*mut ffi::git_diff_binary>()
+        );
+    }
+
+    #[test]
+    fn binary_record_projects_and_mutates_inline_fields() {
+        let empty_file = || ffi::git_diff_binary_file {
+            type_: ffi::git_diff_binary_t_GIT_DIFF_BINARY_NONE,
+            data: core::ptr::null(),
+            datalen: 0,
+            inflatedlen: 0,
+        };
+        let mut raw = ffi::git_diff_binary {
+            contains_data: 0,
+            old_file: empty_file(),
+            new_file: empty_file(),
+        };
+        // SAFETY: `raw` is initialized and exclusively live for the handle.
+        let mut binary = unsafe { DiffBinaryMut::from_ptr(&raw mut raw) }.unwrap();
+
+        assert!(!binary.as_ref().contains_data());
+        assert_eq!(
+            binary.as_ref().old_file().kind(),
+            Ok(crate::diff::DiffBinaryKind::None)
+        );
+        binary.set_contains_data(true);
+        binary
+            .new_file_mut()
+            .set_kind(crate::diff::DiffBinaryKind::Literal);
+        binary
+            .old_file_mut()
+            .set_kind(crate::diff::DiffBinaryKind::Delta);
+
+        let binary = binary.as_ref();
+        assert!(binary.contains_data());
+        assert_eq!(
+            binary.new_file().kind(),
+            Ok(crate::diff::DiffBinaryKind::Literal)
+        );
+        assert_eq!(
+            binary.old_file().kind(),
+            Ok(crate::diff::DiffBinaryKind::Delta)
+        );
+    }
+}
