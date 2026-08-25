@@ -363,3 +363,5 @@
 ^git_proxy_options$
 ^GIT_PROXY_OPTIONS_VERSION$
 ^git_status_entry$
+^git_checkout_options$
+^GIT_CHECKOUT_OPTIONS_VERSION$

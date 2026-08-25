@@ -507,6 +507,209 @@
    ]
   },
   {
+   "name": "git_checkout_options",
+   "defined_in": "include/git2/checkout.h",
+   "_comment_agent": "git_checkout_options is a non-owning configuration header. Checkout copies it transiently and never releases caller-provided fields. Callback code is static; paired type-erased payloads and every configured object, string, and path array remain caller-owned for all uses of the options (including APIs that copy options for deferred use).",
+   "fields": [
+    {
+     "name": "ancestor_label",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed NUL-terminated conflict label, read but not modified or released by checkout."
+     }
+    },
+    {
+     "name": "baseline",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned tree used read-only as the expected worktree baseline. Checkout does not free a supplied tree; deferred users must retain it or duplicate it."
+     }
+    },
+    {
+     "name": "baseline_index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned index used as a read-only baseline and overriding baseline. Direct checkout does not acquire or release it."
+     }
+    },
+    {
+     "name": "notify_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer invoked synchronously with transient diff-file views and its paired externally borrowed payload."
+     }
+    },
+    {
+     "name": "notify_payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional type-erased state passed to notify_cb; the callback may mutate it and the options header never owns it."
+     }
+    },
+    {
+     "name": "our_label",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed NUL-terminated conflict label, read but not modified or released by checkout."
+     }
+    },
+    {
+     "name": "perfdata_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer invoked once with transient performance counters and its paired externally borrowed payload."
+     }
+    },
+    {
+     "name": "perfdata_payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional type-erased state passed to perfdata_cb; the callback may mutate it and the options header never owns it."
+     }
+    },
+    {
+     "name": "progress_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer invoked during checkout; code has static lifetime and the paired payload supplies externally borrowed mutable state."
+     }
+    },
+    {
+     "name": "progress_payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional type-erased state passed to progress_cb; the callback may mutate it and the options header never owns it."
+     }
+    },
+    {
+     "name": "target_directory",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed NUL-terminated checkout directory, read throughout checkout and never released by the options header."
+     }
+    },
+    {
+     "name": "their_label",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed NUL-terminated conflict label, read but not modified or released by checkout."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_clone_local_t",
    "defined_in": "include/git2/clone.h",
    "_comment_agent": "Closed public C enum with four scalar values and no ownership-bearing fields.",
