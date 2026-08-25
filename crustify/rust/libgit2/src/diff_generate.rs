@@ -35,12 +35,6 @@ fn diff_result<'repo>(
     }
 }
 
-fn options_ptr(
-    options: Option<crate::api::diff::GitDiffOptionsRef<'_, '_>>,
-) -> *const crate::ffi::git_diff_options {
-    options.map_or(core::ptr::null(), |options| options.as_ptr())
-}
-
 #[cfg(test)]
 mod owner_result_tests {
     use super::*;
@@ -77,7 +71,7 @@ pub fn git_diff_index_to_index<'repo>(
             repo.as_ptr().cast_mut(),
             old_index.as_ptr().cast_mut(),
             new_index.as_ptr().cast_mut(),
-            options_ptr(options),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
         );
         (status, crate::diff::DiffOwned::from_raw(out))
     };
@@ -103,7 +97,7 @@ pub fn git_diff_index_to_workdir<'repo>(
             &mut out,
             repo.as_ptr().cast_mut(),
             index,
-            options_ptr(options),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
         );
         (status, crate::diff::DiffOwned::from_raw(out))
     };
@@ -130,7 +124,7 @@ pub fn git_diff_tree_to_index<'repo>(
             repo.as_ptr().cast_mut(),
             old_tree,
             index,
-            options_ptr(options),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
         );
         (status, crate::diff::DiffOwned::from_raw(out))
     };
@@ -157,7 +151,7 @@ pub fn git_diff_tree_to_tree<'repo>(
             repo.as_ptr().cast_mut(),
             old_tree,
             new_tree,
-            options_ptr(options),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
         );
         (status, crate::diff::DiffOwned::from_raw(out))
     };
@@ -181,7 +175,7 @@ pub fn git_diff_tree_to_workdir<'repo>(
             &mut out,
             repo.as_ptr().cast_mut(),
             old_tree,
-            options_ptr(options),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
         );
         (status, crate::diff::DiffOwned::from_raw(out))
     };
@@ -205,7 +199,7 @@ pub fn git_diff_tree_to_workdir_with_index<'repo>(
             &mut out,
             repo.as_ptr().cast_mut(),
             tree,
-            options_ptr(options),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
         );
         (status, crate::diff::DiffOwned::from_raw(out))
     };
