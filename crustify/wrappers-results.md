@@ -84,6 +84,8 @@ in Notes.
 ## Overview
 
 - **Rust LoC** — `18,452`
+- **test LoC** — `10,231` across `193` `cfg(test)` modules, `32.5`% of the
+  tree; excluded from `Rust LoC` and from every audit metric
 - **C LoC** — `171,084`
 - **ported types** — `0`
 - **ported symbols** — `0`
@@ -411,6 +413,25 @@ Deterministic `crustify-audit unsafe`; no model.
 | `void_ptr_smell` | `0` | `0` | `0` | `*c_void` elsewhere; `void_ptr_sites` names each one |
 
 ## Notes
+
+### How test LoC is counted
+
+`Rust LoC` is `crustify-audit`'s `code_lines` — the union of HIR definition
+spans. `cfg` stripping happens before HIR, so an inline `mod tests` contributes
+nothing to it, and nothing to any other audit metric: test code puts neither its
+lines in the denominator of the unsafe ratio nor its `unsafe` blocks in the
+numerator. Every safety figure in this report is therefore about shipped code
+only.
+
+That also means the tool publishes no test-line metric, so `test LoC` is
+measured separately: non-blank, non-comment lines inside `#[cfg(test)]` modules,
+counted by brace-matching each one. On that same basis the non-test tree is
+`21,272` lines, which is why the share reads `32.5`% rather than
+`10,231 / 18,452` — the two numbers in the Overview come from different
+instruments and should not be divided into each other.
+
+There are no integration test directories; all `560` tests live in the `193`
+inline modules.
 
 ### What the coverage percentages measure
 
