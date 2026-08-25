@@ -1154,3 +1154,119 @@ mod find_options_tests {
         assert!(options.as_ref().metric().is_none());
     }
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_diff_delta
+    /// A borrowed description of one changed entry and its two sides.
+    DiffDelta,
+    DiffDeltaRef,
+    DiffDeltaMut,
+    ffi::git_diff_delta
+);
+
+impl<'a> DiffDeltaRef<'a> {
+    /// Field: git_diff_delta.flags
+    /// Returns the raw combination of published `git_diff_flag_t` bits.
+    #[must_use]
+    pub fn flags(&self) -> u32 {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+    }
+
+    /// Field: git_diff_delta.status
+    /// Returns the kind of change, rejecting an unknown C value.
+    pub fn status(&self) -> Result<crate::diff::Delta, crate::diff::InvalidDelta> {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        let status = unsafe { addr_of!((*self.as_ptr()).status).read() };
+        crate::diff::Delta::try_from(status)
+    }
+
+    /// Field: git_diff_delta.similarity
+    /// Returns the similarity score recorded by rename or copy detection.
+    #[must_use]
+    pub fn similarity(&self) -> u16 {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).similarity).read() }
+    }
+
+    /// Field: git_diff_delta.new_file
+    /// Borrows the inline file description for the new side.
+    #[must_use]
+    pub fn new_file(&self) -> crate::diff::DiffFileRef<'a> {
+        // SAFETY: raw-place projection reaches the initialized inline field
+        // without forming a reference to C-visible memory.
+        let file = unsafe { addr_of!((*self.as_ptr()).new_file) }.cast_mut();
+        // SAFETY: the inline field is non-null and remains live for the
+        // enclosing delta's shared borrow.
+        unsafe { crate::diff::DiffFileRef::from_ptr(file) }.expect("an inline field is non-null")
+    }
+
+    /// Field: git_diff_delta.old_file
+    /// Borrows the inline file description for the old side.
+    #[must_use]
+    pub fn old_file(&self) -> crate::diff::DiffFileRef<'a> {
+        // SAFETY: raw-place projection reaches the initialized inline field
+        // without forming a reference to C-visible memory.
+        let file = unsafe { addr_of!((*self.as_ptr()).old_file) }.cast_mut();
+        // SAFETY: the inline field is non-null and remains live for the
+        // enclosing delta's shared borrow.
+        unsafe { crate::diff::DiffFileRef::from_ptr(file) }.expect("an inline field is non-null")
+    }
+
+    /// Field: git_diff_delta.nfiles
+    /// Returns the number of file sides represented by this delta.
+    #[must_use]
+    pub fn file_count(&self) -> u16 {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).nfiles).read() }
+    }
+}
+
+impl DiffDeltaMut<'_> {
+    /// Sets the raw combination of published `git_diff_flag_t` bits.
+    pub fn set_flags(&mut self, flags: u32) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+    }
+
+    /// Sets the kind of change.
+    pub fn set_status(&mut self, status: crate::diff::Delta) {
+        // SAFETY: this exclusive handle permits the write, and `Delta`
+        // converts only to a published C enum value.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).status).write(status.into()) }
+    }
+
+    /// Sets the similarity score.
+    pub fn set_similarity(&mut self, similarity: u16) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).similarity).write(similarity) }
+    }
+
+    /// Borrows the inline file description for the new side exclusively.
+    #[must_use]
+    pub fn new_file_mut(&mut self) -> crate::diff::DiffFileMut<'_> {
+        // SAFETY: raw-place projection through this exclusive handle reaches
+        // the initialized inline field without forming a reference.
+        let file = unsafe { addr_of_mut!((*self.as_mut_ptr()).new_file) };
+        // SAFETY: the field is non-null and exclusively borrowed for the
+        // returned handle's lifetime.
+        unsafe { crate::diff::DiffFileMut::from_ptr(file) }.expect("an inline field is non-null")
+    }
+
+    /// Borrows the inline file description for the old side exclusively.
+    #[must_use]
+    pub fn old_file_mut(&mut self) -> crate::diff::DiffFileMut<'_> {
+        // SAFETY: raw-place projection through this exclusive handle reaches
+        // the initialized inline field without forming a reference.
+        let file = unsafe { addr_of_mut!((*self.as_mut_ptr()).old_file) };
+        // SAFETY: the field is non-null and exclusively borrowed for the
+        // returned handle's lifetime.
+        unsafe { crate::diff::DiffFileMut::from_ptr(file) }.expect("an inline field is non-null")
+    }
+
+    /// Sets the number of file sides represented by this delta.
+    pub fn set_file_count(&mut self, file_count: u16) {
+        // SAFETY: this exclusive handle permits a raw-place scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).nfiles).write(file_count) }
+    }
+}

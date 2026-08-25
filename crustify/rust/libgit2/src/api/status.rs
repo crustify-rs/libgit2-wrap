@@ -524,3 +524,94 @@ mod options_tests {
         );
     }
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_status_entry
+    /// A status-list-owned entry borrowing its optional deltas from the
+    /// enclosing list's two diff objects.
+    GitStatusEntry,
+    GitStatusEntryRef,
+    GitStatusEntryMut,
+    ffi::git_status_entry
+);
+
+impl<'a> GitStatusEntryRef<'a> {
+    /// Field: git_status_entry.status
+    /// Returns all status bits, retaining flags introduced by newer libgit2
+    /// versions.
+    #[must_use]
+    pub fn status(&self) -> crate::status::Status {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        let status = unsafe { addr_of!((*self.as_ptr()).status).read() };
+        crate::status::Status::from_bits_retain(status)
+    }
+
+    /// Field: git_status_entry.index_to_workdir
+    /// Borrows the optional index-to-working-directory delta.
+    #[must_use]
+    pub fn index_to_workdir(&self) -> Option<crate::api::diff::DiffDeltaRef<'a>> {
+        // SAFETY: raw-place projection copies the initialized pointer field.
+        let delta = unsafe { addr_of!((*self.as_ptr()).index_to_workdir).read() };
+        // SAFETY: the enclosing status list owns the referenced diff and a
+        // status-entry borrow cannot outlive that list; null remains `None`.
+        unsafe { crate::api::diff::DiffDeltaRef::from_ptr(delta) }
+    }
+
+    /// Field: git_status_entry.head_to_index
+    /// Borrows the optional `HEAD`-to-index delta.
+    #[must_use]
+    pub fn head_to_index(&self) -> Option<crate::api::diff::DiffDeltaRef<'a>> {
+        // SAFETY: raw-place projection copies the initialized pointer field.
+        let delta = unsafe { addr_of!((*self.as_ptr()).head_to_index).read() };
+        // SAFETY: the enclosing status list owns the referenced diff and a
+        // status-entry borrow cannot outlive that list; null remains `None`.
+        unsafe { crate::api::diff::DiffDeltaRef::from_ptr(delta) }
+    }
+}
+
+#[cfg(test)]
+mod entry_tests {
+    use core::mem::{align_of, size_of};
+
+    use ffibox::CCell;
+
+    use super::*;
+
+    #[test]
+    fn entry_wrapper_preserves_layout_and_borrows_deltas() {
+        fn assert_cell<T: CCell>() {}
+        assert_cell::<GitStatusEntry>();
+        assert_eq!(
+            size_of::<GitStatusEntry>(),
+            size_of::<ffi::git_status_entry>()
+        );
+        assert_eq!(
+            align_of::<GitStatusEntry>(),
+            align_of::<ffi::git_status_entry>()
+        );
+        assert_eq!(
+            size_of::<GitStatusEntryRef<'_>>(),
+            size_of::<*const ffi::git_status_entry>()
+        );
+
+        // SAFETY: all-zero is a valid delta with UNMODIFIED status, absent
+        // optional paths and zero-valued scalar fields.
+        let mut head_delta: ffi::git_diff_delta = unsafe { core::mem::zeroed() };
+        head_delta.status = ffi::git_delta_t_GIT_DELTA_MODIFIED;
+        let unknown_status = crate::status::Status::ALL.bits() | (1 << 5);
+        let mut raw = ffi::git_status_entry {
+            status: unknown_status,
+            head_to_index: &raw mut head_delta,
+            index_to_workdir: core::ptr::null_mut(),
+        };
+        // SAFETY: the entry and pointed-to delta remain live and unmodified
+        // while this shared handle and its derived delta handle are used.
+        let entry = unsafe { GitStatusEntryRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(entry.status().bits(), unknown_status);
+        assert_eq!(
+            entry.head_to_index().unwrap().status(),
+            Ok(crate::diff::Delta::Modified)
+        );
+        assert!(entry.index_to_workdir().is_none());
+    }
+}

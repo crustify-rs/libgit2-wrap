@@ -2956,6 +2956,79 @@
    ]
   },
   {
+   "name": "git_proxy_options",
+   "defined_in": "include/git2/proxy.h",
+   "_comment_agent": "The public options form borrows URL and callback state. Internal duplication switches only url to owned storage; callback function and payload pointers remain borrowed.",
+   "fields": [
+    {
+     "name": "certificate_check",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable function pointer; code storage is static and callback state is carried separately in payload."
+     }
+    },
+    {
+     "name": "credentials",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable function pointer; code storage is static and callback state is carried separately in payload."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller callback state; never freed by proxy options and invoked mutably only through the paired callback slots."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": true,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Public input options borrow a caller NUL string; internal duplicated options own a git__strdup copy released by git_proxy_options_dispose."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_push",
    "defined_in": "src/libgit2/push.h",
    "_comment_agent": "git_push is opaque in the public API and handed to transport callbacks as a borrow. Its internal remote/repository pointers are borrowed; pb is temporary owned state whose stale field value must not be exposed.",
@@ -4379,6 +4452,47 @@
       "nullable": true,
       "mutable": false,
       "note": "Borrowed signature read during stash construction and never retained or released. Zero/default options use null, though git_stash_save_with_opts rejects null before use."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_status_entry",
+   "defined_in": "include/git2/status.h",
+   "_comment_agent": "Status entries own neither delta. git_status_list_free releases the two git_diff owners before freeing entry headers, so safe views must be tied to the parent list borrow.",
+   "fields": [
+    {
+     "name": "head_to_index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional delta owned by the parent status list's head-to-index git_diff and borrowed for the status entry/list lifetime."
+     }
+    },
+    {
+     "name": "index_to_workdir",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional delta owned by the parent status list's index-to-workdir git_diff and borrowed for the status entry/list lifetime."
      }
     }
    ]
@@ -18738,6 +18852,107 @@
       "nullable": false,
       "mutable": false,
       "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_proxy_options_dispose",
+   "defined_in": "src/libgit2/proxy.c",
+   "lifetime": {
+    "for": "opts",
+    "is_dropper": false,
+    "is_disposer": true,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Disposes owned URL field storage in place, clears the slot, and retains the options header."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_proxy_options_dup",
+   "defined_in": "src/libgit2/proxy.c",
+   "lifetime": {
+    "for": "src",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": true,
+     "upref": false
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "src",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:src"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable source is read only; null initializes defaults, while non-null deep-copies the URL field."
+     }
+    },
+    {
+     "name": "tgt",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:tgt"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-provided destination storage is initialized in place and retained by the caller."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_proxy_options_init",
+   "defined_in": "src/libgit2/proxy.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Initializes caller-provided options storage in place and retains no pointer."
      }
     }
    ]
