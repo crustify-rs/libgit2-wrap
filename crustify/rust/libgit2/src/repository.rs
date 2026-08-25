@@ -1595,9 +1595,14 @@ pub fn git_repository_init_options_init(
 
 /// Wraps: git_repository_commit_parents
 /// Collects the parents implied by the repository's current operation state.
-pub fn git_repository_commit_parents(
-    repository: &mut GitRepositoryMut<'_>,
-) -> Result<CVal<crate::api::commit::GitCommitArray>, i32> {
+///
+/// Each returned commit owns a reference of its own, but also keeps this
+/// repository's pointer, so the result is tied to `'repo` rather than handed
+/// back as a free-standing array. See
+/// [`GitCommitArrayOwned`](crate::api::commit::GitCommitArrayOwned).
+pub fn git_repository_commit_parents<'repo>(
+    mut repository: GitRepositoryMut<'repo>,
+) -> Result<crate::api::commit::GitCommitArrayOwned<'repo>, i32> {
     let mut parents = crate::api::commit::GitCommitArray::new();
     // SAFETY: the output header and repository are exclusively borrowed. On
     // success the header owns every returned commit reference and its pointer
@@ -1606,7 +1611,10 @@ pub fn git_repository_commit_parents(
         ffi::git_repository_commit_parents(parents.as_mut().as_mut_ptr(), repository.as_mut_ptr())
     };
     if status == 0 {
-        Ok(parents)
+        Ok(crate::api::commit::GitCommitArrayOwned::from_repository(
+            parents,
+            &repository,
+        ))
     } else {
         Err(status)
     }

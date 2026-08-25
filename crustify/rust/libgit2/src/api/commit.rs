@@ -1000,6 +1000,63 @@ impl GitCommitArray {
     }
 }
 
+/// An owned commit array whose commits keep their repository borrowed.
+///
+/// `git_commitarray_dispose` releases the array's own commit references, so
+/// the header is self-contained as far as its own memory goes. The commits are
+/// not: every libgit2 object stores the repository it was looked up in, and
+/// [`git_commit_owner`](crate::object_api::git_commit_owner) hands that
+/// pointer straight back out as a repository handle. Freeing the repository
+/// leaves those references alive but their stored pointer dangling, so a bare
+/// [`CVal<GitCommitArray>`](CVal) — which states no relationship to any
+/// repository — lets safe code drop the repository owner, keep the array, and
+/// read freed memory through any commit it holds. `'repo` records the borrow
+/// that rules that out.
+///
+/// `'repo` is fixed at construction and no operation installs a `'repo`
+/// referent into an existing array, so the covariant marker is sound here:
+/// shrinking `'repo` only releases the array sooner.
+///
+/// ```compile_fail
+/// use core::ffi::CStr;
+/// use libgit2::api::commit::GitCommitArrayOwned;
+/// use libgit2::repository::{git_repository_commit_parents, git_repository_open};
+///
+/// fn escape(path: &CStr) -> GitCommitArrayOwned<'static> {
+///     let mut repository = git_repository_open(path).unwrap();
+///     git_repository_commit_parents(repository.as_mut()).unwrap()
+/// }
+/// ```
+pub struct GitCommitArrayOwned<'repo> {
+    commits: CVal<GitCommitArray>,
+    _repository: PhantomData<crate::repository::GitRepositoryRef<'repo>>,
+}
+
+impl<'repo> GitCommitArrayOwned<'repo> {
+    /// Ties a library-produced commit array to the repository that filled it.
+    pub(crate) fn from_repository(
+        commits: CVal<GitCommitArray>,
+        _repository: &crate::repository::GitRepositoryMut<'repo>,
+    ) -> Self {
+        Self {
+            commits,
+            _repository: PhantomData,
+        }
+    }
+
+    /// Borrows the commit array.
+    #[must_use]
+    pub fn as_ref(&self) -> GitCommitArrayRef<'_> {
+        self.commits.as_ref()
+    }
+
+    /// Borrows the commit array exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitCommitArrayMut<'_> {
+        self.commits.as_mut()
+    }
+}
+
 impl<'a> GitCommitArrayRef<'a> {
     /// Field: git_commitarray.count
     /// Returns the number of owned commit references.
@@ -1183,5 +1240,172 @@ mod commit_create_options_and_array_tests {
         let empty = GitCommitArray::new();
         assert_eq!(empty.as_ref().count(), 0);
         assert!(empty.as_ref().commits().unwrap().is_empty());
+    }
+
+    /// Drives both scheduled types through libgit2 itself: the simple options
+    /// carry the borrowed author, committer, encoding and extra headers into
+    /// `git_commit_create_from_stage`, and the resulting commit comes back
+    /// through a commit array that keeps the repository borrowed.
+    ///
+    /// The repository tie is the point of the array owner. Every libgit2
+    /// object stores the repository it was looked up in, and
+    /// `git_commit_owner` hands that pointer back out, so an array that
+    /// outlived the repository would let safe code read freed memory through
+    /// any commit it still owns.
+    #[test]
+    fn options_create_a_commit_that_returns_as_a_repository_tied_parent() {
+        let _: fn(crate::repository::GitRepositoryMut<'_>) -> Result<GitCommitArrayOwned<'_>, i32> =
+            crate::repository::git_repository_commit_parents;
+
+        // SAFETY: process-global initialization is refcounted and balanced
+        // below, after every owner created here has been dropped.
+        assert!(unsafe { crate::ffi::git_libgit2_init() } > 0);
+
+        let directory = std::env::temp_dir().join(format!(
+            "crustify-commit-parents-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let path = std::ffi::CString::new(
+            directory
+                .to_str()
+                .expect("a temporary directory path is UTF-8"),
+        )
+        .expect("a temporary directory path holds no interior NUL");
+
+        // A SHA-256 repository sidesteps the bundled SHA1DC collision
+        // detector, whose unaligned 32-bit loads trip the C build's UBSan on
+        // every object it hashes.
+        let mut init_options = crate::repository::git_repository_init_options_init(1)
+            .expect("the current init-options version");
+        init_options
+            .as_mut()
+            .set_oid_type(Some(crate::oid::OidType::Sha256));
+        init_options.as_mut().set_flags(
+            crate::repository::GitRepositoryInitFlags::MKPATH
+                | crate::repository::GitRepositoryInitFlags::BARE,
+        );
+        let mut repository =
+            crate::repository::git_repository_init_ext(&path, &mut init_options.as_mut())
+                .expect("a fresh directory initializes as a bare repository");
+        let repository_ptr = repository.as_ref().as_ptr();
+
+        let unborn = crate::repository::git_repository_commit_parents(repository.as_mut())
+            .expect("an unborn HEAD reports no parents");
+        assert_eq!(unborn.as_ref().count(), 0);
+        assert!(
+            unborn
+                .as_ref()
+                .commits()
+                .expect("the empty state is an empty view")
+                .is_empty()
+        );
+        drop(unborn);
+
+        let signature = crate::signature::git_signature_now(c"Crustify", c"crustify@example.com")
+            .expect("a signature stamped with the current time");
+        let mut raw_headers = [crate::ffi::git_commit_header {
+            field: c"x-crustify".as_ptr(),
+            value: c"tests".as_ptr(),
+        }];
+        let headers_ptr = NonNull::new(raw_headers.as_mut_ptr().cast::<GitCommitHeader>())
+            .expect("the address of a local array is non-null");
+        // SAFETY: the initialized local header run and the strings it names
+        // remain live and unmodified for every use of the options below.
+        let headers = unsafe { CSlice::from_raw_parts(headers_ptr, raw_headers.len()) };
+
+        let mut options = GitCommitCreateOptions::new();
+        options.as_mut().set_allow_empty_commit(true);
+        // SAFETY: the signature owner, the header run and the encoding
+        // literal all outlive the options and the commit call below.
+        unsafe {
+            options
+                .as_mut()
+                .set_borrowed_author(Some(signature.as_ref()));
+            options
+                .as_mut()
+                .set_borrowed_committer(Some(signature.as_ref()));
+            options
+                .as_mut()
+                .set_borrowed_message_encoding(Some(c"UTF-8"));
+            options.as_mut().set_borrowed_extra_headers(headers);
+        }
+
+        let mut created = crate::oid::Oid::zeroed();
+        {
+            // SAFETY: `created` is live, initialized, exclusively borrowed
+            // local storage for the whole life of this handle.
+            let mut out = unsafe {
+                crate::oid::OidMut::from_ptr(addr_of_mut!(created).cast::<crate::ffi::git_oid>())
+            }
+            .expect("the address of a local value is non-null");
+            crate::commit::git_commit_create_from_stage(
+                &mut out,
+                &mut repository.as_mut(),
+                c"initial",
+                Some(options.as_ref()),
+            )
+            .expect("the options allow committing an empty staged tree");
+        }
+        // SAFETY: as above, for a shared handle over the same local storage.
+        let created = unsafe {
+            crate::oid::OidRef::from_ptr(addr_of_mut!(created).cast::<crate::ffi::git_oid>())
+        }
+        .expect("the address of a local value is non-null");
+
+        let parents = crate::repository::git_repository_commit_parents(repository.as_mut())
+            .expect("HEAD now names the created commit");
+        assert_eq!(parents.as_ref().count(), 1);
+        let commits = parents
+            .as_ref()
+            .commits()
+            .expect("one owned commit reference");
+        assert_eq!(commits.len(), 1);
+        assert!(!commits.is_empty());
+        assert!(commits.get(1).is_none());
+        let parent = commits.get(0).expect("the sole parent commit");
+
+        let mut expected = [0u8; 32];
+        let mut actual = [0u8; 32];
+        assert!(
+            created
+                .digest()
+                .expect("SHA-256 is a published algorithm")
+                .copy_to_slice(&mut expected)
+        );
+        assert!(
+            crate::object_api::git_commit_id(parent)
+                .digest()
+                .expect("SHA-256 is a published algorithm")
+                .copy_to_slice(&mut actual)
+        );
+        assert_eq!(actual, expected, "the parent is the commit just created");
+
+        assert_eq!(crate::commit::git_commit_message(parent), Some(c"initial"));
+        assert_eq!(
+            crate::commit::git_commit_message_encoding(parent),
+            Some(c"UTF-8"),
+            "the borrowed encoding reached the commit header"
+        );
+        assert_eq!(crate::commit::git_commit_author(parent).name(), c"Crustify");
+        let header = crate::commit::git_commit_raw_header(parent).to_bytes();
+        assert!(
+            header
+                .windows(b"x-crustify tests".len())
+                .any(|window| window == b"x-crustify tests"),
+            "the borrowed extra header reached the commit header"
+        );
+        assert_eq!(
+            crate::object_api::git_commit_owner(parent).as_ptr(),
+            repository_ptr,
+            "every returned commit still points at the repository"
+        );
+
+        drop(parents);
+        drop(repository);
+        let _ = std::fs::remove_dir_all(&directory);
+        // SAFETY: balances the successful initialization above.
+        assert!(unsafe { crate::ffi::git_libgit2_shutdown() } >= 0);
     }
 }

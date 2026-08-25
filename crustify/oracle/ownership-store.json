@@ -1261,11 +1261,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "self"
+       "lifetime": "other"
       },
       "nullable": true,
       "mutable": true,
-      "note": "Opaque caller state passed to the installed signing callback; copied into transient extended options but never retained or freed by libgit2."
+      "note": "Opaque caller state passed to the installed signing callback; copied into transient extended options but never retained or freed by libgit2. The storage belongs to the caller and is unrelated to the options header, so the borrow source is `other`, not `self`; it must stay live and exclusively reserved for the callback for as long as the options are used."
      }
     },
     {
@@ -1349,7 +1349,7 @@
   {
    "name": "git_commitarray",
    "defined_in": "include/git2/commit.h",
-   "_comment_agent": "Library-produced commit arrays own the detached pointer allocation and one independently releasable git_commit reference per element. git_commitarray_dispose frees every commit, frees the outer pointer array, and zeroes the by-value header.",
+   "_comment_agent": "Library-produced commit arrays own the detached pointer allocation and one independently releasable git_commit reference per element. git_commitarray_dispose frees every commit, frees the outer pointer array, and zeroes the by-value header. The elements stay bound to the repository they were looked up in: the commit stores it in object.repo and git_commit_owner hands that pointer back out, while git_repository_free releases none of the caller's references, so an array that outlives its repository holds commits whose repository pointer dangles. A safe owner therefore has to carry that repository borrow rather than stand alone.",
    "fields": [
     {
      "name": "commits",
@@ -1365,8 +1365,8 @@
       "owned": true,
       "borrowed": null,
       "nullable": true,
-      "mutable": true,
-      "note": "Nullable when count is zero; otherwise an owned count-element pointer array whose non-null git_commit elements are each owned references released by git_commit_free."
+      "mutable": false,
+      "note": "Nullable when count is zero; otherwise an owned count-element pointer array whose non-null git_commit elements are each owned references released by git_commit_free. The declaration is `git_commit *const *commits`, so the element slots are const-qualified and no path stores through them: git_repository_commit_parents assigns the field itself from git_vector_detach, and git_commitarray_dispose casts the const away only to git__free the block after releasing each element. Each element also keeps its repository's pointer, so the run is valid only while that repository lives."
      }
     }
    ]
