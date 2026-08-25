@@ -230,6 +230,10 @@ pub fn git_revwalk_add_hide_cb(
 /// Wraps: git_revwalk_pathspec
 /// Installs a compiled pathspec used by subsequent traversal.
 ///
+/// C also accepts a null pathspec, which installs nothing and leaves any
+/// previously installed one in place rather than clearing it. The wrapper
+/// requires the pathspec, so it never spells that no-op.
+///
 /// # Safety
 ///
 /// `pathspec` must remain live and unmodified until `walk` is reset, freed, or

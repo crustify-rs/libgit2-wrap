@@ -157,6 +157,9 @@ pub fn git_refspec_transform(
 
 /// Wraps: git_refspec_src_matches_negative
 /// Reports whether a negative refspec excludes `refname`.
+///
+/// C also accepts a null refspec and reports no match; the wrapper requires
+/// the refspec rather than spelling that constant answer as an argument.
 #[must_use]
 pub fn git_refspec_src_matches_negative(refspec: GitRefspecRef<'_>, refname: &CStr) -> bool {
     // SAFETY: both inputs are live and shared for the synchronous match.

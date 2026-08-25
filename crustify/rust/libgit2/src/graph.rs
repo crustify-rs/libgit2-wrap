@@ -2,7 +2,7 @@
 
 use crate::ffi;
 use crate::oid::OidRef;
-use crate::repository::GitRepositoryRef;
+use crate::repository::{GitRepositoryMut, GitRepositoryRef};
 
 /// Wraps: git_graph_ahead_behind
 /// Counts commits unique to the local and upstream histories.
@@ -54,16 +54,21 @@ pub fn git_graph_descendant_of(
 
 /// Wraps: git_graph_reachable_from_any
 /// Reports whether `commit` is reachable from any descendant ID.
+///
+/// The repository is taken exclusively because the walk writes through it:
+/// `git_revwalk_new` reaches `git_repository_odb__weakptr`, which builds an
+/// object database on first use and installs it in `repo->_odb`.
 pub fn git_graph_reachable_from_any(
-    repository: GitRepositoryRef<'_>,
+    repository: &mut GitRepositoryMut<'_>,
     commit: OidRef<'_>,
     descendants: ffibox::CSlice<'_, crate::oid::Oid>,
 ) -> Result<bool, i32> {
-    // SAFETY: `Oid` is layout-compatible with `git_oid`; every input remains
-    // readable for this non-retaining graph walk.
+    // SAFETY: `Oid` is layout-compatible with `git_oid`; the repository is
+    // exclusive for the object-database install, the object IDs are readable
+    // for their supplied counts, and the walk retains none of them.
     let status = unsafe {
         ffi::git_graph_reachable_from_any(
-            repository.as_ptr().cast_mut(),
+            repository.as_mut_ptr(),
             commit.as_ptr(),
             descendants.as_ptr().cast_const(),
             descendants.len(),
@@ -73,5 +78,73 @@ pub fn git_graph_reachable_from_any(
         0 => Ok(false),
         1 => Ok(true),
         error => Err(error),
+    }
+}
+
+#[cfg(test)]
+mod scheduled_graph_tests {
+    use core::ptr::{NonNull, addr_of};
+
+    use super::*;
+    use crate::oid::Oid;
+
+    /// Borrows an owned array of object IDs as the counted run C reads.
+    fn descendants(ids: &[Oid]) -> ffibox::CSlice<'_, Oid> {
+        let ptr = addr_of!(*ids).cast::<Oid>().cast_mut();
+        // SAFETY: `ids` is a live Rust-owned run of exactly `ids.len()`
+        // initialized, layout-compatible object IDs, and the returned view
+        // borrows it for the slice's own lifetime.
+        unsafe { ffibox::CSlice::from_raw_parts(NonNull::new(ptr).unwrap(), ids.len()) }
+    }
+
+    #[test]
+    fn reachability_walks_the_repository_it_borrows_exclusively() {
+        // SAFETY: process-global initialization is refcounted and balanced
+        // after every repository-derived owner below has been released.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        // This crate lives inside the repository under test, so its own
+        // history supplies a commit and one of its ancestors.
+        let mut repository = crate::repository::git_repository_open(c"../../..")
+            .expect("the crate is checked out inside a repository");
+        let head = crate::refs::git_reference_name_to_id(&mut repository.as_mut(), c"HEAD")
+            .expect("HEAD resolves to a commit");
+        let parent = {
+            let object = crate::revparse::git_revparse_single(repository.as_mut(), c"HEAD~1")
+                .expect("HEAD has at least one ancestor");
+            crate::oid::git_oid_cpy(crate::object::git_object_id(object.as_ref()))
+        };
+
+        // SAFETY: `head` is a live initialized layout-compatible stack value
+        // borrowed only by this handle.
+        let head_ref = unsafe { crate::oid::OidRef::from_ptr(addr_of!(head).cast_mut().cast()) }
+            .expect("the address of a stack value is non-null");
+        // SAFETY: as above, for the independent `parent` value.
+        let parent_ref = unsafe { crate::oid::OidRef::from_ptr(addr_of!(parent).cast_mut().cast()) }
+            .expect("the address of a stack value is non-null");
+
+        // The ancestor is reachable from the descendant, but not the reverse.
+        // Both walks open the repository's object database, which is why the
+        // wrapper holds the repository exclusively.
+        let heads = [head];
+        let parents = [parent];
+        assert_eq!(
+            git_graph_reachable_from_any(&mut repository.as_mut(), parent_ref, descendants(&heads)),
+            Ok(true)
+        );
+        assert_eq!(
+            git_graph_reachable_from_any(&mut repository.as_mut(), head_ref, descendants(&parents)),
+            Ok(false)
+        );
+        // An empty descendant set short-circuits before any walk.
+        assert_eq!(
+            git_graph_reachable_from_any(&mut repository.as_mut(), head_ref, descendants(&[])),
+            Ok(false)
+        );
+
+        drop(repository);
+        // SAFETY: balances the successful initialization above, after the one
+        // repository owner this test created has been released.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }

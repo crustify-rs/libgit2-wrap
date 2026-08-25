@@ -268,6 +268,10 @@ pub fn git_mailmap_resolve_signature(
 /// Wraps: git_mailmap_resolve
 /// Resolves an identity, borrowing replacements from `mailmap` and otherwise
 /// returning the input strings.
+///
+/// C also accepts a null mailmap, which resolves every identity to the name
+/// and email it was given. That is a no-op a Rust caller expresses by not
+/// calling this at all, so the wrapper requires the mailmap.
 pub fn git_mailmap_resolve<'a>(
     mailmap: GitMailmapRef<'a>,
     name: &'a CStr,

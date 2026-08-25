@@ -9161,8 +9161,8 @@
        "lifetime": "arg:blame"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+      "mutable": false,
+      "note": "Read-only access despite the mutable C spelling: the body returns blame->hunks.length (src/libgit2/blame.c:192) and writes nothing. The sorting entry point is git_blame_hunk_byline, not this one."
      }
     }
    ]
@@ -9207,8 +9207,8 @@
        "lifetime": "arg:blame"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+      "mutable": false,
+      "note": "Read-only access despite the mutable C spelling: the body bounds-checks idx and returns git_array_get(blame->lines, idx - 1) (src/libgit2/blame.c:206) without writing. Unlike git_blame_hunk_byline it runs no git_vector_bsearch2, so it never sorts the hunk vector."
      }
     }
    ],
@@ -9246,8 +9246,8 @@
        "lifetime": "arg:blame"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+      "mutable": false,
+      "note": "Read-only access despite the mutable C spelling: the body returns git_array_size(blame->line_index) (src/libgit2/blame.c:199) and writes nothing."
      }
     }
    ]
@@ -16551,8 +16551,8 @@
        "lifetime": "call"
       },
       "nullable": true,
-      "mutable": true,
-      "note": "Borrows len configuration-level values; null is valid when len is zero."
+      "mutable": false,
+      "note": "Borrows len configuration-level values, read only: the body compares levels[j] against each reader's level and writes only the config's own write_order fields (src/libgit2/config.c:394). Null is valid when len is zero, and len must be below INT_MAX."
      }
     }
    ]
@@ -21111,8 +21111,8 @@
        "lifetime": "call"
       },
       "nullable": true,
-      "mutable": true,
-      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+      "mutable": false,
+      "note": "Optional filter list read only: the body returns 0 for null and otherwise strcmps fl->filters.ptr[i].filter_name (src/libgit2/filter.c:661) without writing. Shared access despite the mutable C spelling."
      }
     },
     {
@@ -21726,7 +21726,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+      "note": "Exclusively borrows the repository, which the reachability walk writes through: git_revwalk_new opens the object database with git_repository_odb__weakptr, which builds an odb on first use and installs it in repo->_odb (src/libgit2/repository.c:1588). Ownership is not transferred."
      }
     }
    ]
@@ -24787,9 +24787,9 @@
       "borrowed": {
        "lifetime": "arg:mailmap"
       },
-      "nullable": false,
+      "nullable": true,
       "mutable": false,
-      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+      "note": "Optional shared mailmap: git_mailmap_entry_lookup returns NULL for a null mailmap (src/libgit2/mailmap.c:425), so a null mailmap resolves both outputs to the name and email that were passed in. Ownership is not transferred."
      }
     },
     {
@@ -30911,7 +30911,7 @@
      },
      "nullable": true,
      "mutable": false,
-     "note": "Library-owned thread-local string independent of the input OID; reused by later calls on the thread and never freed by the caller."
+     "note": "Library-owned thread-local string independent of the input OID; reused by later calls on the thread and never freed by the caller. It is only FORMATTED when the OID's algorithm is published: git_oid_tostr_s returns the buffer unconditionally, but the git_oid_nfmt inside it bails out before writing when git_oid_hexsize rejects git_oid_type(oid) (src/libgit2/oid.c:113,180). On the thread's first call the buffer is a bare git__malloc(GIT_OID_MAX_HEXSIZE + 1), so an unknown-algorithm OID yields a pointer to uninitialized heap with no terminator; callers must reject such an OID before calling."
     }
    }
   },

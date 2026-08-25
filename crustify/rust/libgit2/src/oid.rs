@@ -706,12 +706,25 @@ pub fn git_oid_streq(oid: OidRef<'_>, text: &core::ffi::CStr) -> bool {
 
 /// Wraps: git_oid_tostr_s
 /// Copies the library's thread-local formatting buffer into Rust-owned text.
+///
+/// An object ID whose stored algorithm is not published returns `None` without
+/// calling C. `git_oid_tostr_s` hands back its thread-local buffer even when
+/// the `git_oid_nfmt` inside it fails, and that failure is exactly the
+/// unknown-algorithm case, which returns before writing a single byte. The
+/// buffer is a bare `git__malloc(GIT_OID_MAX_HEXSIZE + 1)` on first use, so
+/// reading it would scan uninitialized heap for a terminator that need not be
+/// there. A zeroed `git_oid` — what a diff delta carries for the absent side
+/// of an addition or deletion — is such a value, so this is reachable from
+/// safe code and is checked here rather than assumed away.
 #[must_use]
 pub fn git_oid_tostr_s(oid: OidRef<'_>) -> Option<String> {
-    // SAFETY: `oid` is live for the call. A non-null return is a
-    // NUL-terminated library buffer valid until a later call on this thread;
-    // it is copied before this function returns, so no shared reference to
-    // mutable TLS storage escapes.
+    // Only a published algorithm has a hexadecimal width for C to format.
+    oid.oid_type().ok()?;
+    // SAFETY: `oid` is live and carries a checked algorithm, so C formats and
+    // terminates its buffer. A non-null return is that NUL-terminated library
+    // buffer, valid until a later call on this thread; it is copied before
+    // this function returns, so no shared reference to mutable TLS storage
+    // escapes.
     let text = unsafe { ffi::git_oid_tostr_s(oid.as_ptr()) };
     if text.is_null() {
         None
@@ -832,5 +845,39 @@ mod scheduled_oid_tests {
         let mut text = [0u8; 40];
         assert_eq!(git_oid_fmt(&mut text, copy_ref).unwrap(), &b"ab".repeat(20));
         assert!(git_oid_from_raw(&raw[..19], OidType::Sha1).is_err());
+    }
+
+    #[test]
+    fn shared_formatting_refuses_an_object_id_c_never_formats() {
+        // SAFETY: process-global initialization is refcounted and balanced
+        // once the thread-local formatting buffer has been exercised.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        // A zeroed `git_oid` carries algorithm 0, which `git_oid_hexsize`
+        // rejects. `git_oid_tostr_s` would still hand back its thread-local
+        // buffer with nothing written into it, so reading that buffer runs
+        // off the end of the allocation; the wrapper stops before the call.
+        let mut untyped = Oid::zeroed();
+        // SAFETY: live, initialized, layout-compatible stack storage that is
+        // only borrowed by this handle.
+        let untyped = unsafe { OidRef::from_ptr(addr_of_mut!(untyped).cast()) }
+            .expect("the address of a stack value is non-null");
+        assert_eq!(untyped.oid_type(), Err(InvalidOidType(0)));
+        assert_eq!(git_oid_tostr_s(untyped), None);
+
+        // A published algorithm still formats through the same buffer.
+        let mut typed = git_oid_from_raw(&[0xab; 20], OidType::Sha1).unwrap();
+        // SAFETY: as above, for the independently initialized `typed` value.
+        let typed = unsafe { OidRef::from_ptr(addr_of_mut!(typed).cast()) }
+            .expect("the address of a stack value is non-null");
+        assert_eq!(
+            git_oid_tostr_s(typed).as_deref(),
+            Some("abababababababababababababababababababab")
+        );
+
+        // SAFETY: balances the successful initialization above; the only
+        // libgit2 storage this test reached is the thread-local buffer the
+        // shutdown hook releases.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
