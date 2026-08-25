@@ -95,8 +95,8 @@ mod scheduled_email_tests {
 
     impl BareRepo {
         fn create(tag: &str) -> Self {
-            let path = std::env::temp_dir()
-                .join(format!("crustify-email-{}-{tag}", std::process::id()));
+            let path =
+                std::env::temp_dir().join(format!("crustify-email-{}-{tag}", std::process::id()));
             let _ = std::fs::remove_dir_all(&path);
             std::fs::create_dir_all(path.join("objects")).expect("a private temporary directory");
             std::fs::create_dir_all(path.join("refs/heads")).expect("a refs directory");

@@ -750,13 +750,24 @@ mod scheduled_object_api_tests {
 
         let object = git_odb_read(&mut odb.as_mut(), id).unwrap();
         assert_eq!(git_odb_object_size(object.as_ref()), body.len());
-        assert_eq!(git_odb_object_type(object.as_ref()), Ok(GitObjectType::BLOB));
         assert_eq!(
-            git_odb_object_id(object.as_ref()).raw_bytes().elems().take(20).collect::<Vec<_>>(),
+            git_odb_object_type(object.as_ref()),
+            Ok(GitObjectType::BLOB)
+        );
+        assert_eq!(
+            git_odb_object_id(object.as_ref())
+                .raw_bytes()
+                .elems()
+                .take(20)
+                .collect::<Vec<_>>(),
             id.raw_bytes().elems().take(20).collect::<Vec<_>>()
         );
         let mut seen = vec![0u8; body.len()];
-        assert!(git_odb_object_data(object.as_ref()).unwrap().copy_to_slice(&mut seen));
+        assert!(
+            git_odb_object_data(object.as_ref())
+                .unwrap()
+                .copy_to_slice(&mut seen)
+        );
         assert_eq!(seen.as_slice(), body.as_slice());
 
         // `git_odb_object` is layout-compatible with the cache prefix it embeds
@@ -765,10 +776,9 @@ mod scheduled_object_api_tests {
             // SAFETY: `cached` is the first member of `git_odb_object`, so the
             // object's address is also the address of a live `git_cached_obj`,
             // and the handle only outlives this call.
-            let cached = unsafe {
-                GitCachedObjRef::from_ptr(object.as_ref().as_ptr().cast_mut().cast())
-            }
-            .expect("a live object has a non-null address");
+            let cached =
+                unsafe { GitCachedObjRef::from_ptr(object.as_ref().as_ptr().cast_mut().cast()) }
+                    .expect("a live object has a non-null address");
             assert_eq!(cached.store_kind(), Ok(CacheStoreKind::Raw));
             cached.refcount()
         };
