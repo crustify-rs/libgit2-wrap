@@ -51,3 +51,27 @@ pub fn git_graph_descendant_of(
         error => Err(error),
     }
 }
+
+/// Wraps: git_graph_reachable_from_any
+/// Reports whether `commit` is reachable from any descendant ID.
+pub fn git_graph_reachable_from_any(
+    repository: GitRepositoryRef<'_>,
+    commit: OidRef<'_>,
+    descendants: ffibox::CSlice<'_, crate::oid::Oid>,
+) -> Result<bool, i32> {
+    // SAFETY: `Oid` is layout-compatible with `git_oid`; every input remains
+    // readable for this non-retaining graph walk.
+    let status = unsafe {
+        ffi::git_graph_reachable_from_any(
+            repository.as_ptr().cast_mut(),
+            commit.as_ptr(),
+            descendants.as_ptr().cast_const(),
+            descendants.len(),
+        )
+    };
+    match status {
+        0 => Ok(false),
+        1 => Ok(true),
+        error => Err(error),
+    }
+}

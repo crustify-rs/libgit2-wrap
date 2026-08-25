@@ -110,6 +110,7 @@ pub unsafe fn git_libgit2_shutdown(_initialization: Libgit2Init) -> Result<usize
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
 
@@ -138,5 +139,30 @@ mod tests {
     #[test]
     fn release_prerelease_label_is_optional_static_data() {
         assert_eq!(git_libgit2_prerelease(), None);
+    }
+}
+
+/// Wraps: git_libgit2_feature_backend
+/// Returns the static backend name selected for one feature.
+#[must_use]
+pub fn git_libgit2_feature_backend(feature: Libgit2Features) -> Option<&'static core::ffi::CStr> {
+    // SAFETY: the bitset is passed by value and C returns null or immutable
+    // compile-time NUL-terminated storage.
+    let backend = unsafe { ffi::git_libgit2_feature_backend(feature.bits()) };
+    if backend.is_null() {
+        None
+    } else {
+        // SAFETY: a non-null backend label has process-static storage.
+        Some(unsafe { core::ffi::CStr::from_ptr(backend) })
+    }
+}
+
+#[cfg(test)]
+mod scheduled_backend_tests {
+    use super::*;
+    #[test]
+    fn selected_thread_backend_is_static() {
+        assert!(git_libgit2_feature_backend(Libgit2Features::THREADS).is_some());
+        assert_eq!(git_libgit2_feature_backend(Libgit2Features::HTTP), None);
     }
 }

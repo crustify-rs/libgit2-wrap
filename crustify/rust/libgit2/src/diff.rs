@@ -1742,3 +1742,11 @@ mod scheduled_symbol_tests {
         assert!(seen);
     }
 }
+
+/// Wraps: git_diff_num_deltas_of_type
+/// Counts deltas having `kind`.
+#[must_use]
+pub fn git_diff_num_deltas_of_type(diff: DiffRef<'_>, kind: Delta) -> usize {
+    // SAFETY: `diff` is live and the operation only scans its delta vector.
+    unsafe { ffi::git_diff_num_deltas_of_type(diff.as_ptr(), kind.into()) }
+}

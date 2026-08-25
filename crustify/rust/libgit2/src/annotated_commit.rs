@@ -175,6 +175,7 @@ pub fn git_annotated_commit_ref<'a>(commit: AnnotatedCommitRef<'a>) -> Option<&'
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
 
@@ -234,4 +235,21 @@ mod tests {
     fn failed_result_accepts_an_empty_typed_owner() {
         assert!(matches!(annotated_result(-123, None), Err(-123)));
     }
+}
+
+/// Wraps: git_annotated_commit_from_revspec
+/// Resolves `revspec` to a commit and returns an annotated commit tied to `repo`.
+pub fn git_annotated_commit_from_revspec<'repo>(
+    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    revspec: &core::ffi::CStr,
+) -> Result<AnnotatedCommitOwned<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `repo` and `revspec` are live for the call, `out` is writable,
+    // and the returned owner carries the repository lifetime it retains.
+    let status = unsafe {
+        ffi::git_annotated_commit_from_revspec(&mut out, repo.as_mut_ptr(), revspec.as_ptr())
+    };
+    // SAFETY: `out` is null or transfers a complete annotated commit.
+    let inner = unsafe { ffibox::CBox::<AnnotatedCommit>::from_raw(out) };
+    annotated_result(status, inner)
 }

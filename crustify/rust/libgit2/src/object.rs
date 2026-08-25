@@ -253,6 +253,7 @@ pub fn git_object_typeisloose(kind: GitObjectType) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
 
@@ -351,5 +352,87 @@ mod tests {
         assert_eq!(git_object_type2string(GitObjectType::INVALID), c"");
         assert!(!git_object_typeisloose(GitObjectType::ANY));
         assert!(!git_object_typeisloose(GitObjectType::INVALID));
+    }
+}
+
+/// Wraps: git_object_lookup_bypath
+/// Looks up an object below `treeish`, tying the owner to its repository.
+pub fn git_object_lookup_bypath<'repo>(
+    treeish: GitObjectRef<'repo>,
+    path: &CStr,
+    kind: GitObjectType,
+) -> Result<RepositoryObject<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: inputs are live, `out` is writable, and the resulting object's
+    // repository lifetime is bounded by the source object borrow.
+    let status = unsafe {
+        ffi::git_object_lookup_bypath(&mut out, treeish.as_ptr(), path.as_ptr(), kind.into())
+    };
+    // SAFETY: `out` is null or transfers one initialized object reference.
+    let inner = unsafe { GitObjectOwned::from_raw(out) };
+    adopt_repository_object(status, inner)
+}
+
+/// Wraps: git_object_owner
+/// Borrows the repository retained by an object.
+#[must_use]
+pub fn git_object_owner<'a>(object: GitObjectRef<'a>) -> GitRepositoryRef<'a> {
+    // SAFETY: a live repository-backed object carries a non-null repository
+    // pointer which remains valid for the object's borrow.
+    let repo = unsafe { ffi::git_object_owner(object.as_ptr()) };
+    // SAFETY: the object borrow keeps the returned repository live.
+    unsafe { GitRepositoryRef::from_ptr(repo) }.expect("a live object has an owner")
+}
+
+/// Wraps: git_object_rawcontent_is_valid
+/// Validates length-delimited raw object content.
+pub fn git_object_rawcontent_is_valid(
+    bytes: &[u8],
+    object_type: GitObjectType,
+    oid_type: crate::oid::OidType,
+) -> Result<bool, i32> {
+    let mut valid = 0;
+    // SAFETY: `valid` is writable and `bytes` supplies exactly the readable
+    // run passed to C; neither pointer is retained.
+    let status = unsafe {
+        ffi::git_object_rawcontent_is_valid(
+            &mut valid,
+            bytes.as_ptr().cast(),
+            bytes.len(),
+            object_type.into(),
+            oid_type.into(),
+        )
+    };
+    if status == 0 {
+        Ok(valid != 0)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_object_type_is_valid
+/// Reports whether a kind denotes a concrete parseable object type.
+#[must_use]
+pub fn git_object_type_is_valid(object_type: GitObjectType) -> bool {
+    // SAFETY: the checked scalar is passed by value.
+    unsafe { ffi::git_object_type_is_valid(object_type.into()) != 0 }
+}
+
+#[cfg(test)]
+mod scheduled_object_tests {
+    use super::*;
+    #[test]
+    fn concrete_object_types_are_valid() {
+        assert!(git_object_type_is_valid(GitObjectType::COMMIT));
+        assert!(git_object_type_is_valid(GitObjectType::BLOB));
+        assert!(!git_object_type_is_valid(GitObjectType::ANY));
+        assert!(
+            git_object_rawcontent_is_valid(
+                b"anything",
+                GitObjectType::BLOB,
+                crate::oid::OidType::Sha1
+            )
+            .unwrap()
+        );
     }
 }

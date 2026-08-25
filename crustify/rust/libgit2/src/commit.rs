@@ -562,3 +562,18 @@ mod commitbuilder_tests {
         );
     }
 }
+
+/// Wraps: git_commitbuilder_add_header
+/// Adds or replaces a header in a transient commit builder.
+pub fn git_commitbuilder_add_header(
+    builder: &mut GitCommitbuilderMut<'_>,
+    field: &core::ffi::CStr,
+    value: &core::ffi::CStr,
+) -> Result<(), i32> {
+    // SAFETY: the builder is exclusively borrowed and both strings remain
+    // live while libgit2 copies them into builder-owned storage.
+    let status = unsafe {
+        ffi::git_commitbuilder_add_header(builder.as_mut_ptr(), field.as_ptr(), value.as_ptr())
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}

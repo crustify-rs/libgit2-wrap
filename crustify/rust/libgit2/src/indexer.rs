@@ -543,3 +543,23 @@ mod constructor_tests {
         assert_eq!(options.as_ref().mode(), 0);
     }
 }
+
+/// Wraps: git_indexer_hash
+/// Borrows the legacy 20-byte SHA-1 pack hash stored in an indexer.
+///
+/// The deprecated C function casts the indexer's raw checksum byte array to
+/// `git_oid *`; current `git_oid` has an additional algorithm byte, so treating
+/// that result as an `OidRef` would both shift the digest and read past the
+/// legacy SHA-1 run. This wrapper preserves the actual storage contract.
+#[must_use]
+pub fn git_indexer_hash<'a>(indexer: IndexerRef<'a>) -> ffibox::CSlice<'a, u8> {
+    // SAFETY: the live indexer owns its inline checksum for the input borrow;
+    // C returns the start of that raw byte array despite its declared type.
+    let hash = unsafe { ffi::git_indexer_hash(indexer.as_ptr()) }
+        .cast_mut()
+        .cast::<u8>();
+    let hash = core::ptr::NonNull::new(hash).expect("a live indexer has an inline checksum");
+    // SAFETY: this deprecated entry point is the SHA-1 API and exposes the
+    // first 20 initialized checksum bytes, retained by `indexer` for `'a`.
+    unsafe { ffibox::CSlice::from_raw_parts(hash, 20) }
+}

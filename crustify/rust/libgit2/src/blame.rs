@@ -480,3 +480,33 @@ mod hunk_lookup_tests {
             git_blame_get_hunk_byline;
     }
 }
+
+/// Wraps: git_blame_hunkcount
+/// Returns the number of hunks in a blame result.
+#[must_use]
+pub fn git_blame_hunkcount(blame: GitBlameRef<'_>) -> usize {
+    // SAFETY: `blame` is live and the query only reads its hunk vector length.
+    unsafe { ffi::git_blame_hunkcount(blame.as_ptr().cast_mut()) }
+}
+
+/// Wraps: git_blame_line_byindex
+/// Borrows a one-based blame line, returning `None` when out of range.
+#[must_use]
+pub fn git_blame_line_byindex<'a>(
+    blame: GitBlameRef<'a>,
+    index: usize,
+) -> Option<crate::api::blame::GitBlameLineRef<'a>> {
+    // SAFETY: the live blame owns every non-null returned line record and its
+    // backing bytes for the complete input borrow.
+    let line = unsafe { ffi::git_blame_line_byindex(blame.as_ptr().cast_mut(), index) };
+    // SAFETY: null means out of range; otherwise `blame` keeps the line live.
+    unsafe { crate::api::blame::GitBlameLineRef::from_ptr(line.cast_mut()) }
+}
+
+/// Wraps: git_blame_linecount
+/// Returns the number of indexed lines in a blame result.
+#[must_use]
+pub fn git_blame_linecount(blame: GitBlameRef<'_>) -> usize {
+    // SAFETY: `blame` is live and the query only reads its line-index length.
+    unsafe { ffi::git_blame_linecount(blame.as_ptr().cast_mut()) }
+}

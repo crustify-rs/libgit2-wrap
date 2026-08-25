@@ -2532,3 +2532,29 @@ mod scheduled_flag_tests {
         );
     }
 }
+
+/// Wraps: git_diff_progress_cb
+/// Safe callable surface for diff-generation progress notifications.
+pub trait GitDiffProgressCallback {
+    /// Observes the partial diff and optional old and new paths.
+    fn call(
+        &mut self,
+        diff_so_far: crate::diff::DiffRef<'_>,
+        old_path: Option<&core::ffi::CStr>,
+        new_path: Option<&core::ffi::CStr>,
+    ) -> i32;
+}
+
+impl<F> GitDiffProgressCallback for F
+where
+    F: FnMut(crate::diff::DiffRef<'_>, Option<&core::ffi::CStr>, Option<&core::ffi::CStr>) -> i32,
+{
+    fn call(
+        &mut self,
+        diff: crate::diff::DiffRef<'_>,
+        old: Option<&core::ffi::CStr>,
+        new: Option<&core::ffi::CStr>,
+    ) -> i32 {
+        self(diff, old, new)
+    }
+}

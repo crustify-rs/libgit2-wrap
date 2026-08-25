@@ -97,6 +97,7 @@ pub fn git_diff_print(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod print_tests {
     use super::*;
 
@@ -151,5 +152,40 @@ mod print_tests {
         drop(patch);
         // SAFETY: balances the successful initialization above.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+}
+
+/// Wraps: git_diff_status_char
+/// Returns the conventional one-byte status marker for a delta kind.
+#[must_use]
+pub fn git_diff_status_char(status: crate::diff::Delta) -> u8 {
+    // SAFETY: `status` is a published C discriminant and the function returns
+    // one ASCII byte for every input.
+    unsafe { ffi::git_diff_status_char(status.into()) as u8 }
+}
+
+/// Wraps: git_diff_to_buf
+/// Formats a diff into a newly owned libgit2 buffer.
+pub fn git_diff_to_buf(
+    diff: &mut crate::diff::DiffMut<'_>,
+    format: crate::diff::DiffFormat,
+) -> Result<CVal<GitBuf>, i32> {
+    let mut out = GitBuf::new();
+    // SAFETY: both values are exclusively writable/live and the format is a
+    // checked C discriminant; no pointer is retained.
+    let status = unsafe {
+        ffi::git_diff_to_buf(out.as_mut().as_mut_ptr(), diff.as_mut_ptr(), format.into())
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod scheduled_status_tests {
+    use super::*;
+    #[test]
+    fn status_markers_match_git_conventions() {
+        assert_eq!(git_diff_status_char(crate::diff::Delta::Added), b'A');
+        assert_eq!(git_diff_status_char(crate::diff::Delta::Deleted), b'D');
+        assert_eq!(git_diff_status_char(crate::diff::Delta::Untracked), b'?');
     }
 }

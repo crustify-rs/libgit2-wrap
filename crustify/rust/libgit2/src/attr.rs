@@ -170,3 +170,152 @@ pub fn git_attr_value(attr: Option<&core::ffi::CStr>) -> AttrValue {
     let raw = unsafe { ffi::git_attr_value(attr) };
     AttrValue::try_from(raw).expect("git_attr_value returned an unknown category")
 }
+
+/// Wraps: git_attr_add_macro
+/// Adds a macro definition to the repository's attribute cache.
+pub fn git_attr_add_macro(
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    name: &core::ffi::CStr,
+    values: &core::ffi::CStr,
+) -> Result<(), i32> {
+    // SAFETY: the repository is exclusive and both live strings are copied
+    // into cache-owned storage before this call returns.
+    let status =
+        unsafe { ffi::git_attr_add_macro(repo.as_mut_ptr(), name.as_ptr(), values.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+unsafe extern "C" fn attr_foreach_trampoline<C>(
+    name: *const core::ffi::c_char,
+    value: *const core::ffi::c_char,
+    payload: *mut core::ffi::c_void,
+) -> i32
+where
+    C: crate::api::attr::GitAttrForeachCallback,
+{
+    if name.is_null() || payload.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: the synchronous wrapper supplies a live `F` payload and
+    // libgit2 supplies callback-scoped NUL-terminated strings.
+    let callback = unsafe { &mut *payload.cast::<C>() };
+    // SAFETY: `name` is a required callback-scoped string.
+    let name = unsafe { core::ffi::CStr::from_ptr(name) };
+    // SAFETY: classification only compares the possibly-null pointer with the
+    // three immutable libgit2 sentinels.
+    let value = match unsafe { ffi::git_attr_value(value) } {
+        ffi::git_attr_value_t_GIT_ATTR_VALUE_UNSPECIFIED => Attribute::Unspecified,
+        ffi::git_attr_value_t_GIT_ATTR_VALUE_TRUE => Attribute::True,
+        ffi::git_attr_value_t_GIT_ATTR_VALUE_FALSE => Attribute::False,
+        ffi::git_attr_value_t_GIT_ATTR_VALUE_STRING if !value.is_null() => {
+            // SAFETY: a string-category value is a callback-scoped C string.
+            Attribute::String(unsafe { core::ffi::CStr::from_ptr(value) })
+        }
+        _ => return ffi::git_error_code_GIT_ERROR,
+    };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback.call(name, value)))
+        .unwrap_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_attr_foreach
+/// Visits the effective attributes for `path` synchronously.
+pub fn git_attr_foreach<C>(
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    flags: u32,
+    path: &core::ffi::CStr,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: crate::api::attr::GitAttrForeachCallback,
+{
+    // SAFETY: all inputs and the erased callback payload remain live for the
+    // complete synchronous traversal; the trampoline catches Rust panics.
+    let status = unsafe {
+        ffi::git_attr_foreach(
+            repo.as_mut_ptr(),
+            flags,
+            path.as_ptr(),
+            Some(attr_foreach_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_attr_get_many
+/// Looks up several attributes and ties returned strings to `repo`.
+pub fn git_attr_get_many<'repo>(
+    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    flags: u32,
+    path: &core::ffi::CStr,
+    names: &[&core::ffi::CStr],
+) -> Result<Vec<Attribute<'repo>>, i32> {
+    let mut values = vec![core::ptr::null(); names.len()];
+    let mut raw_names: Vec<_> = names.iter().map(|name| name.as_ptr()).collect();
+    // SAFETY: outputs and name pointers cover `names.len()` elements; the
+    // repository and path are live, and returned cache strings are lifetime-
+    // bound by consuming the repository handle into this result.
+    let status = unsafe {
+        ffi::git_attr_get_many(
+            values.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            flags,
+            path.as_ptr(),
+            names.len(),
+            raw_names.as_mut_ptr(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    values
+        .into_iter()
+        .map(|value| {
+            // SAFETY: classification only compares pointer identity.
+            match unsafe { ffi::git_attr_value(value) } {
+                ffi::git_attr_value_t_GIT_ATTR_VALUE_UNSPECIFIED => Ok(Attribute::Unspecified),
+                ffi::git_attr_value_t_GIT_ATTR_VALUE_TRUE => Ok(Attribute::True),
+                ffi::git_attr_value_t_GIT_ATTR_VALUE_FALSE => Ok(Attribute::False),
+                ffi::git_attr_value_t_GIT_ATTR_VALUE_STRING if !value.is_null() => {
+                    // SAFETY: string-category values are cache-owned C strings.
+                    Ok(Attribute::String(unsafe {
+                        core::ffi::CStr::from_ptr(value)
+                    }))
+                }
+                raw => Err(InvalidAttrValue(raw).0 as i32),
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod scheduled_callback_tests {
+    use super::*;
+    #[test]
+    fn attr_trampoline_delivers_optional_values() {
+        unsafe fn invoke<C>(callback: &mut C) -> i32
+        where
+            C: crate::api::attr::GitAttrForeachCallback,
+        {
+            // SAFETY: the literals and exact callback payload remain live for
+            // this direct trampoline invocation.
+            unsafe {
+                attr_foreach_trampoline::<C>(
+                    c"kind".as_ptr(),
+                    c"value".as_ptr(),
+                    core::ptr::from_mut(callback).cast(),
+                )
+            }
+        }
+
+        let mut seen = false;
+        let mut callback = |name: &core::ffi::CStr, value: Attribute<'_>| {
+            seen = name == c"kind" && value == Attribute::String(c"value");
+            0
+        };
+        // SAFETY: `invoke` keeps the callback live for the direct call.
+        let status = unsafe { invoke(&mut callback) };
+        assert_eq!(status, 0);
+        assert!(seen);
+    }
+}

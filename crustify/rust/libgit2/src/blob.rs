@@ -253,3 +253,89 @@ mod binary_data_tests {
         assert!(!git_blob_data_is_binary(&[]));
     }
 }
+
+/// Wraps: git_blob_create_from_buffer
+/// Creates a blob through the current non-deprecated API.
+pub fn git_blob_create_from_buffer(
+    id: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    buffer: &[u8],
+) -> Result<(), i32> {
+    // SAFETY: typed handles are live and exclusive; borrowed input bytes or
+    // strings remain live for this synchronous non-retaining call.
+    let status = unsafe {
+        ffi::git_blob_create_from_buffer(
+            id.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            buffer.as_ptr().cast(),
+            buffer.len(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_blob_create_from_disk
+/// Creates a blob through the current non-deprecated API.
+pub fn git_blob_create_from_disk(
+    id: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    path: &core::ffi::CStr,
+) -> Result<(), i32> {
+    // SAFETY: typed handles are live and exclusive; borrowed input bytes or
+    // strings remain live for this synchronous non-retaining call.
+    let status = unsafe {
+        ffi::git_blob_create_from_disk(id.as_mut_ptr(), repo.as_mut_ptr(), path.as_ptr())
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_blob_create_from_stream
+/// Opens a blob write stream that retains the repository borrow.
+pub fn git_blob_create_from_stream<'repo>(
+    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    hint_path: Option<&core::ffi::CStr>,
+) -> Result<GitBlobWriteStream<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    let hint = hint_path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    // SAFETY: inputs are live, `out` is writable, and the result carries the
+    // repository borrow stored by the C stream.
+    let status = unsafe { ffi::git_blob_create_from_stream(&mut out, repo.as_mut_ptr(), hint) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one initialized stream with a free callback.
+    let inner = unsafe { crate::api::types::GitWriteStreamOwned::from_raw(out) }
+        .ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(GitBlobWriteStream {
+        inner,
+        _repository: core::marker::PhantomData,
+    })
+}
+
+/// Wraps: git_blob_create_from_stream_commit
+/// Commits and consumes a blob write stream.
+pub fn git_blob_create_from_stream_commit(
+    id: &mut crate::oid::OidMut<'_>,
+    stream: GitBlobWriteStream<'_>,
+) -> Result<(), i32> {
+    let raw = stream.inner.into_raw();
+    // SAFETY: ownership of `raw` is transferred to a function that frees it
+    // on every path, and `id` is a live writable output.
+    let status = unsafe { ffi::git_blob_create_from_stream_commit(id.as_mut_ptr(), raw) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_blob_create_from_workdir
+/// Creates a blob through the current non-deprecated API.
+pub fn git_blob_create_from_workdir(
+    id: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    path: &core::ffi::CStr,
+) -> Result<(), i32> {
+    // SAFETY: typed handles are live and exclusive; borrowed input bytes or
+    // strings remain live for this synchronous non-retaining call.
+    let status = unsafe {
+        ffi::git_blob_create_from_workdir(id.as_mut_ptr(), repo.as_mut_ptr(), path.as_ptr())
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}

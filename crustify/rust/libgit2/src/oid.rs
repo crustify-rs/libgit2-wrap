@@ -468,3 +468,112 @@ mod shorten_tests {
         }
     }
 }
+
+/// Wraps: git_oid_cpy
+/// Copies an object ID into a new layout-compatible value.
+#[must_use]
+pub fn git_oid_cpy(source: OidRef<'_>) -> Oid {
+    let mut out = Oid::zeroed();
+    // SAFETY: `out` is writable and `source` is live for the fixed-size copy.
+    let status = unsafe { ffi::git_oid_cpy(addr_of_mut!(out).cast(), source.as_ptr()) };
+    debug_assert_eq!(status, 0);
+    out
+}
+
+/// Wraps: git_oid_fmt
+/// Writes lowercase hexadecimal without a trailing NUL.
+pub fn git_oid_fmt<'a>(out: &'a mut [u8], oid: OidRef<'_>) -> Option<&'a mut [u8]> {
+    let len = oid.oid_type().ok()?.hex_len();
+    let target = out.get_mut(..len)?;
+    // SAFETY: `target` supplies the exact writable width selected by the live
+    // object ID's checked algorithm; C writes no terminator.
+    let status = unsafe { ffi::git_oid_fmt(target.as_mut_ptr().cast(), oid.as_ptr()) };
+    debug_assert_eq!(status, 0);
+    Some(target)
+}
+
+/// Wraps: git_oid_from_prefix
+/// Parses a counted hexadecimal prefix for `oid_type`.
+pub fn git_oid_from_prefix(hex: &[u8], oid_type: OidType) -> Result<Oid, i32> {
+    let mut out = Oid::zeroed();
+    // SAFETY: `out` is writable and `hex` supplies exactly the readable count.
+    let status = unsafe {
+        ffi::git_oid_from_prefix(
+            addr_of_mut!(out).cast(),
+            hex.as_ptr().cast(),
+            hex.len(),
+            oid_type.into(),
+        )
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_oid_from_raw
+/// Constructs an object ID from a complete raw digest.
+pub fn git_oid_from_raw(raw: &[u8], oid_type: OidType) -> Result<Oid, i32> {
+    if raw.len() != oid_type.digest_len() {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    let mut out = Oid::zeroed();
+    // SAFETY: the checked slice provides the exact digest width C copies.
+    let status =
+        unsafe { ffi::git_oid_from_raw(addr_of_mut!(out).cast(), raw.as_ptr(), oid_type.into()) };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_oid_from_string
+/// Parses one complete NUL-terminated object ID.
+pub fn git_oid_from_string(hex: &core::ffi::CStr, oid_type: OidType) -> Result<Oid, i32> {
+    if hex.to_bytes().len() != oid_type.hex_len() {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    let mut out = Oid::zeroed();
+    // SAFETY: `hex` has the complete checked width plus its trailing NUL, and
+    // `out` is writable.
+    let status = unsafe {
+        ffi::git_oid_from_string(addr_of_mut!(out).cast(), hex.as_ptr(), oid_type.into())
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_oid_fromstr
+/// Parses one complete SHA-1 object ID.
+pub fn git_oid_fromstr(hex: &core::ffi::CStr) -> Result<Oid, i32> {
+    if hex.to_bytes().len() != OidType::Sha1.hex_len() {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    let mut out = Oid::zeroed();
+    // SAFETY: `hex` contains the 40 bytes this legacy function unconditionally
+    // reads plus its trailing NUL, and `out` is writable.
+    let status = unsafe { ffi::git_oid_fromstr(addr_of_mut!(out).cast(), hex.as_ptr()) };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_oid_fromstrp
+/// Parses a NUL-terminated SHA-1 hexadecimal prefix.
+pub fn git_oid_fromstrp(hex: &core::ffi::CStr) -> Result<Oid, i32> {
+    let mut out = Oid::zeroed();
+    // SAFETY: `hex` is NUL terminated and `out` is writable.
+    let status = unsafe { ffi::git_oid_fromstrp(addr_of_mut!(out).cast(), hex.as_ptr()) };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod scheduled_oid_tests {
+    use super::*;
+    #[test]
+    fn parses_copies_and_formats_sha1_ids() {
+        let raw = [0xabu8; 20];
+        let oid = git_oid_from_raw(&raw, OidType::Sha1).unwrap();
+        // SAFETY: the stack value is live and shared for this handle's scope.
+        let oid_ref =
+            unsafe { OidRef::from_ptr(core::ptr::addr_of!(oid).cast_mut().cast()) }.unwrap();
+        let copy = git_oid_cpy(oid_ref);
+        // SAFETY: `copy` is live and shared for this handle's scope.
+        let copy_ref =
+            unsafe { OidRef::from_ptr(core::ptr::addr_of!(copy).cast_mut().cast()) }.unwrap();
+        let mut text = [0u8; 40];
+        assert_eq!(git_oid_fmt(&mut text, copy_ref).unwrap(), &b"ab".repeat(20));
+        assert!(git_oid_from_raw(&raw[..19], OidType::Sha1).is_err());
+    }
+}

@@ -371,3 +371,14 @@ pub fn git_branch_create<'repo>(
     let reference = unsafe { crate::refs::GitReferenceOwned::from_raw(out) };
     crate::refs::adopt_reference(status, reference)
 }
+
+/// Wraps: git_branch_is_checked_out
+/// Reports whether any linked worktree has `branch` checked out.
+pub fn git_branch_is_checked_out(branch: crate::refs::GitReferenceRef<'_>) -> Result<bool, i32> {
+    // SAFETY: the reference is live and C retains no pointer after its scan.
+    match unsafe { ffi::git_branch_is_checked_out(branch.as_ptr()) } {
+        0 => Ok(false),
+        1 => Ok(true),
+        error => Err(error),
+    }
+}

@@ -949,3 +949,71 @@ mod scheduled_iterator_tests {
         drop(config);
     }
 }
+
+/// A configuration transaction tied to the configuration it has locked.
+pub struct ConfigTransaction<'config> {
+    inner: crate::transaction::GitTransactionOwned,
+    _config: core::marker::PhantomData<GitConfigRef<'config>>,
+}
+
+impl ConfigTransaction<'_> {
+    /// Borrows the transaction exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> crate::transaction::GitTransactionMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+/// Wraps: git_config_lock
+/// Locks the writable backend and returns a transaction tied to `config`.
+pub fn git_config_lock<'config>(
+    config: &'config mut GitConfigMut<'_>,
+) -> Result<ConfigTransaction<'config>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and the returned transaction carries the
+    // exclusive borrow of the config pointer retained until it is freed.
+    let status = unsafe { ffi::git_config_lock(&mut out, config.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete configuration transaction.
+    let inner = unsafe { crate::transaction::GitTransactionOwned::from_raw(out) }
+        .ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(ConfigTransaction {
+        inner,
+        _config: core::marker::PhantomData,
+    })
+}
+
+/// Wraps: git_config_parse_path
+/// Expands a configuration path into a newly owned buffer.
+pub fn git_config_parse_path(
+    value: &CStr,
+) -> Result<ffibox::CVal<crate::api::buffer::GitBuf>, i32> {
+    let mut out = crate::api::buffer::GitBuf::new();
+    // SAFETY: the output header is exclusively writable and `value` is a live
+    // C string used only for this parse.
+    let status = unsafe { ffi::git_config_parse_path(out.as_mut().as_mut_ptr(), value.as_ptr()) };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_config_set_writeorder
+/// Reorders writable backends according to `levels`.
+pub fn git_config_set_writeorder(
+    config: &mut GitConfigMut<'_>,
+    levels: &[GitConfigLevel],
+) -> Result<(), i32> {
+    if levels.len() >= i32::MAX as usize {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    // SAFETY: `GitConfigLevel` is transparent over the C scalar; the slice is
+    // readable for the call, and the exclusive config handle permits sorting.
+    let status = unsafe {
+        ffi::git_config_set_writeorder(
+            config.as_mut_ptr(),
+            levels.as_ptr().cast_mut().cast(),
+            levels.len(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}

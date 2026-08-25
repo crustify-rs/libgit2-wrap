@@ -7166,6 +7166,66 @@
    ]
   },
   {
+   "name": "git_annotated_commit_from_revspec",
+   "defined_in": "src/libgit2/annotated_commit.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a non-null output slot and writes one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "revspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:revspec"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_annotated_commit_id",
    "defined_in": "src/libgit2/annotated_commit.c",
    "ptr_args": [
@@ -7518,6 +7578,160 @@
    ]
   },
   {
+   "name": "git_attr_add_macro",
+   "defined_in": "src/libgit2/attr.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "values",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:values"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_attr_cache_flush",
+   "defined_in": "src/libgit2/attrcache.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_attr_foreach",
+   "defined_in": "src/libgit2/attr.c",
+   "ptr_args": [
+    {
+     "name": "callback",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required function pointer invoked only during the synchronous traversal."
+     }
+    },
+    {
+     "name": "pathname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pathname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback payload borrowed for the synchronous traversal."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_attr_foreach_cb",
    "defined_in": null,
    "ptr_args": [
@@ -7649,6 +7863,85 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrows the output slot; the written pointer remains borrowed from the named owner."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_attr_get_many",
+   "defined_in": "src/libgit2/attr.c",
+   "ptr_args": [
+    {
+     "name": "names",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrows num_attr NUL-terminated name pointers for the call."
+     }
+    },
+    {
+     "name": "pathname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pathname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "values",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
+       }
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:values"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrows a num_attr-element output array; each written string pointer is borrowed from the repository attribute cache."
      }
     }
    ]
@@ -7942,6 +8235,29 @@
    ]
   },
   {
+   "name": "git_blame_hunkcount",
+   "defined_in": "src/libgit2/blame.c",
+   "ptr_args": [
+    {
+     "name": "blame",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blame"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_blame_init_options",
    "defined_in": "src/libgit2/blame.c",
    "ptr_args": [
@@ -7960,6 +8276,337 @@
       "nullable": false,
       "mutable": true,
       "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blame_line_byindex",
+   "defined_in": "src/libgit2/blame.c",
+   "ptr_args": [
+    {
+     "name": "blame",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blame"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:blame"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Returned borrow is tied to the named lifetime source and is not owned."
+    }
+   }
+  },
+  {
+   "name": "git_blame_linecount",
+   "defined_in": "src/libgit2/blame.c",
+   "ptr_args": [
+    {
+     "name": "blame",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blame"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_create_from_buffer",
+   "defined_in": "src/libgit2/blob.c",
+   "ptr_args": [
+    {
+     "name": "buffer",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Length-delimited input buffer borrowed for the call; null is valid when len is zero."
+     }
+    },
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_create_from_disk",
+   "defined_in": "src/libgit2/blob.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_create_from_stream",
+   "defined_in": "src/libgit2/blob.c",
+   "ptr_args": [
+    {
+     "name": "hintpath",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a non-null output slot and writes one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_create_from_stream_commit",
+   "defined_in": "src/libgit2/blob.c",
+   "ptr_args": [
+    {
+     "name": "_stream",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "Consumes and frees the blob write stream on every return path."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_create_from_workdir",
+   "defined_in": "src/libgit2/blob.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
      }
     }
    ]
@@ -8618,6 +9265,29 @@
   },
   {
    "name": "git_branch_delete",
+   "defined_in": "src/libgit2/branch.c",
+   "ptr_args": [
+    {
+     "name": "branch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:branch"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_branch_is_checked_out",
    "defined_in": "src/libgit2/branch.c",
    "ptr_args": [
     {
@@ -11800,6 +12470,63 @@
    }
   },
   {
+   "name": "git_commitbuilder_add_header",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "builder",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "field",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "value",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_config_add_file_ondisk",
    "defined_in": "src/libgit2/config.c",
    "ptr_args": [
@@ -12614,6 +13341,49 @@
    ]
   },
   {
+   "name": "git_config_lock",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:config"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a non-null output slot and writes one newly owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_config_multivar_iterator_new",
    "defined_in": "src/libgit2/config.c",
    "ptr_args": [
@@ -13037,6 +13807,46 @@
    ]
   },
   {
+   "name": "git_config_parse_path",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    },
+    {
+     "name": "value",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_config_set_bool",
    "defined_in": "src/libgit2/config.c",
    "ptr_args": [
@@ -13273,6 +14083,46 @@
       "nullable": false,
       "mutable": false,
       "note": "Transient NUL-terminated input string; libgit2 copies or consumes it before returning."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_set_writeorder",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:config"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "levels",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrows len configuration-level values; null is valid when len is zero."
      }
     }
    ]
@@ -13808,6 +14658,198 @@
    ]
   },
   {
+   "name": "git_credential_sign_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Writes one newly allocated signature byte array whose ownership passes to the SSH caller."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    },
+    {
+     "name": "arg3",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Length-delimited signing input borrowed for this callback invocation."
+     }
+    },
+    {
+     "name": "arg5",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "callback"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg5"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the callback payload pointer slot for this invocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_credential_ssh_interactive_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Counted name bytes borrowed for the callback invocation."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Counted instruction bytes borrowed for the callback invocation."
+     }
+    },
+    {
+     "name": "arg5",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrows num_prompts opaque prompt records for the callback invocation."
+     }
+    },
+    {
+     "name": "arg6",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows num_prompts response records for the callback invocation."
+     }
+    },
+    {
+     "name": "arg7",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "callback"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg7"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the callback payload pointer slot for this invocation."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_describe_commit",
    "defined_in": "src/libgit2/describe.c",
    "ptr_args": [
@@ -13922,6 +14964,52 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_describe_format_options_init",
+   "defined_in": "src/libgit2/describe.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_describe_options_init",
+   "defined_in": "src/libgit2/describe.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
      }
     }
    ]
@@ -15135,6 +16223,29 @@
    ]
   },
   {
+   "name": "git_diff_num_deltas_of_type",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_patchid",
    "defined_in": "src/libgit2/diff.c",
    "ptr_args": [
@@ -15272,6 +16383,80 @@
    ]
   },
   {
+   "name": "git_diff_progress_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "arg3",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque payload borrowed for this callback invocation."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_stats_deletions",
    "defined_in": "src/libgit2/diff_stats.c",
    "ptr_args": [
@@ -15403,6 +16588,50 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_status_char",
+   "defined_in": "src/libgit2/diff_print.c"
+  },
+  {
+   "name": "git_diff_to_buf",
+   "defined_in": "src/libgit2/diff_print.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
      }
     }
    ]
@@ -16002,6 +17231,177 @@
    ]
   },
   {
+   "name": "git_filter_list_apply_to_buffer",
+   "defined_in": "src/libgit2/filter.c",
+   "ptr_args": [
+    {
+     "name": "filters",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "in",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_filter_list_apply_to_file",
+   "defined_in": "src/libgit2/filter.c",
+   "ptr_args": [
+    {
+     "name": "filters",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_filter_list_contains",
+   "defined_in": "src/libgit2/filter.c",
+   "ptr_args": [
+    {
+     "name": "fl",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_filter_list_free",
    "defined_in": "src/libgit2/filter.c",
    "lifetime": {
@@ -16024,6 +17424,137 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and frees one complete git_filter_list; null is explicitly accepted. It runs payload cleanup callbacks, clears the owned entry buffer, then frees the list allocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_filter_list_stream_buffer",
+   "defined_in": "src/libgit2/filter.c",
+   "ptr_args": [
+    {
+     "name": "buffer",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "filters",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "target",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_filter_list_stream_file",
+   "defined_in": "src/libgit2/filter.c",
+   "ptr_args": [
+    {
+     "name": "filters",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "target",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
      }
     }
    ]
@@ -16172,6 +17703,46 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_graph_reachable_from_any",
+   "defined_in": "src/libgit2/graph.c",
+   "ptr_args": [
+    {
+     "name": "commit_id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
      }
     }
    ]
@@ -17870,6 +19441,45 @@
    ]
   },
   {
+   "name": "git_indexer_hash",
+   "defined_in": "src/libgit2/indexer.c",
+   "ptr_args": [
+    {
+     "name": "idx",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:idx"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": null,
+     "array": {
+      "by_val": true
+     },
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:idx"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "The deprecated implementation returns the start of its inline raw SHA-1 checksum array cast to git_oid pointer; callers must treat it as 20 bytes, not as the current larger git_oid layout."
+    }
+   }
+  },
+  {
    "name": "git_indexer_name",
    "defined_in": "src/libgit2/indexer.c",
    "ptr_args": [
@@ -18055,6 +19665,46 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_libgit2_buildinfo",
+   "defined_in": "src/libgit2/settings.c",
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "static"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Returned borrow is tied to the named lifetime source and is not owned."
+    }
+   }
+  },
+  {
+   "name": "git_libgit2_feature_backend",
+   "defined_in": "src/libgit2/libgit2.c",
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "static"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Returned borrow is tied to the named lifetime source and is not owned."
+    }
+   }
   },
   {
    "name": "git_libgit2_features",
@@ -18359,6 +20009,107 @@
       "nullable": false,
       "mutable": true,
       "note": "Non-null borrowed output slot receives one fresh owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_mailmap_resolve",
+   "defined_in": "src/libgit2/mailmap.c",
+   "ptr_args": [
+    {
+     "name": "email",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:email"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "mailmap",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:mailmap"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "real_email",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "arg:mailmap"
+        }
+       }
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:real_email"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Writes a string borrowed from the mailmap or original inputs."
+     }
+    },
+    {
+     "name": "real_name",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "arg:mailmap"
+        }
+       }
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:real_name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Writes a string borrowed from the mailmap or original inputs."
      }
     }
    ]
@@ -20096,6 +21847,63 @@
    ]
   },
   {
+   "name": "git_note_foreach_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "callback"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque payload borrowed for this callback invocation."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_note_free",
    "defined_in": "src/libgit2/notes.c",
    "lifetime": {
@@ -20691,6 +22499,66 @@
    ]
   },
   {
+   "name": "git_object_lookup_bypath",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a non-null output slot and writes one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "treeish",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:treeish"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_object_lookup_prefix",
    "defined_in": "src/libgit2/object.c",
    "ptr_args": [
@@ -20751,6 +22619,45 @@
    ]
   },
   {
+   "name": "git_object_owner",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:obj"
+     },
+     "nullable": false,
+     "mutable": true,
+     "note": "Returned borrow is tied to the named lifetime source and is not owned."
+    }
+   }
+  },
+  {
    "name": "git_object_peel",
    "defined_in": "src/libgit2/object.c",
    "ptr_args": [
@@ -20789,6 +22696,46 @@
       "nullable": false,
       "mutable": true,
       "note": "Required borrowed output slot written with a newly owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_rawcontent_is_valid",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "buf",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "valid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:valid"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
      }
     }
    ]
@@ -22163,6 +24110,46 @@
    ]
   },
   {
+   "name": "git_oid_cpy",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    },
+    {
+     "name": "src",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_oid_equal",
    "defined_in": "src/libgit2/oid.c",
    "ptr_args": [
@@ -22198,6 +24185,166 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_fmt",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    },
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Writable output array of the object ID hexadecimal width; C writes no terminator."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_from_prefix",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    },
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_from_raw",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    },
+    {
+     "name": "raw",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrows exactly the digest width selected by the oid type."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_from_string",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    },
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
      }
     }
    ]
@@ -22243,6 +24390,46 @@
    ]
   },
   {
+   "name": "git_oid_fromstr",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    },
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_oid_fromstrn",
    "defined_in": "src/libgit2/oid.c",
    "ptr_args": [
@@ -22278,6 +24465,46 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_fromstrp",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a writable output slot; the written value is not transferred through the slot."
+     }
+    },
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "call"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
      }
     }
    ]

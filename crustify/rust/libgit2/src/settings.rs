@@ -323,6 +323,7 @@ pub fn git_libgit2_opts(option: Libgit2Option<'_>) -> Result<(), i32> {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
 
@@ -335,5 +336,20 @@ mod tests {
         let mut validate = false;
         git_libgit2_opts(Libgit2Option::GetOwnerValidation(&mut validate)).unwrap();
         assert!(validate);
+    }
+}
+
+/// Wraps: git_libgit2_buildinfo
+/// Returns static build metadata when the requested value was compiled in.
+#[must_use]
+pub fn git_libgit2_buildinfo(info: crate::api::common::GitBuildInfo) -> Option<&'static CStr> {
+    // SAFETY: the checked key is passed by value and C returns null or static
+    // immutable NUL-terminated build metadata.
+    let value = unsafe { ffi::git_libgit2_buildinfo(info.into()) };
+    if value.is_null() {
+        None
+    } else {
+        // SAFETY: non-null results are compile-time strings with static life.
+        Some(unsafe { CStr::from_ptr(value) })
     }
 }

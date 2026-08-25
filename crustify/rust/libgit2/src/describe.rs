@@ -502,3 +502,54 @@ pub fn git_describe_workdir<'repo>(
     // SAFETY: success returns a fresh complete describe result.
     unsafe { DescribeResultOwned::from_raw(out) }.ok_or(-1)
 }
+
+/// Wraps: git_describe_format_options_init
+/// Initializes describe formatting options for `version`.
+pub fn git_describe_format_options_init(
+    options: &mut DescribeFormatOptionsMut<'_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: `options` exclusively exposes complete writable C storage.
+    let status = unsafe { ffi::git_describe_format_options_init(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_describe_options_init
+/// Initializes describe lookup options for `version`.
+pub fn git_describe_options_init(
+    options: &mut DescribeOptionsMut<'_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: `options` exclusively exposes complete writable C storage.
+    let status = unsafe { ffi::git_describe_options_init(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod scheduled_initializer_tests {
+    use super::*;
+    #[test]
+    fn public_initializers_write_current_versions() {
+        let mut format = DescribeFormatOptions::zeroed();
+        // SAFETY: this stack value is live and exclusively borrowed here.
+        let mut format =
+            unsafe { DescribeFormatOptionsMut::from_ptr(core::ptr::addr_of_mut!(format).cast()) }
+                .unwrap();
+        git_describe_format_options_init(&mut format, ffi::GIT_DESCRIBE_FORMAT_OPTIONS_VERSION)
+            .unwrap();
+        assert_eq!(
+            format.as_ref().version(),
+            ffi::GIT_DESCRIBE_FORMAT_OPTIONS_VERSION
+        );
+        let mut options = DescribeOptions::zeroed();
+        // SAFETY: this stack value is live and exclusively borrowed here.
+        let mut options =
+            unsafe { DescribeOptionsMut::from_ptr(core::ptr::addr_of_mut!(options).cast()) }
+                .unwrap();
+        git_describe_options_init(&mut options, ffi::GIT_DESCRIBE_OPTIONS_VERSION).unwrap();
+        assert_eq!(
+            options.as_ref().version(),
+            ffi::GIT_DESCRIBE_OPTIONS_VERSION
+        );
+    }
+}

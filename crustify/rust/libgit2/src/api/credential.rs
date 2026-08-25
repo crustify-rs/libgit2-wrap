@@ -81,6 +81,53 @@ ffibox::define_ctype!(
     crate::ffi::_LIBSSH2_USERAUTH_KBDINT_RESPONSE
 );
 
+/// An opaque run of keyboard-interactive prompts for one callback invocation.
+///
+/// Libgit2 deliberately exposes no prompt layout when libssh2 headers are not
+/// present, so this token reports cardinality without pretending that Rust can
+/// calculate an element stride for the incomplete C type.
+#[derive(Clone, Copy)]
+pub struct Libssh2PromptBatch<'a> {
+    _ptr: core::ptr::NonNull<crate::ffi::_LIBSSH2_USERAUTH_KBDINT_PROMPT>,
+    len: usize,
+    _borrow: core::marker::PhantomData<&'a ()>,
+}
+
+impl Libssh2PromptBatch<'_> {
+    /// Returns the number of opaque prompt records.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns whether there are no prompts.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+/// An exclusive opaque run of keyboard-interactive responses.
+pub struct Libssh2ResponseBatch<'a> {
+    _ptr: core::ptr::NonNull<crate::ffi::_LIBSSH2_USERAUTH_KBDINT_RESPONSE>,
+    len: usize,
+    _borrow: core::marker::PhantomData<&'a mut ()>,
+}
+
+impl Libssh2ResponseBatch<'_> {
+    /// Returns the number of opaque response records.
+    #[must_use]
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns whether there are no responses.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
 #[cfg(test)]
 mod libssh2_type_tests {
     use core::mem::{align_of, size_of};
@@ -142,5 +189,50 @@ mod libssh2_type_tests {
             assert!(Libssh2UserauthKbdintPromptRef::from_ptr(ptr::null_mut()).is_none());
             assert!(Libssh2UserauthKbdintResponseMut::from_ptr(ptr::null_mut()).is_none());
         }
+    }
+}
+
+/// Wraps: git_credential_sign_cb
+/// Safe callable surface for a custom SSH signing operation.
+pub trait GitCredentialSignCallback {
+    /// Signs `data`; the returned bytes are transferred by the eventual C
+    /// trampoline using libgit2's configured allocator.
+    fn sign(&mut self, session: Libssh2SessionMut<'_>, data: &[u8]) -> Result<Vec<u8>, i32>;
+}
+
+impl<F> GitCredentialSignCallback for F
+where
+    F: FnMut(Libssh2SessionMut<'_>, &[u8]) -> Result<Vec<u8>, i32>,
+{
+    fn sign(&mut self, session: Libssh2SessionMut<'_>, data: &[u8]) -> Result<Vec<u8>, i32> {
+        self(session, data)
+    }
+}
+
+/// Wraps: git_credential_ssh_interactive_cb
+/// Safe callable surface for SSH keyboard-interactive prompts.
+pub trait GitCredentialSshInteractiveCallback {
+    /// Fills the response records for the corresponding prompt records.
+    fn respond(
+        &mut self,
+        name: &[u8],
+        instruction: &[u8],
+        prompts: Libssh2PromptBatch<'_>,
+        responses: Libssh2ResponseBatch<'_>,
+    );
+}
+
+impl<F> GitCredentialSshInteractiveCallback for F
+where
+    F: FnMut(&[u8], &[u8], Libssh2PromptBatch<'_>, Libssh2ResponseBatch<'_>),
+{
+    fn respond(
+        &mut self,
+        name: &[u8],
+        instruction: &[u8],
+        prompts: Libssh2PromptBatch<'_>,
+        responses: Libssh2ResponseBatch<'_>,
+    ) {
+        self(name, instruction, prompts, responses)
     }
 }

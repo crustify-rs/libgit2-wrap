@@ -264,3 +264,32 @@ pub fn git_mailmap_resolve_signature(
     // SAFETY: success transfers one complete signature allocation.
     unsafe { GitSignatureOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
 }
+
+/// Wraps: git_mailmap_resolve
+/// Resolves an identity, borrowing replacements from `mailmap` and otherwise
+/// returning the input strings.
+pub fn git_mailmap_resolve<'a>(
+    mailmap: GitMailmapRef<'a>,
+    name: &'a CStr,
+    email: &'a CStr,
+) -> Result<(&'a CStr, &'a CStr), i32> {
+    let (mut real_name, mut real_email) = (core::ptr::null(), core::ptr::null());
+    // SAFETY: outputs are writable; all inputs share `'a`, which bounds both
+    // possible return sources (mailmap entries or the original strings).
+    let status = unsafe {
+        ffi::git_mailmap_resolve(
+            &mut real_name,
+            &mut real_email,
+            mailmap.as_ptr(),
+            name.as_ptr(),
+            email.as_ptr(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    debug_assert!(!real_name.is_null() && !real_email.is_null());
+    // SAFETY: success returns the live input strings or NUL-terminated strings
+    // owned by the live mailmap, all bounded by `'a`.
+    Ok(unsafe { (CStr::from_ptr(real_name), CStr::from_ptr(real_email)) })
+}
