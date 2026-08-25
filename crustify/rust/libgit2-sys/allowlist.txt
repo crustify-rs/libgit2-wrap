@@ -381,3 +381,8 @@
 ^GIT_EMAIL_CREATE_OPTIONS_VERSION$
 ^git_rebase_options$
 ^GIT_REBASE_OPTIONS_VERSION$
+^git_apply_hunk_cb$
+^git_apply_options$
+^GIT_APPLY_OPTIONS_VERSION$
+^git_cherrypick_options$
+^GIT_CHERRYPICK_OPTIONS_VERSION$

@@ -99,6 +99,64 @@
    "fields": []
   },
   {
+   "name": "git_apply_options",
+   "defined_in": "include/git2/apply.h",
+   "_comment_agent": "The options header owns no pointed-to storage. Its nullable payload borrows caller callback state and libgit2 only passes it back during synchronous callback invocation; the function-pointer slots are nullable borrowed code addresses. Safe Rust installation couples all three fields to one exclusive callback-state lifetime.",
+   "fields": [
+    {
+     "name": "delta_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable callback code address, invoked synchronously and never freed."
+     }
+    },
+    {
+     "name": "hunk_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable callback code address, invoked synchronously and never freed."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller state is never freed by libgit2 and may be mutated by the installed callbacks."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_attr_value_t",
    "defined_in": "include/git2/attr.h",
    "_comment_agent": "git_attr_value_t is a fieldless enum with no pointer, lifecycle, refcount, or locking semantics.",
@@ -708,6 +766,12 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_cherrypick_options",
+   "defined_in": "include/git2/cherrypick.h",
+   "_comment_agent": "The aggregate contains only scalar fields and two by-value option headers. It owns no heap storage; the embedded merge and checkout headers borrow any configured strings, objects, arrays, or callback state and require no disposal.",
+   "fields": []
   },
   {
    "name": "git_clone_local_t",
