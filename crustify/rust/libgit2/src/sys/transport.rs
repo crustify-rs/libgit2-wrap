@@ -240,6 +240,8 @@ pub enum GitSmartSubtransportStreamError {
     /// A read callback reported more initialized bytes than the destination
     /// can hold.
     InvalidReadCount(usize),
+    /// The stream installed no write callback, so it is read-only.
+    WriteUnsupported,
 }
 
 impl<'a> GitSmartSubtransportStreamRef<'a> {
@@ -256,6 +258,24 @@ impl<'a> GitSmartSubtransportStreamRef<'a> {
         // is destroyed. The shared view cannot dispatch mutating callbacks.
         unsafe { GitSmartSubtransportRef::from_ptr(subtransport) }
             .expect("a valid smart-subtransport stream has an owner")
+    }
+
+    /// Field: git_smart_subtransport_stream.write
+    /// Reports whether this stream installed a write callback.
+    ///
+    /// The slot is optional. libgit2's own HTTP subtransport installs a write
+    /// callback only for the `POST` services (`http_action` in
+    /// `src/libgit2/transports/http.c`), leaving it null for the two
+    /// reference-advertisement `GET` services; the smart transport in turn
+    /// only ever writes to a stream returned for `GIT_SERVICE_UPLOADPACK` or
+    /// `GIT_SERVICE_RECEIVEPACK`.
+    #[must_use]
+    pub fn supports_write(&self) -> bool {
+        let stream = self.as_ptr();
+        // SAFETY: `stream` comes from this live shared handle; raw-place
+        // projection reads the callback slot without calling through it or
+        // forming a reference to C-visible storage.
+        unsafe { core::ptr::addr_of!((*stream).write).read() }.is_some()
     }
 }
 
@@ -313,13 +333,19 @@ impl GitSmartSubtransportStreamMut<'_> {
 
     /// Field: git_smart_subtransport_stream.write
     /// Writes all bytes in `buffer` synchronously.
+    ///
+    /// Returns [`GitSmartSubtransportStreamError::WriteUnsupported`] for a
+    /// read-only stream; see
+    /// [`GitSmartSubtransportStreamRef::supports_write`] for why the slot is
+    /// optional.
     pub fn write(&mut self, buffer: &[u8]) -> Result<(), GitSmartSubtransportStreamError> {
         let stream = self.as_mut_ptr();
         // SAFETY: this exclusive handle addresses a live, fully constructed
         // stream; raw-place projection reads its initialized callback slot
         // without forming a reference to C-visible storage.
-        let write = unsafe { core::ptr::addr_of!((*stream).write).read() }
-            .expect("a valid smart-subtransport stream has a write callback");
+        let Some(write) = (unsafe { core::ptr::addr_of!((*stream).write).read() }) else {
+            return Err(GitSmartSubtransportStreamError::WriteUnsupported);
+        };
         // SAFETY: `write` is the callback installed for this live stream. The
         // slice supplies exactly `buffer.len()` readable bytes, and this
         // exclusive handle prevents another Rust invocation during the
@@ -601,6 +627,39 @@ mod tests {
             stream.read(&mut buffer),
             Err(GitSmartSubtransportStreamError::InvalidReadCount(5))
         );
+    }
+
+    #[test]
+    fn read_only_stream_reports_and_refuses_writes() {
+        // libgit2's HTTP subtransport leaves `write` null for the two
+        // reference-advertisement services, so the wrapper must report the
+        // gap instead of calling through a null slot.
+        let mut raw = ffi::git_smart_subtransport_stream {
+            subtransport: core::ptr::null_mut(),
+            read: Some(test_read),
+            write: None,
+            free: Some(no_free),
+        };
+        // SAFETY: `raw` remains live and this handle is its only borrow for the
+        // scope; every slot the wrapper reads is initialized.
+        let mut stream = unsafe { GitSmartSubtransportStreamMut::from_ptr(&raw mut raw) }.unwrap();
+        assert!(!stream.as_ref().supports_write());
+        assert_eq!(
+            stream.write(b"xyz"),
+            Err(GitSmartSubtransportStreamError::WriteUnsupported)
+        );
+
+        let mut buffer = [0; 8];
+        assert_eq!(stream.read(&mut buffer), Ok(3));
+    }
+
+    #[test]
+    fn writable_stream_reports_its_write_callback() {
+        let mut raw = raw_stream(test_read);
+        // SAFETY: `raw` remains live and this handle is its only borrow for the
+        // scope; all callback slots are initialized with compatible functions.
+        let stream = unsafe { GitSmartSubtransportStreamMut::from_ptr(&raw mut raw) }.unwrap();
+        assert!(stream.as_ref().supports_write());
     }
 
     #[test]

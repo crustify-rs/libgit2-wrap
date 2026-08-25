@@ -5284,7 +5284,7 @@
   {
    "name": "git_smart_subtransport_stream",
    "defined_in": "include/git2/sys/transport.h",
-   "_comment_agent": "A stream is a polymorphic header embedded at offset zero in a concrete allocation. Its three callbacks are required static code pointers. The stream borrows its owning subtransport, which outlives it, while ownership of the concrete stream allocation is released through the installed free callback.",
+   "_comment_agent": "A stream is a polymorphic header embedded at offset zero in a concrete allocation. `read` and `free` are required static code pointers; `write` is NOT - libgit2's own HTTP subtransport leaves it null for the two reference-advertisement (GET) services, so a safe wrapper must treat the slot as optional rather than assume it. The stream borrows its owning subtransport, which outlives it, while ownership of the concrete stream allocation is released through the installed free callback.",
    "fields": [
     {
      "name": "free",
@@ -5300,7 +5300,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Required static concrete destructor callback. Smart transport invokes it exactly once for an owned stream before freeing the originating subtransport."
+      "note": "Required static concrete destructor callback; installed by every observed constructor. git_smart__reset_stream (smart.c:57) invokes it exactly once for the current stream and clears the slot, and it always runs before git_smart__free releases the originating subtransport (smart.c:426)."
      }
     },
     {
@@ -5317,7 +5317,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Required static synchronous callback installed by every observed stream constructor; smart transport calls it without a null check."
+      "note": "Required static synchronous callback. Installed on every path of every observed stream constructor, including both http.c service methods (http.c:707 and http.c:710); smart.c:29 calls it without a null check."
      }
     },
     {
@@ -5334,7 +5334,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Every published stream constructor stores the originating subtransport. The stream never frees it; read/write callbacks may mutate it, and smart-transport teardown frees the stream before the subtransport."
+      "note": "Every published stream constructor stores the originating subtransport (git.c:165, http.c:704, ssh_exec.c:100, ssh_libssh2.c:225, winhttp.c:1546, tests/libgit2/transport/register.c:148). The stream never frees it; read/write callbacks may mutate it through OWNING_SUBTRANSPORT, and smart-transport teardown frees the stream before the subtransport."
      }
     },
     {
@@ -5349,9 +5349,9 @@
       "borrowed": {
        "lifetime": "static"
       },
-      "nullable": false,
+      "nullable": true,
       "mutable": false,
-      "note": "Required static synchronous callback installed by every observed stream constructor; smart transport calls it without a null check."
+      "note": "OPTIONAL static synchronous callback, corrected from the earlier 'required' judgement. http.c's http_action installs it only for the POST services (http.c:706-711): a stream created for GIT_SERVICE_UPLOADPACK_LS or GIT_SERVICE_RECEIVEPACK_LS is calloc'd and left with a null write slot. That is safe in C because the smart transport writes only to streams obtained for GIT_SERVICE_UPLOADPACK (smart.c:322) or GIT_SERVICE_RECEIVEPACK (git_smart__get_push_stream), plus the non-RPC goodbye flush in git_smart__close (smart.c:395), and never to an advertisement stream. Every other constructor (git.c:167, ssh_exec.c:102, ssh_libssh2.c:227, winhttp.c:1548, register.c:150) does install it, so nullability is a property of the concrete subtransport and the requested service, not of the struct."
      }
     }
    ]
