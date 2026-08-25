@@ -24533,6 +24533,166 @@
    ]
   },
   {
+   "name": "git_oid_ncmp",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "oid_a",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid_a"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared OID read for the comparison."
+     }
+    },
+    {
+     "name": "oid_b",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid_b"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared OID read for the comparison."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_nfmt",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional shared OID; null requests zero-fill."
+     }
+    },
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:str"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-owned writable run of n bytes."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_pathfmt",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required shared OID."
+     }
+    },
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:str"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-owned writable path-format buffer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_shorten_add",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "os",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:os"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusive shortener state mutated during insertion."
+     }
+    },
+    {
+     "name": "text_oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:text_oid"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed 40-digit NUL string; null only queries current length."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_oid_shorten_free",
    "defined_in": "src/libgit2/oid.c",
    "lifetime": {
@@ -24553,8 +24713,106 @@
       "owned": true,
       "borrowed": null,
       "nullable": true,
+      "mutable": true,
+      "note": "Consumes and frees the complete shortener; null is accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_shorten_new",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": true,
+     "borrowed": null,
+     "nullable": true,
+     "mutable": true,
+     "note": "Returns a newly allocated unique shortener or null on allocation failure."
+    }
+   }
+  },
+  {
+   "name": "git_oid_strcmp",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "oid_a",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid_a"
+      },
+      "nullable": false,
       "mutable": false,
-      "note": "Consumes and frees the complete shortener and its owned nodes buffer; NULL is explicitly accepted."
+      "note": "Shared OID input."
+     }
+    },
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:str"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed hexadecimal NUL string."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_streq",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "oid_a",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid_a"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared OID input."
+     }
+    },
+    {
+     "name": "str",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:str"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed hexadecimal NUL string."
      }
     }
    ]
@@ -24612,6 +24870,45 @@
      "nullable": false,
      "mutable": true,
      "note": "Returned borrow is tied to the storage named by its lifetime source and is not owned."
+    }
+   }
+  },
+  {
+   "name": "git_oid_tostr_s",
+   "defined_in": "src/libgit2/oid.c",
+   "ptr_args": [
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared OID formatted during the call."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "static"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Library-owned thread-local string independent of the input OID; reused by later calls on the thread and never freed by the caller."
     }
    }
   },
@@ -26073,6 +26370,45 @@
    ]
   },
   {
+   "name": "git_patch_owner",
+   "defined_in": "src/libgit2/patch.c",
+   "ptr_args": [
+    {
+     "name": "patch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:patch"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared patch input."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:patch"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional patch-associated repository, borrowed from patch state."
+    }
+   }
+  },
+  {
    "name": "git_patch_print",
    "defined_in": "src/libgit2/diff_print.c",
    "ptr_args": [
@@ -27406,6 +27742,84 @@
    ]
   },
   {
+   "name": "git_rebase_onto_id",
+   "defined_in": "src/libgit2/rebase.c",
+   "ptr_args": [
+    {
+     "name": "rebase",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:rebase"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared logical access despite mutable C spelling."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:rebase"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Non-null pointer to embedded onto OID."
+    }
+   }
+  },
+  {
+   "name": "git_rebase_onto_name",
+   "defined_in": "src/libgit2/rebase.c",
+   "ptr_args": [
+    {
+     "name": "rebase",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:rebase"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared logical access despite mutable C spelling."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:rebase"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional rebase-owned onto name."
+    }
+   }
+  },
+  {
    "name": "git_rebase_open",
    "defined_in": "src/libgit2/rebase.c",
    "ptr_args": [
@@ -27674,6 +28088,96 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one owned refcount. NULL is explicitly accepted; the final count frees the backend and git_refdb allocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_refdb_new",
+   "defined_in": "src/libgit2/refdb.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Writable out-slot receives one owned refdb count which retains a repository dependency."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository may be consulted and is retained as a borrowed pointer by the refdb."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_refdb_open",
+   "defined_in": "src/libgit2/refdb.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Writable out-slot receives one owned refdb count which retains a repository dependency."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository may be consulted and is retained as a borrowed pointer by the refdb."
      }
     }
    ]
@@ -28105,6 +28609,175 @@
    ]
   },
   {
+   "name": "git_reference_foreach_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership of each yielded reference transfers to the callback, which must free it."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller payload borrowed for the invocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_foreach_glob",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "callback",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required borrowed callback invoked synchronously."
+     }
+    },
+    {
+     "name": "glob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:glob"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed glob pattern for this traversal."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque payload passed through synchronously."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository borrowed for traversal and lazy refdb access."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_foreach_name",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "callback",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required borrowed callback invoked synchronously."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque payload passed through synchronously."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository borrowed for traversal and lazy refdb access."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_reference_foreach_name_cb",
    "defined_in": null,
    "ptr_args": [
@@ -28429,6 +29102,46 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_list",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "array",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:array"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed output header initialized with caller-owned strings on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository borrowed for traversal."
      }
     }
    ]
@@ -28760,6 +29473,45 @@
    ]
   },
   {
+   "name": "git_reference_owner",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ref"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared reference input."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:ref"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Required repository behind the reference database."
+    }
+   }
+  },
+  {
    "name": "git_reference_peel",
    "defined_in": "src/libgit2/refs.c",
    "ptr_args": [
@@ -28800,6 +29552,46 @@
       "nullable": false,
       "mutable": false,
       "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reference_remove",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed reference name."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository borrowed exclusively for deletion."
      }
     }
    ]
@@ -30386,6 +31178,46 @@
    ]
   },
   {
+   "name": "git_refspec_src_matches_negative",
+   "defined_in": "src/libgit2/refspec.c",
+   "ptr_args": [
+    {
+     "name": "refname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed reference name read during matching."
+     }
+    },
+    {
+     "name": "refspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspec"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Implementation accepts null and reports no match."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_refspec_string",
    "defined_in": "src/libgit2/refspec.c",
    "ptr_args": [
@@ -30591,6 +31423,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_autotag",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared remote input."
      }
     }
    ]
@@ -30825,6 +31680,102 @@
       "nullable": false,
       "mutable": false,
       "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_create_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": {
+         "lifetime": "arg:arg1"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Out-slot receives an owned remote which borrows the repository."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository borrowed by the created remote."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed remote name."
+     }
+    },
+    {
+     "name": "arg3",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg3"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed remote URL."
+     }
+    },
+    {
+     "name": "arg4",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg4"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback payload."
      }
     }
    ]
@@ -31701,6 +32652,45 @@
    ]
   },
   {
+   "name": "git_remote_owner",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared remote input."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:remote"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional repository borrowed from remote state."
+    }
+   }
+  },
+  {
    "name": "git_remote_prune",
    "defined_in": "src/libgit2/remote.c",
    "ptr_args": [
@@ -31736,6 +32726,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Exclusively borrows the remote: pruning lists its advertised refs, walks remote->active_refspecs and deletes remote-tracking references through remote->repo. C rejects a remote with no repository (git_remote_create_detached) with GIT_ASSERT before doing any work. Ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_prune_refs",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared remote input."
      }
     }
    ]
@@ -31929,6 +32942,126 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_set_autotag",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed remote name."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository config is mutated."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_set_instance_pushurl",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Remote string field is replaced."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required URL duplicated before return."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_set_instance_url",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Remote string field is replaced."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required URL duplicated before return."
      }
     }
    ]
@@ -32290,6 +33423,134 @@
    ]
   },
   {
+   "name": "git_repository_config_snapshot",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Out-slot receives an owned snapshot conservatively tied to repository-derived backend state."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository may lazily initialize configuration."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_create_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Out-slot receives a newly owned repository."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed repository path."
+     }
+    },
+    {
+     "name": "arg3",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg3"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback payload."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_detach_head",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository references and HEAD are mutated."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_repository_discover",
    "defined_in": "src/libgit2/repository.c",
    "ptr_args": [
@@ -32544,6 +33805,80 @@
    }
   },
   {
+   "name": "git_repository_hashfile",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "as_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:as_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed filter path."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-owned OID output value."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required borrowed filesystem path."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository filters and object format are consulted."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_repository_head",
    "defined_in": "src/libgit2/repository.c",
    "ptr_args": [
@@ -32612,6 +33947,198 @@
    ]
   },
   {
+   "name": "git_repository_head_detached_for_worktree",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed worktree name."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository borrowed for worktree/reference lookup."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_head_for_worktree",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed worktree name."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Out-slot receives an owned reference dependent on repository state."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository borrowed for worktree/reference lookup."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_head_unborn",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository borrowed for HEAD lookup."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_ident",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "email",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
+       }
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:email"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Out-slot receives optional repository-owned email; inner value may be null."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": null,
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
+       }
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Out-slot receives optional repository-owned name; inner value may be null."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared repository owning returned strings."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_repository_index",
    "defined_in": "src/libgit2/repository.c",
    "ptr_args": [
@@ -32650,6 +34177,49 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_init",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required repository path read during initialization."
+     }
+    },
+    {
+     "name": "repo_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Out-slot receives a newly owned repository."
      }
     }
    ]
@@ -32825,6 +34395,46 @@
       "nullable": false,
       "mutable": false,
       "note": "Reads the required repository worktree flag without mutation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_item_path",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed output buffer header initialized with owned bytes."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared repository used to resolve the item path."
      }
     }
    ]
@@ -33484,6 +35094,63 @@
       "nullable": false,
       "mutable": true,
       "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_set_ident",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "email",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:email"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional email duplicated before return."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional name duplicated before return."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository identity strings are replaced."
      }
     }
    ]
@@ -34652,6 +36319,46 @@
    ]
   },
   {
+   "name": "git_revwalk_pathspec",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "pathspec",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional pathspec is stored without an ownership count and must outlive its installation."
+     }
+    },
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Walker is mutated and retains the pathspec pointer."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_revwalk_push",
    "defined_in": "src/libgit2/revwalk.c",
    "ptr_args": [
@@ -34833,6 +36540,45 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_revwalk_repository",
+   "defined_in": "src/libgit2/revwalk.c",
+   "ptr_args": [
+    {
+     "name": "walk",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:walk"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared logical walker access."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:walk"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Required repository retained by walker lifetime."
+    }
+   }
   },
   {
    "name": "git_revwalk_reset",
@@ -35822,6 +37568,63 @@
    ]
   },
   {
+   "name": "git_status_foreach",
+   "defined_in": "src/libgit2/status.c",
+   "ptr_args": [
+    {
+     "name": "cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cb"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required callback invoked synchronously."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque payload passed through synchronously."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository borrowed for status traversal."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_status_init_options",
    "defined_in": "src/libgit2/status.c",
    "ptr_args": [
@@ -36450,6 +38253,29 @@
    ]
   },
   {
+   "name": "git_submodule_fetch_recurse_submodules",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "submodule",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:submodule"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Read-only field access despite mutable C spelling."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_submodule_foreach",
    "defined_in": "src/libgit2/submodule.c",
    "ptr_args": [
@@ -36658,6 +38484,46 @@
    ]
   },
   {
+   "name": "git_submodule_location",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "location",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:location"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-owned scalar output."
+     }
+    },
+    {
+     "name": "sm",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:sm"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Submodule borrowed for status lookup."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_submodule_lookup",
    "defined_in": "src/libgit2/submodule.c",
    "ptr_args": [
@@ -36800,6 +38666,45 @@
    ]
   },
   {
+   "name": "git_submodule_owner",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "submodule",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:submodule"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Shared logical submodule access."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:submodule"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Required parent repository borrowed from submodule."
+    }
+   }
+  },
+  {
    "name": "git_submodule_path",
    "defined_in": "src/libgit2/submodule.c",
    "ptr_args": [
@@ -36905,6 +38810,63 @@
    ]
   },
   {
+   "name": "git_submodule_resolve_url",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed output buffer initialized with owned bytes."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository config and paths are consulted."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required borrowed URL."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_submodule_set_branch",
    "defined_in": "src/libgit2/submodule.c",
    "ptr_args": [
@@ -36957,6 +38919,46 @@
       "nullable": false,
       "mutable": true,
       "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_set_fetch_recurse_submodules",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed submodule name."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository configuration is mutated."
      }
     }
    ]
@@ -37531,6 +39533,63 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_tag_create_from_buffer",
+   "defined_in": "src/libgit2/tag.c",
+   "ptr_args": [
+    {
+     "name": "buffer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:buffer"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required serialized tag read during the call."
+     }
+    },
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-owned OID output."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository object database and references are mutated."
      }
     }
    ]

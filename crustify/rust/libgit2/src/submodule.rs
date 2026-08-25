@@ -6,9 +6,13 @@ use core::ptr::NonNull;
 
 use ffibox::{CBox, CCloned};
 
-use crate::api::submodule::{GitSubmoduleCallback, GitSubmoduleUpdateOptionsRef};
+use crate::api::buffer::GitBuf;
+use crate::api::submodule::{
+    GitSubmoduleCallback, GitSubmoduleStatusFlags, GitSubmoduleUpdateOptionsRef,
+};
 use crate::api::types::{
-    GitSubmoduleIgnore, GitSubmoduleUpdate, InvalidGitSubmoduleIgnore, InvalidGitSubmoduleUpdate,
+    GitSubmoduleIgnore, GitSubmoduleRecurse, GitSubmoduleUpdate, InvalidGitSubmoduleIgnore,
+    InvalidGitSubmoduleRecurse, InvalidGitSubmoduleUpdate,
 };
 use crate::ffi;
 use crate::oid::OidRef;
@@ -754,4 +758,87 @@ mod tests {
         ) -> Result<(), i32> = git_submodule_update;
         let _ = (clone, clone_without_output, update);
     }
+}
+
+/// Wraps: git_submodule_fetch_recurse_submodules
+/// Returns the submodule's configured fetch-recursion policy.
+pub fn git_submodule_fetch_recurse_submodules(
+    submodule: GitSubmoduleRef<'_>,
+) -> Result<GitSubmoduleRecurse, InvalidGitSubmoduleRecurse> {
+    // SAFETY: the implementation only reads the live submodule field and
+    // retains no pointer; the mutable C spelling is historical.
+    GitSubmoduleRecurse::try_from(unsafe {
+        ffi::git_submodule_fetch_recurse_submodules(submodule.as_ptr().cast_mut())
+    })
+}
+
+/// Wraps: git_submodule_location
+/// Returns the checked flags describing where submodule metadata is present.
+pub fn git_submodule_location(
+    submodule: &mut GitSubmoduleMut<'_>,
+) -> Result<GitSubmoduleStatusFlags, i32> {
+    let mut location = 0;
+    // SAFETY: `location` is writable and the submodule is exclusive for the
+    // status lookup and any cache activity it performs.
+    let status = unsafe { ffi::git_submodule_location(&mut location, submodule.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    GitSubmoduleStatusFlags::try_from(location).map_err(|_| ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_submodule_owner
+/// Borrows the parent repository of a submodule.
+#[must_use]
+pub fn git_submodule_owner<'a>(submodule: GitSubmoduleRef<'a>) -> GitRepositoryRef<'a> {
+    // SAFETY: the submodule is live and C returns its required parent pointer.
+    let repository = unsafe { ffi::git_submodule_owner(submodule.as_ptr().cast_mut()) };
+    // SAFETY: a valid submodule's parent remains live for its borrow.
+    unsafe { GitRepositoryRef::from_ptr(repository) }
+        .expect("a valid submodule has a repository owner")
+}
+
+/// Wraps: git_submodule_resolve_url
+/// Resolves a submodule URL relative to its parent repository.
+pub fn git_submodule_resolve_url(
+    repository: &mut GitRepositoryMut<'_>,
+    url: &CStr,
+) -> Result<ffibox::CVal<GitBuf>, i32> {
+    let mut resolved = GitBuf::new();
+    let status = {
+        let mut output = resolved.as_mut();
+        // SAFETY: `output` is an empty exclusive buffer, the repository is
+        // exclusive for config lookup, and `url` is a live C string.
+        unsafe {
+            ffi::git_submodule_resolve_url(
+                output.as_mut_ptr(),
+                repository.as_mut_ptr(),
+                url.as_ptr(),
+            )
+        }
+    };
+    if status == 0 {
+        Ok(resolved)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_submodule_set_fetch_recurse_submodules
+/// Stores the fetch-recursion policy for a named submodule.
+pub fn git_submodule_set_fetch_recurse_submodules(
+    repository: &mut GitRepositoryMut<'_>,
+    name: &CStr,
+    recurse: GitSubmoduleRecurse,
+) -> Result<(), i32> {
+    // SAFETY: the repository is exclusive, `name` is live, and the checked
+    // enum converts to a published C value. No pointer is retained.
+    let status = unsafe {
+        ffi::git_submodule_set_fetch_recurse_submodules(
+            repository.as_mut_ptr(),
+            name.as_ptr(),
+            recurse.into(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

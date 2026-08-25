@@ -609,3 +609,29 @@ mod scheduled_constructor_tests {
         assert_eq!(options.as_ref().version(), ffi::GIT_REBASE_OPTIONS_VERSION);
     }
 }
+
+/// Wraps: git_rebase_onto_id
+/// Borrows the object ID of the rebase's `onto` commit.
+#[must_use]
+pub fn git_rebase_onto_id<'a>(rebase: GitRebaseRef<'a>) -> OidRef<'a> {
+    // SAFETY: the rebase is live and C returns its embedded initialized OID.
+    let oid = unsafe { ffi::git_rebase_onto_id(rebase.as_ptr().cast_mut()) };
+    // SAFETY: the C function returns the non-null address of the embedded
+    // `onto_id`, which remains live for the rebase borrow.
+    unsafe { OidRef::from_ptr(oid.cast_mut()) }.expect("an embedded OID is non-null")
+}
+
+/// Wraps: git_rebase_onto_name
+/// Borrows the optional name of the rebase's `onto` reference.
+#[must_use]
+pub fn git_rebase_onto_name<'a>(rebase: GitRebaseRef<'a>) -> Option<&'a core::ffi::CStr> {
+    // SAFETY: the rebase is live and C returns null or a rebase-owned string.
+    let name = unsafe { ffi::git_rebase_onto_name(rebase.as_ptr().cast_mut()) };
+    if name.is_null() {
+        None
+    } else {
+        // SAFETY: a non-null result is NUL-terminated and owned by the rebase,
+        // so it remains live and read-only for the handle borrow.
+        Some(unsafe { core::ffi::CStr::from_ptr(name) })
+    }
+}

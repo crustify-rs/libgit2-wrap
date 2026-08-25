@@ -13,6 +13,7 @@ use crate::ffi;
 use crate::remote::GitRemoteWithRepository;
 use crate::repository::{GitRepositoryMut, GitRepositoryOwned};
 
+/// Wraps: git_repository_create_cb
 /// Safe implementation of a repository-creation callback used by clone.
 pub trait GitRepositoryCreateCallback {
     /// Creates and returns the repository at `path`.
@@ -28,6 +29,7 @@ where
     }
 }
 
+/// Wraps: git_remote_create_cb
 /// Safe implementation of a remote-creation callback used by clone.
 pub trait GitRemoteCreateCallback {
     /// Creates and returns the remote named `name` for `repository`.

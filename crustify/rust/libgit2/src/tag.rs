@@ -384,3 +384,24 @@ mod tests {
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
+
+/// Wraps: git_tag_create_from_buffer
+/// Validates and writes an annotated tag from its complete serialized form.
+pub fn git_tag_create_from_buffer(
+    repository: &mut GitRepositoryMut<'_>,
+    buffer: &CStr,
+    force: bool,
+) -> Result<Oid, i32> {
+    let mut oid = Oid::zeroed();
+    // SAFETY: `oid` is writable, the repository is exclusive for object and
+    // reference updates, and `buffer` is a live NUL-terminated serialization.
+    let status = unsafe {
+        ffi::git_tag_create_from_buffer(
+            core::ptr::addr_of_mut!(oid).cast(),
+            repository.as_mut_ptr(),
+            buffer.as_ptr(),
+            i32::from(force),
+        )
+    };
+    if status == 0 { Ok(oid) } else { Err(status) }
+}

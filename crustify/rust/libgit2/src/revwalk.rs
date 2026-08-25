@@ -9,6 +9,7 @@ use crate::api::revwalk::GitRevwalkHideCallback;
 pub use crate::api::revwalk::GitSortFlags;
 use crate::ffi;
 use crate::oid::{Oid, OidRef};
+use crate::pathspec::GitPathspecRef;
 use crate::repository::{GitRepositoryMut, GitRepositoryRef};
 
 ffibox::define_ctype!(
@@ -288,4 +289,35 @@ mod tests {
         // SAFETY: balances this test's successful initialization.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
+}
+
+/// Wraps: git_revwalk_pathspec
+/// Installs a compiled pathspec used by subsequent traversal.
+///
+/// # Safety
+///
+/// `pathspec` must remain live and unmodified until `walk` is reset, freed, or
+/// assigned another pathspec. Libgit2 stores the pointer without acquiring an
+/// ownership count, and a borrowed walker handle cannot express that retained
+/// lifetime in its type.
+pub unsafe fn git_revwalk_pathspec(
+    walk: &mut GitRevwalkMut<'_>,
+    pathspec: GitPathspecRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: the caller provides the retained lifetime contract; both typed
+    // handles are live for the call and the walker is exclusive.
+    let status =
+        unsafe { ffi::git_revwalk_pathspec(walk.as_mut_ptr(), pathspec.as_ptr().cast_mut()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_revwalk_repository
+/// Borrows the repository retained by a revision walker.
+#[must_use]
+pub fn git_revwalk_repository<'a>(walk: GitRevwalkRef<'a>) -> GitRepositoryRef<'a> {
+    // SAFETY: `walk` is live and C returns its required non-null repository.
+    let repository = unsafe { ffi::git_revwalk_repository(walk.as_ptr().cast_mut()) };
+    // SAFETY: the repository is required to remain live for the walker.
+    unsafe { GitRepositoryRef::from_ptr(repository) }
+        .expect("a valid revision walker has a repository")
 }

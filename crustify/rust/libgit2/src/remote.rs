@@ -15,7 +15,7 @@ use crate::ffi;
 use crate::indexer::IndexerProgressRef;
 use crate::oid::{InvalidOidType, OidRef, OidType};
 use crate::refspec::GitRefspecRef;
-use crate::repository::GitRepositoryMut;
+use crate::repository::{GitRepositoryMut, GitRepositoryRef};
 use crate::strarray::GitStrArray;
 use crate::strarray::GitStrArrayRef;
 use crate::util::net::Direction;
@@ -1677,4 +1677,67 @@ mod scheduled_transfer_repository_tests {
         );
         assert!(!git_remote_connected(remote.as_ref()));
     }
+}
+
+/// Wraps: git_remote_autotag
+/// Returns the remote's tag-download policy.
+pub fn git_remote_autotag(
+    remote: GitRemoteRef<'_>,
+) -> Result<GitRemoteAutotagOption, ffi::git_remote_autotag_option_t> {
+    // SAFETY: `remote` is a live shared input and the getter retains nothing.
+    GitRemoteAutotagOption::try_from(unsafe { ffi::git_remote_autotag(remote.as_ptr()) })
+}
+
+/// Wraps: git_remote_owner
+/// Borrows the repository associated with a remote, if any.
+#[must_use]
+pub fn git_remote_owner<'a>(remote: GitRemoteRef<'a>) -> Option<GitRepositoryRef<'a>> {
+    // SAFETY: the remote is live and C returns null or its borrowed repository.
+    let repository = unsafe { ffi::git_remote_owner(remote.as_ptr()) };
+    // SAFETY: a non-null repository remains live for the remote borrow.
+    unsafe { GitRepositoryRef::from_ptr(repository) }
+}
+
+/// Wraps: git_remote_prune_refs
+/// Reports whether fetches through this remote prune stale references.
+#[must_use]
+pub fn git_remote_prune_refs(remote: GitRemoteRef<'_>) -> bool {
+    // SAFETY: `remote` is live and shared and the getter retains nothing.
+    unsafe { ffi::git_remote_prune_refs(remote.as_ptr()) != 0 }
+}
+
+/// Wraps: git_remote_set_autotag
+/// Stores the tag-download policy for a named repository remote.
+pub fn git_remote_set_autotag(
+    repository: &mut GitRepositoryMut<'_>,
+    remote_name: &CStr,
+    option: GitRemoteAutotagOption,
+) -> Result<(), i32> {
+    // SAFETY: the repository is exclusive, the name is a live C string, and
+    // the checked enum is a published C value. No input pointer is retained.
+    let status = unsafe {
+        ffi::git_remote_set_autotag(repository.as_mut_ptr(), remote_name.as_ptr(), option.into())
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_remote_set_instance_pushurl
+/// Replaces this remote instance's push URL with a copied string.
+pub fn git_remote_set_instance_pushurl(
+    remote: &mut GitRemoteMut<'_>,
+    url: &CStr,
+) -> Result<(), i32> {
+    // SAFETY: the remote is exclusive and `url` is live; C duplicates the
+    // string before returning and retains no borrowed pointer.
+    let status = unsafe { ffi::git_remote_set_instance_pushurl(remote.as_mut_ptr(), url.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_remote_set_instance_url
+/// Replaces this remote instance's fetch URL with a copied string.
+pub fn git_remote_set_instance_url(remote: &mut GitRemoteMut<'_>, url: &CStr) -> Result<(), i32> {
+    // SAFETY: the remote is exclusive and `url` is live; C duplicates the
+    // string before returning and retains no borrowed pointer.
+    let status = unsafe { ffi::git_remote_set_instance_url(remote.as_mut_ptr(), url.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

@@ -407,6 +407,7 @@ ffibox::define_ctype!(
 /// An exclusively owned object-ID prefix shortener.
 pub type GitOidShortenOwned = ffibox::CBox<GitOidShorten>;
 
+/// Wraps: git_oid_shorten_free
 // SAFETY: `git_oid_shorten_free` is the public destructor for a complete
 // shortener allocation. It releases the owned trie-node buffer and then the
 // header, accepts null although `CBox` supplies non-null, and is invoked once
@@ -466,6 +467,162 @@ mod shorten_tests {
             assert!(GitOidShortenMut::from_ptr(ptr::null_mut()).is_none());
             assert!(GitOidShortenOwned::from_raw(ptr::null_mut()).is_none());
         }
+    }
+
+    #[test]
+    fn scheduled_oid_format_compare_and_shortener_wrappers_are_typed() {
+        // SAFETY: process-global initialization is refcounted and balanced
+        // after the shortener and TLS formatting operations are complete.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        let raw = [0xabu8; 20];
+        let mut oid = git_oid_fromraw(&raw).unwrap();
+        // SAFETY: `oid` is an initialized layout-compatible local value and
+        // remains live and shared throughout this test's formatting calls.
+        let oid = unsafe { OidRef::from_ptr(addr_of_mut!(oid).cast()) }.unwrap();
+
+        let mut hex = [0; 40];
+        git_oid_nfmt(&mut hex, Some(oid)).unwrap();
+        assert_eq!(&hex, b"abababababababababababababababababababab");
+        assert!(git_oid_ncmp(oid, oid, 40));
+        assert!(git_oid_streq(
+            oid,
+            c"abababababababababababababababababababab"
+        ));
+        assert_eq!(
+            git_oid_strcmp(oid, c"abababababababababababababababababababab"),
+            0
+        );
+        assert_eq!(
+            git_oid_tostr_s(oid).as_deref(),
+            Some("abababababababababababababababababababab")
+        );
+
+        let mut path = [0; 41];
+        assert_eq!(git_oid_pathfmt(&mut path, oid), Ok(41));
+        assert_eq!(path[2], b'/');
+        assert_eq!(
+            git_oid_pathfmt(&mut path[..40], oid),
+            Err(ffi::git_error_code_GIT_EBUFS)
+        );
+
+        let mut shortener = git_oid_shorten_new(4).expect("shortener allocation");
+        assert_eq!(
+            git_oid_shorten_add(
+                &mut shortener.as_mut(),
+                c"0000000000000000000000000000000000000000"
+            ),
+            Ok(4)
+        );
+        assert_eq!(
+            git_oid_shorten_add(&mut shortener.as_mut(), c"too-short"),
+            Err(ffi::git_error_code_GIT_EINVALID)
+        );
+        drop(shortener);
+
+        // SAFETY: balances the successful initialization above after every
+        // libgit2 allocation owned by the test has been released.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+}
+
+/// Wraps: git_oid_ncmp
+/// Reports whether the first `hex_digits` hexadecimal digits match.
+#[must_use]
+pub fn git_oid_ncmp(left: OidRef<'_>, right: OidRef<'_>, hex_digits: usize) -> bool {
+    // SAFETY: both object IDs are live shared inputs and the C implementation
+    // clamps the requested digit count to its maximum inline digest width.
+    unsafe { ffi::git_oid_ncmp(left.as_ptr(), right.as_ptr(), hex_digits) == 0 }
+}
+
+/// Wraps: git_oid_nfmt
+/// Writes `out.len()` hexadecimal digits, zero-filling bytes beyond the OID's
+/// hexadecimal width. `None` writes an all-zero run, matching the C API.
+pub fn git_oid_nfmt(out: &mut [u8], oid: Option<OidRef<'_>>) -> Result<(), i32> {
+    let oid = oid.map_or(core::ptr::null(), |oid| oid.as_ptr());
+    // SAFETY: `out` is a writable run of exactly the supplied length and
+    // `oid` is null or a live shared object ID. Neither pointer is retained.
+    let status = unsafe { ffi::git_oid_nfmt(out.as_mut_ptr().cast(), out.len(), oid) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_oid_pathfmt
+/// Writes the loose-object path (`aa/...`) and returns its byte length.
+pub fn git_oid_pathfmt(out: &mut [u8], oid: OidRef<'_>) -> Result<usize, i32> {
+    let len = oid
+        .oid_type()
+        .map_err(|_| ffi::git_error_code_GIT_EINVALID)?
+        .hex_len()
+        + 1;
+    if out.len() < len {
+        return Err(ffi::git_error_code_GIT_EBUFS);
+    }
+    // SAFETY: the checked output run provides the algorithm-specific number
+    // of bytes written by C and `oid` is a live shared input.
+    let status = unsafe { ffi::git_oid_pathfmt(out.as_mut_ptr().cast(), oid.as_ptr()) };
+    if status == 0 { Ok(len) } else { Err(status) }
+}
+
+/// Wraps: git_oid_shorten_add
+/// Adds one complete 40-digit SHA-1 object ID and returns the unique prefix
+/// length calculated so far.
+pub fn git_oid_shorten_add(
+    shortener: &mut GitOidShortenMut<'_>,
+    text_oid: &core::ffi::CStr,
+) -> Result<usize, i32> {
+    if text_oid.to_bytes().len() != 40 {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    // SAFETY: the exclusive shortener is live and `text_oid` provides all 40
+    // readable digits required by the C loop. The input is not retained.
+    let result = unsafe { ffi::git_oid_shorten_add(shortener.as_mut_ptr(), text_oid.as_ptr()) };
+    usize::try_from(result).map_err(|_| result)
+}
+
+/// Wraps: git_oid_shorten_new
+/// Allocates an empty object-ID prefix shortener.
+#[must_use]
+pub fn git_oid_shorten_new(min_length: usize) -> Option<GitOidShortenOwned> {
+    // SAFETY: a non-null result transfers unique ownership of a fully
+    // initialized shortener allocation to the caller.
+    unsafe { GitOidShortenOwned::from_raw(ffi::git_oid_shorten_new(min_length)) }
+}
+
+/// Wraps: git_oid_strcmp
+/// Compares an object ID with a hexadecimal C string.
+#[must_use]
+pub fn git_oid_strcmp(oid: OidRef<'_>, text: &core::ffi::CStr) -> i32 {
+    // SAFETY: both inputs are live and shared for the synchronous comparison.
+    unsafe { ffi::git_oid_strcmp(oid.as_ptr(), text.as_ptr()) }
+}
+
+/// Wraps: git_oid_streq
+/// Reports whether an object ID equals a hexadecimal C string.
+#[must_use]
+pub fn git_oid_streq(oid: OidRef<'_>, text: &core::ffi::CStr) -> bool {
+    // SAFETY: both inputs are live and shared for the synchronous comparison.
+    unsafe { ffi::git_oid_streq(oid.as_ptr(), text.as_ptr()) == 0 }
+}
+
+/// Wraps: git_oid_tostr_s
+/// Copies the library's thread-local formatting buffer into Rust-owned text.
+#[must_use]
+pub fn git_oid_tostr_s(oid: OidRef<'_>) -> Option<String> {
+    // SAFETY: `oid` is live for the call. A non-null return is a
+    // NUL-terminated library buffer valid until a later call on this thread;
+    // it is copied before this function returns, so no shared reference to
+    // mutable TLS storage escapes.
+    let text = unsafe { ffi::git_oid_tostr_s(oid.as_ptr()) };
+    if text.is_null() {
+        None
+    } else {
+        // SAFETY: the non-null result is documented as a NUL-terminated C
+        // string and remains valid while this immediate copy is made.
+        Some(
+            unsafe { core::ffi::CStr::from_ptr(text) }
+                .to_string_lossy()
+                .into_owned(),
+        )
     }
 }
 

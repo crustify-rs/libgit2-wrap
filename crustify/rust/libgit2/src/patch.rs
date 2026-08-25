@@ -7,6 +7,7 @@ use ffibox::{CBox, CDropped};
 use crate::api::diff::DiffDeltaRef;
 use crate::diff::{DiffHunkRef, DiffLineRef, DiffMut};
 use crate::ffi;
+use crate::repository::GitRepositoryRef;
 
 ffibox::define_ctype!(
     /// Wraps: git_patch
@@ -320,4 +321,15 @@ mod delta_accessor_tests {
     fn delta_borrow_is_tied_to_the_patch() {
         let _: for<'a> fn(GitPatchRef<'a>) -> DiffDeltaRef<'a> = git_patch_get_delta;
     }
+}
+
+/// Wraps: git_patch_owner
+/// Borrows the repository associated with a patch, if it has one.
+#[must_use]
+pub fn git_patch_owner<'a>(patch: GitPatchRef<'a>) -> Option<GitRepositoryRef<'a>> {
+    // SAFETY: `patch` is live and the returned repository pointer is borrowed
+    // from it. The getter retains nothing and may return null.
+    let owner = unsafe { ffi::git_patch_owner(patch.as_ptr()) };
+    // SAFETY: a non-null owner remains live for the patch borrow.
+    unsafe { GitRepositoryRef::from_ptr(owner) }
 }

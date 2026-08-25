@@ -7,15 +7,16 @@ use core::ptr::{NonNull, addr_of, addr_of_mut};
 use ffibox::{CBox, CVal, CValued};
 
 use crate::annotated_commit::AnnotatedCommitRef;
-use crate::api::buffer::GitBufMut;
+use crate::api::buffer::{GitBuf, GitBufMut};
 pub use crate::api::repository::{
-    GitRepositoryInitFlags, GitRepositoryOpenFlags, GitRepositoryState,
+    GitRepositoryInitFlags, GitRepositoryItem, GitRepositoryOpenFlags, GitRepositoryState,
 };
+use crate::api::types::GitObjectType;
 use crate::config::{GitConfigMut, GitConfigOwned, GitConfigRef};
 use crate::ffi;
 use crate::index::{GitIndex, GitIndexOwned, GitIndexRef};
 use crate::odb::{GitOdb, GitOdbOwned, GitOdbRef};
-use crate::oid::{InvalidOidType, OidRef, OidType};
+use crate::oid::{InvalidOidType, Oid, OidRef, OidType};
 use crate::refdb::{GitRefdbMut, GitRefdbOwned, GitRefdbRef, GitRefdbType, InvalidGitRefdbType};
 use crate::refs::{GitReferenceTetheredOwned, adopt_reference};
 use crate::worktree::GitWorktreeRef;
@@ -216,9 +217,8 @@ unsafe fn optional_borrowed_string<'a>(value: *const c_char) -> Option<&'a CStr>
     if value.is_null() {
         None
     } else {
-        // SAFETY: callers obtain this helper from getters on valid options
-        // handles, whose non-null string fields remain live and NUL-terminated
-        // for the handle lifetime.
+        // SAFETY: callers guarantee that non-null values remain live and
+        // NUL-terminated for the requested borrow lifetime.
         Some(unsafe { CStr::from_ptr(value) })
     }
 }
@@ -479,6 +479,13 @@ pub struct GitRepositoryRefdbOwned<'repo> {
 }
 
 impl GitRepositoryRefdbOwned<'_> {
+    pub(crate) fn from_inner(inner: GitRefdbOwned) -> Self {
+        Self {
+            inner,
+            _repository: PhantomData,
+        }
+    }
+
     /// Borrows the reference database.
     #[must_use]
     pub fn as_ref(&self) -> GitRefdbRef<'_> {
@@ -1296,6 +1303,273 @@ mod scheduled_symbol_tests {
         let _ = std::fs::remove_dir_all(&directory);
 
         // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+}
+
+/// Wraps: git_repository_config_snapshot
+/// Creates an immutable snapshot of the repository configuration.
+pub fn git_repository_config_snapshot<'repo>(
+    repository: &'repo mut GitRepositoryMut<'_>,
+) -> Result<GitRepositoryConfigOwned<'repo>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: `output` is writable and the exclusive repository permits lazy
+    // config initialization. Success transfers one owned config snapshot.
+    let status =
+        unsafe { ffi::git_repository_config_snapshot(&mut output, repository.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one non-null independently releasable config.
+    let inner = unsafe { GitConfigOwned::from_raw(output) }
+        .expect("git_repository_config_snapshot succeeded without a config");
+    Ok(GitRepositoryConfigOwned {
+        inner,
+        _repository: PhantomData,
+    })
+}
+
+/// Wraps: git_repository_detach_head
+/// Rewrites `HEAD` as a direct reference to its current commit.
+pub fn git_repository_detach_head(repository: &mut GitRepositoryMut<'_>) -> Result<(), i32> {
+    // SAFETY: the repository is exclusively available for the mutation and no
+    // pointer derived from the handle is retained.
+    let status = unsafe { ffi::git_repository_detach_head(repository.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_hashfile
+/// Hashes a file as a Git object, optionally applying filters for `as_path`.
+pub fn git_repository_hashfile(
+    repository: &mut GitRepositoryMut<'_>,
+    path: &CStr,
+    object_type: GitObjectType,
+    as_path: Option<&CStr>,
+) -> Result<Oid, i32> {
+    let mut oid = Oid::zeroed();
+    let as_path = as_path.map_or(core::ptr::null(), CStr::as_ptr);
+    // SAFETY: `oid` is writable, the repository is exclusive, and both string
+    // pointers are null or live for the call. No borrowed pointer is retained.
+    let status = unsafe {
+        ffi::git_repository_hashfile(
+            core::ptr::addr_of_mut!(oid).cast(),
+            repository.as_mut_ptr(),
+            path.as_ptr(),
+            object_type.into(),
+            as_path,
+        )
+    };
+    if status == 0 { Ok(oid) } else { Err(status) }
+}
+
+/// Wraps: git_repository_head_detached_for_worktree
+/// Reports whether a linked worktree's `HEAD` is detached.
+pub fn git_repository_head_detached_for_worktree(
+    repository: &mut GitRepositoryMut<'_>,
+    name: &CStr,
+) -> Result<bool, i32> {
+    // SAFETY: the repository is exclusive for lazy lookups and `name` is a
+    // live C string retained only for this call.
+    let status = unsafe {
+        ffi::git_repository_head_detached_for_worktree(repository.as_mut_ptr(), name.as_ptr())
+    };
+    match status {
+        0 => Ok(false),
+        1 => Ok(true),
+        error => Err(error),
+    }
+}
+
+/// Wraps: git_repository_head_for_worktree
+/// Looks up a linked worktree's resolved `HEAD` reference.
+pub fn git_repository_head_for_worktree<'repo>(
+    repository: &'repo mut GitRepositoryMut<'_>,
+    name: &CStr,
+) -> Result<GitReferenceTetheredOwned<'repo>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: `output` is writable, the repository is exclusive for lookup,
+    // and `name` is live. Success transfers one owned reference.
+    let status = unsafe {
+        ffi::git_repository_head_for_worktree(&mut output, repository.as_mut_ptr(), name.as_ptr())
+    };
+    // SAFETY: null maps to no owner; a non-null pointer on success transfers
+    // one reference count whose repository is tied to `'repo` below.
+    let reference = unsafe { crate::refs::GitReferenceOwned::from_raw(output) };
+    adopt_reference(status, reference)
+}
+
+/// Wraps: git_repository_head_unborn
+/// Reports whether `HEAD` points to a branch with no commit yet.
+pub fn git_repository_head_unborn(repository: &mut GitRepositoryMut<'_>) -> Result<bool, i32> {
+    // SAFETY: the repository is exclusive for lazy reference lookup and the
+    // call retains no pointer.
+    let status = unsafe { ffi::git_repository_head_unborn(repository.as_mut_ptr()) };
+    match status {
+        0 => Ok(false),
+        1 => Ok(true),
+        error => Err(error),
+    }
+}
+
+/// Wraps: git_repository_ident
+/// Borrows the optional identity override stored on a repository.
+#[must_use]
+pub fn git_repository_ident<'repo>(
+    repository: GitRepositoryRef<'repo>,
+) -> (Option<&'repo CStr>, Option<&'repo CStr>) {
+    let mut name = core::ptr::null();
+    let mut email = core::ptr::null();
+    // SAFETY: both output slots are writable and the shared repository remains
+    // live for the returned borrows. The function always initializes them.
+    let status = unsafe { ffi::git_repository_ident(&mut name, &mut email, repository.as_ptr()) };
+    debug_assert_eq!(status, 0);
+    // SAFETY: each non-null output is a repository-owned NUL-terminated
+    // string that remains live for `'repo`.
+    let name = unsafe { optional_borrowed_string(name) };
+    // SAFETY: as above, for the independently optional email output.
+    let email = unsafe { optional_borrowed_string(email) };
+    (name, email)
+}
+
+/// Wraps: git_repository_init
+/// Initializes a repository at `path` with the legacy default options.
+pub fn git_repository_init(path: &CStr, bare: bool) -> Result<GitRepositoryOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: `output` is writable and `path` is a live C string. Success
+    // transfers a complete independently owned repository allocation.
+    let status =
+        unsafe { ffi::git_repository_init(&mut output, path.as_ptr(), c_uint::from(bare)) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: a successful initialization returns one non-null owner.
+    unsafe { GitRepositoryOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_repository_item_path
+/// Resolves a selected repository-layout path into an owned buffer.
+pub fn git_repository_item_path(
+    repository: GitRepositoryRef<'_>,
+    item: GitRepositoryItem,
+) -> Result<CVal<GitBuf>, i32> {
+    let mut path = GitBuf::new();
+    let status = {
+        let mut output = path.as_mut();
+        // SAFETY: `output` is an empty exclusive buffer header and the shared
+        // repository is live. Success initializes an owned byte allocation.
+        unsafe {
+            ffi::git_repository_item_path(output.as_mut_ptr(), repository.as_ptr(), item.into())
+        }
+    };
+    if status == 0 { Ok(path) } else { Err(status) }
+}
+
+/// Wraps: git_repository_set_ident
+/// Replaces or clears the repository's identity overrides.
+pub fn git_repository_set_ident(
+    repository: &mut GitRepositoryMut<'_>,
+    name: Option<&CStr>,
+    email: Option<&CStr>,
+) -> Result<(), i32> {
+    let name = name.map_or(core::ptr::null(), CStr::as_ptr);
+    let email = email.map_or(core::ptr::null(), CStr::as_ptr);
+    // SAFETY: the repository is exclusive and each optional string is live;
+    // C duplicates non-null values before returning.
+    let status = unsafe { ffi::git_repository_set_ident(repository.as_mut_ptr(), name, email) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod wrap_batch_tests {
+    use super::*;
+
+    #[test]
+    fn repository_outputs_and_traversal_callbacks_stay_typed() {
+        // SAFETY: process-global initialization is refcounted and balanced
+        // after every repository-dependent owner below is dropped.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        let directory = std::env::temp_dir().join(format!(
+            "crustify-repository-wrap-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let path = std::ffi::CString::new(directory.to_str().unwrap()).unwrap();
+        let mut repository = git_repository_init(&path, false).expect("initialize repository");
+
+        git_repository_set_ident(
+            &mut repository.as_mut(),
+            Some(c"Crustify"),
+            Some(c"crustify@example.com"),
+        )
+        .unwrap();
+        assert_eq!(
+            git_repository_ident(repository.as_ref()),
+            (Some(c"Crustify"), Some(c"crustify@example.com"))
+        );
+        assert_eq!(
+            git_repository_head_unborn(&mut repository.as_mut()),
+            Ok(true)
+        );
+
+        let gitdir = git_repository_item_path(
+            repository.as_ref(),
+            crate::api::repository::GitRepositoryItem::GitDir,
+        )
+        .unwrap();
+        assert!(gitdir.as_ref().size() > 0);
+        drop(gitdir);
+
+        std::fs::write(directory.join("untracked.txt"), b"contents\n").unwrap();
+        let mut oid = git_repository_hashfile(
+            &mut repository.as_mut(),
+            c"untracked.txt",
+            GitObjectType::BLOB,
+            None,
+        )
+        .unwrap();
+        // SAFETY: `oid` is a live initialized layout value and this shared
+        // handle is confined to the assertion.
+        let oid = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(oid).cast()) }.unwrap();
+        assert_eq!(oid.oid_type(), Ok(OidType::Sha1));
+
+        {
+            let mut view = repository.as_mut();
+            let snapshot = git_repository_config_snapshot(&mut view).unwrap();
+            drop(snapshot);
+        }
+        {
+            let mut view = repository.as_mut();
+            let refdb = crate::refdb::git_refdb_open(&mut view).unwrap();
+            drop(refdb);
+        }
+
+        let names = crate::refs::git_reference_list(&mut repository.as_mut()).unwrap();
+        assert_eq!(names.as_ref().count(), 0);
+        drop(names);
+        let mut reference_names = 0;
+        crate::refs::git_reference_foreach_name(&mut repository.as_mut(), &mut |_: &CStr| {
+            reference_names += 1;
+            0
+        })
+        .unwrap();
+        assert_eq!(reference_names, 0);
+
+        let mut statuses = 0;
+        crate::status::git_status_foreach(
+            &mut repository.as_mut(),
+            &mut |_: &CStr, _: crate::status::Status| {
+                statuses += 1;
+                0
+            },
+        )
+        .unwrap();
+        assert_eq!(statuses, 1);
+
+        drop(repository);
+        let _ = std::fs::remove_dir_all(&directory);
+        // SAFETY: balances the successful initialization above.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }

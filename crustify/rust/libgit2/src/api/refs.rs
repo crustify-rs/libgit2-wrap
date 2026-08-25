@@ -4,6 +4,7 @@ use core::ffi::CStr;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 use crate::ffi;
+use crate::refs::GitReferenceTetheredOwned;
 
 /// Wraps: git_reference_format_t
 /// A checked set of options for validating and normalizing reference names.
@@ -128,6 +129,23 @@ where
 {
     fn call(&mut self, name: &CStr) -> i32 {
         self(name)
+    }
+}
+
+/// Wraps: git_reference_foreach_cb
+/// Safe callable surface for one owned reference yielded by an iteration.
+pub trait GitReferenceForeachCallback {
+    /// Receives ownership of one reference tied to the repository borrow for
+    /// this invocation. Returning nonzero stops iteration.
+    fn call<'repo>(&mut self, reference: GitReferenceTetheredOwned<'repo>) -> i32;
+}
+
+impl<F> GitReferenceForeachCallback for F
+where
+    F: for<'repo> FnMut(GitReferenceTetheredOwned<'repo>) -> i32,
+{
+    fn call<'repo>(&mut self, reference: GitReferenceTetheredOwned<'repo>) -> i32 {
+        self(reference)
     }
 }
 

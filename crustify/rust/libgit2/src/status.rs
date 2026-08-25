@@ -1,11 +1,11 @@
 //! Safe wrappers for libgit2 status APIs.
 
-use core::ffi::CStr;
+use core::ffi::{CStr, c_void};
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 use ffibox::CBox;
 
-use crate::api::status::{GitStatusOptionsMut, GitStatusOptionsRef};
+use crate::api::status::{GitStatusCallback, GitStatusOptionsMut, GitStatusOptionsRef};
 use crate::ffi;
 use crate::repository::GitRepositoryMut;
 
@@ -451,4 +451,42 @@ pub fn git_status_byindex<'a>(
     // SAFETY: null means out of range; otherwise the entry remains live for
     // the source list borrow.
     unsafe { crate::api::status::GitStatusEntryRef::from_ptr(entry.cast_mut()) }
+}
+
+unsafe extern "C" fn status_trampoline<C: GitStatusCallback>(
+    path: *const core::ffi::c_char,
+    status: ffi::git_status_t,
+    payload: *mut c_void,
+) -> i32 {
+    // SAFETY: the traversal returns the exact callback pointer installed by
+    // the wrapper and invokes it only before that wrapper returns.
+    let callback = unsafe { &mut *payload.cast::<C>() };
+    // SAFETY: libgit2 supplies a non-null transient NUL-terminated path for
+    // this invocation. Unknown status bits are retained without invalid enums.
+    let path = unsafe { CStr::from_ptr(path) };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        callback.call(path, Status::from_bits_retain(status))
+    }))
+    .unwrap_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_status_foreach
+/// Visits each path with its status under libgit2's default options.
+pub fn git_status_foreach<C>(
+    repository: &mut GitRepositoryMut<'_>,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: GitStatusCallback,
+{
+    // SAFETY: the repository and callback remain live for the synchronous
+    // traversal; the payload type matches the trampoline and is not retained.
+    let status = unsafe {
+        ffi::git_status_foreach(
+            repository.as_mut_ptr(),
+            Some(status_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

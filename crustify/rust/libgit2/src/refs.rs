@@ -1,18 +1,19 @@
 //! Safe wrappers for libgit2 refs APIs.
 
 use core::cmp::Ordering;
-use core::ffi::CStr;
+use core::ffi::{CStr, c_void};
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
-use ffibox::{CBox, CCloned, CDropped};
+use ffibox::{CBox, CCloned, CDropped, CVal};
 
-use crate::api::refs::GitReferenceFormatFlags;
+use crate::api::refs::{GitReferenceForeachNameCallback, GitReferenceFormatFlags};
 use crate::api::types::{GitObjectType, GitReferenceType, InvalidGitReferenceType};
 use crate::ffi;
 use crate::object::{GitObjectOwned, GitObjectRef};
 use crate::oid::{Oid, OidRef};
 use crate::repository::{GitRepositoryMut, GitRepositoryRef};
+use crate::strarray::GitStrArray;
 use crate::sys::refdb_backend::{GitReferenceIteratorMut, GitReferenceIteratorOwned};
 
 ffibox::define_ctype!(
@@ -823,4 +824,94 @@ mod tests {
     fn failed_result_accepts_an_empty_typed_owner() {
         assert!(matches!(adopt_reference(-123, None), Err(-123)));
     }
+}
+
+unsafe extern "C" fn reference_name_trampoline<C: GitReferenceForeachNameCallback>(
+    name: *const core::ffi::c_char,
+    payload: *mut c_void,
+) -> i32 {
+    // SAFETY: the traversal passes back the exact non-null callback pointer
+    // installed by the wrapper and never invokes it after the wrapper returns.
+    let callback = unsafe { &mut *payload.cast::<C>() };
+    // SAFETY: libgit2 supplies a non-null transient NUL-terminated reference
+    // name valid for this callback invocation.
+    let name = unsafe { CStr::from_ptr(name) };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback.call(name)))
+        .unwrap_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_reference_foreach_glob
+/// Visits names matching a glob pattern.
+pub fn git_reference_foreach_glob<C>(
+    repository: &mut GitRepositoryMut<'_>,
+    glob: &CStr,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: GitReferenceForeachNameCallback,
+{
+    // SAFETY: every typed input remains live for the traversal. The payload
+    // type matches the monomorphized trampoline and no pointer is retained.
+    let status = unsafe {
+        ffi::git_reference_foreach_glob(
+            repository.as_mut_ptr(),
+            glob.as_ptr(),
+            Some(reference_name_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_reference_foreach_name
+/// Visits every fully qualified reference name.
+pub fn git_reference_foreach_name<C>(
+    repository: &mut GitRepositoryMut<'_>,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: GitReferenceForeachNameCallback,
+{
+    // SAFETY: the repository and callback remain live for the synchronous
+    // traversal; the payload type matches the trampoline and is not retained.
+    let status = unsafe {
+        ffi::git_reference_foreach_name(
+            repository.as_mut_ptr(),
+            Some(reference_name_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_reference_list
+/// Collects all repository reference names into an owned string array.
+pub fn git_reference_list(repository: &mut GitRepositoryMut<'_>) -> Result<CVal<GitStrArray>, i32> {
+    let mut names = GitStrArray::new();
+    let status = {
+        let mut output = names.as_mut();
+        // SAFETY: `output` is an empty exclusive header and the repository is
+        // live for traversal. Success initializes owned strings and storage.
+        unsafe { ffi::git_reference_list(output.as_mut_ptr(), repository.as_mut_ptr()) }
+    };
+    if status == 0 { Ok(names) } else { Err(status) }
+}
+
+/// Wraps: git_reference_owner
+/// Borrows the repository that owns a reference.
+#[must_use]
+pub fn git_reference_owner<'a>(reference: GitReferenceRef<'a>) -> GitRepositoryRef<'a> {
+    // SAFETY: the reference is live and C returns its non-null repository.
+    let repository = unsafe { ffi::git_reference_owner(reference.as_ptr()) };
+    // SAFETY: the repository remains live for the reference borrow.
+    unsafe { GitRepositoryRef::from_ptr(repository) }
+        .expect("a valid reference has a repository owner")
+}
+
+/// Wraps: git_reference_remove
+/// Removes a reference by name without first loading its old value.
+pub fn git_reference_remove(repository: &mut GitRepositoryMut<'_>, name: &CStr) -> Result<(), i32> {
+    // SAFETY: both inputs are live for the call and neither is retained.
+    let status = unsafe { ffi::git_reference_remove(repository.as_mut_ptr(), name.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
 }
