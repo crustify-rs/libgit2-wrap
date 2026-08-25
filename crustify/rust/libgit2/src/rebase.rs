@@ -104,11 +104,8 @@ impl GitRebaseOwned<'_, '_> {
 
 fn rebase_result<'repo, 'data>(
     status: i32,
-    raw: *mut ffi::git_rebase,
+    inner: Option<CBox<GitRebase>>,
 ) -> Result<GitRebaseOwned<'repo, 'data>, i32> {
-    // SAFETY: constructor outputs are null or transfer one complete rebase;
-    // adopting before status handling also releases a surprising error output.
-    let inner = unsafe { CBox::<GitRebase>::from_raw(raw) };
     if status == 0 {
         let inner = inner.ok_or(ffi::git_error_code_GIT_ERROR)?;
         Ok(GitRebaseOwned {
@@ -547,7 +544,11 @@ pub fn git_rebase_init<'repo, 'data>(
             options.map_or(core::ptr::null(), |options| options.as_ptr()),
         )
     };
-    rebase_result(status, out)
+    // SAFETY: the constructor leaves `out` null or transfers one complete
+    // rebase allocation, including on a surprising error output. Adopting it
+    // here keeps the raw ownership seam beside the call that produced it.
+    let rebase = unsafe { CBox::<GitRebase>::from_raw(out) };
+    rebase_result(status, rebase)
 }
 
 /// Wraps: git_rebase_init_options
@@ -578,7 +579,11 @@ pub fn git_rebase_open<'repo, 'data>(
             options.map_or(core::ptr::null(), |options| options.as_ptr()),
         )
     };
-    rebase_result(status, out)
+    // SAFETY: the constructor leaves `out` null or transfers one complete
+    // rebase allocation, including on a surprising error output. Adopting it
+    // here keeps the raw ownership seam beside the call that produced it.
+    let rebase = unsafe { CBox::<GitRebase>::from_raw(out) };
+    rebase_result(status, rebase)
 }
 
 #[cfg(test)]
