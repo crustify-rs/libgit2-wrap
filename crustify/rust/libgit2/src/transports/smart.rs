@@ -3,7 +3,8 @@
 use crate::ffi;
 use crate::remote::GitRemoteMut;
 use crate::sys::transport::{
-    GitSmartSubtransportCallback, GitTransportMut, GitTransportOwned, GitTransportWithRemote,
+    GitSmartSubtransportCallback, GitSmartSubtransportDefinition, GitTransportOwned,
+    GitTransportWithRemote,
 };
 
 /// Wraps: git_transport_smart
@@ -16,41 +17,8 @@ pub fn git_transport_smart<'remote, C>(
 where
     C: GitSmartSubtransportCallback,
 {
-    unsafe extern "C" fn trampoline<C>(
-        out: *mut *mut ffi::git_smart_subtransport,
-        owner: *mut ffi::git_transport,
-        payload: *mut core::ffi::c_void,
-    ) -> i32
-    where
-        C: GitSmartSubtransportCallback,
-    {
-        if out.is_null() || owner.is_null() || payload.is_null() {
-            return ffi::git_error_code_GIT_ERROR;
-        }
-        // SAFETY: the wrapper stores this exact callback pointer in the
-        // temporary definition for the duration of `git_transport_smart`.
-        let callback = unsafe { &mut *payload.cast::<C>() };
-        // SAFETY: libgit2 supplies its live, exclusively initializing smart
-        // transport to the one synchronous factory invocation.
-        let owner = unsafe { GitTransportMut::from_ptr(owner) }.expect("checked non-null owner");
-        match callback.call(owner) {
-            Ok(subtransport) => {
-                // SAFETY: `out` was checked writable by the callback contract;
-                // ownership transfers to the smart transport on success.
-                unsafe { out.write(subtransport.into_raw()) };
-                0
-            }
-            Err(error) if error < 0 => error,
-            Err(_) => ffi::git_error_code_GIT_ERROR,
-        }
-    }
-
     let mut raw = core::ptr::null_mut();
-    let mut definition = ffi::git_smart_subtransport_definition {
-        callback: Some(trampoline::<C>),
-        rpc: u32::from(rpc),
-        param: core::ptr::from_mut(callback).cast(),
-    };
+    let mut definition = GitSmartSubtransportDefinition::new(rpc, callback);
     // SAFETY: `raw` is writable; `owner` is live and exclusive, and the
     // temporary definition and callback remain live until this synchronous
     // constructor returns. The returned transport retains only `owner`.
@@ -58,7 +26,7 @@ where
         ffi::git_transport_smart(
             core::ptr::addr_of_mut!(raw),
             owner.as_mut_ptr(),
-            core::ptr::addr_of_mut!(definition).cast(),
+            definition.as_mut().as_mut_ptr().cast(),
         )
     };
     if status != 0 {
@@ -74,7 +42,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sys::transport::{GitSmartSubtransportOwned, GitSmartSubtransportWithTransport};
+    use crate::sys::transport::{
+        GitSmartSubtransportOwned, GitSmartSubtransportWithTransport, GitTransportMut,
+    };
 
     unsafe extern "C" fn action(
         _out: *mut *mut ffi::git_smart_subtransport_stream,

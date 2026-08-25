@@ -1,8 +1,9 @@
 //! Safe wrappers for libgit2 transport APIs.
 
-use core::ptr::NonNull;
+use core::marker::PhantomData;
+use core::ptr::{NonNull, addr_of, addr_of_mut};
 
-use ffibox::{CBox, CDropped};
+use ffibox::{CBox, CCell, CDropped, CPtr, CType, CVal, CValued};
 
 use crate::ffi;
 use crate::remote::GitRemoteMut;
@@ -1591,5 +1592,249 @@ mod transport_tests {
         let transport = unsafe { GitTransportOwned::from_raw(raw) }.unwrap();
         drop(transport);
         assert_eq!(FREES.load(Ordering::SeqCst), before + 1);
+    }
+}
+
+/// Wraps: git_smart_subtransport_definition
+/// Layout-compatible smart-subtransport factory configuration borrowing its
+/// typed callback state for `'callback`.
+#[repr(transparent)]
+pub struct GitSmartSubtransportDefinition<'callback> {
+    inner: CType<ffi::git_smart_subtransport_definition>,
+    _callback: PhantomData<&'callback mut ()>,
+}
+
+/// Shared borrow of [`GitSmartSubtransportDefinition`].
+#[repr(transparent)]
+pub struct GitSmartSubtransportDefinitionRef<'object, 'callback>(
+    CPtr<'object, GitSmartSubtransportDefinition<'callback>>,
+);
+
+impl Clone for GitSmartSubtransportDefinitionRef<'_, '_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl Copy for GitSmartSubtransportDefinitionRef<'_, '_> {}
+
+/// Exclusive borrow of [`GitSmartSubtransportDefinition`].
+#[repr(transparent)]
+pub struct GitSmartSubtransportDefinitionMut<'object, 'callback>(
+    GitSmartSubtransportDefinitionRef<'object, 'callback>,
+);
+
+// SAFETY: the layout type is transparent over the matching bindgen struct;
+// both handles are pointer-sized and access C-visible storage only through
+// raw-place projections. The shared handle exposes no writes.
+unsafe impl<'callback> CCell for GitSmartSubtransportDefinition<'callback> {
+    type C = ffi::git_smart_subtransport_definition;
+    type Ref<'object>
+        = GitSmartSubtransportDefinitionRef<'object, 'callback>
+    where
+        Self: 'object;
+    type Mut<'object>
+        = GitSmartSubtransportDefinitionMut<'object, 'callback>
+    where
+        Self: 'object;
+
+    unsafe fn ref_from_raw<'object>(ptr: NonNull<Self>) -> Self::Ref<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller guarantees that `ptr` is a live shared object.
+        GitSmartSubtransportDefinitionRef(unsafe { CPtr::new(ptr) })
+    }
+
+    unsafe fn mut_from_raw<'object>(ptr: NonNull<Self>) -> Self::Mut<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller additionally guarantees exclusive access.
+        GitSmartSubtransportDefinitionMut(GitSmartSubtransportDefinitionRef(unsafe {
+            CPtr::new(ptr)
+        }))
+    }
+}
+
+// SAFETY: a definition only borrows its callback state and owns no resource,
+// so disposing its inline storage requires no action.
+unsafe impl CValued for GitSmartSubtransportDefinition<'_> {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+impl<'callback> GitSmartSubtransportDefinition<'callback> {
+    /// Creates a definition with a typed callback and its coupled state.
+    #[must_use]
+    pub fn new<C>(rpc: bool, callback: &'callback mut C) -> CVal<Self>
+    where
+        C: GitSmartSubtransportCallback,
+    {
+        CVal::new(Self {
+            inner: CType::new(ffi::git_smart_subtransport_definition {
+                callback: Some(smart_subtransport_definition_trampoline::<C>),
+                rpc: u32::from(rpc),
+                param: core::ptr::from_mut(callback).cast(),
+            }),
+            _callback: PhantomData,
+        })
+    }
+}
+
+impl<'object, 'callback> GitSmartSubtransportDefinitionRef<'object, 'callback> {
+    /// Borrows a raw C definition pointer, returning `None` for null.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must identify an initialized definition live for `'object`. Its
+    /// callback must be valid, and its erased parameter must remain valid for
+    /// `'callback`, which must outlive `'object`. The callback and parameter
+    /// must agree on the parameter's concrete type.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_smart_subtransport_definition) -> Option<Self> {
+        NonNull::new(ptr.cast::<GitSmartSubtransportDefinition<'callback>>()).map(|ptr| {
+            // SAFETY: the caller supplies the required live shared object.
+            Self(unsafe { CPtr::new(ptr) })
+        })
+    }
+
+    /// Returns the C pointer for read-only FFI calls.
+    #[must_use]
+    pub fn as_ptr(&self) -> *const ffi::git_smart_subtransport_definition {
+        self.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Field: git_smart_subtransport_definition.callback
+    /// Reports whether a factory callback is installed.
+    #[must_use]
+    pub fn has_callback(&self) -> bool {
+        // SAFETY: raw-place projection copies the initialized function slot.
+        unsafe { addr_of!((*self.as_ptr()).callback).read() }.is_some()
+    }
+
+    /// Field: git_smart_subtransport_definition.rpc
+    /// Returns whether the subtransport uses stateless request/response I/O.
+    #[must_use]
+    pub fn is_rpc(&self) -> bool {
+        // SAFETY: this live shared handle permits a scalar raw-place read.
+        unsafe { addr_of!((*self.as_ptr()).rpc).read() != 0 }
+    }
+
+    /// Field: git_smart_subtransport_definition.param
+    /// Reports whether callback state is installed.
+    #[must_use]
+    pub fn has_callback_state(&self) -> bool {
+        // SAFETY: raw-place projection copies the initialized opaque pointer.
+        !unsafe { addr_of!((*self.as_ptr()).param).read() }.is_null()
+    }
+}
+
+impl<'object, 'callback> GitSmartSubtransportDefinitionMut<'object, 'callback> {
+    /// Exclusively borrows a raw C definition pointer, returning `None` for
+    /// null.
+    ///
+    /// # Safety
+    ///
+    /// The shared-handle requirements apply, and no other access path to the
+    /// definition may be used for `'object`.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_smart_subtransport_definition) -> Option<Self> {
+        // SAFETY: the caller supplies a live exclusively accessible object.
+        unsafe { GitSmartSubtransportDefinitionRef::from_ptr(ptr) }.map(Self)
+    }
+
+    /// Returns the C pointer for writable FFI calls.
+    #[must_use]
+    pub fn as_mut_ptr(&mut self) -> *mut ffi::git_smart_subtransport_definition {
+        self.0.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Reborrows this exclusive handle as shared.
+    #[must_use]
+    pub fn as_ref(&self) -> GitSmartSubtransportDefinitionRef<'_, 'callback> {
+        GitSmartSubtransportDefinitionRef(self.0.0)
+    }
+
+    /// Changes whether the subtransport uses stateless request/response I/O.
+    pub fn set_rpc(&mut self, rpc: bool) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).rpc).write(u32::from(rpc)) }
+    }
+}
+
+unsafe extern "C" fn smart_subtransport_definition_trampoline<C>(
+    out: *mut *mut ffi::git_smart_subtransport,
+    owner: *mut ffi::git_transport,
+    param: *mut core::ffi::c_void,
+) -> core::ffi::c_int
+where
+    C: GitSmartSubtransportCallback,
+{
+    if out.is_null() || owner.is_null() || param.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: `GitSmartSubtransportDefinition::new` stores this exact live
+    // callback pointer together with this monomorphized trampoline.
+    let callback = unsafe { &mut *param.cast::<C>() };
+    // SAFETY: libgit2 supplies its live, exclusively initializing smart
+    // transport to the one synchronous factory invocation.
+    let owner = unsafe { GitTransportMut::from_ptr(owner) }.expect("checked non-null owner");
+    match callback.call(owner) {
+        Ok(subtransport) => {
+            // SAFETY: `out` was checked non-null and the callback contract
+            // makes it a writable output slot. Ownership transfers to C.
+            unsafe { out.write(subtransport.into_raw()) };
+            0
+        }
+        Err(error) if error < 0 => error,
+        Err(_) => ffi::git_error_code_GIT_ERROR,
+    }
+}
+
+#[cfg(test)]
+mod smart_subtransport_definition_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    fn fail_factory<'transport>(
+        _owner: GitTransportMut<'transport>,
+    ) -> Result<GitSmartSubtransportWithTransport<'transport>, i32> {
+        Err(-1)
+    }
+
+    #[test]
+    fn definition_and_handles_match_the_c_seam() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_valued<T: CValued>() {}
+
+        assert_cell::<GitSmartSubtransportDefinition<'_>>();
+        assert_valued::<GitSmartSubtransportDefinition<'_>>();
+        assert_eq!(
+            size_of::<GitSmartSubtransportDefinition<'_>>(),
+            size_of::<ffi::git_smart_subtransport_definition>()
+        );
+        assert_eq!(
+            align_of::<GitSmartSubtransportDefinition<'_>>(),
+            align_of::<ffi::git_smart_subtransport_definition>()
+        );
+        assert_eq!(
+            size_of::<GitSmartSubtransportDefinitionRef<'_, '_>>(),
+            size_of::<*const ffi::git_smart_subtransport_definition>()
+        );
+        assert_eq!(
+            size_of::<GitSmartSubtransportDefinitionMut<'_, '_>>(),
+            size_of::<*mut ffi::git_smart_subtransport_definition>()
+        );
+    }
+
+    #[test]
+    fn typed_constructor_couples_callback_state_and_updates_rpc() {
+        let mut callback = fail_factory;
+        let mut definition = GitSmartSubtransportDefinition::new(false, &mut callback);
+
+        assert!(definition.as_ref().has_callback());
+        assert!(definition.as_ref().has_callback_state());
+        assert!(!definition.as_ref().is_rpc());
+        definition.as_mut().set_rpc(true);
+        assert!(definition.as_ref().is_rpc());
     }
 }

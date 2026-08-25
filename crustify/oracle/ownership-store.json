@@ -5151,6 +5151,47 @@
    ]
   },
   {
+   "name": "git_smart_subtransport_definition",
+   "defined_in": "include/git2/sys/transport.h",
+   "_comment_agent": "The definition is a borrowed by-value callback configuration with no lifecycle operation. callback and param are a coupled callable/state pair; rpc is a scalar behavior flag.",
+   "fields": [
+    {
+     "name": "callback",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required function pointer copied into the definition; every valid in-tree definition installs a static callback and git_transport_smart invokes it synchronously."
+     }
+    },
+    {
+     "name": "param",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional type-erased caller state passed to callback. The custom callback stores its referent in the returned subtransport, which later mutates it, so its lifetime may extend through the resulting transport rather than only the synchronous factory call."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_smart_subtransport_stream",
    "defined_in": "include/git2/sys/transport.h",
    "_comment_agent": "A stream is a polymorphic header embedded at offset zero in a concrete allocation. Its three callbacks are required static code pointers. The stream borrows its owning subtransport, which outlives it, while ownership of the concrete stream allocation is released through the installed free callback.",
