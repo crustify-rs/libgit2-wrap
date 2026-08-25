@@ -214,3 +214,141 @@ mod attr_options_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod attr_callback_traversal_tests {
+    use super::*;
+
+    use crate::attr::{git_attr_foreach, git_attr_foreach_ext};
+    use crate::repository::git_repository_open;
+
+    /// A refcounted hold on the process-global libgit2 initialization.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and refcounted;
+            // `Drop` below balances this successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances this guard's initialization; every repository
+            // opened under it is released first.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// A hand-built repository whose working directory carries the one
+    /// `.gitattributes` file the traversal reads. Attribute lookup consults
+    /// the working directory directly, so no object or index entry is needed.
+    struct WorkdirRepo(std::path::PathBuf);
+
+    impl WorkdirRepo {
+        fn create(tag: &str) -> Self {
+            let path =
+                std::env::temp_dir().join(format!("crustify-attr-cb-{}-{tag}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            let git = path.join(".git");
+            std::fs::create_dir_all(git.join("objects")).expect("a loose-object directory");
+            std::fs::create_dir_all(git.join("refs/heads")).expect("a refs directory");
+            std::fs::write(git.join("HEAD"), b"ref: refs/heads/main\n").expect("a HEAD file");
+            std::fs::write(
+                git.join("config"),
+                b"[core]\n\trepositoryformatversion = 0\n\tbare = false\n",
+            )
+            .expect("a config file");
+            // One assignment of each classified shape: a string value, a set
+            // flag, an unset flag and an explicitly unspecified one.
+            std::fs::write(
+                path.join(".gitattributes"),
+                b"report.txt eol=lf text -merge !diff\n",
+            )
+            .expect("an attributes file");
+            Self(path)
+        }
+
+        fn c_path(&self) -> std::ffi::CString {
+            std::ffi::CString::new(self.0.to_str().expect("a UTF-8 temporary path"))
+                .expect("a path without interior NUL")
+        }
+    }
+
+    impl Drop for WorkdirRepo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn traversal_classifies_every_value_shape_for_the_callback() {
+        let _init = Libgit2Init::acquire();
+        let directory = WorkdirRepo::create("visit");
+        let mut owner = git_repository_open(&directory.c_path())
+            .expect("the hand-built directory is a repository");
+
+        let mut seen = Vec::new();
+        let mut collect = |name: &CStr, value: Attribute<'_>| {
+            // Both borrows are call-scoped, so retaining them needs copies.
+            let value = match value {
+                Attribute::Unspecified => "unspecified".to_owned(),
+                Attribute::True => "true".to_owned(),
+                Attribute::False => "false".to_owned(),
+                Attribute::String(value) => format!("string:{}", value.to_string_lossy()),
+            };
+            seen.push((name.to_owned(), value));
+            0
+        };
+        git_attr_foreach(&mut owner.as_mut(), 0, c"report.txt", &mut collect)
+            .expect("visiting the hand-built attributes");
+
+        seen.sort();
+        assert_eq!(
+            seen,
+            [
+                (c"diff".to_owned(), "unspecified".to_owned()),
+                (c"eol".to_owned(), "string:lf".to_owned()),
+                (c"merge".to_owned(), "false".to_owned()),
+                (c"text".to_owned(), "true".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_nonzero_callback_result_stops_the_traversal_and_propagates() {
+        let _init = Libgit2Init::acquire();
+        let directory = WorkdirRepo::create("stop");
+        let mut owner = git_repository_open(&directory.c_path())
+            .expect("the hand-built directory is a repository");
+
+        let mut visits = 0;
+        let mut stop = |_: &CStr, _: Attribute<'_>| {
+            visits += 1;
+            -37
+        };
+        assert_eq!(
+            git_attr_foreach(&mut owner.as_mut(), 0, c"report.txt", &mut stop),
+            Err(-37)
+        );
+        assert_eq!(visits, 1);
+
+        // The extended entry point drives the same callback surface.
+        let options = GitAttrOptions::new();
+        let mut extended_visits = 0;
+        let mut count = |_: &CStr, _: Attribute<'_>| {
+            extended_visits += 1;
+            0
+        };
+        git_attr_foreach_ext(
+            &mut owner.as_mut(),
+            options.as_ref(),
+            c"report.txt",
+            &mut count,
+        )
+        .expect("visiting the hand-built attributes through the options entry point");
+        assert_eq!(extended_visits, 4);
+    }
+}

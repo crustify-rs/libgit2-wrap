@@ -60,6 +60,16 @@ pub fn git_libgit2_version() -> Result<Libgit2Version, i32> {
 
 /// Wraps: git_libgit2_init
 /// Acquires one process-global libgit2 initialization count.
+///
+/// # Errors
+///
+/// A subsystem initializer that fails is reported without a token, but
+/// `git_runtime_init` raises the process-global count before running those
+/// initializers and never lowers it again. The library is then permanently
+/// half-initialized: no later call re-runs the initializers, and every count
+/// handed out afterwards rests on that failed setup. This wrapper cannot
+/// compensate, because the same error code also covers the lock failure that
+/// returns before raising the count at all.
 pub fn git_libgit2_init() -> Result<Libgit2Init, i32> {
     // SAFETY: initialization takes no arguments, is internally synchronized,
     // and a successful count is balanced by the returned owning token.
@@ -139,6 +149,24 @@ mod tests {
     #[test]
     fn release_prerelease_label_is_optional_static_data() {
         assert_eq!(git_libgit2_prerelease(), None);
+    }
+
+    #[test]
+    fn nested_initialization_counts_are_released_independently() {
+        let outer = git_libgit2_init().unwrap();
+        let inner = git_libgit2_init().unwrap();
+        assert!(outer.initial_count() > 0);
+        assert!(inner.initial_count() > 0);
+
+        // SAFETY: this test still owns `outer`, so releasing `inner` cannot
+        // reach the final process-global count, and it holds no libgit2 object
+        // or borrowed result of its own.
+        let remaining = unsafe { git_libgit2_shutdown(inner) }.unwrap();
+        assert!(remaining >= 1, "the retained token keeps one count live");
+
+        // SAFETY: the remaining token is released last and this test has
+        // created no libgit2 object or borrowed result.
+        unsafe { git_libgit2_shutdown(outer) }.unwrap();
     }
 }
 

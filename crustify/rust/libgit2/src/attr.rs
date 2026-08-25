@@ -196,8 +196,8 @@ where
     if name.is_null() || payload.is_null() {
         return ffi::git_error_code_GIT_ERROR;
     }
-    // SAFETY: the synchronous wrapper supplies a live `F` payload and
-    // libgit2 supplies callback-scoped NUL-terminated strings.
+    // SAFETY: the guard above rejects a null payload, and the synchronous
+    // wrapper installs the address of a live `C` that outlives the traversal.
     let callback = unsafe { &mut *payload.cast::<C>() };
     // SAFETY: `name` is a required callback-scoped string.
     let name = unsafe { core::ffi::CStr::from_ptr(name) };

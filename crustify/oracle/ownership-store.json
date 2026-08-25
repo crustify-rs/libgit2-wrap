@@ -24444,6 +24444,10 @@
    "defined_in": "src/libgit2/libgit2.c"
   },
   {
+   "name": "git_libgit2_init",
+   "defined_in": "src/libgit2/libgit2.c"
+  },
+  {
    "name": "git_libgit2_opts",
    "defined_in": "src/libgit2/settings.c"
   },
@@ -24466,6 +24470,10 @@
      "note": "Returns either null for a final release or an immutable compile-time NUL-terminated version string with static lifetime."
     }
    }
+  },
+  {
+   "name": "git_libgit2_shutdown",
+   "defined_in": "src/libgit2/libgit2.c"
   },
   {
    "name": "git_libgit2_version",

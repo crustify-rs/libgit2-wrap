@@ -252,6 +252,37 @@ mod binary_data_tests {
         assert!(git_blob_data_is_binary(b"text\0binary"));
         assert!(!git_blob_data_is_binary(&[]));
     }
+
+    #[test]
+    fn binary_data_classifier_reads_the_whole_borrowed_length() {
+        // The length is separate from the bytes, so an embedded NUL is data
+        // rather than a terminator and an interior slice is classified on its
+        // own contents.
+        let data = b"text\0binary";
+        assert!(git_blob_data_is_binary(data));
+        assert!(!git_blob_data_is_binary(&data[..4]));
+        assert!(!git_blob_data_is_binary(&data[5..]));
+    }
+
+    #[test]
+    fn binary_data_classifier_follows_the_byte_order_mark() {
+        // A byte-order mark wider than UTF-8 makes the content binary whatever
+        // follows it, while a UTF-8 mark is skipped before the heuristic runs.
+        assert!(git_blob_data_is_binary(b"\xff\xfehello"));
+        assert!(git_blob_data_is_binary(b"\xfe\xffhello"));
+        assert!(!git_blob_data_is_binary(b"\xef\xbb\xbfhello world\n"));
+    }
+
+    #[test]
+    fn binary_data_classifier_weighs_nonprintable_bytes() {
+        // The heuristic accepts one nonprintable byte per 128 printable ones.
+        assert!(git_blob_data_is_binary(b"\x01\x02\x03"));
+        let mut mostly_text = vec![b'a'; 200];
+        mostly_text.push(0x01);
+        assert!(!git_blob_data_is_binary(&mostly_text));
+        mostly_text.extend_from_slice(&[0x01, 0x02]);
+        assert!(git_blob_data_is_binary(&mostly_text));
+    }
 }
 
 /// Wraps: git_blob_create_from_buffer

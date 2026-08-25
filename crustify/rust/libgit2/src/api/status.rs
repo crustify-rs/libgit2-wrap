@@ -695,3 +695,155 @@ mod callback_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod status_callback_traversal_tests {
+    use super::*;
+
+    use crate::repository::git_repository_open;
+    use crate::status::{git_status_foreach, git_status_foreach_ext};
+
+    /// A refcounted hold on the process-global libgit2 initialization.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and refcounted;
+            // `Drop` below balances this successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances this guard's initialization; every repository
+            // opened under it is released first.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// A hand-built repository with a working directory and two untracked
+    /// files, so a status scan reports entries without needing any object.
+    struct WorkdirRepo(std::path::PathBuf);
+
+    impl WorkdirRepo {
+        fn create(tag: &str) -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("crustify-status-cb-{}-{tag}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            let git = path.join(".git");
+            std::fs::create_dir_all(git.join("objects")).expect("a loose-object directory");
+            std::fs::create_dir_all(git.join("refs/heads")).expect("a refs directory");
+            std::fs::write(git.join("HEAD"), b"ref: refs/heads/main\n").expect("a HEAD file");
+            std::fs::write(
+                git.join("config"),
+                b"[core]\n\trepositoryformatversion = 0\n\tbare = false\n",
+            )
+            .expect("a config file");
+            std::fs::write(path.join("first.txt"), b"first\n").expect("a working-tree file");
+            std::fs::write(path.join("second.txt"), b"second\n").expect("a working-tree file");
+            Self(path)
+        }
+
+        fn c_path(&self) -> std::ffi::CString {
+            std::ffi::CString::new(self.0.to_str().expect("a UTF-8 temporary path"))
+                .expect("a path without interior NUL")
+        }
+    }
+
+    impl Drop for WorkdirRepo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn traversal_hands_the_callback_transient_paths_and_typed_flags() {
+        let _init = Libgit2Init::acquire();
+        let directory = WorkdirRepo::create("visit");
+        let mut owner = git_repository_open(&directory.c_path())
+            .expect("the hand-built directory is a repository");
+
+        let mut options = GitStatusOptions::new();
+        options
+            .as_mut()
+            .set_flags(GitStatusOptionFlags::INCLUDE_UNTRACKED);
+
+        let mut seen = Vec::new();
+        let mut collect = |path: &core::ffi::CStr, status: Status| {
+            // The path borrow is call-scoped, so retaining it needs a copy.
+            seen.push((path.to_owned(), status));
+            0
+        };
+        git_status_foreach_ext(&mut owner.as_mut(), Some(options.as_ref()), &mut collect)
+            .expect("scanning the hand-built working directory");
+
+        seen.sort_by(|left, right| left.0.cmp(&right.0));
+        let paths: Vec<_> = seen.iter().map(|(path, _)| path.clone()).collect();
+        assert_eq!(paths, [c"first.txt".to_owned(), c"second.txt".to_owned()]);
+        assert!(
+            seen.iter()
+                .all(|(_, status)| status.contains(Status::WT_NEW))
+        );
+    }
+
+    #[test]
+    fn the_default_scan_and_zeroed_options_select_different_entries() {
+        let _init = Libgit2Init::acquire();
+        let directory = WorkdirRepo::create("defaults");
+        let mut owner = git_repository_open(&directory.c_path())
+            .expect("the hand-built directory is a repository");
+
+        // Passing no options is not the same as passing zeroed ones:
+        // `git_status_list_new` substitutes `GIT_STATUS_OPT_DEFAULTS` only
+        // for a null pointer, and those defaults include untracked paths.
+        let mut default_visits = 0;
+        let mut count_defaults = |_: &core::ffi::CStr, _: Status| {
+            default_visits += 1;
+            0
+        };
+        git_status_foreach(&mut owner.as_mut(), &mut count_defaults)
+            .expect("the default scan of the hand-built working directory");
+        assert_eq!(default_visits, 2);
+
+        let options = GitStatusOptions::new();
+        assert_eq!(options.as_ref().flags(), Ok(GitStatusOptionFlags::NONE));
+        let mut selected_visits = 0;
+        let mut count_selected = |_: &core::ffi::CStr, _: Status| {
+            selected_visits += 1;
+            0
+        };
+        git_status_foreach_ext(
+            &mut owner.as_mut(),
+            Some(options.as_ref()),
+            &mut count_selected,
+        )
+        .expect("a scan that selects no optional entry");
+        assert_eq!(selected_visits, 0);
+    }
+
+    #[test]
+    fn a_nonzero_callback_result_stops_the_traversal_and_propagates() {
+        let _init = Libgit2Init::acquire();
+        let directory = WorkdirRepo::create("stop");
+        let mut owner = git_repository_open(&directory.c_path())
+            .expect("the hand-built directory is a repository");
+
+        let mut options = GitStatusOptions::new();
+        options
+            .as_mut()
+            .set_flags(GitStatusOptionFlags::INCLUDE_UNTRACKED);
+
+        let mut visits = 0;
+        let mut stop = |_: &core::ffi::CStr, _: Status| {
+            visits += 1;
+            -37
+        };
+        assert_eq!(
+            git_status_foreach_ext(&mut owner.as_mut(), Some(options.as_ref()), &mut stop),
+            Err(-37)
+        );
+        assert_eq!(visits, 1);
+    }
+}
