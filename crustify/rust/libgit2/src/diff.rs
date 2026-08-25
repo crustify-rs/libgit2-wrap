@@ -1240,11 +1240,11 @@ impl<'a> DiffFileRef<'a> {
     }
 
     /// Field: git_diff_file.flags
-    /// Returns the raw combination of `git_diff_flag_t` bits.
-    #[must_use]
-    pub fn flags(&self) -> u32 {
+    /// Returns the checked file state flags.
+    pub fn flags(&self) -> Result<crate::api::diff::GitDiffFlags, crate::ffi::git_diff_flag_t> {
         // SAFETY: this live shared handle permits a raw-place scalar read.
-        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+        let bits = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        crate::api::diff::GitDiffFlags::from_bits(bits).ok_or(bits)
     }
 
     /// Field: git_diff_file.id
@@ -1303,10 +1303,10 @@ impl DiffFileMut<'_> {
         unsafe { addr_of_mut!((*self.as_mut_ptr()).mode).write(mode as u16) }
     }
 
-    /// Sets the raw combination of `git_diff_flag_t` bits.
-    pub fn set_flags(&mut self, flags: u32) {
+    /// Sets the file state flags.
+    pub fn set_flags(&mut self, flags: crate::api::diff::GitDiffFlags) {
         // SAFETY: this exclusive handle permits a raw-place scalar write.
-        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
     }
 
     /// Borrows the inline object identifier exclusively.
@@ -1464,7 +1464,10 @@ mod diff_file_tests {
             .expect("the address of a stack value is non-null");
         assert_eq!(file.as_ref().path(), Some(c"old.txt"));
         assert_eq!(file.as_ref().size(), 7);
-        assert_eq!(file.as_ref().flags(), 3);
+        assert_eq!(
+            file.as_ref().flags(),
+            Ok(crate::api::diff::GitDiffFlags::BINARY | crate::api::diff::GitDiffFlags::NOT_BINARY)
+        );
         assert_eq!(
             file.as_ref().mode(),
             Some(crate::api::types::GitFileMode::BLOB)
@@ -1472,7 +1475,7 @@ mod diff_file_tests {
         assert_eq!(file.as_ref().id_abbrev(), 7);
 
         file.set_size(11);
-        file.set_flags(16);
+        file.set_flags(crate::api::diff::GitDiffFlags::VALID_SIZE);
         file.set_mode(crate::api::types::GitFileMode::BLOB_EXECUTABLE);
         file.set_id_abbrev(12);
         // SAFETY: the static path outlives every use of `file` and `raw`.
@@ -1483,7 +1486,10 @@ mod diff_file_tests {
             let shared = file.as_ref();
             assert_eq!(shared.path(), Some(c"new.txt"));
             assert_eq!(shared.size(), 11);
-            assert_eq!(shared.flags(), 16);
+            assert_eq!(
+                shared.flags(),
+                Ok(crate::api::diff::GitDiffFlags::VALID_SIZE)
+            );
             assert_eq!(
                 shared.mode(),
                 Some(crate::api::types::GitFileMode::BLOB_EXECUTABLE)

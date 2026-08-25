@@ -1048,11 +1048,11 @@ impl<'a> DiffFindOptionsRef<'a> {
     }
 
     /// Field: git_diff_find_options.flags
-    /// Returns the raw combination of published `git_diff_find_t` bits.
-    #[must_use]
-    pub fn flags(&self) -> u32 {
+    /// Returns the checked rename and copy detection options.
+    pub fn flags(&self) -> Result<GitDiffFindFlags, ffi::git_diff_find_t> {
         // SAFETY: this live shared handle permits a raw-place scalar read.
-        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+        let bits = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        GitDiffFindFlags::from_bits(bits).ok_or(bits)
     }
 
     /// Field: git_diff_find_options.rename_threshold
@@ -1114,10 +1114,10 @@ impl DiffFindOptionsMut<'_> {
         unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
     }
 
-    /// Sets the raw combination of published `git_diff_find_t` bits.
-    pub fn set_flags(&mut self, flags: u32) {
+    /// Sets the rename and copy detection options.
+    pub fn set_flags(&mut self, flags: GitDiffFindFlags) {
         // SAFETY: this live exclusive handle permits a raw-place scalar write.
-        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
     }
 
     /// Sets the rename similarity threshold.
@@ -1217,12 +1217,14 @@ mod find_options_tests {
             options.as_ref().version(),
             ffi::GIT_DIFF_FIND_OPTIONS_VERSION
         );
-        assert_eq!(options.as_ref().flags(), 0);
+        assert_eq!(options.as_ref().flags(), Ok(GitDiffFindFlags::BY_CONFIG));
         assert!(options.as_ref().metric().is_none());
 
         {
             let mut options = options.as_mut();
-            options.set_flags(0x42);
+            options.set_flags(
+                GitDiffFindFlags::RENAMES_FROM_REWRITES | GitDiffFindFlags::FOR_UNTRACKED,
+            );
             options.set_rename_threshold(51);
             options.set_rename_from_rewrite_threshold(52);
             options.set_copy_threshold(53);
@@ -1231,7 +1233,10 @@ mod find_options_tests {
         }
 
         let options = options.as_ref();
-        assert_eq!(options.flags(), 0x42);
+        assert_eq!(
+            options.flags(),
+            Ok(GitDiffFindFlags::RENAMES_FROM_REWRITES | GitDiffFindFlags::FOR_UNTRACKED)
+        );
         assert_eq!(options.rename_threshold(), 51);
         assert_eq!(options.rename_from_rewrite_threshold(), 52);
         assert_eq!(options.copy_threshold(), 53);
@@ -1266,11 +1271,11 @@ ffibox::define_ctype!(
 
 impl<'a> DiffDeltaRef<'a> {
     /// Field: git_diff_delta.flags
-    /// Returns the raw combination of published `git_diff_flag_t` bits.
-    #[must_use]
-    pub fn flags(&self) -> u32 {
+    /// Returns the checked delta state flags.
+    pub fn flags(&self) -> Result<GitDiffFlags, ffi::git_diff_flag_t> {
         // SAFETY: this live shared handle permits a raw-place scalar read.
-        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+        let bits = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        GitDiffFlags::from_bits(bits).ok_or(bits)
     }
 
     /// Field: git_diff_delta.status
@@ -1323,10 +1328,10 @@ impl<'a> DiffDeltaRef<'a> {
 }
 
 impl DiffDeltaMut<'_> {
-    /// Sets the raw combination of published `git_diff_flag_t` bits.
-    pub fn set_flags(&mut self, flags: u32) {
+    /// Sets the delta state flags.
+    pub fn set_flags(&mut self, flags: GitDiffFlags) {
         // SAFETY: this exclusive handle permits a raw-place scalar write.
-        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
     }
 
     /// Sets the kind of change.
@@ -2260,6 +2265,270 @@ mod diff_binary_tests {
         assert_eq!(
             binary.old_file().kind(),
             Ok(crate::diff::DiffBinaryKind::Delta)
+        );
+    }
+}
+
+/// Wraps: git_diff_find_t
+/// A checked set of rename, copy, rewrite, and similarity options.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitDiffFindFlags(ffi::git_diff_find_t);
+
+impl GitDiffFindFlags {
+    /// Read rename detection settings from repository configuration.
+    pub const BY_CONFIG: Self = Self(ffi::git_diff_find_t_GIT_DIFF_FIND_BY_CONFIG);
+    /// Detect renamed files.
+    pub const RENAMES: Self = Self(ffi::git_diff_find_t_GIT_DIFF_FIND_RENAMES);
+    /// Consider rewrites as rename sources.
+    pub const RENAMES_FROM_REWRITES: Self =
+        Self(ffi::git_diff_find_t_GIT_DIFF_FIND_RENAMES_FROM_REWRITES);
+    /// Detect copied files.
+    pub const COPIES: Self = Self(ffi::git_diff_find_t_GIT_DIFF_FIND_COPIES);
+    /// Consider unmodified files as copy sources.
+    pub const COPIES_FROM_UNMODIFIED: Self =
+        Self(ffi::git_diff_find_t_GIT_DIFF_FIND_COPIES_FROM_UNMODIFIED);
+    /// Mark significant rewrites.
+    pub const REWRITES: Self = Self(ffi::git_diff_find_t_GIT_DIFF_FIND_REWRITES);
+    /// Split significant rewrites into delete/add pairs.
+    pub const BREAK_REWRITES: Self = Self(ffi::git_diff_find_t_GIT_DIFF_BREAK_REWRITES);
+    /// Mark and split significant rewrites.
+    pub const FIND_AND_BREAK_REWRITES: Self =
+        Self(ffi::git_diff_find_t_GIT_DIFF_FIND_AND_BREAK_REWRITES);
+    /// Find renames and copies for untracked files.
+    pub const FOR_UNTRACKED: Self = Self(ffi::git_diff_find_t_GIT_DIFF_FIND_FOR_UNTRACKED);
+    /// Enable every published finding feature.
+    pub const FIND_ALL: Self = Self(ffi::git_diff_find_t_GIT_DIFF_FIND_ALL);
+    /// Ignore leading whitespace when measuring similarity.
+    pub const IGNORE_LEADING_WHITESPACE: Self =
+        Self(ffi::git_diff_find_t_GIT_DIFF_FIND_IGNORE_LEADING_WHITESPACE);
+    /// Ignore all whitespace when measuring similarity.
+    pub const IGNORE_WHITESPACE: Self = Self(ffi::git_diff_find_t_GIT_DIFF_FIND_IGNORE_WHITESPACE);
+    /// Include whitespace when measuring similarity.
+    pub const DONT_IGNORE_WHITESPACE: Self =
+        Self(ffi::git_diff_find_t_GIT_DIFF_FIND_DONT_IGNORE_WHITESPACE);
+    /// Compare object IDs only when measuring similarity.
+    pub const EXACT_MATCH_ONLY: Self = Self(ffi::git_diff_find_t_GIT_DIFF_FIND_EXACT_MATCH_ONLY);
+    /// Restore a split rewrite unless it contributes to a rename.
+    pub const BREAK_REWRITES_FOR_RENAMES_ONLY: Self =
+        Self(ffi::git_diff_find_t_GIT_DIFF_BREAK_REWRITES_FOR_RENAMES_ONLY);
+    /// Remove unmodified deltas after similarity detection.
+    pub const REMOVE_UNMODIFIED: Self = Self(ffi::git_diff_find_t_GIT_DIFF_FIND_REMOVE_UNMODIFIED);
+
+    const PUBLISHED_BITS: ffi::git_diff_find_t = Self::FIND_ALL.0
+        | Self::IGNORE_WHITESPACE.0
+        | Self::DONT_IGNORE_WHITESPACE.0
+        | Self::EXACT_MATCH_ONLY.0
+        | Self::BREAK_REWRITES_FOR_RENAMES_ONLY.0
+        | Self::REMOVE_UNMODIFIED.0;
+
+    /// Converts raw bits when every bit is published by libgit2.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_diff_find_t) -> Option<Self> {
+        if bits & !Self::PUBLISHED_BITS == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 option bits.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_diff_find_t {
+        self.0
+    }
+
+    /// Returns whether no nonzero option is selected.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every option in `other` is selected.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any option in `other` is selected.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl BitOr for GitDiffFindFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitDiffFindFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitDiffFindFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitDiffFindFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl From<GitDiffFindFlags> for ffi::git_diff_find_t {
+    fn from(flags: GitDiffFindFlags) -> Self {
+        flags.bits()
+    }
+}
+
+/// Wraps: git_diff_flag_t
+/// A checked set of state flags attached to diff deltas and files.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitDiffFlags(ffi::git_diff_flag_t);
+
+impl GitDiffFlags {
+    /// No state flags are set.
+    pub const NONE: Self = Self(0);
+    /// The file is treated as binary data.
+    pub const BINARY: Self = Self(ffi::git_diff_flag_t_GIT_DIFF_FLAG_BINARY);
+    /// The file is treated as text data.
+    pub const NOT_BINARY: Self = Self(ffi::git_diff_flag_t_GIT_DIFF_FLAG_NOT_BINARY);
+    /// The object ID is known to be correct.
+    pub const VALID_ID: Self = Self(ffi::git_diff_flag_t_GIT_DIFF_FLAG_VALID_ID);
+    /// The file exists on this side of the delta.
+    pub const EXISTS: Self = Self(ffi::git_diff_flag_t_GIT_DIFF_FLAG_EXISTS);
+    /// The recorded file size is known to be correct.
+    pub const VALID_SIZE: Self = Self(ffi::git_diff_flag_t_GIT_DIFF_FLAG_VALID_SIZE);
+    /// Every state bit published by this libgit2 API.
+    pub const ALL: Self = Self(
+        Self::BINARY.0
+            | Self::NOT_BINARY.0
+            | Self::VALID_ID.0
+            | Self::EXISTS.0
+            | Self::VALID_SIZE.0,
+    );
+
+    /// Converts raw bits when every bit is published by libgit2.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_diff_flag_t) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 state bits.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_diff_flag_t {
+        self.0
+    }
+
+    /// Returns whether no state flag is set.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every state in `other` is present.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any state in `other` is present.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl BitOr for GitDiffFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitDiffFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitDiffFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitDiffFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl From<GitDiffFlags> for ffi::git_diff_flag_t {
+    fn from(flags: GitDiffFlags) -> Self {
+        flags.bits()
+    }
+}
+
+#[cfg(test)]
+mod scheduled_flag_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn diff_find_flags_validate_and_combine_published_bits() {
+        let flags = GitDiffFindFlags::RENAMES
+            | GitDiffFindFlags::COPIES
+            | GitDiffFindFlags::IGNORE_WHITESPACE;
+        assert!(flags.contains(GitDiffFindFlags::RENAMES));
+        assert!(flags.intersects(GitDiffFindFlags::COPIES));
+        assert_eq!(GitDiffFindFlags::from_bits(flags.bits()), Some(flags));
+        assert_eq!(GitDiffFindFlags::from_bits(1 << 20), None);
+        assert!(GitDiffFindFlags::BY_CONFIG.is_empty());
+    }
+
+    #[test]
+    fn diff_file_flags_validate_and_combine_published_bits() {
+        let flags = GitDiffFlags::BINARY | GitDiffFlags::VALID_ID | GitDiffFlags::EXISTS;
+        assert!(flags.contains(GitDiffFlags::BINARY));
+        assert!(flags.intersects(GitDiffFlags::VALID_ID));
+        assert_eq!(GitDiffFlags::from_bits(flags.bits()), Some(flags));
+        assert_eq!(GitDiffFlags::from_bits(GitDiffFlags::ALL.bits() << 1), None);
+    }
+
+    #[test]
+    fn diff_flag_wrappers_preserve_the_c_layouts() {
+        assert_eq!(
+            size_of::<GitDiffFindFlags>(),
+            size_of::<ffi::git_diff_find_t>()
+        );
+        assert_eq!(
+            align_of::<GitDiffFindFlags>(),
+            align_of::<ffi::git_diff_find_t>()
+        );
+        assert_eq!(size_of::<GitDiffFlags>(), size_of::<ffi::git_diff_flag_t>());
+        assert_eq!(
+            align_of::<GitDiffFlags>(),
+            align_of::<ffi::git_diff_flag_t>()
         );
     }
 }

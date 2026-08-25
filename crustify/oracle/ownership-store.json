@@ -1163,6 +1163,43 @@
    ]
   },
   {
+   "name": "git_credential_userpass_payload",
+   "defined_in": "include/git2/credential_helpers.h",
+   "_comment_agent": "Both const string fields borrow caller storage, may be NULL, and are never retained or freed by libgit2.",
+   "fields": [
+    {
+     "name": "password",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Caller-owned optional NUL-terminated password; NULL is accepted structurally and makes git_credential_userpass fail, while a non-NULL value is only read/copy-consumed during the callback."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Caller-owned optional NUL-terminated username; git_credential_userpass only reads it during the callback and credential constructors copy it."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_describe_format_options",
    "defined_in": "include/git2/describe.h",
    "_comment_agent": "Public format options are caller-owned by value and have no lifecycle operation. dirty_suffix is an optional borrowed const C string read synchronously by git_describe__format.",

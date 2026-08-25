@@ -227,19 +227,15 @@ impl<'a> DescribeOptionsRef<'a> {
     }
 
     /// Field: git_describe_options.describe_strategy
-    /// Returns the raw libgit2 describe strategy value.
-    ///
-    /// The C field is a plain `unsigned int` holding a
-    /// `git_describe_strategy_t`: 0 `GIT_DESCRIBE_DEFAULT`, 1
-    /// `GIT_DESCRIBE_TAGS`, 2 `GIT_DESCRIBE_ALL`. That enum has no Rust
-    /// wrapper yet, so the value is carried raw; libgit2 treats every
-    /// unrecognized value as the default.
-    #[must_use]
-    pub fn describe_strategy(&self) -> u32 {
+    /// Returns the checked reference lookup strategy.
+    pub fn describe_strategy(
+        &self,
+    ) -> Result<crate::api::describe::GitDescribeStrategy, ffi::git_describe_strategy_t> {
         // SAFETY: `self` carries a live shared borrow of the complete C
         // object, and raw-place projection reads the initialized scalar
         // without forming a reference to C-owned memory.
-        unsafe { addr_of!((*self.as_ptr()).describe_strategy).read() }
+        let raw = unsafe { addr_of!((*self.as_ptr()).describe_strategy).read() };
+        crate::api::describe::GitDescribeStrategy::from_raw(raw).ok_or(raw)
     }
 
     /// Field: git_describe_options.max_candidates_tags
@@ -304,14 +300,12 @@ impl DescribeOptionsMut<'_> {
         unsafe { self.set_pattern(None) }
     }
 
-    /// Sets the raw libgit2 describe strategy value.
-    ///
-    /// See [`DescribeOptionsRef::describe_strategy`] for the accepted values.
-    pub fn set_describe_strategy(&mut self, strategy: u32) {
+    /// Sets the reference lookup strategy.
+    pub fn set_describe_strategy(&mut self, strategy: crate::api::describe::GitDescribeStrategy) {
         // SAFETY: this exclusive handle permits mutation, and raw-place
-        // projection writes the scalar without forming a reference to
+        // projection writes the checked scalar without forming a reference to
         // C-owned memory.
-        unsafe { addr_of_mut!((*self.as_mut_ptr()).describe_strategy).write(strategy) }
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).describe_strategy).write(strategy.as_raw()) }
     }
 
     /// Sets the maximum number of candidate tags to consider.
@@ -377,7 +371,7 @@ mod describe_type_tests {
 
         options.set_version(1);
         options.set_max_candidates_tags(20);
-        options.set_describe_strategy(2);
+        options.set_describe_strategy(crate::api::describe::GitDescribeStrategy::ALL);
         options.set_only_follow_first_parent(true);
         options.set_show_commit_oid_as_fallback(true);
         // SAFETY: this string literal has static storage and remains valid for
@@ -387,7 +381,10 @@ mod describe_type_tests {
         let shared = options.as_ref();
         assert_eq!(shared.version(), 1);
         assert_eq!(shared.max_candidates_tags(), 20);
-        assert_eq!(shared.describe_strategy(), 2);
+        assert_eq!(
+            shared.describe_strategy(),
+            Ok(crate::api::describe::GitDescribeStrategy::ALL)
+        );
         assert!(shared.only_follow_first_parent());
         assert!(shared.show_commit_oid_as_fallback());
         assert_eq!(shared.pattern(), Some(c"release-*"));
