@@ -6,6 +6,7 @@ use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use core::ptr::NonNull;
 
 use crate::api::buffer::GitBufMut;
+use crate::ffi;
 use crate::remote::GitPushUpdateRef;
 use crate::util::net::Direction;
 
@@ -1329,11 +1330,11 @@ impl<'object, 'data> GitFetchOptionsRef<'object, 'data> {
     }
 
     /// Field: git_fetch_options.depth
-    /// Returns the requested history depth, with zero denoting full history.
-    #[must_use]
-    pub fn depth(&self) -> core::ffi::c_int {
+    /// Returns the requested history depth, rejecting negative C values.
+    pub fn depth(&self) -> Result<GitFetchDepth, core::ffi::c_int> {
         // SAFETY: this live shared handle permits the scalar raw-place read.
-        unsafe { core::ptr::addr_of!((*self.as_ptr()).depth).read() }
+        let depth = unsafe { core::ptr::addr_of!((*self.as_ptr()).depth).read() };
+        GitFetchDepth::try_from(depth)
     }
 
     /// Field: git_fetch_options.callbacks
@@ -1439,9 +1440,9 @@ impl<'object, 'data> GitFetchOptionsMut<'object, 'data> {
     }
 
     /// Replaces the requested history depth.
-    pub fn set_depth(&mut self, depth: core::ffi::c_int) {
+    pub fn set_depth(&mut self, depth: GitFetchDepth) {
         // SAFETY: this exclusive handle permits the scalar write.
-        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).depth).write(depth) }
+        unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).depth).write(depth.value()) }
     }
 
     /// Replaces the `git_remote_update_flags` bit set.
@@ -1917,7 +1918,7 @@ mod fetch_and_push_options_tests {
             fetch.version(),
             crate::ffi::GIT_FETCH_OPTIONS_VERSION as core::ffi::c_int
         );
-        assert_eq!(fetch.depth(), 0);
+        assert_eq!(fetch.depth(), Ok(GitFetchDepth::FULL));
         assert_eq!(fetch.prune(), Ok(crate::remote::GitFetchPrune::Unspecified));
         assert_eq!(
             fetch.download_tags(),
@@ -1958,7 +1959,7 @@ mod fetch_and_push_options_tests {
         let mut fetch = GitFetchOptions::new();
         {
             let mut view = fetch.as_mut();
-            view.set_depth(7);
+            view.set_depth(GitFetchDepth::new(7).unwrap());
             view.set_prune(crate::remote::GitFetchPrune::Prune);
             view.set_download_tags(crate::remote::GitRemoteAutotagOption::All);
             view.set_update_flags(2);
@@ -1969,7 +1970,7 @@ mod fetch_and_push_options_tests {
             assert_eq!(view.custom_headers_mut().as_ref().count(), 0);
         }
         let view = fetch.as_ref();
-        assert_eq!(view.depth(), 7);
+        assert_eq!(view.depth(), Ok(GitFetchDepth::new(7).unwrap()));
         assert_eq!(view.prune(), Ok(crate::remote::GitFetchPrune::Prune));
         assert_eq!(
             view.download_tags(),
@@ -2321,6 +2322,111 @@ mod remote_flag_tests {
         assert_eq!(
             align_of::<GitRemoteUpdateFlags>(),
             align_of::<crate::ffi::git_remote_update_flags>()
+        );
+    }
+}
+
+/// Wraps: git_fetch_depth_t
+/// A valid history depth for a fetch operation.
+///
+/// Zero requests complete history, values below [`Self::UNSHALLOW`] request
+/// that many commits, and `UNSHALLOW` requests all history missing from an
+/// already-shallow repository.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitFetchDepth(ffi::git_fetch_depth_t);
+
+impl GitFetchDepth {
+    /// Fetch complete history instead of making a shallow clone.
+    pub const FULL: Self = Self(ffi::git_fetch_depth_t_GIT_FETCH_DEPTH_FULL);
+    /// Fetch all history missing from an already-shallow repository.
+    pub const UNSHALLOW: Self = Self(ffi::git_fetch_depth_t_GIT_FETCH_DEPTH_UNSHALLOW);
+
+    /// Constructs a valid fetch depth from a commit count.
+    ///
+    /// Zero is [`Self::FULL`]. The `UNSHALLOW` sentinel is also accepted;
+    /// larger values cannot be represented by libgit2's signed options field.
+    #[must_use]
+    pub const fn new(commits: ffi::git_fetch_depth_t) -> Option<Self> {
+        if commits <= Self::UNSHALLOW.0 {
+            Some(Self(commits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the signed value stored in `git_fetch_options.depth`.
+    #[must_use]
+    pub const fn value(self) -> core::ffi::c_int {
+        self.0 as core::ffi::c_int
+    }
+
+    /// Returns the underlying C enum value.
+    #[must_use]
+    pub const fn as_raw(self) -> ffi::git_fetch_depth_t {
+        self.0
+    }
+
+    /// Returns whether this requests complete, non-shallow history.
+    #[must_use]
+    pub const fn is_full(self) -> bool {
+        self.0 == Self::FULL.0
+    }
+}
+
+impl From<GitFetchDepth> for ffi::git_fetch_depth_t {
+    fn from(depth: GitFetchDepth) -> Self {
+        depth.as_raw()
+    }
+}
+
+impl TryFrom<ffi::git_fetch_depth_t> for GitFetchDepth {
+    type Error = ffi::git_fetch_depth_t;
+
+    fn try_from(depth: ffi::git_fetch_depth_t) -> Result<Self, Self::Error> {
+        Self::new(depth).ok_or(depth)
+    }
+}
+
+impl TryFrom<core::ffi::c_int> for GitFetchDepth {
+    type Error = core::ffi::c_int;
+
+    fn try_from(depth: core::ffi::c_int) -> Result<Self, Self::Error> {
+        if depth < 0 {
+            Err(depth)
+        } else {
+            Ok(Self(depth as ffi::git_fetch_depth_t))
+        }
+    }
+}
+
+#[cfg(test)]
+mod fetch_depth_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn fetch_depths_cover_full_shallow_and_unshallow_requests() {
+        assert!(GitFetchDepth::FULL.is_full());
+        assert_eq!(GitFetchDepth::new(7).unwrap().value(), 7);
+        assert_eq!(GitFetchDepth::UNSHALLOW.value(), core::ffi::c_int::MAX);
+        assert_eq!(GitFetchDepth::try_from(-1), Err(-1));
+        assert_eq!(
+            GitFetchDepth::new(GitFetchDepth::UNSHALLOW.as_raw() + 1),
+            None
+        );
+    }
+
+    #[test]
+    fn fetch_depth_preserves_the_c_enum_layout() {
+        assert_eq!(
+            size_of::<GitFetchDepth>(),
+            size_of::<ffi::git_fetch_depth_t>()
+        );
+        assert_eq!(
+            align_of::<GitFetchDepth>(),
+            align_of::<ffi::git_fetch_depth_t>()
         );
     }
 }

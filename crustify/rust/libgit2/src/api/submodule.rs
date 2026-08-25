@@ -362,12 +362,16 @@ mod update_options_tests {
             let mut view = options.as_mut();
             view.set_allow_fetch(false);
             view.checkout_options_mut().set_disable_filters(true);
-            view.fetch_options_mut().set_depth(2);
+            view.fetch_options_mut()
+                .set_depth(crate::api::remote::GitFetchDepth::new(2).unwrap());
         }
         let view = options.as_ref();
         assert!(!view.allow_fetch());
         assert!(view.checkout_options().disable_filters());
-        assert_eq!(view.fetch_options().depth(), 2);
+        assert_eq!(
+            view.fetch_options().depth(),
+            Ok(crate::api::remote::GitFetchDepth::new(2).unwrap())
+        );
     }
 
     /// The pinned `'data` still accepts a referent that merely outlives the

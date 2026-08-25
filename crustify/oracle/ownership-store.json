@@ -1948,6 +1948,45 @@
    "fields": []
   },
   {
+   "name": "git_filter_list",
+   "defined_in": "src/libgit2/filter.c",
+   "_comment_agent": "git_filter_list is public but opaque. Its internal array owns only the entry buffer; entry filter/name pointers borrow the global registry and payload cleanup is delegated to each filter. temp_buf is optional borrowed session scratch storage.",
+   "fields": [
+    {
+     "name": "filters.ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned growable buffer of inline git_filter_entry values, allocated/reallocated by git_array_alloc and released by git_array_clear in git_filter_list_free; null while empty."
+     }
+    },
+    {
+     "name": "temp_buf",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed optional scratch git_str from git_filter_session; setup_stream clears and writes through it, while git_filter_list_free does not release it. Internal callers keep the checkout/session scratch storage alive through list use."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_index",
    "defined_in": "src/libgit2/index.h",
    "_comment_agent": "git_index is publicly opaque but internally refcounted. tree points into the sibling tree_pool arena; comparator slots always borrow static functions; index_file_path owns an optional strdup allocation.",
@@ -15517,6 +15556,33 @@
       "nullable": false,
       "mutable": false,
       "note": "Required transient NUL string copied into thread-local error storage."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_filter_list_free",
+   "defined_in": "src/libgit2/filter.c",
+   "lifetime": {
+    "for": "fl",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "fl",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and frees one complete git_filter_list; null is explicitly accepted. It runs payload cleanup callbacks, clears the owned entry buffer, then frees the list allocation."
      }
     }
    ]

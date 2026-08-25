@@ -22,42 +22,15 @@ impl Libgit2Init {
 }
 
 /// Compile-time features present in the linked libgit2.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-#[repr(transparent)]
-pub struct Libgit2Features(i32);
-
-impl Libgit2Features {
-    pub const THREADS: Self = Self(ffi::git_feature_t_GIT_FEATURE_THREADS as i32);
-    pub const HTTPS: Self = Self(ffi::git_feature_t_GIT_FEATURE_HTTPS as i32);
-    pub const SSH: Self = Self(ffi::git_feature_t_GIT_FEATURE_SSH as i32);
-    pub const NSEC: Self = Self(ffi::git_feature_t_GIT_FEATURE_NSEC as i32);
-    pub const HTTP_PARSER: Self = Self(ffi::git_feature_t_GIT_FEATURE_HTTP_PARSER as i32);
-    pub const REGEX: Self = Self(ffi::git_feature_t_GIT_FEATURE_REGEX as i32);
-    pub const I18N: Self = Self(ffi::git_feature_t_GIT_FEATURE_I18N as i32);
-    pub const AUTH_NTLM: Self = Self(ffi::git_feature_t_GIT_FEATURE_AUTH_NTLM as i32);
-    pub const AUTH_NEGOTIATE: Self = Self(ffi::git_feature_t_GIT_FEATURE_AUTH_NEGOTIATE as i32);
-    pub const COMPRESSION: Self = Self(ffi::git_feature_t_GIT_FEATURE_COMPRESSION as i32);
-    pub const SHA1: Self = Self(ffi::git_feature_t_GIT_FEATURE_SHA1 as i32);
-    pub const SHA256: Self = Self(ffi::git_feature_t_GIT_FEATURE_SHA256 as i32);
-    pub const HTTP: Self = Self(ffi::git_feature_t_GIT_FEATURE_HTTP as i32);
-
-    #[must_use]
-    pub const fn bits(self) -> i32 {
-        self.0
-    }
-
-    #[must_use]
-    pub const fn contains(self, feature: Self) -> bool {
-        self.0 & feature.0 == feature.0
-    }
-}
+pub use crate::api::common::GitFeatureFlags as Libgit2Features;
 
 /// Wraps: git_libgit2_features
 /// Returns the linked library's compile-time feature bit set.
 #[must_use]
 pub fn git_libgit2_features() -> Libgit2Features {
     // SAFETY: the query has no arguments and returns a scalar bit set.
-    Libgit2Features(unsafe { ffi::git_libgit2_features() })
+    let features = unsafe { ffi::git_libgit2_features() } as ffi::git_feature_t;
+    Libgit2Features::from_bits_retain(features)
 }
 
 /// Runtime version of the linked libgit2 library.

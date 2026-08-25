@@ -553,14 +553,18 @@ mod tests {
             view.set_local(GitCloneLocal::NoLinks);
             view.set_checkout_branch(Some(c"topic"));
             view.checkout_options_mut().set_disable_filters(true);
-            view.fetch_options_mut().set_depth(3);
+            view.fetch_options_mut()
+                .set_depth(crate::api::remote::GitFetchDepth::new(3).unwrap());
         }
         let view = options.as_ref();
         assert!(view.bare());
         assert_eq!(view.local(), Ok(GitCloneLocal::NoLinks));
         assert_eq!(view.checkout_branch(), Some(c"topic"));
         assert!(view.checkout_options().disable_filters());
-        assert_eq!(view.fetch_options().depth(), 3);
+        assert_eq!(
+            view.fetch_options().depth(),
+            Ok(crate::api::remote::GitFetchDepth::new(3).unwrap())
+        );
     }
 
     #[test]

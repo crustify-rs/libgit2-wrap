@@ -283,6 +283,10 @@
 ^git_tree_free$
 ^git_transport_message_cb$
 ^git_feature_t$
+^git_fetch_depth_t$
+^git_filter_flag_t$
+^git_filter_list$
+^git_filter_list_free$
 ^git_libgit2_opt_t$
 ^git_error_code$
 ^git_email_create_flags_t$
