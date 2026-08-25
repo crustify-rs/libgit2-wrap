@@ -185,10 +185,34 @@ mod tests {
 /// Wraps: git_worktree_add_options
 /// Layout-compatible worktree-add options borrowing their optional reference
 /// and all data nested in their checkout options for `'data`.
+///
+/// `'data` is invariant. [`GitWorktreeAddOptionsMut::set_reference`] stores a
+/// `&'data` reference in the C struct while
+/// [`GitWorktreeAddOptionsRef::reference`] hands it back out, and the nested
+/// checkout options behave the same way. A covariant `'data` would let safe
+/// code shrink the parameter on the exclusive handle, install a shorter-lived
+/// reference, and then read it back through a handle still typed at the
+/// longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::worktree::GitWorktreeAddOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitWorktreeAddOptionsMut<'object, 'static>,
+/// ) -> GitWorktreeAddOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitWorktreeAddOptions<'data> {
     inner: CType<ffi::git_worktree_add_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitWorktreeAddOptions`].

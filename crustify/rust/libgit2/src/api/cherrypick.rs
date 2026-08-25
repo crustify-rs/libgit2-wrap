@@ -7,10 +7,34 @@ use crate::ffi;
 /// Wraps: git_cherrypick_options
 /// Layout-compatible cherry-pick options whose embedded option headers borrow
 /// caller-owned data for `'data`.
+///
+/// `'data` is invariant. The embedded merge and checkout headers reached
+/// through [`GitCherrypickOptionsMut::merge_options_mut`] and
+/// [`GitCherrypickOptionsMut::checkout_options_mut`] store `&'data` referents
+/// and hand them back out. A covariant `'data` would let safe code shrink the
+/// parameter on the exclusive handle, configure a shorter-lived string, tree
+/// or index through those headers, and then read it back through a handle
+/// still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::cherrypick::GitCherrypickOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitCherrypickOptionsMut<'object, 'static>,
+/// ) -> GitCherrypickOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitCherrypickOptions<'data> {
     inner: ffibox::CType<ffi::git_cherrypick_options>,
-    _data: core::marker::PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: core::marker::PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitCherrypickOptions`].

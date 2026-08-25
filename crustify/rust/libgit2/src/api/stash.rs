@@ -393,10 +393,33 @@ mod save_options_tests {
 /// Wraps: git_stash_apply_options
 /// Layout-compatible stash-apply options borrowing callback state and nested
 /// checkout data for `'data`.
+///
+/// `'data` is invariant. [`GitStashApplyOptionsMut::set_progress_callback`]
+/// stores a `&'data mut` receiver in the C struct and the nested checkout
+/// options store and return `&'data` referents. A covariant `'data` would let
+/// safe code shrink the parameter on the exclusive handle, install a
+/// shorter-lived receiver or checkout string, and use it through a handle
+/// still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::stash::GitStashApplyOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitStashApplyOptionsMut<'object, 'static>,
+/// ) -> GitStashApplyOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitStashApplyOptions<'data> {
     inner: CType<ffi::git_stash_apply_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitStashApplyOptions`].

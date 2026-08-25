@@ -148,10 +148,34 @@ mod tests {
 /// Wraps: git_email_create_options
 /// Layout-compatible email options borrowing the subject prefix and nested
 /// diff-option data for `'data`.
+///
+/// `'data` is invariant. [`GitEmailCreateOptionsMut::set_subject_prefix`]
+/// stores a `&'data` string in the C struct while
+/// [`GitEmailCreateOptionsRef::subject_prefix`] hands one back out, and the
+/// nested diff options behave the same way. A covariant `'data` would let
+/// safe code shrink the parameter on the exclusive handle, install a
+/// shorter-lived prefix, and then read the released string back through a
+/// handle still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::email::GitEmailCreateOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitEmailCreateOptionsMut<'object, 'static>,
+/// ) -> GitEmailCreateOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitEmailCreateOptions<'data> {
     inner: CType<ffi::git_email_create_options>,
-    _data: core::marker::PhantomData<&'data ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: core::marker::PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitEmailCreateOptions`].

@@ -177,6 +177,12 @@ pub trait GitRemoteCallbackHandler {
     }
 
     /// Receives the deprecated per-reference update notification.
+    ///
+    /// Libgit2 calls the `update_tips` slot only when `update_refs` is unset,
+    /// and [`GitRemoteCallbacksMut::set_handler`] installs every slot. The
+    /// default [`Self::update_refs`] therefore forwards here, so a handler
+    /// that implements only this method still observes every update, exactly
+    /// as a C table that sets only the deprecated slot does.
     fn update_tips(
         &mut self,
         _refname: &CStr,
@@ -249,24 +255,52 @@ pub trait GitRemoteCallbackHandler {
     }
 
     /// Receives the preferred local-reference update notification.
+    ///
+    /// The default forwards to [`Self::update_tips`], because libgit2 prefers
+    /// this slot whenever both are installed and `set_handler` always installs
+    /// both. Overriding this method supersedes `update_tips`, matching a C
+    /// table that sets both.
     fn update_refs(
         &mut self,
-        _refname: &CStr,
-        _old: crate::oid::OidRef<'_>,
-        _new: crate::oid::OidRef<'_>,
+        refname: &CStr,
+        old: crate::oid::OidRef<'_>,
+        new: crate::oid::OidRef<'_>,
         _spec: crate::refspec::GitRefspecRef<'_>,
     ) -> i32 {
-        0
+        self.update_tips(refname, old, new)
     }
 }
 
 /// Wraps: git_remote_callbacks
 /// Layout-compatible remote callback table borrowing one typed receiver for
 /// the table's data lifetime.
+///
+/// `'data` is invariant. [`GitRemoteCallbacksMut::set_handler`] stores a
+/// `&'data mut` receiver in the payload slot, and libgit2 copies the whole
+/// table into connection and push state that outlives the call. A covariant
+/// `'data` would let safe code shrink the parameter on the exclusive handle,
+/// install a shorter-lived receiver, and hand a table still typed at the
+/// longer lifetime to an operation that then calls back into released state.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::remote::GitRemoteCallbacksMut;
+///
+/// fn shrink<'object, 'short>(
+///     callbacks: GitRemoteCallbacksMut<'object, 'static>,
+/// ) -> GitRemoteCallbacksMut<'object, 'short> {
+///     callbacks
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitRemoteCallbacks<'data> {
     inner: ffibox::CType<crate::ffi::git_remote_callbacks>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitRemoteCallbacks`].
@@ -520,6 +554,11 @@ impl<'object, 'data> GitRemoteCallbacksMut<'object, 'data> {
     }
 
     /// Installs every callback trampoline over one typed receiver.
+    ///
+    /// Every slot is filled, so libgit2's preference for `update_refs` over
+    /// the deprecated `update_tips` always applies; see
+    /// [`GitRemoteCallbackHandler::update_tips`] for how the trait keeps both
+    /// reachable.
     ///
     /// # Safety
     /// Libgit2 may copy this table into longer-lived connection and push
@@ -1025,6 +1064,76 @@ mod remote_callbacks_tests {
         drop(unsafe {
             Box::from_raw(raw.cast::<core::mem::MaybeUninit<crate::ffi::git_remote>>())
         });
+    }
+
+    /// Opaque stand-in storage for the refspec the update trampoline borrows.
+    /// Nothing dereferences it: `update_refs` only forwards the handle.
+    fn refspec_storage() -> *mut crate::ffi::git_refspec {
+        Box::into_raw(Box::new(
+            core::mem::MaybeUninit::<crate::ffi::git_refspec>::zeroed(),
+        ))
+        .cast()
+    }
+
+    /// Releases the storage `refspec_storage` produced.
+    ///
+    /// # Safety
+    ///
+    /// `raw` must be a pointer `refspec_storage` returned and not yet
+    /// released, with no surviving handle over it.
+    unsafe fn drop_refspec_storage(raw: *mut crate::ffi::git_refspec) {
+        // SAFETY: the caller supplies exactly that allocation, which this
+        // recovers without interpreting its opaque contents.
+        drop(unsafe {
+            Box::from_raw(raw.cast::<core::mem::MaybeUninit<crate::ffi::git_refspec>>())
+        });
+    }
+
+    /// A handler that implements only the deprecated notification, as a C
+    /// caller filling just `update_tips` would.
+    struct DeprecatedTipsOnly {
+        tips: Vec<std::ffi::CString>,
+    }
+
+    impl GitRemoteCallbackHandler for DeprecatedTipsOnly {
+        fn update_tips(
+            &mut self,
+            refname: &CStr,
+            _old: crate::oid::OidRef<'_>,
+            _new: crate::oid::OidRef<'_>,
+        ) -> i32 {
+            self.tips.push(refname.to_owned());
+            0
+        }
+    }
+
+    #[test]
+    fn update_refs_reaches_a_handler_that_only_implements_update_tips() {
+        // `set_handler` fills both slots and libgit2 then calls `update_refs`
+        // alone, so the deprecated method is reachable only by delegation.
+        let mut handler = DeprecatedTipsOnly { tips: Vec::new() };
+        let raw_spec = refspec_storage();
+        let old = crate::oid::Oid::zeroed();
+        let new = crate::oid::Oid::zeroed();
+        // SAFETY: both IDs and the opaque refspec storage are live for the
+        // call, the name is NUL-terminated, and `handler` is the live typed
+        // receiver this trampoline is instantiated for.
+        let status = unsafe {
+            update_refs::<DeprecatedTipsOnly>(
+                c"refs/heads/main".as_ptr(),
+                core::ptr::addr_of!(old).cast(),
+                core::ptr::addr_of!(new).cast(),
+                raw_spec,
+                core::ptr::addr_of_mut!(handler).cast(),
+            )
+        };
+        assert_eq!(status, 0);
+        assert_eq!(
+            handler.tips,
+            [std::ffi::CString::new("refs/heads/main").unwrap()]
+        );
+        // SAFETY: no handle to the refspec storage survives.
+        unsafe { drop_refspec_storage(raw_spec) };
     }
 
     #[test]
