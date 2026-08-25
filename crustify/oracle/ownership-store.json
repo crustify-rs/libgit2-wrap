@@ -4603,6 +4603,234 @@
    ]
   },
   {
+   "name": "git_transport",
+   "defined_in": "include/git2/sys/transport.h",
+   "_comment_agent": "All pointer fields are callback code pointers stored in the public transport vtable. They are never allocated, cloned, or freed by a transport; their code lifetime is static. GIT_TRANSPORT_INIT initializes every callback to NULL, and custom transports may leave unsupported callbacks unset, so each slot is nullable and immutable through the pointee.",
+   "fields": [
+    {
+     "name": "cancel",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; invoked synchronously."
+     }
+    },
+    {
+     "name": "capabilities",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; writes a scalar output synchronously."
+     }
+    },
+    {
+     "name": "close",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; invoked synchronously to close a transport."
+     }
+    },
+    {
+     "name": "connect",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; URL and option inputs are borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "download_pack",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; repository and progress state are borrowed for synchronous invocation."
+     }
+    },
+    {
+     "name": "free",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; fully constructed owned transports require it as their destructor."
+     }
+    },
+    {
+     "name": "is_connected",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; invoked synchronously."
+     }
+    },
+    {
+     "name": "ls",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; returned head array remains owned by the transport until its next callback."
+     }
+    },
+    {
+     "name": "negotiate_fetch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; repository and negotiation state are borrowed for synchronous invocation."
+     }
+    },
+    {
+     "name": "oid_type",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; writes only through its invocation out-parameter."
+     }
+    },
+    {
+     "name": "push",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; the callback does not outlive the synchronous invocation."
+     }
+    },
+    {
+     "name": "set_connect_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; options are borrowed only for the synchronous call."
+     }
+    },
+    {
+     "name": "shallow_roots",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable static code pointer; writes an oidarray output during synchronous invocation."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_tree",
    "defined_in": "src/libgit2/tree.h",
    "_comment_agent": "The public type is opaque. Its internal ODB reference and entry array are owned by the tree and released by git_tree__free.",
