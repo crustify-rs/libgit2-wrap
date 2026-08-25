@@ -45,3 +45,299 @@ mod tests {
         drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<crate::ffi::git_submodule>>()) });
     }
 }
+
+use core::marker::PhantomData;
+use core::ptr::{NonNull, addr_of, addr_of_mut};
+
+use ffibox::{CCell, CPtr, CType, CVal, CValued};
+
+use crate::api::checkout::{GitCheckoutOptionsMut, GitCheckoutOptionsRef};
+use crate::api::remote::{GitFetchOptionsMut, GitFetchOptionsRef};
+use crate::ffi;
+
+/// Wraps: git_submodule_update_options
+/// Layout-compatible submodule-update options borrowing all nested strings,
+/// objects and callback state for `'data`.
+#[repr(transparent)]
+pub struct GitSubmoduleUpdateOptions<'data> {
+    inner: CType<ffi::git_submodule_update_options>,
+    _data: PhantomData<&'data mut ()>,
+}
+
+/// Shared borrow of [`GitSubmoduleUpdateOptions`].
+#[repr(transparent)]
+pub struct GitSubmoduleUpdateOptionsRef<'object, 'data>(
+    CPtr<'object, GitSubmoduleUpdateOptions<'data>>,
+);
+
+impl Clone for GitSubmoduleUpdateOptionsRef<'_, '_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for GitSubmoduleUpdateOptionsRef<'_, '_> {}
+
+/// Exclusive borrow of [`GitSubmoduleUpdateOptions`].
+#[repr(transparent)]
+pub struct GitSubmoduleUpdateOptionsMut<'object, 'data>(
+    GitSubmoduleUpdateOptionsRef<'object, 'data>,
+);
+
+// SAFETY: the layout type is transparent over the matching bindgen struct;
+// both handles are pointer-sized and access C-visible storage only through
+// raw-place projections. The shared handle exposes no writes.
+unsafe impl<'data> CCell for GitSubmoduleUpdateOptions<'data> {
+    type C = ffi::git_submodule_update_options;
+    type Ref<'object>
+        = GitSubmoduleUpdateOptionsRef<'object, 'data>
+    where
+        Self: 'object;
+    type Mut<'object>
+        = GitSubmoduleUpdateOptionsMut<'object, 'data>
+    where
+        Self: 'object;
+
+    unsafe fn ref_from_raw<'object>(ptr: NonNull<Self>) -> Self::Ref<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller guarantees that `ptr` is a live shared object.
+        GitSubmoduleUpdateOptionsRef(unsafe { CPtr::new(ptr) })
+    }
+
+    unsafe fn mut_from_raw<'object>(ptr: NonNull<Self>) -> Self::Mut<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller additionally guarantees exclusive access.
+        GitSubmoduleUpdateOptionsMut(GitSubmoduleUpdateOptionsRef(unsafe { CPtr::new(ptr) }))
+    }
+}
+
+// SAFETY: submodule-update options own no resource. Every pointer in their
+// inline option records is borrowed for the wrapper's data lifetime.
+unsafe impl CValued for GitSubmoduleUpdateOptions<'_> {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+impl<'data> GitSubmoduleUpdateOptions<'data> {
+    /// Constructs options equivalent to `GIT_SUBMODULE_UPDATE_OPTIONS_INIT`.
+    #[must_use]
+    pub fn new() -> CVal<Self> {
+        // SAFETY: every raw field admits zero. Required versions and nonzero
+        // defaults are installed before the initialized value escapes.
+        let inner = unsafe { CType::zeroed() };
+        let mut options = CVal::new(Self {
+            inner,
+            _data: PhantomData,
+        });
+        {
+            let mut view = options.as_mut();
+            view.set_version(ffi::GIT_SUBMODULE_UPDATE_OPTIONS_VERSION);
+            view.set_allow_fetch(true);
+            view.checkout_options_mut()
+                .set_version(ffi::GIT_CHECKOUT_OPTIONS_VERSION);
+            let mut fetch = view.fetch_options_mut();
+            fetch.set_version(ffi::GIT_FETCH_OPTIONS_VERSION as core::ffi::c_int);
+            fetch.set_update_flags(1);
+            fetch
+                .callbacks_mut()
+                .set_version(ffi::GIT_REMOTE_CALLBACKS_VERSION);
+            fetch
+                .proxy_options_mut()
+                .set_version(ffi::GIT_PROXY_OPTIONS_VERSION);
+        }
+        options
+    }
+}
+
+impl<'object, 'data> GitSubmoduleUpdateOptionsRef<'object, 'data> {
+    /// Borrows a raw C options pointer, returning `None` for null.
+    ///
+    /// # Safety
+    /// `ptr` must identify initialized options live for `'object`. Every
+    /// nested borrow and callback payload must remain valid for `'data`, which
+    /// must outlive `'object`.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_submodule_update_options) -> Option<Self> {
+        NonNull::new(ptr.cast::<GitSubmoduleUpdateOptions<'data>>()).map(|ptr| {
+            // SAFETY: the caller supplies the required live shared object.
+            Self(unsafe { CPtr::new(ptr) })
+        })
+    }
+
+    /// Returns the C pointer for read-only FFI calls.
+    #[must_use]
+    pub fn as_ptr(&self) -> *const ffi::git_submodule_update_options {
+        self.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Field: git_submodule_update_options.version
+    /// Returns the submodule-update ABI version.
+    #[must_use]
+    pub fn version(&self) -> core::ffi::c_uint {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        unsafe { addr_of!((*self.as_ptr()).version).read() }
+    }
+
+    /// Field: git_submodule_update_options.checkout_opts
+    /// Borrows the embedded checkout options.
+    #[must_use]
+    pub fn checkout_options(&self) -> GitCheckoutOptionsRef<'object, 'data> {
+        // SAFETY: raw-place projection locates the initialized inline field.
+        let field = unsafe { addr_of!((*self.as_ptr()).checkout_opts).cast_mut() };
+        // SAFETY: the field lives for the enclosing options borrow and retains
+        // the enclosing data lifetime.
+        unsafe { GitCheckoutOptionsRef::from_ptr(field) }.expect("an inline field is non-null")
+    }
+
+    /// Field: git_submodule_update_options.fetch_opts
+    /// Borrows the embedded fetch options.
+    #[must_use]
+    pub fn fetch_options(&self) -> GitFetchOptionsRef<'object, 'data> {
+        // SAFETY: raw-place projection locates the initialized inline field.
+        let field = unsafe { addr_of!((*self.as_ptr()).fetch_opts).cast_mut() };
+        // SAFETY: the field lives for the enclosing options borrow and retains
+        // the enclosing data lifetime.
+        unsafe { GitFetchOptionsRef::from_ptr(field) }.expect("an inline field is non-null")
+    }
+
+    /// Field: git_submodule_update_options.allow_fetch
+    /// Returns whether a missing target commit may be fetched.
+    #[must_use]
+    pub fn allow_fetch(&self) -> bool {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        unsafe { addr_of!((*self.as_ptr()).allow_fetch).read() != 0 }
+    }
+}
+
+impl<'object, 'data> GitSubmoduleUpdateOptionsMut<'object, 'data> {
+    /// Exclusively borrows a raw C options pointer, returning `None` for null.
+    ///
+    /// # Safety
+    /// The shared-handle requirements apply, and no other access path may use
+    /// the options for `'object`.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_submodule_update_options) -> Option<Self> {
+        // SAFETY: the caller supplies a live exclusively accessible object.
+        unsafe { GitSubmoduleUpdateOptionsRef::from_ptr(ptr) }.map(Self)
+    }
+
+    /// Returns the writable C pointer for FFI calls and raw-place writes.
+    #[must_use]
+    pub fn as_mut_ptr(&mut self) -> *mut ffi::git_submodule_update_options {
+        self.0.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Reborrows this exclusive handle as shared.
+    #[must_use]
+    pub fn as_ref(&self) -> GitSubmoduleUpdateOptionsRef<'_, 'data> {
+        GitSubmoduleUpdateOptionsRef(self.0.0)
+    }
+
+    /// Replaces the options ABI version.
+    pub fn set_version(&mut self, version: core::ffi::c_uint) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+
+    /// Selects whether a missing target commit may be fetched.
+    pub fn set_allow_fetch(&mut self, allow: bool) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe {
+            addr_of_mut!((*self.as_mut_ptr()).allow_fetch).write(core::ffi::c_int::from(allow))
+        }
+    }
+
+    /// Exclusively borrows the embedded checkout options.
+    #[must_use]
+    pub fn checkout_options_mut(&mut self) -> GitCheckoutOptionsMut<'_, 'data> {
+        // SAFETY: raw-place projection through this exclusive handle reaches
+        // the initialized inline field without forming a reference.
+        let field = unsafe { addr_of_mut!((*self.as_mut_ptr()).checkout_opts) };
+        // SAFETY: the projected field is exclusively borrowed for the returned
+        // handle's lifetime and retains the outer data lifetime.
+        unsafe { GitCheckoutOptionsMut::from_ptr(field) }.expect("an inline field is non-null")
+    }
+
+    /// Exclusively borrows the embedded fetch options.
+    #[must_use]
+    pub fn fetch_options_mut(&mut self) -> GitFetchOptionsMut<'_, 'data> {
+        // SAFETY: raw-place projection through this exclusive handle reaches
+        // the initialized inline field without forming a reference.
+        let field = unsafe { addr_of_mut!((*self.as_mut_ptr()).fetch_opts) };
+        // SAFETY: the projected field is exclusively borrowed for the returned
+        // handle's lifetime and retains the outer data lifetime.
+        unsafe { GitFetchOptionsMut::from_ptr(field) }.expect("an inline field is non-null")
+    }
+
+    /// Copies checkout options into the inline field.
+    ///
+    /// # Safety
+    /// Callback invocations through the source, this copy, and any further C
+    /// copies must not overlap. All nested callback state remains exclusively
+    /// reserved for `'data`.
+    pub unsafe fn set_checkout_options(&mut self, options: GitCheckoutOptionsRef<'_, 'data>) {
+        // SAFETY: the source identifies an initialized borrowed header.
+        let options = unsafe { options.as_ptr().read() };
+        // SAFETY: this exclusive handle permits replacing the inline field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).checkout_opts).write(options) }
+    }
+
+    /// Copies fetch options into the inline field.
+    ///
+    /// # Safety
+    /// Callback invocations through the source, this copy, and any further C
+    /// copies must not overlap. All nested callback state remains exclusively
+    /// reserved for `'data`.
+    pub unsafe fn set_fetch_options(&mut self, options: GitFetchOptionsRef<'_, 'data>) {
+        // SAFETY: the source identifies an initialized borrowed header.
+        let options = unsafe { options.as_ptr().read() };
+        // SAFETY: this exclusive handle permits replacing the inline field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).fetch_opts).write(options) }
+    }
+}
+
+#[cfg(test)]
+mod update_options_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn update_options_preserve_layout_and_defaults() {
+        assert_eq!(
+            size_of::<GitSubmoduleUpdateOptions<'static>>(),
+            size_of::<ffi::git_submodule_update_options>()
+        );
+        assert_eq!(
+            align_of::<GitSubmoduleUpdateOptions<'static>>(),
+            align_of::<ffi::git_submodule_update_options>()
+        );
+        let options = GitSubmoduleUpdateOptions::new();
+        let view = options.as_ref();
+        assert_eq!(view.version(), ffi::GIT_SUBMODULE_UPDATE_OPTIONS_VERSION);
+        assert!(view.allow_fetch());
+        assert_eq!(
+            view.checkout_options().version(),
+            ffi::GIT_CHECKOUT_OPTIONS_VERSION
+        );
+        assert_eq!(
+            view.fetch_options().version(),
+            ffi::GIT_FETCH_OPTIONS_VERSION as core::ffi::c_int
+        );
+    }
+
+    #[test]
+    fn nested_and_scalar_fields_are_mutable() {
+        let mut options = GitSubmoduleUpdateOptions::new();
+        {
+            let mut view = options.as_mut();
+            view.set_allow_fetch(false);
+            view.checkout_options_mut().set_disable_filters(true);
+            view.fetch_options_mut().set_depth(2);
+        }
+        let view = options.as_ref();
+        assert!(!view.allow_fetch());
+        assert!(view.checkout_options().disable_filters());
+        assert_eq!(view.fetch_options().depth(), 2);
+    }
+}

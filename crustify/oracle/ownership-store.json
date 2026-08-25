@@ -780,6 +780,96 @@
    "fields": []
   },
   {
+   "name": "git_clone_options",
+   "defined_in": "include/git2/clone.h",
+   "_comment_agent": "git_clone_options owns no pointed-to storage. Its nullable checkout branch borrows a caller NUL-terminated string for the synchronous clone call; callback slots borrow static code addresses and their nullable payloads borrow caller state that callbacks may mutate. The embedded checkout and fetch options are non-owning headers whose nested borrows inherit the outer options lifetime.",
+   "fields": [
+    {
+     "name": "checkout_branch",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated branch name read only during clone."
+     }
+    },
+    {
+     "name": "remote_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable callback code address invoked synchronously during clone and never freed."
+     }
+    },
+    {
+     "name": "remote_cb_payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller state passed to remote_cb; libgit2 neither inspects nor frees it."
+     }
+    },
+    {
+     "name": "repository_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable callback code address invoked synchronously during clone and never freed."
+     }
+    },
+    {
+     "name": "repository_cb_payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller state passed to repository_cb; libgit2 neither inspects nor frees it."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_commit",
    "defined_in": "src/libgit2/commit.h",
    "_comment_agent": "The public API keeps git_commit opaque. Internally, its reference-counted git_object base ultimately disposes all pointer fields: signatures and strings are individually owned, and parent_ids owns a resizable git_oid buffer. Several members are null during quick/partial parsing, message_encoding and body are optional, and summary/body are populated lazily.",
@@ -5558,6 +5648,12 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_submodule_update_options",
+   "defined_in": "include/git2/submodule.h",
+   "_comment_agent": "git_submodule_update_options is a by-value, non-owning options header. Its checkout and fetch subrecords borrow any configured strings, objects, and callback state for the outer options lifetime; version and allow_fetch are plain scalars.",
+   "fields": []
   },
   {
    "name": "git_tag",

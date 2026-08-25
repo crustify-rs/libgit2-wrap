@@ -726,6 +726,15 @@ impl GitRemoteWithRepository<'_> {
         self.remote.as_mut()
     }
 
+    /// Transfers this repository-backed remote to a C owner.
+    ///
+    /// # Safety
+    /// The repository borrowed by this remote must remain live until C frees
+    /// the returned remote pointer.
+    pub(crate) unsafe fn into_raw(self) -> *mut ffi::git_remote {
+        self.remote.into_raw()
+    }
+
     /// Wraps: git_remote_dup
     /// Duplicates the remote, keeping its repository borrow.
     ///
