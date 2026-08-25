@@ -27606,6 +27606,63 @@
    ]
   },
   {
+   "name": "git_remote_download",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NULL selects defaults. The options header is read and copied; nested callback and proxy state may be copied into the connection and remain reachable after download returns while the remote stays connected."
+     }
+    },
+    {
+     "name": "refspecs",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspecs"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NULL or one borrowed git_strarray header selects configured refspecs; its strings are parsed/copied during the call and are not retained."
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "The required remote is mutated in place during connection, negotiation, download, and indexing; ownership stays with the caller."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_remote_dup",
    "defined_in": "src/libgit2/remote.c",
    "lifetime": {
@@ -27653,6 +27710,78 @@
       "nullable": false,
       "mutable": false,
       "note": "Read-only source retained by the caller; the body deep-copies owned strings and refspecs."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_fetch",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NULL selects defaults. The header is borrowed and copied; early errors after connecting can leave copied nested callback/proxy pointers reachable from the remote connection."
+     }
+    },
+    {
+     "name": "reflog_message",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:reflog_message"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional NUL-terminated message read into temporary owned storage during the call and never retained."
+     }
+    },
+    {
+     "name": "refspecs",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspecs"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NULL or one borrowed git_strarray header selects configured refspecs; the input is consumed synchronously and not retained."
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "The required remote and its repository are mutated by connection, download, reference updates and optional pruning; ownership remains with the caller."
      }
     }
    ]
@@ -28143,6 +28272,63 @@
       "nullable": false,
       "mutable": true,
       "note": ""
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_push",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NULL selects defaults. The options and nested data are borrowed for the synchronous operation, which disconnects before returning and retains no input ownership."
+     }
+    },
+    {
+     "name": "refspecs",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspecs"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "NULL or one borrowed git_strarray header selects configured push refspecs; entries are parsed/copied for the synchronous push and are not retained after return."
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "The required remote is mutated during upload, tip updates and disconnect; ownership remains with the caller."
      }
     }
    ]

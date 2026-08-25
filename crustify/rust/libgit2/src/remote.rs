@@ -8,7 +8,9 @@ use ffibox::{CBox, CCloned, CVal};
 
 use crate::api::buffer::GitBufMut;
 use crate::api::proxy::GitProxyOptionsRef;
-use crate::api::remote::{GitRemoteCallbacksMut, GitRemoteCallbacksRef};
+use crate::api::remote::{
+    GitFetchOptionsRef, GitPushOptionsRef, GitRemoteCallbacksMut, GitRemoteCallbacksRef,
+};
 use crate::ffi;
 use crate::indexer::IndexerProgressRef;
 use crate::oid::{InvalidOidType, OidRef, OidType};
@@ -1273,5 +1275,127 @@ mod scheduled_connection_tests {
             callbacks.as_ref().version(),
             ffi::GIT_REMOTE_CALLBACKS_VERSION
         );
+    }
+}
+
+/// Wraps: git_remote_download
+/// Downloads and indexes objects selected by `refspecs`.
+///
+/// Fetch-option callback and proxy state must be static because libgit2 can
+/// leave the remote connected after this call and retain copies of those
+/// nested pointers until a later disconnect.
+pub fn git_remote_download(
+    remote: &mut GitRemoteMut<'_>,
+    refspecs: Option<GitStrArrayRef<'_>>,
+    options: Option<GitFetchOptionsRef<'_, 'static>>,
+) -> Result<(), i32> {
+    // SAFETY: the remote is live and exclusive, each optional header remains
+    // live for the call, and the options' nested data is static if libgit2
+    // retains it in a connection that survives the call.
+    let status = unsafe {
+        ffi::git_remote_download(
+            remote.as_mut_ptr(),
+            refspecs.map_or(core::ptr::null(), |values| values.as_ptr()),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_remote_fetch
+/// Downloads objects, disconnects, updates remote-tracking tips and prunes as
+/// requested.
+///
+/// Fetch-option callback and proxy state must be static because some errors
+/// after connecting return early without disconnecting the remote.
+pub fn git_remote_fetch(
+    remote: &mut GitRemoteMut<'_>,
+    refspecs: Option<GitStrArrayRef<'_>>,
+    options: Option<GitFetchOptionsRef<'_, 'static>>,
+    reflog_message: Option<&CStr>,
+) -> Result<(), i32> {
+    // SAFETY: the remote is live and exclusive, the refspec header and reflog
+    // string are transient live borrows, and the options' nested data is
+    // static if an early error leaves its copied connection state installed.
+    let status = unsafe {
+        ffi::git_remote_fetch(
+            remote.as_mut_ptr(),
+            refspecs.map_or(core::ptr::null(), |values| values.as_ptr()),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+            reflog_message.map_or(core::ptr::null(), CStr::as_ptr),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_remote_push
+/// Uploads the selected refspecs, updates remote-tracking tips and disconnects.
+pub fn git_remote_push(
+    remote: &mut GitRemoteMut<'_>,
+    refspecs: Option<GitStrArrayRef<'_>>,
+    options: Option<GitPushOptionsRef<'_, '_>>,
+) -> Result<(), i32> {
+    // SAFETY: the remote is live and exclusive and all optional inputs remain
+    // live for the synchronous push, which disconnects before returning.
+    let status = unsafe {
+        ffi::git_remote_push(
+            remote.as_mut_ptr(),
+            refspecs.map_or(core::ptr::null(), |values| values.as_ptr()),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod scheduled_transfer_tests {
+    use super::*;
+    use crate::api::remote::{GitFetchOptions, GitPushOptions};
+
+    #[test]
+    fn typed_transfer_inputs_reach_detached_remote_validation() {
+        // SAFETY: libgit2 initialization is refcounted and balanced after all
+        // owners constructed by this test have been dropped.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        let mut remote = git_remote_create_detached(c"https://example.invalid/repo")
+            .expect("detached remote creation succeeds");
+        let refspecs = GitStrArray::new();
+        let fetch_options = GitFetchOptions::new();
+        let push_options = GitPushOptions::new();
+
+        assert_eq!(
+            git_remote_download(
+                &mut remote.as_mut(),
+                Some(refspecs.as_ref()),
+                Some(fetch_options.as_ref()),
+            ),
+            Err(-1)
+        );
+        assert_eq!(
+            git_remote_fetch(
+                &mut remote.as_mut(),
+                Some(refspecs.as_ref()),
+                Some(fetch_options.as_ref()),
+                Some(c"fetch test"),
+            ),
+            Err(-1)
+        );
+        assert_eq!(
+            git_remote_push(
+                &mut remote.as_mut(),
+                Some(refspecs.as_ref()),
+                Some(push_options.as_ref()),
+            ),
+            Err(-1)
+        );
+
+        drop(push_options);
+        drop(fetch_options);
+        drop(refspecs);
+        drop(remote);
+        // SAFETY: balances this test's successful initialization after every
+        // libgit2-backed owner has been released.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
