@@ -1151,19 +1151,27 @@ pub fn git_repository_index(repository: &mut GitRepositoryMut<'_>) -> Result<Git
 }
 
 /// Wraps: git_repository_init_ext
-/// Initializes a repository using a borrowed options record.
+/// Initializes a repository using a caller-owned options record.
+///
+/// The options are taken exclusively because libgit2 writes back into them:
+/// resolving the directories ORs the private `GIT_REPOSITORY_INIT__HAS_DOTGIT`
+/// and `GIT_REPOSITORY_INIT__NATURAL_WD` bits into `options.flags`, and
+/// re-initializing an existing repository adds
+/// `GIT_REPOSITORY_INIT__IS_REINIT`. The caller observes every one of those
+/// writes, so a shared handle would misstate the contract.
 pub fn git_repository_init_ext(
     path: &CStr,
-    options: GitRepositoryInitOptionsRef<'_>,
+    options: &mut GitRepositoryInitOptionsMut<'_>,
 ) -> Result<GitRepositoryOwned, i32> {
     let mut output = core::ptr::null_mut();
-    // SAFETY: the output slot is writable, and `path` plus every borrow held
-    // by `options` remain live for this synchronous initialization.
+    // SAFETY: the output slot is writable, `path` plus every borrow held by
+    // `options` remain live for this synchronous initialization, and the
+    // exclusive options handle permits the flag write-back described above.
     let status = unsafe {
         ffi::git_repository_init_ext(
             core::ptr::addr_of_mut!(output),
             path.as_ptr(),
-            options.as_ptr().cast_mut(),
+            options.as_mut_ptr(),
         )
     };
     if status != 0 {
@@ -1271,5 +1279,75 @@ mod scheduled_symbol_tests {
     #[test]
     fn options_initializer_rejects_an_unknown_version() {
         assert!(git_repository_init_init_options(u32::MAX).is_err());
+    }
+
+    /// `git_repository_init_ext` is documented as taking `git_repository_init_options *`,
+    /// and it means it: every successful call ORs private bits into
+    /// `opts->flags` — `GIT_REPOSITORY_INIT__HAS_DOTGIT` and
+    /// `GIT_REPOSITORY_INIT__NATURAL_WD` while resolving the directories, plus
+    /// `GIT_REPOSITORY_INIT__IS_REINIT` when the path already holds a
+    /// repository. The caller observes those writes, so the wrapper takes the
+    /// options exclusively.
+    #[test]
+    fn init_ext_writes_the_reinit_flag_back_through_the_options_handle() {
+        let _: fn(&CStr, &mut GitRepositoryInitOptionsMut<'_>) -> Result<GitRepositoryOwned, i32> =
+            git_repository_init_ext;
+
+        // SAFETY: process-global initialization is refcounted and balanced
+        // once every repository owner created below has been dropped.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        let directory = std::env::temp_dir().join(format!(
+            "crustify-init-ext-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let path = std::ffi::CString::new(
+            directory
+                .to_str()
+                .expect("a temporary directory path is UTF-8"),
+        )
+        .expect("a temporary directory path holds no interior NUL");
+
+        let mut options = git_repository_init_init_options(1).expect("the current options version");
+        let requested = GitRepositoryInitFlags::MKPATH;
+        options.as_mut().set_flags(requested);
+
+        const HAS_DOTGIT: u32 = 1 << 16;
+        const NATURAL_WD: u32 = 1 << 17;
+        const IS_REINIT: u32 = 1 << 18;
+
+        let created = git_repository_init_ext(&path, &mut options.as_mut())
+            .expect("a fresh directory initializes");
+        drop(created);
+        let after_create = options
+            .as_ref()
+            .flags()
+            .expect_err("the private bits libgit2 writes back are not published flags");
+        assert_eq!(
+            after_create,
+            requested.bits() | HAS_DOTGIT | NATURAL_WD,
+            "resolving the directories writes the private layout bits back"
+        );
+
+        let reinitialized = git_repository_init_ext(&path, &mut options.as_mut())
+            .expect("an existing repository re-initializes");
+        drop(reinitialized);
+        let after_reinit = options
+            .as_ref()
+            .flags()
+            .expect_err("the private reinit bit is not a published flag");
+        assert_eq!(
+            after_reinit,
+            requested.bits() | HAS_DOTGIT | NATURAL_WD | IS_REINIT,
+            "libgit2 set GIT_REPOSITORY_INIT__IS_REINIT in the caller's options"
+        );
+
+        drop(options);
+        let _ = std::fs::remove_dir_all(&directory);
+
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }

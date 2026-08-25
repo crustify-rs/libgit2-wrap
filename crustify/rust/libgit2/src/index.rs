@@ -810,20 +810,25 @@ pub struct GitIndexConflict<'a> {
 
 /// Wraps: git_index_conflict_get
 /// Borrows the conflict entries for `path` until the index can next mutate.
+///
+/// The index is taken exclusively, like [`git_index_get_bypath`]: the lookup
+/// runs through `git_index_find`, whose binary search sorts the index's entry
+/// vector in place before searching it.
 pub fn git_index_conflict_get<'a>(
-    index: GitIndexRef<'a>,
+    index: &'a mut GitIndexMut<'_>,
     path: &CStr,
 ) -> Result<GitIndexConflict<'a>, i32> {
     let (mut ancestor, mut ours, mut theirs) =
         (core::ptr::null(), core::ptr::null(), core::ptr::null());
-    // SAFETY: the output slots are writable, the index and path are live, and
-    // the shared index borrow prevents mutation while returned entries live.
+    // SAFETY: the output slots are writable, `path` is live for the call, and
+    // the index is exclusively borrowed for the in-place sort the lookup
+    // performs and for as long as the returned entries live.
     let status = unsafe {
         ffi::git_index_conflict_get(
             &mut ancestor,
             &mut ours,
             &mut theirs,
-            index.as_ptr().cast_mut(),
+            index.as_mut_ptr(),
             path.as_ptr(),
         )
     };
@@ -831,7 +836,7 @@ pub fn git_index_conflict_get<'a>(
         return Err(status);
     }
     // SAFETY: each non-null result points into `index` and stays live for its
-    // shared `'a` borrow; null denotes a missing side of the conflict.
+    // exclusive `'a` reborrow; null denotes a missing side of the conflict.
     Ok(unsafe {
         GitIndexConflict {
             ancestor: IndexEntryRef::from_ptr(ancestor.cast_mut()),
@@ -1194,6 +1199,24 @@ pub fn git_index_write_tree_to(
 #[cfg(test)]
 mod scheduled_wrapper_tests {
     use super::*;
+
+    #[test]
+    fn conflict_lookup_reborrows_the_index_exclusively() {
+        // The lookup sorts `index->entries` in place, so it takes the index
+        // exclusively and the returned entries are tied to that reborrow.
+        let _: for<'a> fn(&'a mut GitIndexMut<'_>, &CStr) -> Result<GitIndexConflict<'a>, i32> =
+            git_index_conflict_get;
+
+        // SAFETY: process-global initialization is refcounted and balanced
+        // after the index owner is dropped.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let mut index = git_index_new().expect("an in-memory index");
+        let missing = git_index_conflict_get(&mut index.as_mut(), c"missing").err();
+        assert_eq!(missing, Some(ffi::git_error_code_GIT_ENOTFOUND));
+        drop(index);
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
 
     #[test]
     fn new_index_queries_preserve_owned_and_borrowed_state() {

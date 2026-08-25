@@ -7171,11 +7171,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:out"
       },
       "nullable": false,
       "mutable": false,
-      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+      "note": "RETAINED, not call-scoped: git_blame__alloc stores gbr->repository = repo with no refcount, so the repository must outlive the blame returned in out. git_blame_free does not release it."
      }
     }
    ]
@@ -15828,8 +15828,8 @@
        "lifetime": "arg:index"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+      "mutable": true,
+      "note": "Borrowed for this synchronous call, but WRITTEN THROUGH: the lookup runs git_index_find -> git_vector_bsearch2, which calls git_vector_sort and reorders index->entries in place before searching. Matches the mutable model already recorded for git_index_get_bypath / git_index_get_byindex / git_index_find_prefix. The callee retains no pointer."
      }
     },
     {
@@ -15936,11 +15936,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:index"
+       "lifetime": "arg:iterator_out"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+      "mutable": true,
+      "note": "RETAINED, not call-scoped: the constructor stores the bare pointer as it->index with no refcount, so index must outlive the iterator in iterator_out. git_index_conflict_next then reads through it and calls git_index_get_byindex, which sorts index->entries in place, so the borrow is exclusive for the iterator's whole life."
      }
     },
     {
@@ -20587,11 +20587,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:db"
+       "lifetime": "arg:stream"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrowed for this synchronous call; the callee retains no ownership."
+      "note": "RETAINED, not call-scoped: the returned stream keeps stream->backend, a backend owned by db, and every later read / free dereferences it. db must outlive the stream."
      }
     },
     {
@@ -20681,11 +20681,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:db"
+       "lifetime": "arg:stream"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrowed for this synchronous call; the callee retains no ownership."
+      "note": "RETAINED, not call-scoped: the returned stream keeps stream->backend, a backend owned by db, and every later write / finalize_write / free dereferences it. db must outlive the stream."
      }
     },
     {
@@ -21085,11 +21085,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:db"
+       "lifetime": "arg:out"
       },
       "nullable": false,
       "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred."
+      "note": "RETAINED, not call-scoped: pack_backend__writepack forwards db as git_indexer_options.odb, and git_indexer_new stores it in the indexer the writepack owns. db must outlive the writepack in out."
      }
     },
     {
@@ -21122,11 +21122,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:progress_cb"
+       "lifetime": "arg:out"
       },
       "nullable": true,
       "mutable": true,
-      "note": "Borrowed callback function pointer; ownership is not transferred."
+      "note": "RETAINED, not call-scoped: the progress callback is stored in the writepack's indexer and invoked from append/commit, long after this constructor returns."
      }
     },
     {
@@ -21139,11 +21139,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:progress_payload"
+       "lifetime": "arg:out"
       },
       "nullable": true,
       "mutable": true,
-      "note": "Opaque caller payload borrowed by the paired callback; ownership is not transferred."
+      "note": "RETAINED, not call-scoped: stored beside the callback in the writepack's indexer and passed back on every later append/commit progress report, so it must outlive the writepack in out."
      }
     }
    ]
@@ -23068,8 +23068,8 @@
        "lifetime": "arg:index"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred."
+      "mutable": true,
+      "note": "Borrowed for this synchronous call, but WRITTEN THROUGH: git_iterator_for_index -> git_index_snapshot_new calls git_vector_sort on index->entries and increments index->readers for the duration of the walk; git_index_snapshot_release retires both before returning, so no pointer is retained."
      }
     },
     {
@@ -31047,11 +31047,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:hide_cb"
+       "lifetime": "arg:walk"
       },
       "nullable": true,
       "mutable": true,
-      "note": "Borrowed callback function pointer; ownership is not transferred."
+      "note": "RETAINED, not call-scoped: stored as walk->hide_cb and invoked from later git_revwalk_next calls until it is replaced or the walker is freed."
      }
     },
     {
@@ -31064,11 +31064,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:payload"
+       "lifetime": "arg:walk"
       },
       "nullable": true,
       "mutable": true,
-      "note": "Opaque caller payload borrowed by the paired callback; ownership is not transferred."
+      "note": "RETAINED, not call-scoped: stored as walk->hide_cb_payload and handed back to the hide callback on every later walk, so it must outlive the walker or its replacement."
      }
     },
     {
