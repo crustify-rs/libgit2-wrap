@@ -139,20 +139,13 @@ pub enum GitSmartSubtransportError {
 }
 
 impl GitSmartSubtransportMut<'_> {
-    /// Field: git_smart_subtransport.action
-    /// Dispatches an action and borrows the stream it publishes.
-    ///
-    /// This method deliberately does not adopt the returned allocation:
-    /// stateless subtransports return a newly owned stream, while stateful
-    /// continuations may return the stream from the preceding action. The
-    /// borrowed result safely represents both contracts without manufacturing
-    /// a second owner. Its borrow also prevents another Rust action or close
-    /// call through this handle while the stream is in use.
-    pub fn action<'a>(
-        &'a mut self,
+    /// Invokes the installed action callback and returns the pointer it
+    /// published, which a successful call must fill in.
+    fn dispatch_action(
+        &mut self,
         url: &core::ffi::CStr,
         service: GitSmartService,
-    ) -> Result<GitSmartSubtransportStreamMut<'a>, GitSmartSubtransportError> {
+    ) -> Result<*mut ffi::git_smart_subtransport_stream, GitSmartSubtransportError> {
         let transport = self.as_mut_ptr();
         // SAFETY: this exclusive handle addresses a live, fully constructed
         // subtransport; raw-place projection reads its initialized callback
@@ -167,11 +160,71 @@ impl GitSmartSubtransportMut<'_> {
         if result < 0 {
             return Err(GitSmartSubtransportError::Libgit2(result));
         }
+        Ok(stream)
+    }
+
+    /// Field: git_smart_subtransport.action
+    /// Dispatches an action and borrows the stream it publishes.
+    ///
+    /// This method deliberately does not adopt the returned allocation:
+    /// stateless subtransports return a newly owned stream, while stateful
+    /// continuations may return the stream from the preceding action. The
+    /// borrowed result safely represents both contracts without manufacturing
+    /// a second owner. Its borrow also prevents another Rust action or close
+    /// call through this handle while the stream is in use.
+    ///
+    /// The published stream still owes exactly one release, which this
+    /// borrowed form leaves outstanding; take it with
+    /// [`action_owned`](Self::action_owned).
+    pub fn action<'a>(
+        &'a mut self,
+        url: &core::ffi::CStr,
+        service: GitSmartService,
+    ) -> Result<GitSmartSubtransportStreamMut<'a>, GitSmartSubtransportError> {
+        let stream = self.dispatch_action(url, service)?;
         // SAFETY: a successful action publishes a live stream associated with
         // `transport`. The returned exclusive handle is bounded by this
         // subtransport's exclusive reborrow, preventing another safe callback
         // dispatch until it expires. Ownership is intentionally not adopted.
         unsafe { GitSmartSubtransportStreamMut::from_ptr(stream) }
+            .ok_or(GitSmartSubtransportError::MissingStream)
+    }
+
+    /// Field: git_smart_subtransport.action
+    /// Dispatches an action and adopts the stream it publishes.
+    ///
+    /// The published stream is the caller's to release, and releasing it is
+    /// part of the protocol rather than mere hygiene: libgit2's smart
+    /// transport frees the stream through its own `free` callback in
+    /// `git_smart__reset_stream` (`src/libgit2/transports/smart.c`) before
+    /// closing the subtransport, and `_git_close`
+    /// (`src/libgit2/transports/git.c`) fails an assertion when that release
+    /// did not happen. This variant takes the obligation;
+    /// [`action`](Self::action) leaves it outstanding.
+    ///
+    /// # Safety
+    ///
+    /// The published stream must have no other owner. A stateless (RPC)
+    /// subtransport allocates a fresh stream for every action, so every result
+    /// may be adopted. A stateful one hands its continuation actions back the
+    /// stream created by the preceding reference-advertisement action, so at
+    /// most one call in such a chain may adopt and the rest must borrow
+    /// through [`action`](Self::action).
+    ///
+    /// This subtransport must also stay live until the returned owner is
+    /// dropped: a concrete destructor may write back into it, as
+    /// `git_proto_stream_free` does when it clears the subtransport's
+    /// current-stream slot.
+    pub unsafe fn action_owned(
+        &mut self,
+        url: &core::ffi::CStr,
+        service: GitSmartService,
+    ) -> Result<GitSmartSubtransportStreamOwned, GitSmartSubtransportError> {
+        let stream = self.dispatch_action(url, service)?;
+        // SAFETY: a successful action publishes a live, fully constructed
+        // stream with its destructor callback installed, and the caller
+        // guarantees that this adoption creates its only owner.
+        unsafe { GitSmartSubtransportStreamOwned::from_raw(stream) }
             .ok_or(GitSmartSubtransportError::MissingStream)
     }
 
@@ -399,6 +452,7 @@ mod tests {
     static ACTIONS: AtomicUsize = AtomicUsize::new(0);
     static CLOSES: AtomicUsize = AtomicUsize::new(0);
     static SUBTRANSPORT_FREES: AtomicUsize = AtomicUsize::new(0);
+    static ADOPTED_FREES: AtomicUsize = AtomicUsize::new(0);
     static LAST_SERVICE: AtomicUsize = AtomicUsize::new(0);
 
     unsafe extern "C" fn test_read(
@@ -447,6 +501,16 @@ mod tests {
         0
     }
 
+    /// Records nothing: an action test must not disturb the shared counters
+    /// that `stream_dispatches_read_and_write_callbacks` reads back.
+    unsafe extern "C" fn action_stream_write(
+        _stream: *mut ffi::git_smart_subtransport_stream,
+        _buffer: *const core::ffi::c_char,
+        _size: usize,
+    ) -> core::ffi::c_int {
+        0
+    }
+
     unsafe extern "C" fn test_free(stream: *mut ffi::git_smart_subtransport_stream) {
         FREES.fetch_add(1, Ordering::SeqCst);
         // SAFETY: the lifecycle test transfers one `Box` allocation to the
@@ -476,11 +540,37 @@ mod tests {
         let stream = Box::into_raw(Box::new(ffi::git_smart_subtransport_stream {
             subtransport: transport,
             read: Some(test_read),
-            write: Some(test_write),
+            write: Some(action_stream_write),
             free: Some(action_stream_free),
         }));
         // SAFETY: the callback contract supplies a writable output slot and
         // ownership of this new stream allocation passes to its caller.
+        unsafe { out.write(stream) };
+        0
+    }
+
+    unsafe extern "C" fn adopted_stream_free(stream: *mut ffi::git_smart_subtransport_stream) {
+        ADOPTED_FREES.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: `owned_stream_action` transfers one fresh `Box` allocation
+        // and this callback performs its only final release.
+        drop(unsafe { Box::from_raw(stream) });
+    }
+
+    unsafe extern "C" fn owned_stream_action(
+        out: *mut *mut ffi::git_smart_subtransport_stream,
+        transport: *mut ffi::git_smart_subtransport,
+        _url: *const core::ffi::c_char,
+        _service: ffi::git_smart_service_t,
+    ) -> core::ffi::c_int {
+        let stream = Box::into_raw(Box::new(ffi::git_smart_subtransport_stream {
+            subtransport: transport,
+            read: Some(test_read),
+            write: Some(action_stream_write),
+            free: Some(adopted_stream_free),
+        }));
+        // SAFETY: the callback contract supplies a writable output slot, and
+        // this stateless action allocates one fresh stream per call whose
+        // ownership passes to its caller.
         unsafe { out.write(stream) };
         0
     }
@@ -764,6 +854,43 @@ mod tests {
             subtransport.action(c"git://example", GitSmartService::UploadPackLs),
             Err(GitSmartSubtransportError::MissingStream)
         ));
+        // SAFETY: the action publishes no stream, so the owning variant
+        // adopts nothing and the obligations below are vacuous.
+        let owned =
+            unsafe { subtransport.action_owned(c"git://example", GitSmartService::UploadPackLs) };
+        assert!(matches!(
+            owned,
+            Err(GitSmartSubtransportError::MissingStream)
+        ));
+    }
+
+    #[test]
+    fn an_adopted_action_stream_is_released_once() {
+        let before = ADOPTED_FREES.load(Ordering::SeqCst);
+        let mut raw = raw_subtransport(owned_stream_action);
+        // SAFETY: `raw` remains live and this handle is its only access path
+        // for the scope; all required callbacks are installed.
+        let mut subtransport = unsafe { GitSmartSubtransportMut::from_ptr(&raw mut raw) }.unwrap();
+
+        // SAFETY: `owned_stream_action` is stateless and allocates a fresh
+        // stream per call, so this adoption creates its only owner; `raw`
+        // outlives the owner dropped below.
+        let mut stream =
+            unsafe { subtransport.action_owned(c"git://example", GitSmartService::UploadPack) }
+                .unwrap();
+        let mut buffer = [0; 8];
+        assert_eq!(stream.as_mut().read(&mut buffer), Ok(3));
+        assert_eq!(&buffer[..3], b"abc");
+        assert_eq!(stream.as_mut().write(b"request"), Ok(()));
+        assert_eq!(
+            stream.as_ref().subtransport().as_ptr(),
+            subtransport.as_mut_ptr().cast_const()
+        );
+        drop(stream);
+        assert_eq!(ADOPTED_FREES.load(Ordering::SeqCst), before + 1);
+
+        // The stream was released, so the subtransport may now be closed.
+        assert_eq!(subtransport.close(), Ok(()));
     }
 
     #[test]

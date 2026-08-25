@@ -1,6 +1,8 @@
 //! Safe wrappers for libgit2 odb APIs.
 
-use core::ptr::{addr_of, addr_of_mut};
+use core::ptr::{NonNull, addr_of, addr_of_mut};
+
+use ffibox::{CVal, CValued};
 
 use crate::ffi;
 use crate::oid::{InvalidOidType, OidType};
@@ -14,11 +16,30 @@ ffibox::define_ctype!(
     ffi::git_odb_options
 );
 
+// SAFETY: `git_odb_options` holds only scalar configuration fields, owns no
+// resource and has no C disposer, so releasing an inline value is a no-op.
+unsafe impl CValued for GitOdbOptions {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+impl GitOdbOptions {
+    /// Constructs options equivalent to `GIT_ODB_OPTIONS_INIT`.
+    ///
+    /// The stack initializer sets the version and leaves `oid_type` zero, which
+    /// `normalize_options` in `src/libgit2/odb.c` resolves to `GIT_OID_DEFAULT`.
+    #[must_use]
+    pub fn new() -> CVal<Self> {
+        let mut options = CVal::new(Self::zeroed());
+        options.as_mut().set_version(ffi::GIT_ODB_OPTIONS_VERSION);
+        options
+    }
+}
+
 impl GitOdbOptionsRef<'_> {
     /// Field: git_odb_options.version
     /// Returns the ABI version of this options value.
     #[must_use]
-    pub fn version(&self) -> u32 {
+    pub fn version(&self) -> core::ffi::c_uint {
         // SAFETY: this live shared handle covers the initialized C value;
         // raw-place projection reads the scalar without forming a reference
         // to C-visible storage.
@@ -45,7 +66,7 @@ impl GitOdbOptionsRef<'_> {
 
 impl GitOdbOptionsMut<'_> {
     /// Sets the ABI version expected by libgit2.
-    pub fn set_version(&mut self, version: u32) {
+    pub fn set_version(&mut self, version: core::ffi::c_uint) {
         // SAFETY: this exclusive handle permits a raw-place scalar write.
         unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
     }
@@ -71,8 +92,10 @@ mod tests {
     #[test]
     fn odb_options_wrapper_matches_the_c_layout() {
         fn assert_cell<T: CCell>() {}
+        fn assert_valued<T: CValued>() {}
 
         assert_cell::<GitOdbOptions>();
+        assert_valued::<GitOdbOptions>();
         assert_eq!(
             size_of::<GitOdbOptions>(),
             size_of::<ffi::git_odb_options>()
@@ -89,10 +112,30 @@ mod tests {
             size_of::<GitOdbOptionsMut<'_>>(),
             size_of::<*mut ffi::git_odb_options>()
         );
+        assert_eq!(
+            size_of::<CVal<GitOdbOptions>>(),
+            size_of::<ffi::git_odb_options>()
+        );
     }
 
     #[test]
     fn borrowed_handles_read_and_write_every_option() {
+        let mut options = GitOdbOptions::new();
+
+        assert_eq!(options.as_ref().version(), ffi::GIT_ODB_OPTIONS_VERSION);
+        assert_eq!(options.as_ref().oid_type(), Ok(None));
+
+        options.as_mut().set_version(7);
+        options.as_mut().set_oid_type(Some(OidType::Sha256));
+        assert_eq!(options.as_ref().version(), 7);
+        assert_eq!(options.as_ref().oid_type(), Ok(Some(OidType::Sha256)));
+
+        options.as_mut().set_oid_type(None);
+        assert_eq!(options.as_ref().oid_type(), Ok(None));
+    }
+
+    #[test]
+    fn a_borrowed_c_value_reaches_the_same_accessors() {
         let mut storage = GitOdbOptions::zeroed();
         let raw = addr_of_mut!(storage).cast::<ffi::git_odb_options>();
 
@@ -101,21 +144,16 @@ mod tests {
         let mut options = unsafe { GitOdbOptionsMut::from_ptr(raw) }
             .expect("the address of stack storage is non-null");
 
-        assert_eq!(options.as_ref().oid_type(), Ok(None));
-        options.set_version(1);
-        options.set_oid_type(Some(OidType::Sha256));
-        assert_eq!(options.as_ref().version(), 1);
-        assert_eq!(options.as_ref().oid_type(), Ok(Some(OidType::Sha256)));
-
-        options.set_oid_type(None);
-        assert_eq!(options.as_ref().oid_type(), Ok(None));
+        assert_eq!(options.as_ref().version(), 0);
+        options.set_version(ffi::GIT_ODB_OPTIONS_VERSION);
+        assert_eq!(options.as_ref().version(), ffi::GIT_ODB_OPTIONS_VERSION);
     }
 
     #[test]
     fn oid_type_getter_rejects_unpublished_values() {
         let invalid = ffi::git_oid_t_GIT_OID_SHA256 + 1;
         let mut raw = ffi::git_odb_options {
-            version: 1,
+            version: ffi::GIT_ODB_OPTIONS_VERSION,
             oid_type: invalid,
         };
         // SAFETY: `raw` remains live and initialized for this sole shared

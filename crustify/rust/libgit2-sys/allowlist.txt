@@ -147,6 +147,7 @@
 ^git_odb_object_dup$
 ^git_odb_object_free$
 ^git_odb_options$
+^GIT_ODB_OPTIONS_VERSION$
 ^git_oid$
 ^git_oid_t$
 ^git_oidarray$
