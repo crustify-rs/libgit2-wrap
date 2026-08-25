@@ -5,6 +5,7 @@ use core::ptr::{addr_of, addr_of_mut};
 
 use ffibox::CBox;
 
+pub use crate::api::index::{GitIndexAddOptions, GitIndexEntryExtendedFlags};
 use crate::ffi;
 use crate::oid::Oid;
 use crate::repository::GitRepositoryRef;
@@ -278,11 +279,11 @@ impl<'a> IndexEntryRef<'a> {
 
     /// Field: git_index_entry.flags_extended
     /// Returns the entry's extended flag bits.
-    #[must_use]
-    pub fn flags_extended(&self) -> u16 {
+    pub fn flags_extended(&self) -> Result<GitIndexEntryExtendedFlags, u16> {
         // SAFETY: this live shared handle permits a raw-place read of the
         // initialized scalar without forming a reference to C-visible memory.
-        unsafe { addr_of!((*self.as_ptr()).flags_extended).read() }
+        let raw = unsafe { addr_of!((*self.as_ptr()).flags_extended).read() };
+        GitIndexEntryExtendedFlags::from_bits(raw.into()).ok_or(raw)
     }
 
     /// Field: git_index_entry.gid
@@ -384,9 +385,11 @@ impl IndexEntryMut<'_> {
     }
 
     /// Replaces the entry's extended flag bits.
-    pub fn set_flags_extended(&mut self, value: u16) {
+    pub fn set_flags_extended(&mut self, value: GitIndexEntryExtendedFlags) {
+        let value = value.bits() as u16;
         // SAFETY: this exclusive handle permits a raw-place scalar write
-        // without forming a reference to C-visible memory.
+        // without forming a reference to C-visible memory. Every published
+        // extended flag fits in the C field's 16 bits.
         unsafe { addr_of_mut!((*self.as_mut_ptr()).flags_extended).write(value) }
     }
 
@@ -443,7 +446,7 @@ mod entry_tests {
         entry.set_flags(0x1234);
         entry.set_file_size(42);
         entry.set_uid(1000);
-        entry.set_flags_extended(0x4000);
+        entry.set_flags_extended(GitIndexEntryExtendedFlags::SKIP_WORKTREE);
         entry.set_gid(1001);
         entry.set_ino(7);
         entry.set_dev(8);
@@ -459,7 +462,10 @@ mod entry_tests {
         assert_eq!(entry.flags(), 0x1234);
         assert_eq!(entry.file_size(), 42);
         assert_eq!(entry.uid(), 1000);
-        assert_eq!(entry.flags_extended(), 0x4000);
+        assert_eq!(
+            entry.flags_extended(),
+            Ok(GitIndexEntryExtendedFlags::SKIP_WORKTREE)
+        );
         assert_eq!(entry.gid(), 1001);
         assert_eq!(entry.ino(), 7);
         assert_eq!(entry.dev(), 8);
@@ -663,47 +669,6 @@ pub fn git_index_add(index: &mut GitIndexMut<'_>, entry: IndexEntryRef<'_>) -> R
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
-/// Checked bit set controlling bulk index additions.
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
-pub struct GitIndexAddOptions(ffi::git_index_add_option_t);
-
-impl GitIndexAddOptions {
-    /// Default matching and ignore behavior.
-    pub const DEFAULT: Self = Self(ffi::git_index_add_option_t_GIT_INDEX_ADD_DEFAULT);
-    /// Add ignored files too.
-    pub const FORCE: Self = Self(ffi::git_index_add_option_t_GIT_INDEX_ADD_FORCE);
-    /// Treat pathspec entries as exact paths.
-    pub const DISABLE_PATHSPEC_MATCH: Self =
-        Self(ffi::git_index_add_option_t_GIT_INDEX_ADD_DISABLE_PATHSPEC_MATCH);
-    /// Report an exact ignored path as an error.
-    pub const CHECK_PATHSPEC: Self = Self(ffi::git_index_add_option_t_GIT_INDEX_ADD_CHECK_PATHSPEC);
-
-    /// Builds a set if it contains only published bits.
-    pub const fn from_bits(bits: ffi::git_index_add_option_t) -> Option<Self> {
-        let all = Self::FORCE.0 | Self::DISABLE_PATHSPEC_MATCH.0 | Self::CHECK_PATHSPEC.0;
-        if bits & !all == 0 {
-            Some(Self(bits))
-        } else {
-            None
-        }
-    }
-
-    /// Returns the underlying C bit set.
-    #[must_use]
-    pub const fn bits(self) -> ffi::git_index_add_option_t {
-        self.0
-    }
-}
-
-impl core::ops::BitOr for GitIndexAddOptions {
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self::Output {
-        Self(self.0 | rhs.0)
-    }
-}
-
 unsafe extern "C" fn matched_path_trampoline(
     path: *const core::ffi::c_char,
     matched: *const core::ffi::c_char,
@@ -885,19 +850,6 @@ pub fn git_index_conflict_iterator_new<'index>(
         inner,
         _index: core::marker::PhantomData,
     })
-}
-
-#[cfg(test)]
-mod new_wrapper_tests {
-    use super::*;
-
-    #[test]
-    fn index_add_options_validate_bits() {
-        let options = GitIndexAddOptions::FORCE | GitIndexAddOptions::CHECK_PATHSPEC;
-        assert_eq!(GitIndexAddOptions::from_bits(options.bits()), Some(options));
-        assert_eq!(GitIndexAddOptions::from_bits(1 << 31), None);
-        assert_eq!(GitIndexAddOptions::DEFAULT.bits(), 0);
-    }
 }
 
 /// Wraps: git_index_conflict_next

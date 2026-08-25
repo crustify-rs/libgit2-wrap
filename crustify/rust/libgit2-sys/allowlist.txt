@@ -96,6 +96,7 @@
 ^git_refspec_free$
 ^git_error$
 ^git_fetch_prune_t$
+^git_filter_mode_t$
 ^git_fetch_options$
 ^GIT_FETCH_OPTIONS_VERSION$
 ^git_remote$
@@ -110,6 +111,9 @@
 ^git_remote_connect_options_init$
 ^GIT_REMOTE_CONNECT_OPTIONS_VERSION$
 ^git_index$
+^git_index_add_option_t$
+^git_index_capability_t$
+^git_index_entry_extended_flag_t$
 ^git_index_free$
 ^git_index_options$
 ^GIT_INDEX_OPTIONS_VERSION$

@@ -1,5 +1,6 @@
 //! Safe wrappers for libgit2 index APIs.
 
+use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CVal, CValued};
@@ -134,5 +135,407 @@ mod tests {
         // this shared handle is used.
         let options = unsafe { GitIndexOptionsRef::from_ptr(&raw mut raw) }.unwrap();
         assert_eq!(options.oid_type().unwrap_err().value(), invalid);
+    }
+}
+
+/// Wraps: git_index_add_option_t
+/// A checked set of options controlling bulk additions to an index.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct GitIndexAddOptions(ffi::git_index_add_option_t);
+
+impl GitIndexAddOptions {
+    /// Use the default path matching and ignore behavior.
+    pub const DEFAULT: Self = Self(ffi::git_index_add_option_t_GIT_INDEX_ADD_DEFAULT);
+    /// Add ignored files too.
+    pub const FORCE: Self = Self(ffi::git_index_add_option_t_GIT_INDEX_ADD_FORCE);
+    /// Treat pathspec entries as literal paths.
+    pub const DISABLE_PATHSPEC_MATCH: Self =
+        Self(ffi::git_index_add_option_t_GIT_INDEX_ADD_DISABLE_PATHSPEC_MATCH);
+    /// Reject an explicitly named ignored path.
+    pub const CHECK_PATHSPEC: Self = Self(ffi::git_index_add_option_t_GIT_INDEX_ADD_CHECK_PATHSPEC);
+    /// Every bulk-add option published by this libgit2 version.
+    pub const ALL: Self =
+        Self(Self::FORCE.0 | Self::DISABLE_PATHSPEC_MATCH.0 | Self::CHECK_PATHSPEC.0);
+
+    /// Converts raw bits when every bit is a published option.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_index_add_option_t) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 option bits.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_index_add_option_t {
+        self.0
+    }
+
+    /// Returns whether no optional behavior is enabled.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every option in `other` is enabled.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any option in `other` is enabled.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl From<GitIndexAddOptions> for ffi::git_index_add_option_t {
+    fn from(options: GitIndexAddOptions) -> Self {
+        options.bits()
+    }
+}
+
+impl TryFrom<ffi::git_index_add_option_t> for GitIndexAddOptions {
+    type Error = ffi::git_index_add_option_t;
+
+    fn try_from(bits: ffi::git_index_add_option_t) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl BitOr for GitIndexAddOptions {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitIndexAddOptions {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitIndexAddOptions {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitIndexAddOptions {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for GitIndexAddOptions {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(self.0 ^ Self::ALL.0)
+    }
+}
+
+/// Wraps: git_index_capability_t
+/// Validated filesystem capabilities, or a request to derive them from the owner.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct GitIndexCapabilities(ffi::git_index_capability_t);
+
+impl GitIndexCapabilities {
+    /// Derive capabilities from the owning repository's configuration.
+    pub const FROM_OWNER: Self = Self(ffi::git_index_capability_t_GIT_INDEX_CAPABILITY_FROM_OWNER);
+    /// Specify that no optional filesystem capability is present.
+    pub const NONE: Self = Self(0);
+    /// Compare paths without case sensitivity.
+    pub const IGNORE_CASE: Self =
+        Self(ffi::git_index_capability_t_GIT_INDEX_CAPABILITY_IGNORE_CASE);
+    /// Ignore executable-bit differences in file modes.
+    pub const NO_FILEMODE: Self =
+        Self(ffi::git_index_capability_t_GIT_INDEX_CAPABILITY_NO_FILEMODE);
+    /// Treat symbolic links as ordinary files.
+    pub const NO_SYMLINKS: Self =
+        Self(ffi::git_index_capability_t_GIT_INDEX_CAPABILITY_NO_SYMLINKS);
+    /// Every explicit capability published by this libgit2 version.
+    pub const ALL: Self = Self(Self::IGNORE_CASE.0 | Self::NO_FILEMODE.0 | Self::NO_SYMLINKS.0);
+
+    /// Converts an explicit capability bit set.
+    ///
+    /// The `FROM_OWNER` sentinel is intentionally accepted only by
+    /// [`Self::from_raw`] so it cannot be mistaken for a set containing every
+    /// capability.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_index_capability_t) -> Option<Self> {
+        if bits >= 0 && bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Converts either an explicit bit set or the `FROM_OWNER` sentinel.
+    #[must_use]
+    pub const fn from_raw(raw: ffi::git_index_capability_t) -> Option<Self> {
+        if raw == Self::FROM_OWNER.0 {
+            Some(Self::FROM_OWNER)
+        } else {
+            Self::from_bits(raw)
+        }
+    }
+
+    /// Returns the underlying libgit2 value.
+    #[must_use]
+    pub const fn as_raw(self) -> ffi::git_index_capability_t {
+        self.0
+    }
+
+    /// Returns the explicit bits, or `None` for [`Self::FROM_OWNER`].
+    #[must_use]
+    pub const fn bits(self) -> Option<ffi::git_index_capability_t> {
+        if self.0 == Self::FROM_OWNER.0 {
+            None
+        } else {
+            Some(self.0)
+        }
+    }
+
+    /// Returns whether capabilities should be derived from the owner.
+    #[must_use]
+    pub const fn is_from_owner(self) -> bool {
+        self.0 == Self::FROM_OWNER.0
+    }
+
+    /// Combines two explicit capability sets.
+    ///
+    /// Returns `None` rather than silently combining the `FROM_OWNER`
+    /// sentinel with explicit bits.
+    #[must_use]
+    pub const fn union(self, other: Self) -> Option<Self> {
+        match (self.bits(), other.bits()) {
+            (Some(left), Some(right)) => Some(Self(left | right)),
+            _ => None,
+        }
+    }
+
+    /// Returns whether every explicit capability in `other` is enabled.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        match (self.bits(), other.bits()) {
+            (Some(bits), Some(other)) => bits & other == other,
+            _ => false,
+        }
+    }
+}
+
+impl From<GitIndexCapabilities> for ffi::git_index_capability_t {
+    fn from(capabilities: GitIndexCapabilities) -> Self {
+        capabilities.as_raw()
+    }
+}
+
+impl TryFrom<ffi::git_index_capability_t> for GitIndexCapabilities {
+    type Error = ffi::git_index_capability_t;
+
+    fn try_from(raw: ffi::git_index_capability_t) -> Result<Self, Self::Error> {
+        Self::from_raw(raw).ok_or(raw)
+    }
+}
+
+/// Wraps: git_index_entry_extended_flag_t
+/// A checked set of extended state bits stored in an index entry.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct GitIndexEntryExtendedFlags(ffi::git_index_entry_extended_flag_t);
+
+impl GitIndexEntryExtendedFlags {
+    /// No extended state bits are set.
+    pub const NONE: Self = Self(0);
+    /// The entry records an intent to add content later.
+    pub const INTENT_TO_ADD: Self =
+        Self(ffi::git_index_entry_extended_flag_t_GIT_INDEX_ENTRY_INTENT_TO_ADD);
+    /// Worktree operations should leave this entry alone.
+    pub const SKIP_WORKTREE: Self =
+        Self(ffi::git_index_entry_extended_flag_t_GIT_INDEX_ENTRY_SKIP_WORKTREE);
+    /// The entry's cached stat information is current.
+    pub const UPTODATE: Self = Self(ffi::git_index_entry_extended_flag_t_GIT_INDEX_ENTRY_UPTODATE);
+    /// The subset of bits persisted in an on-disk index.
+    pub const PERSISTED: Self =
+        Self(ffi::git_index_entry_extended_flag_t_GIT_INDEX_ENTRY_EXTENDED_FLAGS);
+    /// Every extended-entry bit published by this libgit2 version.
+    pub const ALL: Self = Self(Self::PERSISTED.0 | Self::UPTODATE.0);
+
+    /// Converts raw bits when every bit is published by libgit2.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_index_entry_extended_flag_t) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 flag bits.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_index_entry_extended_flag_t {
+        self.0
+    }
+
+    /// Returns whether no extended state is enabled.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every flag in `other` is enabled.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any flag in `other` is enabled.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl From<GitIndexEntryExtendedFlags> for ffi::git_index_entry_extended_flag_t {
+    fn from(flags: GitIndexEntryExtendedFlags) -> Self {
+        flags.bits()
+    }
+}
+
+impl TryFrom<ffi::git_index_entry_extended_flag_t> for GitIndexEntryExtendedFlags {
+    type Error = ffi::git_index_entry_extended_flag_t;
+
+    fn try_from(bits: ffi::git_index_entry_extended_flag_t) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl BitOr for GitIndexEntryExtendedFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitIndexEntryExtendedFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitIndexEntryExtendedFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitIndexEntryExtendedFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for GitIndexEntryExtendedFlags {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(self.0 ^ Self::ALL.0)
+    }
+}
+
+#[cfg(test)]
+mod enum_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn index_add_options_compose_and_validate() {
+        let options = GitIndexAddOptions::FORCE | GitIndexAddOptions::CHECK_PATHSPEC;
+        assert!(options.contains(GitIndexAddOptions::FORCE));
+        assert!(options.intersects(GitIndexAddOptions::CHECK_PATHSPEC));
+        assert_eq!(GitIndexAddOptions::from_bits(options.bits()), Some(options));
+        assert_eq!(GitIndexAddOptions::from_bits(1 << 31), None);
+        assert_eq!(GitIndexAddOptions::DEFAULT.bits(), 0);
+    }
+
+    #[test]
+    fn index_capabilities_keep_the_owner_sentinel_distinct() {
+        let explicit = GitIndexCapabilities::IGNORE_CASE
+            .union(GitIndexCapabilities::NO_SYMLINKS)
+            .unwrap();
+        assert!(explicit.contains(GitIndexCapabilities::IGNORE_CASE));
+        assert_eq!(explicit.bits(), Some(5));
+        assert_eq!(GitIndexCapabilities::FROM_OWNER.bits(), None);
+        assert!(GitIndexCapabilities::FROM_OWNER.is_from_owner());
+        assert_eq!(
+            GitIndexCapabilities::from_raw(
+                ffi::git_index_capability_t_GIT_INDEX_CAPABILITY_FROM_OWNER
+            ),
+            Some(GitIndexCapabilities::FROM_OWNER)
+        );
+        assert_eq!(GitIndexCapabilities::from_bits(-1), None);
+        assert_eq!(GitIndexCapabilities::from_raw(8), None);
+    }
+
+    #[test]
+    fn extended_entry_flags_preserve_the_persisted_subset() {
+        let flags = GitIndexEntryExtendedFlags::INTENT_TO_ADD
+            | GitIndexEntryExtendedFlags::SKIP_WORKTREE
+            | GitIndexEntryExtendedFlags::UPTODATE;
+        assert!(flags.contains(GitIndexEntryExtendedFlags::PERSISTED));
+        assert!(flags.intersects(GitIndexEntryExtendedFlags::UPTODATE));
+        assert_eq!(
+            GitIndexEntryExtendedFlags::from_bits(flags.bits()),
+            Some(flags)
+        );
+        assert_eq!(GitIndexEntryExtendedFlags::from_bits(1), None);
+    }
+
+    #[test]
+    fn index_enum_wrappers_match_the_c_layouts() {
+        assert_eq!(
+            (
+                size_of::<GitIndexAddOptions>(),
+                align_of::<GitIndexAddOptions>()
+            ),
+            (
+                size_of::<ffi::git_index_add_option_t>(),
+                align_of::<ffi::git_index_add_option_t>()
+            )
+        );
+        assert_eq!(
+            (
+                size_of::<GitIndexCapabilities>(),
+                align_of::<GitIndexCapabilities>()
+            ),
+            (
+                size_of::<ffi::git_index_capability_t>(),
+                align_of::<ffi::git_index_capability_t>()
+            )
+        );
+        assert_eq!(
+            (
+                size_of::<GitIndexEntryExtendedFlags>(),
+                align_of::<GitIndexEntryExtendedFlags>()
+            ),
+            (
+                size_of::<ffi::git_index_entry_extended_flag_t>(),
+                align_of::<ffi::git_index_entry_extended_flag_t>()
+            )
+        );
     }
 }
