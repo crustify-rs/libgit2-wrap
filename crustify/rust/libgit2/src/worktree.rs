@@ -6,9 +6,11 @@ use core::ptr::{addr_of, addr_of_mut};
 use ffibox::{CBox, CVal};
 
 use crate::api::buffer::GitBufMut;
-use crate::api::worktree::GitWorktreePruneFlags;
+use crate::api::worktree::{
+    GitWorktreeAddOptionsMut, GitWorktreeAddOptionsRef, GitWorktreePruneFlags,
+};
 use crate::ffi;
-use crate::repository::GitRepositoryRef;
+use crate::repository::{GitRepositoryMut, GitRepositoryRef};
 use crate::strarray::GitStrArray;
 
 ffibox::define_ctype!(
@@ -374,5 +376,62 @@ mod prune_options_tests {
         // SAFETY: `raw` is initialized and live for the shared handle's use.
         let options = unsafe { GitWorktreePruneOptionsRef::from_ptr(&raw mut raw) }.unwrap();
         assert_eq!(options.flags(), Err(unknown));
+    }
+}
+
+/// Wraps: git_worktree_add
+/// Creates and checks out a linked worktree.
+pub fn git_worktree_add(
+    repository: &mut GitRepositoryMut<'_>,
+    name: &CStr,
+    path: &CStr,
+    options: Option<GitWorktreeAddOptionsRef<'_, '_>>,
+) -> Result<GitWorktreeOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable, the repository is exclusive, and both names
+    // plus optional options remain live for the synchronous filesystem work.
+    let status = unsafe {
+        ffi::git_worktree_add(
+            &mut out,
+            repository.as_mut_ptr(),
+            name.as_ptr(),
+            path.as_ptr(),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+        )
+    };
+    if status == 0 {
+        // SAFETY: success transfers one complete libgit2 worktree allocation.
+        unsafe { GitWorktreeOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_worktree_add_options_init
+/// Initializes worktree-add options for `version`.
+pub fn git_worktree_add_options_init(
+    options: &mut GitWorktreeAddOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies writable layout-compatible
+    // storage and the initializer retains no pointer.
+    let status = unsafe { ffi::git_worktree_add_options_init(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod scheduled_add_tests {
+    use super::*;
+    use crate::api::worktree::GitWorktreeAddOptions;
+
+    #[test]
+    fn initializer_writes_the_current_version() {
+        let mut options = GitWorktreeAddOptions::new();
+        git_worktree_add_options_init(&mut options.as_mut(), ffi::GIT_WORKTREE_ADD_OPTIONS_VERSION)
+            .unwrap();
+        assert_eq!(
+            options.as_ref().version(),
+            ffi::GIT_WORKTREE_ADD_OPTIONS_VERSION
+        );
     }
 }

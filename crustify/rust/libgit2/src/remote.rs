@@ -7,12 +7,16 @@ use core::ptr::{NonNull, addr_of};
 use ffibox::{CBox, CCloned, CVal};
 
 use crate::api::buffer::GitBufMut;
+use crate::api::proxy::GitProxyOptionsRef;
+use crate::api::remote::{GitRemoteCallbacksMut, GitRemoteCallbacksRef};
 use crate::ffi;
 use crate::indexer::IndexerProgressRef;
 use crate::oid::{InvalidOidType, OidRef, OidType};
 use crate::refspec::GitRefspecRef;
 use crate::repository::GitRepositoryMut;
 use crate::strarray::GitStrArray;
+use crate::strarray::GitStrArrayRef;
+use crate::util::net::Direction;
 use crate::util::net::RemoteHeadRef;
 
 /// Wraps: git_fetch_prune_t
@@ -1177,4 +1181,97 @@ pub fn git_remote_ls<'a>(remote: &'a mut GitRemoteMut<'_>) -> Result<GitRemoteHe
         len,
         _remote: PhantomData,
     })
+}
+
+/// Wraps: git_remote_connect
+/// Connects a remote using callback and proxy state valid until disconnect.
+pub fn git_remote_connect(
+    remote: &mut GitRemoteMut<'_>,
+    direction: Direction,
+    callbacks: Option<GitRemoteCallbacksRef<'_, 'static>>,
+    proxy: Option<GitProxyOptionsRef<'_, 'static>>,
+    custom_headers: Option<GitStrArrayRef<'_>>,
+) -> Result<(), i32> {
+    // SAFETY: `remote` is exclusive; the headers are copied synchronously, and
+    // callback/proxy nested borrows are restricted to `'static` because the
+    // connected transport may use them until a later disconnect.
+    let status = unsafe {
+        ffi::git_remote_connect(
+            remote.as_mut_ptr(),
+            direction.into(),
+            callbacks.map_or(core::ptr::null(), |callbacks| callbacks.as_ptr()),
+            proxy.map_or(core::ptr::null(), |proxy| proxy.as_ptr()),
+            custom_headers.map_or(core::ptr::null(), |headers| headers.as_ptr()),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_remote_init_callbacks
+/// Initializes a remote callback table for `version`.
+pub fn git_remote_init_callbacks(
+    callbacks: &mut GitRemoteCallbacksMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies writable callback-table storage;
+    // initialization retains no pointer into it.
+    let status = unsafe { ffi::git_remote_init_callbacks(callbacks.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_remote_prune
+/// Removes remote-tracking references no longer advertised by the remote.
+pub fn git_remote_prune(
+    remote: &mut GitRemoteMut<'_>,
+    callbacks: Option<GitRemoteCallbacksRef<'_, '_>>,
+) -> Result<(), i32> {
+    // SAFETY: the remote is exclusive and callbacks, when present, stay live
+    // for the synchronous prune operation.
+    let status = unsafe {
+        ffi::git_remote_prune(
+            remote.as_mut_ptr(),
+            callbacks.map_or(core::ptr::null(), |callbacks| callbacks.as_ptr()),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_remote_update_tips
+/// Updates remote-tracking tips from the connected remote's advertisements.
+pub fn git_remote_update_tips(
+    remote: &mut GitRemoteMut<'_>,
+    callbacks: Option<GitRemoteCallbacksRef<'_, '_>>,
+    update_flags: core::ffi::c_uint,
+    download_tags: GitRemoteAutotagOption,
+    reflog_message: Option<&CStr>,
+) -> Result<(), i32> {
+    // SAFETY: the remote is exclusive and every optional borrowed input stays
+    // live for the synchronous update operation.
+    let status = unsafe {
+        ffi::git_remote_update_tips(
+            remote.as_mut_ptr(),
+            callbacks.map_or(core::ptr::null(), |callbacks| callbacks.as_ptr()),
+            update_flags,
+            download_tags.into(),
+            reflog_message.map_or(core::ptr::null(), CStr::as_ptr),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod scheduled_connection_tests {
+    use super::*;
+    use crate::api::remote::GitRemoteCallbacks;
+
+    #[test]
+    fn callback_initializer_writes_the_current_version() {
+        let mut callbacks = GitRemoteCallbacks::new();
+        git_remote_init_callbacks(&mut callbacks.as_mut(), ffi::GIT_REMOTE_CALLBACKS_VERSION)
+            .unwrap();
+        assert_eq!(
+            callbacks.as_ref().version(),
+            ffi::GIT_REMOTE_CALLBACKS_VERSION
+        );
+    }
 }

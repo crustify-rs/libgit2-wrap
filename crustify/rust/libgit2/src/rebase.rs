@@ -4,6 +4,8 @@ use core::ptr::{NonNull, addr_of};
 
 use ffibox::{CBox, CDropped};
 
+use crate::annotated_commit::AnnotatedCommitRef;
+use crate::api::rebase::{GitRebaseOptionsMut, GitRebaseOptionsRef};
 use crate::api::types::GitSignatureRef;
 use crate::ffi;
 use crate::index::{GitIndex, GitIndexOwned};
@@ -79,8 +81,46 @@ ffibox::define_ctype!(
     ffi::git_rebase
 );
 
-/// An exclusively owned, fully constructed libgit2 rebase.
-pub type GitRebaseOwned = CBox<GitRebase>;
+/// An exclusively owned rebase tied to the repository and callback data it retains.
+pub struct GitRebaseOwned<'repo, 'data> {
+    inner: CBox<GitRebase>,
+    _repository: core::marker::PhantomData<crate::repository::GitRepositoryMut<'repo>>,
+    _data: core::marker::PhantomData<&'data mut ()>,
+}
+
+impl GitRebaseOwned<'_, '_> {
+    /// Borrows the rebase shared.
+    #[must_use]
+    pub fn as_ref(&self) -> GitRebaseRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the rebase exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitRebaseMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+fn rebase_result<'repo, 'data>(
+    status: i32,
+    raw: *mut ffi::git_rebase,
+) -> Result<GitRebaseOwned<'repo, 'data>, i32> {
+    // SAFETY: constructor outputs are null or transfer one complete rebase;
+    // adopting before status handling also releases a surprising error output.
+    let inner = unsafe { CBox::<GitRebase>::from_raw(raw) };
+    if status == 0 {
+        let inner = inner.ok_or(ffi::git_error_code_GIT_ERROR)?;
+        Ok(GitRebaseOwned {
+            inner,
+            _repository: core::marker::PhantomData,
+            _data: core::marker::PhantomData,
+        })
+    } else {
+        drop(inner);
+        Err(status)
+    }
+}
 
 /// Wraps: git_rebase_free
 // SAFETY: `git_rebase_free` is the public destructor for a fully constructed
@@ -159,7 +199,7 @@ mod tests {
             size_of::<*mut ffi::git_rebase>()
         );
         assert_eq!(
-            size_of::<GitRebaseOwned>(),
+            size_of::<GitRebaseOwned<'static, 'static>>(),
             size_of::<*mut ffi::git_rebase>()
         );
     }
@@ -211,7 +251,7 @@ mod tests {
         unsafe {
             assert!(GitRebaseRef::from_ptr(ptr::null_mut()).is_none());
             assert!(GitRebaseMut::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitRebaseOwned::from_raw(ptr::null_mut()).is_none());
+            assert!(CBox::<GitRebase>::from_raw(ptr::null_mut()).is_none());
         }
     }
 
@@ -479,4 +519,77 @@ pub fn git_rebase_operation_byindex<'a>(
     let operation = unsafe { ffi::git_rebase_operation_byindex(rebase.as_ptr().cast_mut(), index) };
     // SAFETY: the result is null or a live rebase-owned operation for `'a`.
     unsafe { GitRebaseOperationRef::from_ptr(operation) }
+}
+
+/// Wraps: git_rebase_init
+/// Starts a rebase and returns an owner tied to the repository and options data.
+#[allow(clippy::too_many_arguments)]
+pub fn git_rebase_init<'repo, 'data>(
+    mut repository: crate::repository::GitRepositoryMut<'repo>,
+    branch: Option<AnnotatedCommitRef<'_>>,
+    upstream: Option<AnnotatedCommitRef<'_>>,
+    onto: Option<AnnotatedCommitRef<'_>>,
+    options: Option<GitRebaseOptionsRef<'_, 'data>>,
+) -> Result<GitRebaseOwned<'repo, 'data>, i32> {
+    if upstream.is_none() && onto.is_none() {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable, every optional typed input is live for the
+    // call, and the returned owner carries both retained lifetime bounds.
+    let status = unsafe {
+        ffi::git_rebase_init(
+            &mut out,
+            repository.as_mut_ptr(),
+            branch.map_or(core::ptr::null(), |commit| commit.as_ptr()),
+            upstream.map_or(core::ptr::null(), |commit| commit.as_ptr()),
+            onto.map_or(core::ptr::null(), |commit| commit.as_ptr()),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+        )
+    };
+    rebase_result(status, out)
+}
+
+/// Wraps: git_rebase_init_options
+/// Initializes deprecated rebase options for `version`.
+pub fn git_rebase_init_options(
+    options: &mut GitRebaseOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies writable options storage and C
+    // retains no pointer to it after initialization.
+    let status = unsafe { ffi::git_rebase_init_options(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_rebase_open
+/// Opens an existing rebase and ties it to the repository and options data.
+pub fn git_rebase_open<'repo, 'data>(
+    mut repository: crate::repository::GitRepositoryMut<'repo>,
+    options: Option<GitRebaseOptionsRef<'_, 'data>>,
+) -> Result<GitRebaseOwned<'repo, 'data>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and the returned owner records the lifetimes
+    // of the repository and copied option payloads retained by C.
+    let status = unsafe {
+        ffi::git_rebase_open(
+            &mut out,
+            repository.as_mut_ptr(),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+        )
+    };
+    rebase_result(status, out)
+}
+
+#[cfg(test)]
+mod scheduled_constructor_tests {
+    use super::*;
+    use crate::api::rebase::GitRebaseOptions;
+
+    #[test]
+    fn deprecated_initializer_writes_the_current_version() {
+        let mut options = GitRebaseOptions::new();
+        git_rebase_init_options(&mut options.as_mut(), ffi::GIT_REBASE_OPTIONS_VERSION).unwrap();
+        assert_eq!(options.as_ref().version(), ffi::GIT_REBASE_OPTIONS_VERSION);
+    }
 }

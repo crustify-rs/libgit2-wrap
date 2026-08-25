@@ -2,7 +2,10 @@
 
 use core::ffi::{CStr, c_void};
 
-use crate::api::stash::{GitStashCallback, GitStashSaveOptionsMut, GitStashSaveOptionsRef};
+use crate::api::stash::{
+    GitStashApplyOptionsMut, GitStashApplyOptionsRef, GitStashCallback, GitStashSaveOptionsMut,
+    GitStashSaveOptionsRef,
+};
 use crate::api::types::GitSignatureRef;
 use crate::ffi;
 use crate::oid::{Oid, OidRef};
@@ -243,5 +246,72 @@ mod save_options_init_tests {
         );
         assert_eq!(options.as_ref().flags(), 0);
         assert!(options.as_ref().stasher().is_none());
+    }
+}
+
+/// Wraps: git_stash_apply
+/// Applies the stash at `index` to the repository.
+pub fn git_stash_apply(
+    repository: &mut GitRepositoryMut<'_>,
+    index: usize,
+    options: Option<GitStashApplyOptionsRef<'_, '_>>,
+) -> Result<(), i32> {
+    // SAFETY: the repository is exclusively borrowed and the optional options
+    // and callback payload remain live for this synchronous operation.
+    let status = unsafe {
+        ffi::git_stash_apply(
+            repository.as_mut_ptr(),
+            index,
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_stash_apply_init_options
+/// Initializes deprecated stash-apply options for `version`.
+pub fn git_stash_apply_init_options(
+    options: &mut GitStashApplyOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies writable layout-compatible
+    // storage and initialization retains no pointer into it.
+    let status = unsafe { ffi::git_stash_apply_init_options(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_stash_pop
+/// Applies and then removes the stash at `index`.
+pub fn git_stash_pop(
+    repository: &mut GitRepositoryMut<'_>,
+    index: usize,
+    options: Option<GitStashApplyOptionsRef<'_, '_>>,
+) -> Result<(), i32> {
+    // SAFETY: the repository is exclusive and the optional options remain
+    // live while C synchronously applies and removes the stash.
+    let status = unsafe {
+        ffi::git_stash_pop(
+            repository.as_mut_ptr(),
+            index,
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod scheduled_apply_tests {
+    use super::*;
+    use crate::api::stash::GitStashApplyOptions;
+
+    #[test]
+    fn deprecated_initializer_writes_the_current_version() {
+        let mut options = GitStashApplyOptions::new();
+        git_stash_apply_init_options(&mut options.as_mut(), ffi::GIT_STASH_APPLY_OPTIONS_VERSION)
+            .unwrap();
+        assert_eq!(
+            options.as_ref().version(),
+            ffi::GIT_STASH_APPLY_OPTIONS_VERSION
+        );
     }
 }

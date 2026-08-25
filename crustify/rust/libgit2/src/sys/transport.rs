@@ -1039,6 +1039,11 @@ impl<'remote> GitTransportWithRemote<'remote> {
     pub fn as_mut(&mut self) -> GitTransportMut<'_> {
         self.inner.as_mut()
     }
+
+    /// Transfers the transport to libgit2's remote machinery.
+    pub(crate) fn into_raw(self) -> *mut ffi::git_transport {
+        self.inner.into_raw()
+    }
 }
 
 /// A transport callback that may be absent from a custom implementation.

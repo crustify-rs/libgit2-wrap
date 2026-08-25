@@ -6632,6 +6632,63 @@
    }
   },
   {
+   "name": "git_apply",
+   "defined_in": "src/libgit2/apply.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "diff is read only despite historical non-const spelling"
+     }
+    },
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "options are copied for this call"
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "repository is modified synchronously"
+     }
+    }
+   ]
+  },
+  {
    "name": "git_apply_delta_cb",
    "defined_in": null,
    "ptr_args": [
@@ -6667,6 +6724,123 @@
       "nullable": true,
       "mutable": true,
       "note": "User payload is borrowed unchanged for this transient callback invocation and may be null."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_apply_options_init",
+   "defined_in": "src/libgit2/apply.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "initializer overwrites the options header and retains nothing"
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_apply_to_tree",
+   "defined_in": "src/libgit2/apply.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "writable output slot; on success the inner git_index pointer transfers a new owner"
+     }
+    },
+    {
+     "name": "preimage",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:preimage"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
      }
     }
    ]
@@ -8848,6 +9022,63 @@
    ]
   },
   {
+   "name": "git_cherrypick",
+   "defined_in": "src/libgit2/cherrypick.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
+     }
+    }
+   ]
+  },
+  {
    "name": "git_cherrypick_commit",
    "defined_in": "src/libgit2/cherrypick.c",
    "ptr_args": [
@@ -8937,6 +9168,29 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_cherrypick_init_options",
+   "defined_in": "src/libgit2/cherrypick.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
      }
     }
    ]
@@ -14585,6 +14839,188 @@
       "nullable": true,
       "mutable": false,
       "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_email_create_from_commit",
+   "defined_in": "src/libgit2/email.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_email_create_from_diff",
+   "defined_in": "src/libgit2/email.c",
+   "ptr_args": [
+    {
+     "name": "author",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:author"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "body",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:body"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "commit_id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit_id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
+     }
+    },
+    {
+     "name": "summary",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:summary"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": ""
      }
     }
    ]
@@ -23324,6 +23760,140 @@
    ]
   },
   {
+   "name": "git_rebase_init",
+   "defined_in": "src/libgit2/rebase.c",
+   "ptr_args": [
+    {
+     "name": "branch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:branch"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "options are copied into the returned rebase; nested callback data must outlive it"
+     }
+    },
+    {
+     "name": "onto",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:onto"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "writable output slot; on success the inner git_rebase pointer transfers a new owner"
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "returned rebase retains this repository borrow"
+     }
+    },
+    {
+     "name": "upstream",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:upstream"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_rebase_init_options",
+   "defined_in": "src/libgit2/rebase.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
+     }
+    }
+   ]
+  },
+  {
    "name": "git_rebase_inmemory_index",
    "defined_in": "src/libgit2/rebase.c",
    "ptr_args": [
@@ -23407,6 +23977,66 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_rebase_open",
+   "defined_in": "src/libgit2/rebase.c",
+   "ptr_args": [
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "options are copied into the returned rebase"
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "writable output slot; on success the inner git_rebase pointer transfers a new owner"
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "returned rebase retains this repository borrow"
      }
     }
    ]
@@ -26502,6 +27132,80 @@
    ]
   },
   {
+   "name": "git_remote_connect",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "callbacks",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:callbacks"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "callback table is copied; nested payload may be used until disconnect"
+     }
+    },
+    {
+     "name": "custom_headers",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:custom_headers"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "optional string-array header is read by the transport"
+     }
+    },
+    {
+     "name": "proxy",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:proxy"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "proxy options are copied for transport connection"
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
+     }
+    }
+   ]
+  },
+  {
    "name": "git_remote_connected",
    "defined_in": "src/libgit2/remote.c",
    "ptr_args": [
@@ -27100,6 +27804,29 @@
    }
   },
   {
+   "name": "git_remote_init_callbacks",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
+     }
+    }
+   ]
+  },
+  {
    "name": "git_remote_list",
    "defined_in": "src/libgit2/remote.c",
    "ptr_args": [
@@ -27376,6 +28103,46 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_prune",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "callbacks",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:callbacks"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
      }
     }
    ]
@@ -27688,6 +28455,63 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the call; ownership is not transferred and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_update_tips",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "callbacks",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:callbacks"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "reflog_message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:reflog_message"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
      }
     }
    ]
@@ -29457,6 +30281,63 @@
    ]
   },
   {
+   "name": "git_revert",
+   "defined_in": "src/libgit2/revert.c",
+   "ptr_args": [
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
+     }
+    }
+   ]
+  },
+  {
    "name": "git_revert_commit",
    "defined_in": "src/libgit2/revert.c",
    "ptr_args": [
@@ -29546,6 +30427,29 @@
       "nullable": false,
       "mutable": false,
       "note": "Required commit read synchronously; no ownership transfer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revert_options_init",
+   "defined_in": "src/libgit2/revert.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
      }
     }
    ]
@@ -30715,6 +31619,69 @@
    ]
   },
   {
+   "name": "git_stash_apply",
+   "defined_in": "src/libgit2/stash.c",
+   "ptr_args": [
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_stash_apply_init_options",
+   "defined_in": "src/libgit2/stash.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
+     }
+    }
+   ]
+  },
+  {
    "name": "git_stash_apply_progress_cb",
    "defined_in": null,
    "ptr_args": [
@@ -30870,6 +31837,46 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_stash_pop",
+   "defined_in": "src/libgit2/stash.c",
+   "ptr_args": [
+    {
+     "name": "options",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:options"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
      }
     }
    ]
@@ -34222,6 +35229,63 @@
    ]
   },
   {
+   "name": "git_transport_register",
+   "defined_in": "src/libgit2/transport.c",
+   "ptr_args": [
+    {
+     "name": "cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "function pointer is stored in the process-global registry"
+     }
+    },
+    {
+     "name": "param",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "opaque callback state is stored until matching unregister; C never frees it"
+     }
+    },
+    {
+     "name": "scheme",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:scheme"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": ""
+     }
+    }
+   ]
+  },
+  {
    "name": "git_transport_smart",
    "defined_in": "src/libgit2/transports/smart.c",
    "ptr_args": [
@@ -35705,6 +36769,123 @@
       "nullable": true,
       "mutable": true,
       "note": "Borrowed for the call; no pointee ownership transfers."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_worktree_add",
+   "defined_in": "src/libgit2/worktree.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": ""
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "writable output slot; on success the inner git_worktree pointer transfers a new owner"
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
+     }
+    },
+    {
+     "name": "worktree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:worktree"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": ""
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_worktree_add_options_init",
+   "defined_in": "src/libgit2/worktree.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": ""
      }
     }
    ]
