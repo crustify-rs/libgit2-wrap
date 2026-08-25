@@ -46,16 +46,23 @@ pub fn git_cherrypick_commit(
 
 /// Wraps: git_cherrypick
 /// Cherry-picks `commit` into the repository's index and working directory.
+///
+/// The commit is borrowed exclusively. Building the merge message calls
+/// `git_commit_summary`, which computes the first paragraph of the message
+/// and stores it in `commit->summary` on first use — the same lazy cache that
+/// makes [`git_commit_summary`](crate::commit::git_commit_summary) take the
+/// exclusive handle.
 pub fn git_cherrypick(
     repository: &mut crate::repository::GitRepositoryMut<'_>,
-    commit: crate::commit::GitCommitRef<'_>,
+    commit: &mut crate::commit::GitCommitMut<'_>,
     options: Option<GitCherrypickOptionsRef<'_, '_>>,
 ) -> Result<(), i32> {
     let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
-    // SAFETY: the repository is exclusively borrowed and the commit and
-    // optional options are live, read-only inputs for this synchronous call.
+    // SAFETY: the repository and the commit are both exclusively borrowed for
+    // the writes this call performs through them, and the optional options
+    // stay live and read-only for the synchronous call.
     let status = unsafe {
-        crate::ffi::git_cherrypick(repository.as_mut_ptr(), commit.as_ptr().cast_mut(), options)
+        crate::ffi::git_cherrypick(repository.as_mut_ptr(), commit.as_mut_ptr(), options)
     };
     if status == 0 { Ok(()) } else { Err(status) }
 }
@@ -92,6 +99,21 @@ mod scheduled_wrapper_tests {
         // repository config on first use, so it takes the exclusive handle
         // that the working-directory form already required.
         let _: CommitCherrypick = git_cherrypick_commit;
+    }
+
+    /// The shape of the working-directory cherry-pick.
+    type WorkdirCherrypick = fn(
+        &mut crate::repository::GitRepositoryMut<'_>,
+        &mut crate::commit::GitCommitMut<'_>,
+        Option<GitCherrypickOptionsRef<'_, '_>>,
+    ) -> Result<(), i32>;
+
+    #[test]
+    fn the_working_directory_cherrypick_borrows_the_commit_exclusively() {
+        // `git_cherrypick` builds its merge message from
+        // `git_commit_summary`, which populates `commit->summary` on first
+        // use, so the commit cannot be handed over as a shared handle.
+        let _: WorkdirCherrypick = git_cherrypick;
     }
 
     #[test]

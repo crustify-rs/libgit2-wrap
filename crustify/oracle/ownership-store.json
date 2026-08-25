@@ -6756,8 +6756,8 @@
        "lifetime": "arg:diff"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "diff is read only despite historical non-const spelling"
+      "mutable": true,
+      "note": "Exclusively borrows the diff; the non-const spelling is accurate, not historical. apply_deltas calls apply_one for every delta, which calls git_patch_from_diff. Patch generation writes into the diff: git_diff_file_content__init_from_diff resolves attributes through &diff->attrsession, whose first use preloads the attribute files and sets attr_session->init_setup, and loading a file's content stamps GIT_DIFF_FLAG_BINARY / NOT_BINARY / VALID_ID, the size and the object id into delta->old_file and delta->new_file inside diff->deltas. Ownership is not transferred."
      }
     },
     {
@@ -6854,7 +6854,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "initializer overwrites the options header and retains nothing"
+      "note": "Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]
@@ -6876,8 +6876,8 @@
        "lifetime": "arg:diff"
       },
       "nullable": false,
-      "mutable": false,
-      "note": ""
+      "mutable": true,
+      "note": "Exclusively borrows the diff, exactly as git_apply does: this entry point also reaches apply_deltas and therefore git_patch_from_diff, whose patch generation writes diff->attrsession and the per-delta file flags, sizes and object ids held in diff->deltas. Ownership is not transferred."
      }
     },
     {
@@ -6894,7 +6894,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional options, memcpy'd into a local git_apply_options before use; the nested delta_cb, hunk_cb and payload are only invoked during this call. Ownership is not transferred."
      }
     },
     {
@@ -6931,7 +6931,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": ""
+      "note": "Read-only for the call despite the non-const spelling: git_reader_for_tree only records the pointer in a tree_reader that is freed before this function returns, and tree_reader_read consults it through git_tree_entry_bypath and git_tree_owner. Ownership is not transferred and no reference count is taken."
      }
     },
     {
@@ -6948,7 +6948,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the repository: git_index_new_ext and the blob writes reached through apply_deltas open the object database with git_repository_odb__weakptr, which installs repo->_odb on first use. Ownership is not transferred and nothing retains the pointer."
      }
     }
    ]
@@ -9146,8 +9146,8 @@
        "lifetime": "arg:commit"
       },
       "nullable": false,
-      "mutable": false,
-      "note": ""
+      "mutable": true,
+      "note": "Exclusively borrows the commit; the non-const spelling is accurate. Building the merge message calls git_commit_summary(commit), which computes the first paragraph of the message and stores it in commit->summary on first use \u2014 the same lazy cache that makes git_commit_summary itself take a non-const commit. Ownership is not transferred and no reference count is taken."
      }
     },
     {
@@ -9164,7 +9164,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional options, copied by cherrypick_normalize_opts into a local git_cherrypick_options whose nested checkout callbacks and payloads are only used during this call. Ownership is not transferred."
      }
     },
     {
@@ -9181,7 +9181,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the repository: the call writes CHERRY_PICK_HEAD and MERGE_MSG, reaches git_merge_trees through git_cherrypick_commit (whose merge_normalize_opts installs repo->_config through git_repository_config__weakptr), takes the repository index and checks it out. Ownership is not transferred."
      }
     }
    ]
@@ -9298,7 +9298,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Required writable options storage; a deprecated forward to git_cherrypick_options_init. Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]
@@ -15068,8 +15068,8 @@
        "lifetime": "arg:commit"
       },
       "nullable": false,
-      "mutable": false,
-      "note": ""
+      "mutable": true,
+      "note": "Exclusively borrows the commit; the non-const spelling is accurate. The header is built from git_commit_summary and git_commit_body, which fill commit->summary and commit->body on first use, and the repository the patch is generated against is derived from the commit itself with git_commit_owner \u2014 so this call also performs the lazy repository writes every generated diff performs (the configuration snapshot and the index re-read) on a repository that is not an argument. Ownership is not transferred and no reference count is taken."
      }
     },
     {
@@ -15176,8 +15176,8 @@
        "lifetime": "arg:diff"
       },
       "nullable": false,
-      "mutable": false,
-      "note": ""
+      "mutable": true,
+      "note": "Exclusively borrows the diff; the non-const spelling is accurate. append_diffstat calls git_diff_get_stats and append_patches calls git_patch_from_diff once per delta; both generate patches, which sets attr_session->init_setup on diff->attrsession and stamps binary flags, sizes and object ids into delta->old_file and delta->new_file inside diff->deltas. Ownership is not transferred."
      }
     },
     {
@@ -24096,7 +24096,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Required writable options storage; a deprecated forward to git_rebase_options_init. Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]
@@ -27357,7 +27357,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "callback table is copied; nested payload may be used until disconnect"
+      "note": "Optional callback table whose entries and payload outlive this call. The table is memcpy'd into a local git_remote_connect_options and handed to the transport, whose git_smart__connect calls git_remote_connect_options_normalize / git_remote_connect_options_dup and keeps the copy in t->connect_opts. The smart transport then calls callbacks->certificate_check and callbacks->credentials with that stored payload for every later request, until git_remote_disconnect or git_remote_free releases the transport. Ownership is not transferred."
      }
     },
     {
@@ -27374,7 +27374,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "optional string-array header is read by the transport"
+      "note": "Optional header list, deep-copied: git_remote_connect_options_dup calls git_strarray_copy, so neither the array nor its strings need to outlive this call. Ownership is not transferred."
      }
     },
     {
@@ -27391,7 +27391,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "proxy options are copied for transport connection"
+      "note": "Optional proxy options with the same retention as the callbacks: git_proxy_options_dup strdups the url but copies the credentials and certificate_check entries and the payload pointer into t->connect_opts, where the transport uses them until it is freed. Ownership is not transferred."
      }
     },
     {
@@ -27408,7 +27408,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the remote: a successful connect installs remote->transport, and a failure clears it again. Ownership is not transferred."
      }
     }
    ]
@@ -28158,7 +28158,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]
@@ -28462,7 +28462,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional callback table, used only for this call: git_remote_prune reads callbacks->update_refs / update_tips and callbacks->payload as it deletes each reference and stores no copy. Unlike git_remote_connect, nothing survives the call. Ownership is not transferred."
      }
     },
     {
@@ -28479,7 +28479,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the remote: pruning lists its advertised refs, walks remote->active_refspecs and deletes remote-tracking references through remote->repo. C rejects a remote with no repository (git_remote_create_detached) with GIT_ASSERT before doing any work. Ownership is not transferred."
      }
     }
    ]
@@ -28871,7 +28871,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional callback table, used only for this call: update_tips_for_spec and opportunistic_updates read its update_refs / update_tips entry and payload as each tip is written and store no copy. Unlike git_remote_connect, nothing survives the call. Ownership is not transferred."
      }
     },
     {
@@ -28888,7 +28888,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional NUL-terminated reflog message, read while each reference is updated and copied into the reflog it writes. Ownership is not transferred."
      }
     },
     {
@@ -28905,7 +28905,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the remote: the call truncates FETCH_HEAD and writes remote-tracking references and reflogs through remote->repo, and may run git_remote_prune. Ownership is not transferred."
      }
     }
    ]
@@ -30691,8 +30691,8 @@
        "lifetime": "arg:commit"
       },
       "nullable": false,
-      "mutable": false,
-      "note": ""
+      "mutable": true,
+      "note": "Exclusively borrows the commit, exactly as git_cherrypick does: the revert message is built from git_commit_summary(commit), which fills the commit's lazy summary cache on first use. Ownership is not transferred and no reference count is taken."
      }
     },
     {
@@ -30709,7 +30709,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional options, copied by revert_normalize_opts into a local git_revert_options whose nested checkout callbacks and payloads are only used during this call. Ownership is not transferred."
      }
     },
     {
@@ -30726,7 +30726,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the repository: the call writes REVERT_HEAD and MERGE_MSG, reaches git_merge_trees through git_revert_commit (whose merge_normalize_opts installs repo->_config through git_repository_config__weakptr), takes the repository index and checks it out. Ownership is not transferred."
      }
     }
    ]
@@ -30843,7 +30843,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]
@@ -32030,7 +32030,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional options, memcpy'd by normalize_apply_options into a local git_stash_apply_options. The nested progress_cb, progress_payload and checkout callbacks are only used during this call; nothing is retained afterwards. Ownership is not transferred."
      }
     },
     {
@@ -32047,7 +32047,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the repository: the call takes the repository index with git_repository_index, checks the stashed trees out over the working directory and finishes with git_index_write. Ownership is not transferred."
      }
     }
    ]
@@ -32070,7 +32070,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Required writable options storage; a deprecated forward to git_stash_apply_options_init. Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]
@@ -32253,7 +32253,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional options, forwarded unchanged to git_stash_apply and copied there; nothing is retained after the call. Ownership is not transferred."
      }
     },
     {
@@ -32270,7 +32270,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the repository: the call is git_stash_apply followed by git_stash_drop, which rewrites the stash reflog. Ownership is not transferred."
      }
     }
    ]
@@ -37285,7 +37285,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": ""
+      "note": "Required NUL-terminated worktree name, read for path construction and copied into the returned git_worktree by open_worktree_dir. Ownership is not transferred."
      }
     },
     {
@@ -37302,7 +37302,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional options, memcpy'd into a local git_worktree_add_options. opts->ref is validated and duplicated with git_reference_dup rather than retained, and the nested checkout options are only used during this call. Ownership is not transferred."
      }
     },
     {
@@ -37339,7 +37339,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the repository: the call may create a branch with git_branch_create, creates the worktree administrative directory under repo->commondir and looks the result up again with git_worktree_lookup. The returned git_worktree stores only owned strings, so it does not retain the repository. Ownership is not transferred."
      }
     },
     {
@@ -37356,7 +37356,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": ""
+      "note": "Required NUL-terminated working-directory path, created on disk and prettified into a local buffer. Ownership is not transferred."
      }
     }
    ]
@@ -37379,7 +37379,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]

@@ -1196,6 +1196,15 @@ pub fn git_remote_ls<'a>(remote: &'a mut GitRemoteMut<'_>) -> Result<GitRemoteHe
 
 /// Wraps: git_remote_connect
 /// Connects a remote using callback and proxy state valid until disconnect.
+///
+/// The callback and proxy payloads are `'static` because the transport keeps
+/// them: `git_smart__connect` calls `git_remote_connect_options_normalize`,
+/// whose `git_remote_connect_options_dup` copies the callback table and the
+/// proxy options into `t->connect_opts`, and the transport then reaches
+/// `certificate_check` and `credentials` with that stored payload on every
+/// later request until `git_remote_disconnect` or `git_remote_free` releases
+/// it. The headers need no such bound: the same `dup` runs
+/// `git_strarray_copy` over them.
 pub fn git_remote_connect(
     remote: &mut GitRemoteMut<'_>,
     direction: Direction,
@@ -1232,6 +1241,10 @@ pub fn git_remote_init_callbacks(
 
 /// Wraps: git_remote_prune
 /// Removes remote-tracking references no longer advertised by the remote.
+///
+/// Unlike [`git_remote_connect`], nothing here survives the call: the callback
+/// table's `update_refs` entry and payload are read as each stale reference is
+/// deleted and no copy is stored, so the callbacks need only outlive the call.
 pub fn git_remote_prune(
     remote: &mut GitRemoteMut<'_>,
     callbacks: Option<GitRemoteCallbacksRef<'_, '_>>,
@@ -1249,6 +1262,10 @@ pub fn git_remote_prune(
 
 /// Wraps: git_remote_update_tips
 /// Updates remote-tracking tips from the connected remote's advertisements.
+///
+/// As in [`git_remote_prune`], the callback table is read by
+/// `update_tips_for_spec` and `opportunistic_updates` while each tip is
+/// written and never copied, so it need only outlive the call.
 pub fn git_remote_update_tips(
     remote: &mut GitRemoteMut<'_>,
     callbacks: Option<GitRemoteCallbacksRef<'_, '_>>,

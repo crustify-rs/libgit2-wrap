@@ -520,6 +520,17 @@ pub fn git_rebase_operation_byindex<'a>(
 
 /// Wraps: git_rebase_init
 /// Starts a rebase and returns an owner tied to the repository and options data.
+///
+/// At least one of `upstream` and `onto` is required; C asserts that argument
+/// pair, so the wrapper rejects the empty case before the call and reports it
+/// as `GIT_EINVALID` rather than the generic `-1` the assertion would return.
+///
+/// The returned owner carries both retained borrows. `rebase->repo = repo` is
+/// stored without a reference count, and `rebase_alloc` memcpy's the options
+/// into the rebase: it duplicates `rewrite_notes_ref`, `default_driver`, the
+/// checkout labels, the target directory and the baseline tree, but leaves the
+/// checkout `paths` array, `baseline_index` and every callback payload as the
+/// caller's pointers — which is what `'data` records.
 #[allow(clippy::too_many_arguments)]
 pub fn git_rebase_init<'repo, 'data>(
     mut repository: crate::repository::GitRepositoryMut<'repo>,
