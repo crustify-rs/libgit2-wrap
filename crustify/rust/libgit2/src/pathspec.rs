@@ -7,6 +7,7 @@ use core::ptr::NonNull;
 use ffibox::{CBox, CDropped};
 
 use crate::api::diff::DiffDeltaRef;
+use crate::api::pathspec::GitPathspecFlags;
 use crate::diff::{DiffMut, DiffRef};
 use crate::ffi;
 use crate::index::GitIndexMut;
@@ -103,7 +104,7 @@ impl GitPathspecDiffMatchListOwned<'_> {
 /// Builds a match list tied to the diff whose internal deltas it may borrow.
 pub fn git_pathspec_match_diff<'a>(
     diff: &'a mut DiffMut<'_>,
-    flags: u32,
+    flags: GitPathspecFlags,
     pathspec: &mut GitPathspecMut<'_>,
 ) -> Result<GitPathspecDiffMatchListOwned<'a>, i32> {
     let mut output = core::ptr::null_mut();
@@ -114,7 +115,7 @@ pub fn git_pathspec_match_diff<'a>(
         ffi::git_pathspec_match_diff(
             core::ptr::addr_of_mut!(output),
             diff.as_mut_ptr(),
-            flags,
+            flags.bits(),
             pathspec.as_mut_ptr(),
         )
     };
@@ -189,7 +190,7 @@ pub fn git_pathspec_match_list_failed_entrycount(matches: GitPathspecMatchListRe
 /// list of copied pathnames.
 pub fn git_pathspec_match_workdir(
     repository: &mut GitRepositoryMut<'_>,
-    flags: u32,
+    flags: GitPathspecFlags,
     pathspec: &mut GitPathspecMut<'_>,
 ) -> Result<GitPathspecMatchListOwned, i32> {
     let mut output = core::ptr::null_mut();
@@ -199,7 +200,7 @@ pub fn git_pathspec_match_workdir(
         ffi::git_pathspec_match_workdir(
             core::ptr::addr_of_mut!(output),
             repository.as_mut_ptr(),
-            flags,
+            flags.bits(),
             pathspec.as_mut_ptr(),
         )
     };
@@ -213,10 +214,14 @@ pub fn git_pathspec_match_workdir(
 /// Wraps: git_pathspec_matches_path
 /// Tests a required NUL-terminated pathname against a compiled pathspec.
 #[must_use]
-pub fn git_pathspec_matches_path(pathspec: GitPathspecRef<'_>, flags: u32, path: &CStr) -> bool {
+pub fn git_pathspec_matches_path(
+    pathspec: GitPathspecRef<'_>,
+    flags: GitPathspecFlags,
+    path: &CStr,
+) -> bool {
     // SAFETY: both borrowed inputs are live for the call and neither pointer
     // is retained.
-    unsafe { ffi::git_pathspec_matches_path(pathspec.as_ptr(), flags, path.as_ptr()) != 0 }
+    unsafe { ffi::git_pathspec_matches_path(pathspec.as_ptr(), flags.bits(), path.as_ptr()) != 0 }
 }
 
 /// Wraps: git_pathspec_new
@@ -321,12 +326,12 @@ mod tests {
 
         assert!(git_pathspec_matches_path(
             compiled.as_ref(),
-            0,
+            GitPathspecFlags::DEFAULT,
             c"src/main.c"
         ));
         assert!(!git_pathspec_matches_path(
             compiled.as_ref(),
-            0,
+            GitPathspecFlags::DEFAULT,
             c"README.md"
         ));
         drop(compiled);
@@ -345,7 +350,7 @@ mod tests {
 /// registers a reader on it for the duration of the walk.
 pub fn git_pathspec_match_index(
     index: &mut GitIndexMut<'_>,
-    flags: u32,
+    flags: GitPathspecFlags,
     pathspec: GitPathspecRef<'_>,
 ) -> Result<GitPathspecMatchListOwned, i32> {
     let mut output = core::ptr::null_mut();
@@ -357,7 +362,7 @@ pub fn git_pathspec_match_index(
         ffi::git_pathspec_match_index(
             core::ptr::addr_of_mut!(output),
             index.as_mut_ptr(),
-            flags,
+            flags.bits(),
             pathspec.as_ptr().cast_mut(),
         )
     };
@@ -372,7 +377,7 @@ pub fn git_pathspec_match_index(
 /// Matches a tree and returns an independently owned list of copied paths.
 pub fn git_pathspec_match_tree(
     tree: GitTreeRef<'_>,
-    flags: u32,
+    flags: GitPathspecFlags,
     pathspec: GitPathspecRef<'_>,
 ) -> Result<GitPathspecMatchListOwned, i32> {
     let mut output = core::ptr::null_mut();
@@ -382,7 +387,7 @@ pub fn git_pathspec_match_tree(
         ffi::git_pathspec_match_tree(
             core::ptr::addr_of_mut!(output),
             tree.as_ptr().cast_mut(),
-            flags,
+            flags.bits(),
             pathspec.as_ptr().cast_mut(),
         )
     };
@@ -420,7 +425,7 @@ mod index_match_tests {
         // the index cannot be passed as a shared borrow.
         let _: fn(
             &mut GitIndexMut<'_>,
-            u32,
+            GitPathspecFlags,
             GitPathspecRef<'_>,
         ) -> Result<GitPathspecMatchListOwned, i32> = git_pathspec_match_index;
 
@@ -439,8 +444,12 @@ mod index_match_tests {
         let compiled = git_pathspec_new(source).expect("the pattern should compile");
 
         let mut index = crate::index::git_index_new().expect("an in-memory index");
-        let matches = git_pathspec_match_index(&mut index.as_mut(), 0, compiled.as_ref())
-            .expect("an empty index matches nothing without failing");
+        let matches = git_pathspec_match_index(
+            &mut index.as_mut(),
+            GitPathspecFlags::DEFAULT,
+            compiled.as_ref(),
+        )
+        .expect("an empty index matches nothing without failing");
         assert_eq!(git_pathspec_match_list_entrycount(matches.as_ref()), 0);
 
         drop(matches);

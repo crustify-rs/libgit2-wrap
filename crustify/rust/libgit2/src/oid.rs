@@ -394,3 +394,77 @@ mod tests {
         assert!(git_oid_tostr(&mut [], first_ref).is_none());
     }
 }
+
+ffibox::define_ctype!(
+    /// Wraps: git_oid_shorten
+    /// An opaque object-ID prefix shortener managed by libgit2.
+    GitOidShorten,
+    GitOidShortenRef,
+    GitOidShortenMut,
+    ffi::git_oid_shorten
+);
+
+/// An exclusively owned object-ID prefix shortener.
+pub type GitOidShortenOwned = ffibox::CBox<GitOidShorten>;
+
+// SAFETY: `git_oid_shorten_free` is the public destructor for a complete
+// shortener allocation. It releases the owned trie-node buffer and then the
+// header, accepts null although `CBox` supplies non-null, and is invoked once
+// by the unique owner.
+unsafe impl ffibox::CDropped for GitOidShorten {
+    unsafe fn c_drop(shortener: NonNull<Self>) {
+        // SAFETY: the `CDropped` contract supplies one live, fully constructed,
+        // uniquely owned shortener for its final release.
+        unsafe { ffi::git_oid_shorten_free(shortener.as_ptr().cast()) }
+    }
+}
+
+#[cfg(test)]
+mod shorten_tests {
+    use core::mem::{align_of, size_of};
+    use core::ptr;
+
+    use ffibox::{CCell, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn shortener_preserves_the_opaque_c_seam_and_lifecycle() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<GitOidShorten>();
+        assert_dropped::<GitOidShorten>();
+        assert_eq!(
+            size_of::<GitOidShorten>(),
+            size_of::<ffi::git_oid_shorten>()
+        );
+        assert_eq!(
+            align_of::<GitOidShorten>(),
+            align_of::<ffi::git_oid_shorten>()
+        );
+        assert_eq!(
+            size_of::<GitOidShortenRef<'_>>(),
+            size_of::<*const ffi::git_oid_shorten>()
+        );
+        assert_eq!(
+            size_of::<GitOidShortenMut<'_>>(),
+            size_of::<*mut ffi::git_oid_shorten>()
+        );
+        assert_eq!(
+            size_of::<GitOidShortenOwned>(),
+            size_of::<*mut ffi::git_oid_shorten>()
+        );
+    }
+
+    #[test]
+    fn null_seams_create_no_shortener_handles() {
+        // SAFETY: these conversion seams explicitly accept null and return
+        // `None` without borrowing or adopting an object.
+        unsafe {
+            assert!(GitOidShortenRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitOidShortenMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitOidShortenOwned::from_raw(ptr::null_mut()).is_none());
+        }
+    }
+}

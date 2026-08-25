@@ -7,6 +7,7 @@ use core::ptr::NonNull;
 
 use ffibox::{CBox, CCloned, CDropped};
 
+use crate::api::refs::GitReferenceFormatFlags;
 use crate::api::types::{GitObjectType, GitReferenceType, InvalidGitReferenceType};
 use crate::ffi;
 use crate::object::{GitObjectOwned, GitObjectRef};
@@ -153,7 +154,7 @@ pub fn git_reference_name_is_valid(refname: &core::ffi::CStr) -> Result<bool, i3
 pub fn git_reference_normalize_name<'a>(
     buffer: &'a mut [u8],
     name: &core::ffi::CStr,
-    flags: u32,
+    flags: GitReferenceFormatFlags,
 ) -> Result<&'a core::ffi::CStr, i32> {
     if buffer.is_empty() {
         return Err(ffi::git_error_code_GIT_EBUFS);
@@ -166,7 +167,7 @@ pub fn git_reference_normalize_name<'a>(
             buffer.as_mut_ptr().cast(),
             buffer.len(),
             name.as_ptr(),
-            flags,
+            flags.bits(),
         )
     };
     if status != 0 {
@@ -755,11 +756,19 @@ mod tests {
         assert_eq!(git_reference_name_is_valid(c"refs/heads/main"), Ok(true));
         let mut buffer = [0; 64];
         assert_eq!(
-            git_reference_normalize_name(&mut buffer, c"refs//heads/main", 0),
+            git_reference_normalize_name(
+                &mut buffer,
+                c"refs//heads/main",
+                GitReferenceFormatFlags::NORMAL,
+            ),
             Ok(c"refs/heads/main")
         );
         assert_eq!(
-            git_reference_normalize_name(&mut [], c"refs/heads/main", 0),
+            git_reference_normalize_name(
+                &mut [],
+                c"refs/heads/main",
+                GitReferenceFormatFlags::NORMAL,
+            ),
             Err(ffi::git_error_code_GIT_EBUFS)
         );
         // SAFETY: balances this test's successful initialization.

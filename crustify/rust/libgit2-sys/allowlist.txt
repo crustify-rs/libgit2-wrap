@@ -154,6 +154,8 @@
 ^GIT_ODB_OPTIONS_VERSION$
 ^git_oid$
 ^git_oid_t$
+^git_oid_shorten$
+^git_oid_shorten_free$
 ^git_oidarray$
 ^git_oidarray_dispose$
 ^git_odb_writepack$
@@ -176,6 +178,8 @@
 ^git_reference_dup$
 ^git_reference_free$
 ^git_reference_t$
+^git_reference_format_t$
+^GIT_REFERENCE_FORMAT_.*$
 ^git_repository$
 ^git_repository_free$
 ^git_repository_init_flag_t$
@@ -184,6 +188,8 @@
 ^git_repository_item_t$
 ^git_repository_init_options$
 ^git_pathspec$
+^git_pathspec_flag_t$
+^GIT_PATHSPEC_.*$
 ^git_pathspec_free$
 ^git_pathspec_match_list$
 ^git_pathspec_match_list_free$

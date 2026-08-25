@@ -31,6 +31,7 @@ ffibox::define_ctype!(
 /// context and invokes the concrete backend stream's destructor.
 pub type GitOdbStreamOwned = ffibox::CBox<GitOdbStream>;
 
+/// Wraps: git_odb_stream_t
 /// Published read/write capabilities of an ODB stream.
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]

@@ -3163,6 +3163,28 @@
    "fields": []
   },
   {
+   "name": "git_oid_shorten",
+   "defined_in": "src/libgit2/oid.c",
+   "_comment_agent": "The opaque public shortener owns its mutable trie-node capacity buffer; only libgit2 internals access the private fields.",
+   "fields": [
+    {
+     "name": "nodes",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Owned trie_node capacity buffer. resize_trie reallocates and writes elements; an allocation failure after publication can leave the assigned field null, and git_oid_shorten_free releases the buffer."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_oid_t",
    "defined_in": "include/git2/oid.h",
    "_comment_agent": "git_oid_t is a fieldless C enum with no ownership or lifetime-bearing members. Its published values are GIT_OID_SHA1 = 1 and GIT_OID_SHA256 = 2; 0 is not published, so a zeroed git_oid header does not name a hash algorithm and git_oid_size/git_oid_hexsize return 0 for it.",
@@ -21535,6 +21557,33 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_oid_shorten_free",
+   "defined_in": "src/libgit2/oid.c",
+   "lifetime": {
+    "for": "os",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "os",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Consumes and frees the complete shortener and its owned nodes buffer; NULL is explicitly accepted."
      }
     }
    ]
