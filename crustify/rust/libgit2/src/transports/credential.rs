@@ -319,14 +319,32 @@ mod credential_tests {
 
 fn credential_result(
     status: i32,
-    raw: *mut ffi::git_credential,
+    credential: Option<GitCredentialOwned>,
 ) -> Result<GitCredentialOwned, i32> {
-    if status != 0 {
-        return Err(status);
+    if status == 0 {
+        credential.ok_or(ffi::git_error_code_GIT_ERROR)
+    } else {
+        drop(credential);
+        Err(status)
     }
-    // SAFETY: successful credential constructors transfer one fully formed
-    // credential allocation to their caller.
-    unsafe { GitCredentialOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+#[cfg(test)]
+mod owner_result_tests {
+    use super::*;
+
+    #[test]
+    fn typed_credential_result_rejects_a_null_success_output() {
+        assert!(matches!(
+            credential_result(0, None),
+            Err(ffi::git_error_code_GIT_ERROR)
+        ));
+    }
+
+    #[test]
+    fn typed_credential_result_preserves_a_constructor_error() {
+        assert!(matches!(credential_result(-7, None), Err(-7)));
+    }
 }
 
 fn optional_string(value: Option<&core::ffi::CStr>) -> *const core::ffi::c_char {
@@ -337,9 +355,13 @@ fn optional_string(value: Option<&core::ffi::CStr>) -> *const core::ffi::c_char 
 /// Creates a platform-default credential.
 pub fn git_cred_default_new() -> Result<GitCredentialOwned, i32> {
     let mut out = core::ptr::null_mut();
-    // SAFETY: `out` is a writable owner slot.
-    let status = unsafe { ffi::git_cred_default_new(&mut out) };
-    credential_result(status, out)
+    // SAFETY: `out` is a writable owner slot. The constructor leaves it null
+    // or transfers one complete credential, which is adopted at this seam.
+    let (status, credential) = unsafe {
+        let status = ffi::git_cred_default_new(&mut out);
+        (status, GitCredentialOwned::from_raw(out))
+    };
+    credential_result(status, credential)
 }
 
 /// Wraps: git_cred_has_username
@@ -354,9 +376,13 @@ pub fn git_cred_has_username(credential: GitCredentialRef<'_>) -> bool {
 /// Creates an SSH-agent credential for `username`.
 pub fn git_cred_ssh_key_from_agent(username: &core::ffi::CStr) -> Result<GitCredentialOwned, i32> {
     let mut out = core::ptr::null_mut();
-    // SAFETY: `out` is writable and `username` is live for the call.
-    let status = unsafe { ffi::git_cred_ssh_key_from_agent(&mut out, username.as_ptr()) };
-    credential_result(status, out)
+    // SAFETY: `out` is writable, `username` is live for the call, and any
+    // transferred credential is adopted before leaving this FFI seam.
+    let (status, credential) = unsafe {
+        let status = ffi::git_cred_ssh_key_from_agent(&mut out, username.as_ptr());
+        (status, GitCredentialOwned::from_raw(out))
+    };
+    credential_result(status, credential)
 }
 
 /// Wraps: git_cred_ssh_key_memory_new
@@ -369,17 +395,19 @@ pub fn git_cred_ssh_key_memory_new(
 ) -> Result<GitCredentialOwned, i32> {
     let mut out = core::ptr::null_mut();
     // SAFETY: `out` is writable and every non-null string is live for the
-    // synchronous constructor, which copies the values it retains.
-    let status = unsafe {
-        ffi::git_cred_ssh_key_memory_new(
+    // synchronous constructor, which copies retained values and leaves `out`
+    // null or holding one complete credential adopted at this seam.
+    let (status, credential) = unsafe {
+        let status = ffi::git_cred_ssh_key_memory_new(
             &mut out,
             username.as_ptr(),
             optional_string(public_key),
             private_key.as_ptr(),
             optional_string(passphrase),
-        )
+        );
+        (status, GitCredentialOwned::from_raw(out))
     };
-    credential_result(status, out)
+    credential_result(status, credential)
 }
 
 /// Wraps: git_cred_ssh_key_new
@@ -392,26 +420,32 @@ pub fn git_cred_ssh_key_new(
 ) -> Result<GitCredentialOwned, i32> {
     let mut out = core::ptr::null_mut();
     // SAFETY: `out` is writable and every non-null path or passphrase is live
-    // for the synchronous constructor, which copies retained values.
-    let status = unsafe {
-        ffi::git_cred_ssh_key_new(
+    // for the synchronous constructor, which copies retained values and
+    // leaves `out` null or holding one complete credential adopted here.
+    let (status, credential) = unsafe {
+        let status = ffi::git_cred_ssh_key_new(
             &mut out,
             username.as_ptr(),
             optional_string(public_key),
             private_key.as_ptr(),
             optional_string(passphrase),
-        )
+        );
+        (status, GitCredentialOwned::from_raw(out))
     };
-    credential_result(status, out)
+    credential_result(status, credential)
 }
 
 /// Wraps: git_cred_username_new
 /// Creates a username-only credential.
 pub fn git_cred_username_new(username: &core::ffi::CStr) -> Result<GitCredentialOwned, i32> {
     let mut out = core::ptr::null_mut();
-    // SAFETY: `out` is writable and `username` is live for the call.
-    let status = unsafe { ffi::git_cred_username_new(&mut out, username.as_ptr()) };
-    credential_result(status, out)
+    // SAFETY: `out` is writable, `username` is live for the call, and any
+    // transferred credential is adopted before leaving this FFI seam.
+    let (status, credential) = unsafe {
+        let status = ffi::git_cred_username_new(&mut out, username.as_ptr());
+        (status, GitCredentialOwned::from_raw(out))
+    };
+    credential_result(status, credential)
 }
 
 /// Wraps: git_cred_userpass_plaintext_new
@@ -421,11 +455,15 @@ pub fn git_cred_userpass_plaintext_new(
     password: &core::ffi::CStr,
 ) -> Result<GitCredentialOwned, i32> {
     let mut out = core::ptr::null_mut();
-    // SAFETY: `out` is writable and both strings are live for the call.
-    let status = unsafe {
-        ffi::git_cred_userpass_plaintext_new(&mut out, username.as_ptr(), password.as_ptr())
+    // SAFETY: `out` is writable, both strings are live for the call, and the
+    // constructor leaves `out` null or holding one complete credential that
+    // is adopted before leaving this seam.
+    let (status, credential) = unsafe {
+        let status =
+            ffi::git_cred_userpass_plaintext_new(&mut out, username.as_ptr(), password.as_ptr());
+        (status, GitCredentialOwned::from_raw(out))
     };
-    credential_result(status, out)
+    credential_result(status, credential)
 }
 
 #[cfg(test)]

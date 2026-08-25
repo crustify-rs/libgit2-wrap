@@ -162,12 +162,6 @@ fn optional_string(value: Option<&core::ffi::CStr>) -> *const core::ffi::c_char 
     value.map_or(core::ptr::null(), core::ffi::CStr::as_ptr)
 }
 
-fn optional_signature(
-    value: Option<crate::api::types::GitSignatureRef<'_>>,
-) -> *const ffi::git_signature {
-    value.map_or(core::ptr::null(), |signature| signature.as_ptr())
-}
-
 fn optional_tree(value: Option<crate::tree::GitTreeRef<'_>>) -> *const ffi::git_tree {
     value.map_or(core::ptr::null(), |tree| tree.as_ptr())
 }
@@ -200,8 +194,8 @@ pub fn git_commit_amend(
             id.as_mut_ptr(),
             commit.as_ptr(),
             optional_string(update_ref),
-            optional_signature(author),
-            optional_signature(committer),
+            author.map_or(core::ptr::null(), |signature| signature.as_ptr()),
+            committer.map_or(core::ptr::null(), |signature| signature.as_ptr()),
             optional_string(message_encoding),
             optional_string(message),
             optional_tree(tree),
