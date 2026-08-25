@@ -187,6 +187,9 @@
 ^git_status_show_t$
 ^git_status_t$
 ^git_stash_apply_progress_t$
+^git_stash_apply_progress_cb$
+^git_stash_apply_options$
+^GIT_STASH_APPLY_OPTIONS_VERSION$
 ^git_status_list$
 ^git_status_list_free$
 ^git_submodule_ignore_t$
@@ -216,6 +219,8 @@
 ^git_tree_entry_free$
 ^git_worktree_prune_t$
 ^git_worktree_prune_options$
+^git_worktree_add_options$
+^GIT_WORKTREE_ADD_OPTIONS_VERSION$
 ^git_writestream$
 ^git_branch_name_is_valid$
 ^git_checkout_progress_cb$
@@ -376,3 +381,12 @@
 ^GIT_REMOTE_CALLBACKS_VERSION$
 ^git_revert_options$
 ^GIT_REVERT_OPTIONS_VERSION$
+^git_email_create_options$
+^GIT_EMAIL_CREATE_OPTIONS_VERSION$
+^git_rebase_options$
+^GIT_REBASE_OPTIONS_VERSION$
+^git_apply_hunk_cb$
+^git_apply_options$
+^GIT_APPLY_OPTIONS_VERSION$
+^git_cherrypick_options$
+^GIT_CHERRYPICK_OPTIONS_VERSION$
