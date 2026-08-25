@@ -83,17 +83,15 @@ in Notes.
 
 ## Overview
 
-- **Rust LoC** — `18,452`
-- **test LoC** — `10,231` across `193` `cfg(test)` modules, `32.5`% of the
-  tree; excluded from `Rust LoC` and from every audit metric
+- **Rust LoC, non-test** — `18,452`
+- **Rust LoC, tests** — `10,231`
 - **C LoC** — `171,084`
 - **ported types** — `0`
 - **ported symbols** — `0`
-- **wrapped types** — `170` (`64.6`% of libgit2's `260` published API types)
-- **wrapped symbols** — `638` (`605` functions + `33` callbacks; `63.4`% of the
-  `1,057` published API functions and callbacks)
-- **remaining types** — `92` published API types carry no anchor
-- **remaining symbols** — `387` carry none (`359` functions + `28` callbacks)
+- **wrapped types** — `170` (`64.6`% of the API)
+- **wrapped symbols** — `638` (`605` functions + `33` callbacks; `63.4`% of the API)
+- **remaining types** — `92` with no anchor
+- **remaining symbols** — `387` with no anchor
 
 Implementation `openai/gpt-5.6-sol` via `codex`; review `anthropic/claude-opus-5`
 via `claude`. Each row names the model that produced it.
