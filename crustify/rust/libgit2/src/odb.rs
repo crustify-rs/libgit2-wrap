@@ -2,8 +2,9 @@
 
 use core::ffi::CStr;
 use core::marker::PhantomData;
+use core::ptr::NonNull;
 
-use ffibox::CBox;
+use ffibox::{CBox, CCloned};
 
 use crate::api::odb_backend::{GitOdbStreamMut, GitOdbStreamOwned};
 use crate::api::types::GitObjectType;
@@ -417,5 +418,91 @@ mod scheduled_wrapper_tests {
             GitOdbLookupFlags::NO_REFRESH.bits(),
             ffi::git_odb_lookup_flags_t_GIT_ODB_LOOKUP_NO_REFRESH
         );
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_odb_object
+    /// A reference-counted object-database value managed by libgit2's cache.
+    ///
+    /// The concrete layout remains C-compatible because cached values embed a
+    /// `git_cached_obj` prefix. Safe consumers use the borrowed handles and
+    /// [`GitOdbObjectOwned`] rather than references to that C-visible storage.
+    GitOdbObject,
+    GitOdbObjectRef,
+    GitOdbObjectMut,
+    ffi::git_odb_object
+);
+
+/// One independently owned reference to an object-database value.
+pub type GitOdbObjectOwned = CBox<GitOdbObject>;
+
+// SAFETY: `git_odb_object_free` consumes one cache reference to a fully
+// initialized object. The final decrement releases the object's owned byte
+// buffer and then its allocation; null is accepted although `CBox` is non-null.
+ffibox::impl_dropped!(GitOdbObject, ffi::git_odb_object, ffi::git_odb_object_free);
+
+// SAFETY: `git_odb_object_dup` increments the live source's cache reference
+// count and publishes the same address in the output slot. The new reference
+// is independently balanced by `CDropped` above.
+unsafe impl CCloned for GitOdbObject {
+    unsafe fn c_clone(object: NonNull<Self>) -> Option<NonNull<Self>> {
+        let mut duplicate = core::ptr::null_mut();
+        // SAFETY: the trait caller supplies a live object and `duplicate` is a
+        // writable output slot. The wrapper is transparent over the C layout.
+        let status = unsafe {
+            ffi::git_odb_object_dup(core::ptr::addr_of_mut!(duplicate), object.as_ptr().cast())
+        };
+        debug_assert_eq!(status, 0);
+        (status == 0)
+            .then(|| NonNull::new(duplicate.cast::<Self>()))
+            .flatten()
+    }
+}
+
+#[cfg(test)]
+mod object_tests {
+    use core::mem::{align_of, size_of};
+    use core::ptr;
+
+    use ffibox::{CCell, CCloned, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn object_wrapper_preserves_layout_and_refcount_contracts() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_refcounted<T: CDropped + CCloned>() {}
+
+        assert_cell::<GitOdbObject>();
+        assert_refcounted::<GitOdbObject>();
+        assert_eq!(size_of::<GitOdbObject>(), size_of::<ffi::git_odb_object>());
+        assert_eq!(
+            align_of::<GitOdbObject>(),
+            align_of::<ffi::git_odb_object>()
+        );
+        assert_eq!(
+            size_of::<GitOdbObjectRef<'_>>(),
+            size_of::<*const ffi::git_odb_object>()
+        );
+        assert_eq!(
+            size_of::<GitOdbObjectMut<'_>>(),
+            size_of::<*mut ffi::git_odb_object>()
+        );
+        assert_eq!(
+            size_of::<Option<GitOdbObjectOwned>>(),
+            size_of::<*mut ffi::git_odb_object>()
+        );
+    }
+
+    #[test]
+    fn null_object_seams_create_no_handle() {
+        // SAFETY: each conversion explicitly accepts null and returns `None`
+        // without borrowing or adopting any object.
+        unsafe {
+            assert!(GitOdbObjectRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitOdbObjectMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitOdbObjectOwned::from_raw(ptr::null_mut()).is_none());
+        }
     }
 }

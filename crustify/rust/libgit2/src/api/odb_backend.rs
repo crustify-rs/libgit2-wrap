@@ -7,6 +7,7 @@ use ffibox::CBox;
 use crate::ffi;
 use crate::indexer::IndexerProgressMut;
 use crate::oid::{InvalidOidType, OidRef, OidType};
+use crate::sys::odb_backend::{GitOdbBackendMut, GitOdbBackendRef};
 
 ffibox::define_ctype!(
     /// Wraps: git_odb_stream
@@ -102,7 +103,7 @@ pub enum GitOdbStreamError {
     },
 }
 
-impl GitOdbStreamRef<'_> {
+impl<'a> GitOdbStreamRef<'a> {
     /// Field: git_odb_stream.mode
     /// Returns the stream's published capability bits, or `None` if C stored
     /// an unknown or empty mode.
@@ -135,16 +136,16 @@ impl GitOdbStreamRef<'_> {
     }
 
     /// Field: git_odb_stream.backend
-    /// Returns whether the stream has its required borrowed backend link.
-    ///
-    /// The backend type has not yet been wrapped, so this intentionally does
-    /// not expose the temporary raw dependency.
+    /// Borrows the backend that created this stream, if it was installed.
     #[must_use]
-    pub fn has_backend(&self) -> bool {
+    pub fn backend(&self) -> Option<GitOdbBackendRef<'a>> {
         let stream = self.as_ptr();
         // SAFETY: `stream` comes from this live shared handle; raw-place
         // projection reads the initialized pointer without dereferencing it.
-        !unsafe { core::ptr::addr_of!((*stream).backend).read() }.is_null()
+        let backend = unsafe { core::ptr::addr_of!((*stream).backend).read() };
+        // SAFETY: a non-null stream backend remains live until after the
+        // stream is destroyed, so the typed borrow is bounded by this handle.
+        unsafe { GitOdbBackendRef::from_ptr(backend) }
     }
 
     /// Field: git_odb_stream.received_bytes
@@ -212,11 +213,11 @@ impl GitOdbStreamMut<'_> {
     /// `backend` must remain live and at a stable address until this stream is
     /// destroyed, including for any callback dispatched through the stream.
     /// It must designate the backend that installed those callbacks.
-    pub unsafe fn set_backend(&mut self, backend: NonNull<ffi::git_odb_backend>) {
+    pub unsafe fn set_backend(&mut self, mut backend: GitOdbBackendMut<'_>) {
         let stream = self.as_mut_ptr();
         // SAFETY: the caller supplies the unexpressible backend lifetime and
         // identity guarantees; this exclusive handle permits the field write.
-        unsafe { core::ptr::addr_of_mut!((*stream).backend).write(backend.as_ptr()) }
+        unsafe { core::ptr::addr_of_mut!((*stream).backend).write(backend.as_mut_ptr()) }
     }
 
     /// Field: git_odb_stream.write
@@ -426,7 +427,7 @@ mod tests {
 
     fn test_stream() -> ffi::git_odb_stream {
         ffi::git_odb_stream {
-            backend: NonNull::<ffi::git_odb_backend>::dangling().as_ptr(),
+            backend: core::ptr::null_mut(),
             mode: ffi::git_odb_stream_t_GIT_STREAM_RW,
             hash_ctx: core::ptr::null_mut(),
             oid_type: ffi::git_oid_t_GIT_OID_SHA1,
@@ -468,7 +469,7 @@ mod tests {
         let mut stream = unsafe { GitOdbStreamMut::from_ptr(&raw mut raw) }.unwrap();
 
         assert_eq!(stream.as_ref().mode(), Some(GitOdbStreamMode::READ_WRITE));
-        assert!(stream.as_ref().has_backend());
+        assert!(stream.as_ref().backend().is_none());
         assert!(!stream.as_ref().has_hash_context());
         assert_eq!(stream.as_ref().oid_type(), Ok(OidType::Sha1));
         assert_eq!(stream.as_ref().declared_size(), 9);
@@ -588,7 +589,7 @@ mod tests {
         assert!(stream.as_ref().oid_type().is_err());
         assert_eq!(stream.as_ref().declared_size(), 0);
         assert_eq!(stream.as_ref().received_bytes(), 0);
-        assert!(stream.as_ref().has_backend());
+        assert!(stream.as_ref().backend().is_none());
 
         let mut read = [0; 4];
         assert_eq!(stream.read(&mut read), Ok(3));
@@ -625,18 +626,17 @@ ffibox::define_ctype!(
 /// its concrete allocation.
 pub type OdbWritepackOwned = CBox<OdbWritepack>;
 
-impl OdbWritepackRef<'_> {
+impl<'a> OdbWritepackRef<'a> {
     /// Field: git_odb_writepack.backend
-    /// Reports whether the writepack records its originating backend.
-    ///
-    /// The backend itself remains a temporary lower-layer FFI dependency until
-    /// `git_odb_backend` has its own scheduled safe wrapper.
+    /// Borrows the backend that created this writepack, if one is recorded.
     #[must_use]
-    pub fn has_backend(&self) -> bool {
+    pub fn backend(&self) -> Option<GitOdbBackendRef<'a>> {
         // SAFETY: this live shared handle permits a raw-place read of the
         // initialized pointer field without forming a reference to the backend
         // or to C-visible writepack storage.
-        !unsafe { core::ptr::addr_of!((*self.as_ptr()).backend).read() }.is_null()
+        let backend = unsafe { core::ptr::addr_of!((*self.as_ptr()).backend).read() };
+        // SAFETY: a non-null originating backend outlives this writepack.
+        unsafe { GitOdbBackendRef::from_ptr(backend) }
     }
 }
 
@@ -792,7 +792,7 @@ mod writepack_tests {
         let mut stats = unsafe { IndexerProgressMut::from_ptr(&raw mut raw_stats) }
             .expect("a stack address is non-null");
 
-        assert!(!writepack.as_ref().has_backend());
+        assert!(writepack.as_ref().backend().is_none());
         assert_eq!(writepack.as_mut().append(b"pack", &mut stats), Ok(()));
         assert_eq!(stats.as_ref().received_bytes(), 4);
         assert_eq!(writepack.as_mut().commit(&mut stats), Ok(()));

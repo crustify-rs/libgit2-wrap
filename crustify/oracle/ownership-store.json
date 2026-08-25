@@ -2091,6 +2091,290 @@
    ]
   },
   {
+   "name": "git_odb_backend",
+   "defined_in": "include/git2/sys/odb_backend.h",
+   "_comment_agent": "git_odb_backend is a public polymorphic vtable. Its callback pointers are fixed borrowed code pointers (all operations optional except free); odb is a nullable mutable back-reference to the database that owns the backend.",
+   "fields": [
+    {
+     "name": "exists",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    },
+    {
+     "name": "exists_prefix",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    },
+    {
+     "name": "foreach",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    },
+    {
+     "name": "free",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required destructor callback installed by every complete backend."
+     }
+    },
+    {
+     "name": "freshen",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    },
+    {
+     "name": "odb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Back-reference assigned when the database takes ownership of the backend; null before installation. The database owns and destroys the backend before freeing itself."
+     }
+    },
+    {
+     "name": "read",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    },
+    {
+     "name": "read_header",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    },
+    {
+     "name": "read_prefix",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    },
+    {
+     "name": "readstream",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    },
+    {
+     "name": "refresh",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    },
+    {
+     "name": "write",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    },
+    {
+     "name": "writemidx",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    },
+    {
+     "name": "writepack",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    },
+    {
+     "name": "writestream",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_object",
+   "defined_in": "src/libgit2/odb.h",
+   "_comment_agent": "git_odb_object owns its decompressed byte buffer while its embedded git_cached_obj prefix supplies reference counting and the final destructor discriminator.",
+   "fields": [
+    {
+     "name": "buffer",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": false,
+      "note": "Owned decompressed byte run of cached.size bytes, transferred from the backend read result and released by git_odb_object__free. A zero-length object may use a null buffer."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_odb_stream",
    "defined_in": "include/git2/odb_backend.h",
    "_comment_agent": "git_odb_stream is a polymorphic base header. It uniquely owns its optional hash context, borrows its originating backend/ODB lifetime, and stores static code callbacks selected by stream mode. The public git_odb_stream_free routine cleans the hash context before invoking the concrete free callback.",
@@ -15650,6 +15934,85 @@
       "nullable": false,
       "mutable": true,
       "note": "Writable out-slot receiving one newly owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_object_dup",
+   "defined_in": "src/libgit2/odb.c",
+   "lifetime": {
+    "for": "source",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": false,
+     "upref": true
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "dest",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:dest"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed non-null output slot receives a newly owned reference to the same object."
+     }
+    },
+    {
+     "name": "source",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:source"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed live object whose cache refcount is incremented; the original remains valid."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_object_free",
+   "defined_in": "src/libgit2/odb.c",
+   "lifetime": {
+    "for": "object",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "object",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes one object cache reference; null is accepted and the final decrement releases the owned buffer and object allocation."
      }
     }
    ]

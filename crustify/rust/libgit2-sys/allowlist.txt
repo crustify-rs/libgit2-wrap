@@ -130,6 +130,10 @@
 ^git_object_t$
 ^git_odb$
 ^git_odb_free$
+^git_odb_backend$
+^git_odb_object$
+^git_odb_object_dup$
+^git_odb_object_free$
 ^git_odb_options$
 ^git_oid$
 ^git_oid_t$

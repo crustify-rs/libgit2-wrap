@@ -2,7 +2,7 @@
 
 use core::ptr::NonNull;
 
-use ffibox::{CCloned, CDropped};
+use ffibox::{CCloned, CDropped, CLenDropped};
 
 use crate::ffi;
 
@@ -24,6 +24,17 @@ unsafe impl CDropped for GitMallocFree {
         // SAFETY: the `CDropped` contract guarantees that `obj` is uniquely
         // owned and compatible with libgit2's currently installed `gfree`.
         unsafe { ffi::crustify_git__free(obj.as_ptr().cast()) }
+    }
+}
+
+// SAFETY: the same configured allocator frees counted byte buffers without
+// needing their length. `CVec::from_raw_parts` supplies unique ownership and
+// passes the original byte count, which this allocator deliberately ignores.
+unsafe impl CLenDropped for GitMallocFree {
+    unsafe fn c_drop_len(ptr: *mut u8, _byte_len: usize) {
+        // SAFETY: the trait contract guarantees a unique compatible
+        // allocation; libgit2's configured free routine accepts its address.
+        unsafe { ffi::crustify_git__free(ptr.cast()) }
     }
 }
 
