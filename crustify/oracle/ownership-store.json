@@ -2615,7 +2615,7 @@
   {
    "name": "git_filter_options",
    "defined_in": "include/git2/filter.h",
-   "_comment_agent": "git_filter_options owns only its inline attr_commit_id. The conditional pointer slot is a nullable, non-owning deprecated git_oid input in the configured build and an unused reserved placeholder under hard deprecation.",
+   "_comment_agent": "git_filter_options owns only its inline attr_commit_id. The conditional pointer slot is a nullable, non-owning deprecated git_oid input in the configured build and an unused reserved placeholder under hard deprecation. Review pass: `reserved` carried mutable:null while the identical slot on git_attr_options and git_blob_filter_options carries mutable:false; nothing dereferences it at all, so false is the determined value.",
    "fields": [
     {
      "name": "commit_id",
@@ -2647,7 +2647,7 @@
        "lifetime": "other"
       },
       "nullable": true,
-      "mutable": null,
+      "mutable": false,
       "note": "Hard-deprecation-only ABI placeholder occupying the deprecated commit_id slot. No code reads through, retains, mutates, or releases it; safe construction leaves it null."
      }
     }
@@ -3505,7 +3505,7 @@
   {
    "name": "git_object_id_options",
    "defined_in": "include/git2/object.h",
-   "_comment_agent": "git_object_id_options is a non-owning configuration header. Its optional filters pointer aliases a caller-owned list for synchronous hashing and is never mutated, retained, or freed by the options value.",
+   "_comment_agent": "Review correction: the filters slot is an EXCLUSIVE borrow. git_object_id_from_buffer aliases it into a stack copy and, when needs_filter() holds, calls git_filter_list__apply_to_buffer(opts.filters, ...) -- the same pointer the store already records as mutable on git_filter_list_apply_to_buffer. Applying writes back into the list: filter.c setup_stream() hands the filter &fe->payload (a slot inside the list's entry array) and crlf.c crlf_apply() fills it via crlf_check() when it is still NULL, and git_filter_list_free() later releases what was written. git_object_id_from_fd and git_object_id_from_file reach the same apply through git_object_id_from_buffer. Still not owned: nothing retains or releases the list through this field.",
    "fields": [
     {
      "name": "filters",
@@ -3520,8 +3520,8 @@
        "lifetime": "other"
       },
       "nullable": true,
-      "mutable": false,
-      "note": "Optional caller-owned filter list. normalize_options aliases it into a stack copy and ID calculation only reads/applies the list synchronously; the options value never retains or releases it."
+      "mutable": true,
+      "note": "Optional caller-owned filter list, borrowed exclusively. normalize_options aliases it into a stack copy and object-ID computation applies it through git_filter_list__apply_to_buffer, which mutates the list: setup_stream passes &fe->payload and crlf_apply fills a missing entry payload. The options value never retains or releases it."
      }
     }
    ]

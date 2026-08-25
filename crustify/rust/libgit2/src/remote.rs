@@ -1828,8 +1828,14 @@ pub fn git_remote_create_options_init(
 }
 
 /// Wraps: git_remote_create_with_opts
-/// Creates a remote and ties any repository stored in `options` to the
-/// returned handle's lifetime.
+/// Creates a remote from borrowing options and keeps the result tied to them.
+///
+/// `'repo` is the options borrow, not the stored repository's: the options
+/// wrapper carries no `'data` parameter, so a repository installed with
+/// [`crate::api::remote::GitRemoteCreateOptionsMut::set_borrowed_repository`]
+/// is kept alive by that setter's contract, which already covers every remote
+/// created from the options. Creation writes through the stored pointer and
+/// the new remote records it, so the borrow that setter demands is exclusive.
 pub fn git_remote_create_with_opts<'repo>(
     url: &CStr,
     options: GitRemoteCreateOptionsRef<'repo>,

@@ -7,12 +7,19 @@ use ffibox::{CCell, CPtr, CType, CVal, CValued};
 
 use crate::api::types::GitObjectType;
 use crate::ffi;
-use crate::filter::GitFilterListRef;
+use crate::filter::{GitFilterListMut, GitFilterListRef};
 use crate::oid::{InvalidOidType, OidType};
 
 /// Wraps: git_object_id_options
-/// Layout-compatible object-ID options whose optional filter list is borrowed
-/// for `'data`.
+/// Layout-compatible object-ID options that exclusively borrow their optional
+/// filter list for `'data`.
+///
+/// The borrow is exclusive rather than shared: computing an object ID applies
+/// the installed list, and applying a filter writes back into the list's own
+/// entries -- `crlf_apply` fills a missing entry payload through the
+/// `void **payload` slot `setup_stream` hands it. The list is therefore
+/// installed by moving in its [`GitFilterListMut`], which parks that exclusive
+/// borrow in the options for `'data`.
 ///
 /// The data lifetime is invariant: a mutable handle can install a filter list
 /// and a later shared handle can borrow it back. Invariance prevents safe code
@@ -136,13 +143,18 @@ impl<'object, 'data> GitObjectIdOptionsRef<'object, 'data> {
     }
 
     /// Field: git_object_id_options.filters
-    /// Borrows the optional caller-owned filter list.
+    /// Borrows the installed filter list for read-only inspection.
+    ///
+    /// The options hold the list's exclusive borrow, so this shared reborrow
+    /// only supports queries such as `git_filter_list_contains`; applying the
+    /// list needs [`GitObjectIdOptionsMut::filters_mut`].
     #[must_use]
     pub fn filters(&self) -> Option<GitFilterListRef<'object>> {
         // SAFETY: raw-place projection copies the initialized pointer field.
         let filters = unsafe { addr_of!((*self.as_ptr()).filters).read() };
-        // SAFETY: the wrapper contract keeps a non-null filter list live and
-        // shared-only for at least this options borrow.
+        // SAFETY: the wrapper contract keeps a non-null filter list live for
+        // at least this options borrow, and the exclusive borrow parked in the
+        // options makes this shared reborrow the only reachable handle.
         unsafe { GitFilterListRef::from_ptr(filters) }
     }
 
@@ -196,12 +208,42 @@ impl<'object, 'data> GitObjectIdOptionsMut<'object, 'data> {
         unsafe { addr_of_mut!((*self.as_mut_ptr()).oid_type).write(raw) }
     }
 
-    /// Stores an optional borrowed filter list.
-    pub fn set_filters(&mut self, filters: Option<GitFilterListRef<'data>>) {
-        let filters = filters.map_or(core::ptr::null(), |filters| filters.as_ptr());
+    /// Installs an optional exclusively borrowed filter list.
+    ///
+    /// Moving the exclusive handle in parks the list's `'data` borrow here:
+    /// libgit2 mutates the list while applying it, so no other handle to it
+    /// may exist while these options can still be used.
+    ///
+    /// A second handle to an installed list is therefore rejected:
+    ///
+    /// ```compile_fail
+    /// use libgit2::api::object::GitObjectIdOptions;
+    /// use libgit2::filter::RepositoryFilterList;
+    ///
+    /// fn install(list: &mut RepositoryFilterList<'_>) {
+    ///     let mut options = GitObjectIdOptions::new();
+    ///     options.as_mut().set_filters(Some(list.as_mut()));
+    ///     let _second = list.as_mut();
+    ///     let _still_installed = options.as_ref();
+    /// }
+    /// ```
+    pub fn set_filters(&mut self, filters: Option<GitFilterListMut<'data>>) {
+        let filters = filters.map_or(core::ptr::null_mut(), |mut filters| filters.as_mut_ptr());
         // SAFETY: this exclusive handle permits the pointer write, and the
-        // invariant wrapper lifetime keeps a non-null list alive and shared.
-        unsafe { addr_of_mut!((*self.as_mut_ptr()).filters).write(filters.cast_mut()) }
+        // invariant wrapper lifetime keeps a non-null list alive and reachable
+        // only through these options.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).filters).write(filters) }
+    }
+
+    /// Reborrows the installed filter list exclusively.
+    #[must_use]
+    pub fn filters_mut(&mut self) -> Option<GitFilterListMut<'_>> {
+        // SAFETY: this exclusive handle permits the raw-place pointer read.
+        let filters = unsafe { addr_of!((*self.as_mut_ptr()).filters).read() };
+        // SAFETY: a non-null list was installed by moving in its exclusive
+        // handle, so reborrowing it through this exclusive options handle
+        // produces the only live path to the list.
+        unsafe { GitFilterListMut::from_ptr(filters) }
     }
 
     /// Selects an object kind, or the default blob with `None`.
@@ -249,5 +291,126 @@ mod tests {
             assert_eq!(view.as_ref().object_type(), Ok(Some(GitObjectType::BLOB)));
             assert!(view.as_ref().filters().is_none());
         }
+    }
+}
+
+#[cfg(test)]
+mod filtered_object_id_tests {
+    use super::*;
+
+    use crate::api::filter::{GitFilterFlags, GitFilterMode};
+    use crate::filter::git_filter_list_load;
+    use crate::object::git_object_id_from_buffer;
+    use crate::oid::{Oid, OidRef, git_oid_equal};
+    use crate::repository::git_repository_open;
+
+    /// A refcounted hold on the process-global libgit2 initialization.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and refcounted;
+            // `Drop` below balances this successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances this guard's initialization; the repository and
+            // filter list opened under it are released first.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// A hand-built repository whose working directory carries the single
+    /// `.gitattributes` entry that installs the CRLF filter for one path.
+    struct WorkdirRepo(std::path::PathBuf);
+
+    impl WorkdirRepo {
+        fn create() -> Self {
+            let path =
+                std::env::temp_dir().join(format!("crustify-objid-filters-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            let git = path.join(".git");
+            std::fs::create_dir_all(git.join("objects")).expect("a loose-object directory");
+            std::fs::create_dir_all(git.join("refs/heads")).expect("a refs directory");
+            std::fs::write(git.join("HEAD"), b"ref: refs/heads/main\n").expect("a HEAD file");
+            std::fs::write(
+                git.join("config"),
+                b"[core]\n\trepositoryformatversion = 0\n\tbare = false\n",
+            )
+            .expect("a config file");
+            std::fs::write(path.join(".gitattributes"), b"report.txt text eol=lf\n")
+                .expect("an attributes file");
+            Self(path)
+        }
+
+        fn c_path(&self) -> std::ffi::CString {
+            std::ffi::CString::new(self.0.to_str().expect("a UTF-8 temporary path"))
+                .expect("a path without interior NUL")
+        }
+    }
+
+    impl Drop for WorkdirRepo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn oid_ref(oid: &mut Oid) -> OidRef<'_> {
+        // SAFETY: `oid` is live initialized layout-compatible storage, and the
+        // exclusive borrow keeps it still for the returned handle.
+        unsafe { OidRef::from_ptr(core::ptr::from_mut(oid).cast::<ffi::git_oid>()) }
+            .expect("a borrowed local is non-null")
+    }
+
+    #[test]
+    fn an_installed_filter_list_is_applied_while_hashing() {
+        let _init = Libgit2Init::acquire();
+        let directory = WorkdirRepo::create();
+        let repository =
+            git_repository_open(&directory.c_path()).expect("the hand-built directory opens");
+
+        let mut filters = git_filter_list_load(
+            repository.as_ref(),
+            None,
+            c"report.txt",
+            GitFilterMode::ToObjectDatabase,
+            GitFilterFlags::DEFAULT,
+        )
+        .expect("loading the working-directory filters")
+        .expect("the `text` attribute installs the CRLF filter");
+
+        let mut options = GitObjectIdOptions::new();
+        // Installing moves in the list's exclusive handle, because the C apply
+        // path writes back into the list's own entries.
+        options.as_mut().set_filters(Some(filters.as_mut()));
+        assert!(options.as_ref().filters().is_some());
+        assert!(options.as_mut().filters_mut().is_some());
+
+        let mut filtered =
+            git_object_id_from_buffer(b"first\r\nsecond\r\n", Some(options.as_ref()))
+                .expect("hashing through the installed filter list");
+        let mut normalized = git_object_id_from_buffer(b"first\nsecond\n", None)
+            .expect("hashing the normalized content");
+        let mut unfiltered = git_object_id_from_buffer(b"first\r\nsecond\r\n", None)
+            .expect("hashing the raw content");
+
+        assert!(git_oid_equal(
+            oid_ref(&mut filtered),
+            oid_ref(&mut normalized)
+        ));
+        assert!(!git_oid_equal(
+            oid_ref(&mut filtered),
+            oid_ref(&mut unfiltered)
+        ));
+
+        // A second hash reuses the entry payload the first apply installed in
+        // the list, so the parked exclusive borrow has to survive the call.
+        let mut again = git_object_id_from_buffer(b"first\r\nsecond\r\n", Some(options.as_ref()))
+            .expect("hashing through the same list a second time");
+        assert!(git_oid_equal(oid_ref(&mut filtered), oid_ref(&mut again)));
     }
 }

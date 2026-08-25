@@ -10,7 +10,7 @@ use ffibox::{CVal, CValued};
 use crate::api::buffer::GitBufMut;
 use crate::ffi;
 use crate::remote::GitPushUpdateRef;
-use crate::repository::GitRepositoryRef;
+use crate::repository::{GitRepositoryMut, GitRepositoryRef};
 use crate::util::net::Direction;
 
 /// Wraps: git_url_resolve_cb
@@ -2523,6 +2523,11 @@ impl<'a> GitRemoteCreateOptionsRef<'a> {
 
     /// Field: git_remote_create_options.repository
     /// Borrows the optional repository that will own the created remote.
+    ///
+    /// The stored pointer is an exclusive borrow -- `git_remote_create_with_opts`
+    /// installs the repository's config weak pointer through it and hands the
+    /// same pointer to the new remote -- so this shared reborrow supports
+    /// inspection only.
     #[must_use]
     pub fn repository(&self) -> Option<GitRepositoryRef<'a>> {
         // SAFETY: this live shared handle permits reading the initialized
@@ -2586,17 +2591,23 @@ impl GitRemoteCreateOptionsMut<'_> {
         unsafe { self.set_borrowed_fetchspec(None) }
     }
 
-    /// Stores a borrowed repository for the created remote.
+    /// Stores an exclusively borrowed repository for the created remote.
+    ///
+    /// Creation writes through this pointer -- it installs the repository's
+    /// config weak pointer and may add a refspec -- and the created remote
+    /// keeps the same pointer, so the borrow is exclusive rather than shared.
     ///
     /// # Safety
     ///
-    /// A non-null `repository` must remain live for every later use of this
-    /// options value and for every remote created from it. The caller must
-    /// also respect libgit2's mutation and synchronization requirements while
-    /// the repository is used through this pointer.
-    pub unsafe fn set_borrowed_repository(&mut self, repository: Option<GitRepositoryRef<'_>>) {
-        let repository = repository.map_or(core::ptr::null_mut(), |repository| {
-            repository.as_ptr().cast_mut()
+    /// A non-null `repository` must remain live, and exclusively reserved for
+    /// this options value, for every later use of the options and for every
+    /// remote created from them. This wrapper carries no `'data` parameter, so
+    /// neither obligation is expressed in the signature: passing the exclusive
+    /// handle only records which access the stored pointer needs, and its
+    /// borrow ends when the call returns.
+    pub unsafe fn set_borrowed_repository(&mut self, repository: Option<GitRepositoryMut<'_>>) {
+        let repository = repository.map_or(core::ptr::null_mut(), |mut repository| {
+            repository.as_mut_ptr()
         });
         // SAFETY: this exclusive handle permits the field write, and the
         // caller upholds the stored repository's lifetime and access rules.
