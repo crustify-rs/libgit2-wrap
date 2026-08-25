@@ -8,6 +8,23 @@ use crate::ffi;
 
 /// Wraps: git_config_iterator_free
 /// An owned configuration iterator that keeps its source configuration borrowed.
+///
+/// The coupling is a stored pointer, not a naming convention:
+/// `git_config_iterator_new` and `git_config_iterator_glob_new` assign
+/// `iter->config = config` in `src/libgit2/config.c` without taking a
+/// reference count, and `all_iter_next` reads `iter->config->readers` again on
+/// every advance to reach the next backend. The multivar iterator wraps one of
+/// those, so it inherits the same borrow. Outliving the configuration is
+/// therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::config::{git_config_iterator_new, git_config_new, GitConfigIteratorOwned};
+///
+/// fn escape() -> GitConfigIteratorOwned<'static> {
+///     let config = git_config_new().unwrap();
+///     git_config_iterator_new(config.as_ref()).unwrap()
+/// }
+/// ```
 pub struct GitConfigIteratorOwned<'config> {
     inner: crate::sys::config::GitConfigIteratorOwned,
     _config: core::marker::PhantomData<GitConfigRef<'config>>,

@@ -8827,7 +8827,7 @@
       },
       "nullable": true,
       "mutable": true,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "note": "Optional index, exclusively borrowed: git_iterator_for_index snapshots it through git_index_snapshot_new, which sorts index->entries in place, and an index with no owner is temporarily re-owned by repo with GIT_REFCOUNT_OWN and released again before returning. A null index selects the repository index. Ownership is not transferred."
      }
     },
     {
@@ -8859,9 +8859,9 @@
       "borrowed": {
        "lifetime": "arg:repo"
       },
-      "nullable": false,
+      "nullable": true,
       "mutable": true,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "note": "Exclusively borrows the repository, which the checkout writes through. Null is accepted only together with a non-null index, whose git_index_owner then supplies the repository; supplying neither is rejected, and a mismatched pair is an error. Ownership is not transferred."
      }
     }
    ]
@@ -9093,9 +9093,9 @@
       "borrowed": {
        "lifetime": "arg:repo"
       },
-      "nullable": false,
+      "nullable": true,
       "mutable": true,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "note": "Exclusively borrows the repository, which the checkout writes through. Null is accepted only together with a non-null treeish, whose git_object_owner then supplies the repository; supplying neither is rejected, and an object from another repository is an error. Ownership is not transferred."
      }
     },
     {
@@ -9262,8 +9262,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository: the call forwards it to git_merge_trees, whose merge_normalize_opts installs repo->_config through git_repository_config__weakptr and whose merge machinery opens the object database the same way. Ownership is not transferred and nothing retains the pointer."
      }
     }
    ]
@@ -11818,7 +11818,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "note": "Retained by the returned iterator, not merely read for this call: git_config_iterator_new and git_config_iterator_glob_new assign iter->config = config without a reference count, and all_iter_next reads iter->config->readers on every advance to reach the next backend (whose own iterator may refresh it). Ownership is not transferred."
      }
     },
     {
@@ -11838,7 +11838,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required writable out-slot; success transfers one newly owned iterator that stores the configuration (iter->config) with no reference count, so the iterator must not outlive it."
      }
     },
     {
@@ -11878,7 +11878,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "note": "Retained by the returned iterator, not merely read for this call: git_config_iterator_new and git_config_iterator_glob_new assign iter->config = config without a reference count, and all_iter_next reads iter->config->readers on every advance to reach the next backend (whose own iterator may refresh it). Ownership is not transferred."
      }
     },
     {
@@ -11898,7 +11898,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required writable out-slot; success transfers one newly owned iterator that stores the configuration (iter->config) with no reference count, so the iterator must not outlive it."
      }
     }
    ]
@@ -11921,7 +11921,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "note": "Retained by the returned iterator: the multivar iterator wraps the all_iter that git_config_iterator_new builds, which stores iter->config = config without a reference count and dereferences it on every advance. Ownership is not transferred."
      }
     },
     {
@@ -11958,7 +11958,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required writable out-slot; success transfers one newly owned iterator that stores the configuration (iter->config) with no reference count, so the iterator must not outlive it."
      }
     },
     {
@@ -14087,8 +14087,8 @@
        "lifetime": "arg:new_index"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the index: git_iterator_for_index snapshots it through git_index_snapshot_new, which sorts index->entries in place and bumps the reader count before duplicating the vector. That reordering is the storage git_index_get_byindex addresses by position. Ownership is not transferred."
      }
     },
     {
@@ -14104,8 +14104,8 @@
        "lifetime": "arg:old_index"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the index: git_iterator_for_index snapshots it through git_index_snapshot_new, which sorts index->entries in place and bumps the reader count before duplicating the vector. That reordering is the storage git_index_get_byindex addresses by position. Ownership is not transferred."
      }
     },
     {
@@ -14142,7 +14142,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required output receives one newly owned generated diff on success; diff_generated_alloc stores the repository in diff->base.repo with no reference count, so the result must not outlive it."
      }
     },
     {
@@ -14158,8 +14158,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository and is retained by the returned diff: diff_generated_alloc stores it in diff->base.repo without a reference count, and diff_generated_apply_options runs git_repository_config_snapshot, which installs repo->_config through git_repository_config__weakptr. Ownership is not transferred."
      }
     }
    ]
@@ -14219,7 +14219,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required output receives one newly owned generated diff on success; diff_generated_alloc stores the repository in diff->base.repo with no reference count, so the result must not outlive it."
      }
     },
     {
@@ -14235,8 +14235,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository and is retained by the returned diff: diff_generated_alloc stores it in diff->base.repo without a reference count, diff_load_index re-reads the repository index with git_index_read (clearing it, and freeing every entry a live index handle is lending out, whenever the file changed on disk), and applying the diff options installs repo->_config through git_repository_config_snapshot. Ownership is not transferred."
      }
     }
    ]
@@ -14714,8 +14714,8 @@
        "lifetime": "arg:index"
       },
       "nullable": true,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the index: git_iterator_for_index snapshots it through git_index_snapshot_new, which sorts index->entries in place and bumps the reader count before duplicating the vector. That reordering is the storage git_index_get_byindex addresses by position. Ownership is not transferred. A null index selects the repository index, which diff_load_index re-reads from disk first."
      }
     },
     {
@@ -14769,7 +14769,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required output receives one newly owned generated diff on success; diff_generated_alloc stores the repository in diff->base.repo with no reference count, so the result must not outlive it."
      }
     },
     {
@@ -14785,8 +14785,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository and is retained by the returned diff: diff_generated_alloc stores it in diff->base.repo without a reference count, diff_load_index re-reads the repository index with git_index_read (clearing it, and freeing every entry a live index handle is lending out, whenever the file changed on disk), and applying the diff options installs repo->_config through git_repository_config_snapshot. Ownership is not transferred."
      }
     }
    ]
@@ -14863,7 +14863,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required output receives one newly owned generated diff on success; diff_generated_alloc stores the repository in diff->base.repo with no reference count, so the result must not outlive it."
      }
     },
     {
@@ -14879,8 +14879,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository and is retained by the returned diff: diff_generated_alloc stores it in diff->base.repo without a reference count, and diff_generated_apply_options runs git_repository_config_snapshot, which installs repo->_config through git_repository_config__weakptr. Ownership is not transferred."
      }
     }
    ]
@@ -14940,7 +14940,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required output receives one newly owned generated diff on success; diff_generated_alloc stores the repository in diff->base.repo with no reference count, so the result must not outlive it."
      }
     },
     {
@@ -14956,8 +14956,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository and is retained by the returned diff: diff_generated_alloc stores it in diff->base.repo without a reference count, and the call installs repo->_index through git_repository_index__weakptr and repo->_config through git_repository_config_snapshot. Ownership is not transferred."
      }
     }
    ]
@@ -15000,7 +15000,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required output receives one newly owned generated diff on success; diff_generated_alloc stores the repository in diff->base.repo with no reference count, so the result must not outlive it."
      }
     },
     {
@@ -15016,8 +15016,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository and is retained by the returned diff: diff_generated_alloc stores it in diff->base.repo without a reference count, diff_load_index re-reads the repository index with git_index_read (clearing it, and freeing every entry a live index handle is lending out, whenever the file changed on disk), and applying the diff options installs repo->_config through git_repository_config_snapshot. Ownership is not transferred."
      }
     },
     {
@@ -18338,8 +18338,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository, as git_merge_trees already records: merge_annotated_commits reaches merge_normalize_opts, which installs repo->_config through git_repository_config__weakptr, and compute_base's git_merge_bases_many opens the object database the same way. Both write repository storage. Ownership is not transferred and nothing retains the pointer."
      }
     },
     {

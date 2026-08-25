@@ -4,8 +4,14 @@ use crate::api::cherrypick::{GitCherrypickOptionsMut, GitCherrypickOptionsRef};
 
 /// Wraps: git_cherrypick_commit
 /// Computes the in-memory index produced by cherry-picking one commit.
+///
+/// The repository is borrowed exclusively. The cherry-pick runs the same merge
+/// machinery [`git_merge_trees`](crate::merge::git_merge_trees) does:
+/// `merge_normalize_opts` reaches `git_repository_config__weakptr`, which
+/// installs `repo->_config` on first use, and the merge-base walk opens the
+/// object database the same way. Neither write is visible to a shared handle.
 pub fn git_cherrypick_commit(
-    repo: crate::repository::GitRepositoryRef<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
     cherrypick_commit: crate::commit::GitCommitRef<'_>,
     our_commit: crate::commit::GitCommitRef<'_>,
     mainline: core::ffi::c_uint,
@@ -13,12 +19,14 @@ pub fn git_cherrypick_commit(
 ) -> Result<crate::index::GitIndexOwned, i32> {
     let mut out = core::ptr::null_mut();
     let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
-    // SAFETY: the output slot is writable, all borrowed inputs remain live for
-    // the synchronous merge, and no input ownership is transferred.
+    // SAFETY: the output slot is writable, the repository is exclusively
+    // borrowed for the lazy subsystem writes the merge performs, every other
+    // borrowed input remains live for the synchronous merge, and no input
+    // ownership is transferred.
     let status = unsafe {
         crate::ffi::git_cherrypick_commit(
             &mut out,
-            repo.as_ptr().cast_mut(),
+            repo.as_mut_ptr(),
             cherrypick_commit.as_ptr().cast_mut(),
             our_commit.as_ptr().cast_mut(),
             mainline,
@@ -68,6 +76,23 @@ pub fn git_cherrypick_init_options(
 mod scheduled_wrapper_tests {
     use super::*;
     use crate::api::cherrypick::GitCherrypickOptions;
+
+    /// The shape of the in-memory cherry-pick.
+    type CommitCherrypick = fn(
+        &mut crate::repository::GitRepositoryMut<'_>,
+        crate::commit::GitCommitRef<'_>,
+        crate::commit::GitCommitRef<'_>,
+        core::ffi::c_uint,
+        Option<crate::api::merge::GitMergeOptionsRef<'_, '_>>,
+    ) -> Result<crate::index::GitIndexOwned, i32>;
+
+    #[test]
+    fn the_in_memory_cherrypick_borrows_the_repository_exclusively() {
+        // The commit form runs the merge machinery, which installs the
+        // repository config on first use, so it takes the exclusive handle
+        // that the working-directory form already required.
+        let _: CommitCherrypick = git_cherrypick_commit;
+    }
 
     #[test]
     fn deprecated_initializer_writes_the_current_version() {
