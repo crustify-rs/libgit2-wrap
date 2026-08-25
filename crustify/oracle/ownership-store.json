@@ -9358,7 +9358,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrows a required output slot and writes one newly owned repository allocation on success; failures leave the slot null after releasing partial state."
+      "note": "Borrows a required output slot and writes one newly owned repository allocation on success. C assigns the slot exactly once, at the end of clone_repo; every earlier refusal (an unsupported options version, a non-empty destination reported as GIT_EEXISTS, a failing repository-creation callback, a failing local-clone probe) returns before that assignment and leaves the caller's value untouched. Only a failure that already created the repository stores null, after freeing it and removing the directory. Callers must therefore initialize the slot themselves rather than rely on a null-on-failure contract."
      }
     },
     {
