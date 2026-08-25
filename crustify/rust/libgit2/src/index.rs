@@ -5,7 +5,7 @@ use core::ptr::{addr_of, addr_of_mut};
 
 use ffibox::CBox;
 
-pub use crate::api::index::{GitIndexAddOptions, GitIndexEntryExtendedFlags};
+pub use crate::api::index::{GitIndexAddOptions, GitIndexEntryExtendedFlags, GitIndexStage};
 use crate::ffi;
 use crate::oid::Oid;
 use crate::repository::GitRepositoryRef;
@@ -930,11 +930,12 @@ pub fn git_index_get_byindex<'a>(
 pub fn git_index_get_bypath<'a>(
     index: &'a mut GitIndexMut<'_>,
     path: &CStr,
-    stage: i32,
+    stage: GitIndexStage,
 ) -> Option<IndexEntryRef<'a>> {
     // SAFETY: the index is exclusively borrowed, `path` is live for this
     // lookup, and the returned pointer remains index-owned.
-    let entry = unsafe { ffi::git_index_get_bypath(index.as_mut_ptr(), path.as_ptr(), stage) };
+    let entry =
+        unsafe { ffi::git_index_get_bypath(index.as_mut_ptr(), path.as_ptr(), stage.into()) };
     // SAFETY: null means no entry; a non-null entry is bounded by the index
     // reborrow and is exposed only through a shared handle.
     unsafe { IndexEntryRef::from_ptr(entry.cast_mut()) }
@@ -999,10 +1000,14 @@ pub fn git_index_read_tree(index: &mut GitIndexMut<'_>, tree: GitTreeRef<'_>) ->
 }
 
 /// Wraps: git_index_remove
-pub fn git_index_remove(index: &mut GitIndexMut<'_>, path: &CStr, stage: i32) -> Result<(), i32> {
+pub fn git_index_remove(
+    index: &mut GitIndexMut<'_>,
+    path: &CStr,
+    stage: GitIndexStage,
+) -> Result<(), i32> {
     // SAFETY: the index is exclusively borrowed and `path` is retained only
     // for this call.
-    status_result(unsafe { ffi::git_index_remove(index.as_mut_ptr(), path.as_ptr(), stage) })
+    status_result(unsafe { ffi::git_index_remove(index.as_mut_ptr(), path.as_ptr(), stage.into()) })
 }
 
 /// Wraps: git_index_remove_all
@@ -1052,12 +1057,12 @@ pub fn git_index_remove_bypath(index: &mut GitIndexMut<'_>, path: &CStr) -> Resu
 pub fn git_index_remove_directory(
     index: &mut GitIndexMut<'_>,
     directory: &CStr,
-    stage: i32,
+    stage: GitIndexStage,
 ) -> Result<(), i32> {
     // SAFETY: the index is exclusively borrowed and `directory` is live for
     // the non-retaining call.
     status_result(unsafe {
-        ffi::git_index_remove_directory(index.as_mut_ptr(), directory.as_ptr(), stage)
+        ffi::git_index_remove_directory(index.as_mut_ptr(), directory.as_ptr(), stage.into())
     })
 }
 
@@ -1186,5 +1191,86 @@ mod scheduled_wrapper_tests {
         drop(index);
         // SAFETY: balances this test's successful initialization call.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_index_iterator
+    /// Opaque storage for an iterator over a stable snapshot of an index.
+    ///
+    /// The iterator stores the index pointer supplied to its constructor
+    /// without taking another ordinary owner. Safe construction must therefore
+    /// carry an exclusive borrow of that index until the iterator is dropped.
+    GitIndexIterator,
+    GitIndexIteratorRef,
+    GitIndexIteratorMut,
+    ffi::git_index_iterator
+);
+
+/// Wraps: git_index_iterator_free
+/// A raw owning iterator allocation.
+///
+/// This ownership building block does not encode the iterator's borrow of its
+/// source index. A safe constructor must place it in a lifetime-carrying owner
+/// before returning it.
+pub type GitIndexIteratorOwned = CBox<GitIndexIterator>;
+
+// SAFETY: `git_index_iterator_free` is the public destructor for a fully
+// formed iterator allocation. `CBox` supplies one live non-null allocation
+// exactly once. The destructor releases the iterator's snapshot through its
+// borrowed index, whose lifetime must be carried by every safe constructor.
+ffibox::impl_dropped!(
+    GitIndexIterator,
+    ffi::git_index_iterator,
+    ffi::git_index_iterator_free
+);
+
+#[cfg(test)]
+mod index_iterator_type_tests {
+    use core::mem::{align_of, size_of};
+    use core::ptr;
+
+    use ffibox::{CCell, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn iterator_preserves_the_opaque_c_seam_and_lifecycle_contract() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<GitIndexIterator>();
+        assert_dropped::<GitIndexIterator>();
+        assert_eq!(
+            size_of::<GitIndexIterator>(),
+            size_of::<ffi::git_index_iterator>()
+        );
+        assert_eq!(
+            align_of::<GitIndexIterator>(),
+            align_of::<ffi::git_index_iterator>()
+        );
+        assert_eq!(
+            size_of::<GitIndexIteratorRef<'_>>(),
+            size_of::<*const ffi::git_index_iterator>()
+        );
+        assert_eq!(
+            size_of::<GitIndexIteratorMut<'_>>(),
+            size_of::<*mut ffi::git_index_iterator>()
+        );
+        assert_eq!(
+            size_of::<GitIndexIteratorOwned>(),
+            size_of::<*mut ffi::git_index_iterator>()
+        );
+    }
+
+    #[test]
+    fn null_iterator_seams_create_no_handles() {
+        // SAFETY: each conversion seam accepts null and returns `None` without
+        // borrowing or adopting an object.
+        unsafe {
+            assert!(GitIndexIteratorRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitIndexIteratorMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitIndexIteratorOwned::from_raw(ptr::null_mut()).is_none());
+        }
     }
 }

@@ -457,7 +457,7 @@ impl Not for GitIndexEntryExtendedFlags {
 }
 
 #[cfg(test)]
-mod enum_tests {
+mod entry_flag_and_stage_tests {
     use core::mem::{align_of, size_of};
 
     use super::*;
@@ -536,6 +536,170 @@ mod enum_tests {
                 size_of::<ffi::git_index_entry_extended_flag_t>(),
                 align_of::<ffi::git_index_entry_extended_flag_t>()
             )
+        );
+    }
+}
+
+/// Wraps: git_index_entry_flag_t
+/// A checked set of flags stored in `git_index_entry.flags`.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct GitIndexEntryFlags(ffi::git_index_entry_flag_t);
+
+impl GitIndexEntryFlags {
+    /// The entry includes an extended-flags word.
+    pub const EXTENDED: Self = Self(ffi::git_index_entry_flag_t_GIT_INDEX_ENTRY_EXTENDED);
+    /// The entry is assumed to remain valid in the working directory.
+    pub const VALID: Self = Self(ffi::git_index_entry_flag_t_GIT_INDEX_ENTRY_VALID);
+
+    /// Builds a flag set if it contains only published bits.
+    pub const fn from_bits(bits: ffi::git_index_entry_flag_t) -> Option<Self> {
+        let all = Self::EXTENDED.0 | Self::VALID.0;
+        if bits & !all == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 bit set.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_index_entry_flag_t {
+        self.0
+    }
+
+    /// Returns whether every flag in `other` is present.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+}
+
+impl core::ops::BitOr for GitIndexEntryFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl core::ops::BitOrAssign for GitIndexEntryFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        *self = *self | rhs;
+    }
+}
+
+impl From<GitIndexEntryFlags> for ffi::git_index_entry_flag_t {
+    fn from(flags: GitIndexEntryFlags) -> Self {
+        flags.bits()
+    }
+}
+
+/// Wraps: git_index_stage_t
+/// A checked index stage selector.
+#[repr(i32)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum GitIndexStage {
+    /// Match an entry in any stage.
+    Any = ffi::git_index_stage_t_GIT_INDEX_STAGE_ANY,
+    /// A normal, non-conflicted entry.
+    Normal = ffi::git_index_stage_t_GIT_INDEX_STAGE_NORMAL,
+    /// The common-ancestor side of a conflict.
+    Ancestor = ffi::git_index_stage_t_GIT_INDEX_STAGE_ANCESTOR,
+    /// Our side of a conflict.
+    Ours = ffi::git_index_stage_t_GIT_INDEX_STAGE_OURS,
+    /// Their side of a conflict.
+    Theirs = ffi::git_index_stage_t_GIT_INDEX_STAGE_THEIRS,
+}
+
+/// A raw index stage not published by this libgit2 API.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidGitIndexStage(ffi::git_index_stage_t);
+
+impl InvalidGitIndexStage {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_index_stage_t {
+        self.0
+    }
+}
+
+impl From<GitIndexStage> for ffi::git_index_stage_t {
+    fn from(stage: GitIndexStage) -> Self {
+        stage as Self
+    }
+}
+
+impl TryFrom<ffi::git_index_stage_t> for GitIndexStage {
+    type Error = InvalidGitIndexStage;
+
+    fn try_from(stage: ffi::git_index_stage_t) -> Result<Self, Self::Error> {
+        match stage {
+            ffi::git_index_stage_t_GIT_INDEX_STAGE_ANY => Ok(Self::Any),
+            ffi::git_index_stage_t_GIT_INDEX_STAGE_NORMAL => Ok(Self::Normal),
+            ffi::git_index_stage_t_GIT_INDEX_STAGE_ANCESTOR => Ok(Self::Ancestor),
+            ffi::git_index_stage_t_GIT_INDEX_STAGE_OURS => Ok(Self::Ours),
+            ffi::git_index_stage_t_GIT_INDEX_STAGE_THEIRS => Ok(Self::Theirs),
+            value => Err(InvalidGitIndexStage(value)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod enum_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn entry_flags_form_only_published_sets() {
+        let mut flags = GitIndexEntryFlags::default();
+        flags |= GitIndexEntryFlags::EXTENDED;
+        flags |= GitIndexEntryFlags::VALID;
+
+        assert!(flags.contains(GitIndexEntryFlags::EXTENDED));
+        assert!(flags.contains(GitIndexEntryFlags::VALID));
+        assert_eq!(GitIndexEntryFlags::from_bits(flags.bits()), Some(flags));
+        assert_eq!(GitIndexEntryFlags::from_bits(1), None);
+    }
+
+    #[test]
+    fn entry_flags_match_the_c_enum_layout() {
+        assert_eq!(
+            size_of::<GitIndexEntryFlags>(),
+            size_of::<ffi::git_index_entry_flag_t>()
+        );
+        assert_eq!(
+            align_of::<GitIndexEntryFlags>(),
+            align_of::<ffi::git_index_entry_flag_t>()
+        );
+    }
+
+    #[test]
+    fn published_index_stages_round_trip() {
+        for stage in [
+            GitIndexStage::Any,
+            GitIndexStage::Normal,
+            GitIndexStage::Ancestor,
+            GitIndexStage::Ours,
+            GitIndexStage::Theirs,
+        ] {
+            let raw = ffi::git_index_stage_t::from(stage);
+            assert_eq!(GitIndexStage::try_from(raw), Ok(stage));
+        }
+    }
+
+    #[test]
+    fn index_stage_rejects_unknown_values_and_matches_the_c_layout() {
+        let raw = ffi::git_index_stage_t_GIT_INDEX_STAGE_THEIRS + 1;
+        assert_eq!(GitIndexStage::try_from(raw).unwrap_err().value(), raw);
+        assert_eq!(
+            size_of::<GitIndexStage>(),
+            size_of::<ffi::git_index_stage_t>()
+        );
+        assert_eq!(
+            align_of::<GitIndexStage>(),
+            align_of::<ffi::git_index_stage_t>()
         );
     }
 }

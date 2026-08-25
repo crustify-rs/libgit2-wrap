@@ -249,3 +249,293 @@ mod feature_flag_tests {
         );
     }
 }
+
+/// Wraps: git_libgit2_opt_t
+/// A checked selector for libgit2's process-global option API.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum GitLibgit2Option {
+    /// Query the maximum memory-map window size.
+    GetMwindowSize = ffi::git_libgit2_opt_t_GIT_OPT_GET_MWINDOW_SIZE,
+    /// Set the maximum memory-map window size.
+    SetMwindowSize = ffi::git_libgit2_opt_t_GIT_OPT_SET_MWINDOW_SIZE,
+    /// Query the total mapped-memory limit.
+    GetMwindowMappedLimit = ffi::git_libgit2_opt_t_GIT_OPT_GET_MWINDOW_MAPPED_LIMIT,
+    /// Set the total mapped-memory limit.
+    SetMwindowMappedLimit = ffi::git_libgit2_opt_t_GIT_OPT_SET_MWINDOW_MAPPED_LIMIT,
+    /// Query a configuration search path.
+    GetSearchPath = ffi::git_libgit2_opt_t_GIT_OPT_GET_SEARCH_PATH,
+    /// Set a configuration search path.
+    SetSearchPath = ffi::git_libgit2_opt_t_GIT_OPT_SET_SEARCH_PATH,
+    /// Set the cache limit for one object kind.
+    SetCacheObjectLimit = ffi::git_libgit2_opt_t_GIT_OPT_SET_CACHE_OBJECT_LIMIT,
+    /// Set the total object-cache size.
+    SetCacheMaxSize = ffi::git_libgit2_opt_t_GIT_OPT_SET_CACHE_MAX_SIZE,
+    /// Enable or disable object caching.
+    EnableCaching = ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_CACHING,
+    /// Query current and allowed cache memory.
+    GetCachedMemory = ffi::git_libgit2_opt_t_GIT_OPT_GET_CACHED_MEMORY,
+    /// Query the repository template path.
+    GetTemplatePath = ffi::git_libgit2_opt_t_GIT_OPT_GET_TEMPLATE_PATH,
+    /// Set the repository template path.
+    SetTemplatePath = ffi::git_libgit2_opt_t_GIT_OPT_SET_TEMPLATE_PATH,
+    /// Set the TLS certificate file and directory.
+    SetSslCertLocations = ffi::git_libgit2_opt_t_GIT_OPT_SET_SSL_CERT_LOCATIONS,
+    /// Set the HTTP user-agent string.
+    SetUserAgent = ffi::git_libgit2_opt_t_GIT_OPT_SET_USER_AGENT,
+    /// Enable or disable strict object creation.
+    EnableStrictObjectCreation = ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_STRICT_OBJECT_CREATION,
+    /// Enable or disable strict symbolic-reference creation.
+    EnableStrictSymbolicRefCreation =
+        ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_STRICT_SYMBOLIC_REF_CREATION,
+    /// Set the TLS cipher list.
+    SetSslCiphers = ffi::git_libgit2_opt_t_GIT_OPT_SET_SSL_CIPHERS,
+    /// Query the HTTP user-agent string.
+    GetUserAgent = ffi::git_libgit2_opt_t_GIT_OPT_GET_USER_AGENT,
+    /// Enable or disable offset deltas.
+    EnableOfsDelta = ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_OFS_DELTA,
+    /// Enable or disable `fsync` for Git directories.
+    EnableFsyncGitdir = ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_FSYNC_GITDIR,
+    /// Query the Windows file-sharing mode.
+    GetWindowsSharemode = ffi::git_libgit2_opt_t_GIT_OPT_GET_WINDOWS_SHAREMODE,
+    /// Set the Windows file-sharing mode.
+    SetWindowsSharemode = ffi::git_libgit2_opt_t_GIT_OPT_SET_WINDOWS_SHAREMODE,
+    /// Enable or disable strict object-hash verification.
+    EnableStrictHashVerification = ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_STRICT_HASH_VERIFICATION,
+    /// Install a process-global allocator.
+    SetAllocator = ffi::git_libgit2_opt_t_GIT_OPT_SET_ALLOCATOR,
+    /// Enable or disable unsaved-index safety checks.
+    EnableUnsavedIndexSafety = ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_UNSAVED_INDEX_SAFETY,
+    /// Query the pack object-count limit.
+    GetPackMaxObjects = ffi::git_libgit2_opt_t_GIT_OPT_GET_PACK_MAX_OBJECTS,
+    /// Set the pack object-count limit.
+    SetPackMaxObjects = ffi::git_libgit2_opt_t_GIT_OPT_SET_PACK_MAX_OBJECTS,
+    /// Disable or enable pack keep-file checks.
+    DisablePackKeepFileChecks = ffi::git_libgit2_opt_t_GIT_OPT_DISABLE_PACK_KEEP_FILE_CHECKS,
+    /// Enable or disable HTTP `Expect: 100-continue`.
+    EnableHttpExpectContinue = ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_HTTP_EXPECT_CONTINUE,
+    /// Query the mapped-file count limit.
+    GetMwindowFileLimit = ffi::git_libgit2_opt_t_GIT_OPT_GET_MWINDOW_FILE_LIMIT,
+    /// Set the mapped-file count limit.
+    SetMwindowFileLimit = ffi::git_libgit2_opt_t_GIT_OPT_SET_MWINDOW_FILE_LIMIT,
+    /// Set the packed ODB backend priority.
+    SetOdbPackedPriority = ffi::git_libgit2_opt_t_GIT_OPT_SET_ODB_PACKED_PRIORITY,
+    /// Set the loose ODB backend priority.
+    SetOdbLoosePriority = ffi::git_libgit2_opt_t_GIT_OPT_SET_ODB_LOOSE_PRIORITY,
+    /// Query the enabled index extensions.
+    GetExtensions = ffi::git_libgit2_opt_t_GIT_OPT_GET_EXTENSIONS,
+    /// Set the enabled index extensions.
+    SetExtensions = ffi::git_libgit2_opt_t_GIT_OPT_SET_EXTENSIONS,
+    /// Query repository-owner validation.
+    GetOwnerValidation = ffi::git_libgit2_opt_t_GIT_OPT_GET_OWNER_VALIDATION,
+    /// Set repository-owner validation.
+    SetOwnerValidation = ffi::git_libgit2_opt_t_GIT_OPT_SET_OWNER_VALIDATION,
+    /// Query the process home directory.
+    GetHomedir = ffi::git_libgit2_opt_t_GIT_OPT_GET_HOMEDIR,
+    /// Set the process home directory.
+    SetHomedir = ffi::git_libgit2_opt_t_GIT_OPT_SET_HOMEDIR,
+    /// Set the server connection timeout.
+    SetServerConnectTimeout = ffi::git_libgit2_opt_t_GIT_OPT_SET_SERVER_CONNECT_TIMEOUT,
+    /// Query the server connection timeout.
+    GetServerConnectTimeout = ffi::git_libgit2_opt_t_GIT_OPT_GET_SERVER_CONNECT_TIMEOUT,
+    /// Set the server operation timeout.
+    SetServerTimeout = ffi::git_libgit2_opt_t_GIT_OPT_SET_SERVER_TIMEOUT,
+    /// Query the server operation timeout.
+    GetServerTimeout = ffi::git_libgit2_opt_t_GIT_OPT_GET_SERVER_TIMEOUT,
+    /// Set the product portion of the user-agent string.
+    SetUserAgentProduct = ffi::git_libgit2_opt_t_GIT_OPT_SET_USER_AGENT_PRODUCT,
+    /// Query the product portion of the user-agent string.
+    GetUserAgentProduct = ffi::git_libgit2_opt_t_GIT_OPT_GET_USER_AGENT_PRODUCT,
+    /// Add an in-memory X.509 certificate.
+    AddSslX509Cert = ffi::git_libgit2_opt_t_GIT_OPT_ADD_SSL_X509_CERT,
+    /// Query the maximum size of one packed object.
+    GetPackMaxObjectSize = ffi::git_libgit2_opt_t_GIT_OPT_GET_PACK_MAX_OBJECT_SIZE,
+    /// Set the maximum size of one packed object.
+    SetPackMaxObjectSize = ffi::git_libgit2_opt_t_GIT_OPT_SET_PACK_MAX_OBJECT_SIZE,
+}
+
+/// A raw global-option selector not published by this libgit2 API.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidGitLibgit2Option(ffi::git_libgit2_opt_t);
+
+impl InvalidGitLibgit2Option {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_libgit2_opt_t {
+        self.0
+    }
+}
+
+impl From<GitLibgit2Option> for ffi::git_libgit2_opt_t {
+    fn from(option: GitLibgit2Option) -> Self {
+        option as Self
+    }
+}
+
+impl TryFrom<ffi::git_libgit2_opt_t> for GitLibgit2Option {
+    type Error = InvalidGitLibgit2Option;
+
+    fn try_from(option: ffi::git_libgit2_opt_t) -> Result<Self, Self::Error> {
+        match option {
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_MWINDOW_SIZE => Ok(Self::GetMwindowSize),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_MWINDOW_SIZE => Ok(Self::SetMwindowSize),
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_MWINDOW_MAPPED_LIMIT => {
+                Ok(Self::GetMwindowMappedLimit)
+            }
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_MWINDOW_MAPPED_LIMIT => {
+                Ok(Self::SetMwindowMappedLimit)
+            }
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_SEARCH_PATH => Ok(Self::GetSearchPath),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_SEARCH_PATH => Ok(Self::SetSearchPath),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_CACHE_OBJECT_LIMIT => Ok(Self::SetCacheObjectLimit),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_CACHE_MAX_SIZE => Ok(Self::SetCacheMaxSize),
+            ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_CACHING => Ok(Self::EnableCaching),
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_CACHED_MEMORY => Ok(Self::GetCachedMemory),
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_TEMPLATE_PATH => Ok(Self::GetTemplatePath),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_TEMPLATE_PATH => Ok(Self::SetTemplatePath),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_SSL_CERT_LOCATIONS => Ok(Self::SetSslCertLocations),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_USER_AGENT => Ok(Self::SetUserAgent),
+            ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_STRICT_OBJECT_CREATION => {
+                Ok(Self::EnableStrictObjectCreation)
+            }
+            ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_STRICT_SYMBOLIC_REF_CREATION => {
+                Ok(Self::EnableStrictSymbolicRefCreation)
+            }
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_SSL_CIPHERS => Ok(Self::SetSslCiphers),
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_USER_AGENT => Ok(Self::GetUserAgent),
+            ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_OFS_DELTA => Ok(Self::EnableOfsDelta),
+            ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_FSYNC_GITDIR => Ok(Self::EnableFsyncGitdir),
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_WINDOWS_SHAREMODE => Ok(Self::GetWindowsSharemode),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_WINDOWS_SHAREMODE => Ok(Self::SetWindowsSharemode),
+            ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_STRICT_HASH_VERIFICATION => {
+                Ok(Self::EnableStrictHashVerification)
+            }
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_ALLOCATOR => Ok(Self::SetAllocator),
+            ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_UNSAVED_INDEX_SAFETY => {
+                Ok(Self::EnableUnsavedIndexSafety)
+            }
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_PACK_MAX_OBJECTS => Ok(Self::GetPackMaxObjects),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_PACK_MAX_OBJECTS => Ok(Self::SetPackMaxObjects),
+            ffi::git_libgit2_opt_t_GIT_OPT_DISABLE_PACK_KEEP_FILE_CHECKS => {
+                Ok(Self::DisablePackKeepFileChecks)
+            }
+            ffi::git_libgit2_opt_t_GIT_OPT_ENABLE_HTTP_EXPECT_CONTINUE => {
+                Ok(Self::EnableHttpExpectContinue)
+            }
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_MWINDOW_FILE_LIMIT => Ok(Self::GetMwindowFileLimit),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_MWINDOW_FILE_LIMIT => Ok(Self::SetMwindowFileLimit),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_ODB_PACKED_PRIORITY => {
+                Ok(Self::SetOdbPackedPriority)
+            }
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_ODB_LOOSE_PRIORITY => Ok(Self::SetOdbLoosePriority),
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_EXTENSIONS => Ok(Self::GetExtensions),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_EXTENSIONS => Ok(Self::SetExtensions),
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_OWNER_VALIDATION => Ok(Self::GetOwnerValidation),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_OWNER_VALIDATION => Ok(Self::SetOwnerValidation),
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_HOMEDIR => Ok(Self::GetHomedir),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_HOMEDIR => Ok(Self::SetHomedir),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_SERVER_CONNECT_TIMEOUT => {
+                Ok(Self::SetServerConnectTimeout)
+            }
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_SERVER_CONNECT_TIMEOUT => {
+                Ok(Self::GetServerConnectTimeout)
+            }
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_SERVER_TIMEOUT => Ok(Self::SetServerTimeout),
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_SERVER_TIMEOUT => Ok(Self::GetServerTimeout),
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_USER_AGENT_PRODUCT => Ok(Self::SetUserAgentProduct),
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_USER_AGENT_PRODUCT => Ok(Self::GetUserAgentProduct),
+            ffi::git_libgit2_opt_t_GIT_OPT_ADD_SSL_X509_CERT => Ok(Self::AddSslX509Cert),
+            ffi::git_libgit2_opt_t_GIT_OPT_GET_PACK_MAX_OBJECT_SIZE => {
+                Ok(Self::GetPackMaxObjectSize)
+            }
+            ffi::git_libgit2_opt_t_GIT_OPT_SET_PACK_MAX_OBJECT_SIZE => {
+                Ok(Self::SetPackMaxObjectSize)
+            }
+            value => Err(InvalidGitLibgit2Option(value)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod option_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    const OPTIONS: [GitLibgit2Option; 48] = [
+        GitLibgit2Option::GetMwindowSize,
+        GitLibgit2Option::SetMwindowSize,
+        GitLibgit2Option::GetMwindowMappedLimit,
+        GitLibgit2Option::SetMwindowMappedLimit,
+        GitLibgit2Option::GetSearchPath,
+        GitLibgit2Option::SetSearchPath,
+        GitLibgit2Option::SetCacheObjectLimit,
+        GitLibgit2Option::SetCacheMaxSize,
+        GitLibgit2Option::EnableCaching,
+        GitLibgit2Option::GetCachedMemory,
+        GitLibgit2Option::GetTemplatePath,
+        GitLibgit2Option::SetTemplatePath,
+        GitLibgit2Option::SetSslCertLocations,
+        GitLibgit2Option::SetUserAgent,
+        GitLibgit2Option::EnableStrictObjectCreation,
+        GitLibgit2Option::EnableStrictSymbolicRefCreation,
+        GitLibgit2Option::SetSslCiphers,
+        GitLibgit2Option::GetUserAgent,
+        GitLibgit2Option::EnableOfsDelta,
+        GitLibgit2Option::EnableFsyncGitdir,
+        GitLibgit2Option::GetWindowsSharemode,
+        GitLibgit2Option::SetWindowsSharemode,
+        GitLibgit2Option::EnableStrictHashVerification,
+        GitLibgit2Option::SetAllocator,
+        GitLibgit2Option::EnableUnsavedIndexSafety,
+        GitLibgit2Option::GetPackMaxObjects,
+        GitLibgit2Option::SetPackMaxObjects,
+        GitLibgit2Option::DisablePackKeepFileChecks,
+        GitLibgit2Option::EnableHttpExpectContinue,
+        GitLibgit2Option::GetMwindowFileLimit,
+        GitLibgit2Option::SetMwindowFileLimit,
+        GitLibgit2Option::SetOdbPackedPriority,
+        GitLibgit2Option::SetOdbLoosePriority,
+        GitLibgit2Option::GetExtensions,
+        GitLibgit2Option::SetExtensions,
+        GitLibgit2Option::GetOwnerValidation,
+        GitLibgit2Option::SetOwnerValidation,
+        GitLibgit2Option::GetHomedir,
+        GitLibgit2Option::SetHomedir,
+        GitLibgit2Option::SetServerConnectTimeout,
+        GitLibgit2Option::GetServerConnectTimeout,
+        GitLibgit2Option::SetServerTimeout,
+        GitLibgit2Option::GetServerTimeout,
+        GitLibgit2Option::SetUserAgentProduct,
+        GitLibgit2Option::GetUserAgentProduct,
+        GitLibgit2Option::AddSslX509Cert,
+        GitLibgit2Option::GetPackMaxObjectSize,
+        GitLibgit2Option::SetPackMaxObjectSize,
+    ];
+
+    #[test]
+    fn every_published_option_round_trips() {
+        for option in OPTIONS {
+            let raw = ffi::git_libgit2_opt_t::from(option);
+            assert_eq!(GitLibgit2Option::try_from(raw), Ok(option));
+        }
+    }
+
+    #[test]
+    fn unknown_options_are_rejected() {
+        let raw = ffi::git_libgit2_opt_t_GIT_OPT_SET_PACK_MAX_OBJECT_SIZE + 1;
+        assert_eq!(GitLibgit2Option::try_from(raw).unwrap_err().value(), raw);
+    }
+
+    #[test]
+    fn option_selector_matches_the_c_enum_layout() {
+        assert_eq!(
+            size_of::<GitLibgit2Option>(),
+            size_of::<ffi::git_libgit2_opt_t>()
+        );
+        assert_eq!(
+            align_of::<GitLibgit2Option>(),
+            align_of::<ffi::git_libgit2_opt_t>()
+        );
+    }
+}

@@ -2203,6 +2203,42 @@
    ]
   },
   {
+   "name": "git_index_entry_flag_t",
+   "defined_in": "include/git2/index.h",
+   "_comment_agent": "git_index_entry_flag_t is a fieldless public bitmask enum with EXTENDED and VALID bits. It is stored by value and has no pointer, lifecycle, refcount, or locking semantics; zero and the combination of both published bits are valid flag sets.",
+   "fields": []
+  },
+  {
+   "name": "git_index_iterator",
+   "defined_in": "src/libgit2/index.h",
+   "_comment_agent": "The iterator owns its snapshot vector and allocation, but its index field is a non-null external mutable borrow whose lifetime must be carried by the safe iterator owner.",
+   "fields": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "git_index_iterator_new stores the caller's index pointer without transferring ownership; snapshot_new registers a reader and iterator_free uses the pointer to release that snapshot, so the source index must remain live and exclusively borrowed until the iterator is dropped."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_stage_t",
+   "defined_in": "include/git2/index.h",
+   "_comment_agent": "git_index_stage_t is a fieldless public enum with ANY=-1 and the four stage selectors NORMAL through THEIRS. It is passed and stored by value and has no pointer, lifecycle, refcount, or locking semantics.",
+   "fields": []
+  },
+  {
    "name": "git_indexer",
    "defined_in": "src/libgit2/indexer.c",
    "_comment_agent": "The public API treats git_indexer as opaque. Its retained ODB and callback state are borrowed, while its internal pack singleton is owned and released by git_indexer_free.",
@@ -2490,6 +2526,12 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_libgit2_opt_t",
+   "defined_in": "include/git2/common.h",
+   "_comment_agent": "git_libgit2_opt_t is a fieldless public selector enum for the variadic git_libgit2_opts API. The selector itself is passed by value and has no pointer, lifecycle, refcount, or locking semantics; individual selectors determine the separate variadic payload contract.",
+   "fields": []
   },
   {
    "name": "git_mailmap",
@@ -16699,6 +16741,33 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for this synchronous call; the callee retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_iterator_free",
+   "defined_in": "src/libgit2/index.c",
+   "lifetime": {
+    "for": "it",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "it",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes a fully formed iterator allocation when non-null, releases its snapshot against the borrowed index, and frees the iterator storage; null is a no-op."
      }
     }
    ]
