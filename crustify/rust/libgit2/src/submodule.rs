@@ -6,7 +6,7 @@ use core::ptr::NonNull;
 
 use ffibox::{CBox, CCloned};
 
-use crate::api::submodule::GitSubmoduleCallback;
+use crate::api::submodule::{GitSubmoduleCallback, GitSubmoduleUpdateOptionsRef};
 use crate::api::types::{
     GitSubmoduleIgnore, GitSubmoduleUpdate, InvalidGitSubmoduleIgnore, InvalidGitSubmoduleUpdate,
 };
@@ -423,6 +423,74 @@ fn optional_submodule_string<'a>(value: *const core::ffi::c_char) -> Option<&'a 
     }
 }
 
+fn submodule_clone_result(
+    status: i32,
+    repository: Option<GitRepositoryOwned>,
+) -> Result<GitRepositoryOwned, i32> {
+    if status == 0 {
+        repository.ok_or(ffi::git_error_code_GIT_ERROR)
+    } else {
+        drop(repository);
+        Err(status)
+    }
+}
+
+/// Wraps: git_submodule_clone
+/// Performs the clone step and returns the newly owned submodule repository.
+pub fn git_submodule_clone(
+    submodule: &mut GitSubmoduleMut<'_>,
+    options: Option<GitSubmoduleUpdateOptionsRef<'_, '_>>,
+) -> Result<GitRepositoryOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
+    // SAFETY: the output is writable, the submodule is live and exclusive for
+    // status-cache changes, and all optional nested option borrows remain live
+    // through this synchronous clone and its callbacks.
+    let status = unsafe {
+        ffi::git_submodule_clone(
+            core::ptr::addr_of_mut!(output),
+            submodule.as_mut_ptr(),
+            options,
+        )
+    };
+    // SAFETY: a non-null output is one complete repository owner transferred
+    // by a successful clone; failure leaves it null.
+    let repository = unsafe { GitRepositoryOwned::from_raw(output) };
+    submodule_clone_result(status, repository)
+}
+
+/// Wraps: git_submodule_clone
+/// Performs the clone step while asking libgit2 to release its repository handle.
+pub fn git_submodule_clone_without_repository(
+    submodule: &mut GitSubmoduleMut<'_>,
+    options: Option<GitSubmoduleUpdateOptionsRef<'_, '_>>,
+) -> Result<(), i32> {
+    let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
+    // SAFETY: null selects the documented no-output ownership contract; the
+    // exclusive submodule and every nested option borrow remain live through
+    // the synchronous clone and its callbacks.
+    let status =
+        unsafe { ffi::git_submodule_clone(core::ptr::null_mut(), submodule.as_mut_ptr(), options) };
+    status_result(status)
+}
+
+/// Wraps: git_submodule_update
+/// Initializes when requested, fetches as needed, and checks out the index commit.
+pub fn git_submodule_update(
+    submodule: &mut GitSubmoduleMut<'_>,
+    initialize: bool,
+    options: Option<GitSubmoduleUpdateOptionsRef<'_, '_>>,
+) -> Result<(), i32> {
+    let options = options.map_or(core::ptr::null_mut(), |options| options.as_ptr().cast_mut());
+    // SAFETY: the submodule is exclusively borrowed while its repository and
+    // caches may change. C only copies the historically mutable options
+    // header, and its nested borrows remain live through synchronous callbacks.
+    let status = unsafe {
+        ffi::git_submodule_update(submodule.as_mut_ptr(), i32::from(initialize), options)
+    };
+    status_result(status)
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
@@ -478,6 +546,33 @@ mod tests {
         // SAFETY: no borrowed handle remains and this cast recovers the exact
         // allocation returned by `Box::into_raw` above.
         drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_submodule>>()) });
+    }
+
+    #[test]
+    fn clone_result_preserves_errors_and_rejects_missing_success_output() {
+        assert!(matches!(submodule_clone_result(-123, None), Err(-123)));
+        assert_eq!(
+            submodule_clone_result(0, None).unwrap_err(),
+            ffi::git_error_code_GIT_ERROR
+        );
+    }
+
+    #[test]
+    fn clone_and_update_surfaces_contain_no_raw_pointer_obligations() {
+        let clone: fn(
+            &mut GitSubmoduleMut<'static>,
+            Option<GitSubmoduleUpdateOptionsRef<'static, 'static>>,
+        ) -> Result<GitRepositoryOwned, i32> = git_submodule_clone;
+        let clone_without_output: fn(
+            &mut GitSubmoduleMut<'static>,
+            Option<GitSubmoduleUpdateOptionsRef<'static, 'static>>,
+        ) -> Result<(), i32> = git_submodule_clone_without_repository;
+        let update: fn(
+            &mut GitSubmoduleMut<'static>,
+            bool,
+            Option<GitSubmoduleUpdateOptionsRef<'static, 'static>>,
+        ) -> Result<(), i32> = git_submodule_update;
+        let _ = (clone, clone_without_output, update);
     }
 }
 

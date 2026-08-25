@@ -9292,6 +9292,106 @@
    ]
   },
   {
+   "name": "git_clone",
+   "defined_in": "src/libgit2/clone.c",
+   "ptr_args": [
+    {
+     "name": "local_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:local_path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required NUL-terminated destination path read only during the synchronous clone."
+     }
+    },
+    {
+     "name": "options",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:options"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional clone options copied by value; nested strings and callback payloads are borrowed only for synchronous callback invocations."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a required output slot and writes one newly owned repository allocation on success; failures leave the slot null after releasing partial state."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required NUL-terminated remote URL read only during the synchronous clone."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_clone_init_options",
+   "defined_in": "src/libgit2/clone.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required caller-owned options storage is initialized in place; no pointer is retained."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_commit_amend",
    "defined_in": "src/libgit2/commit.c",
    "ptr_args": [
@@ -32930,6 +33030,66 @@
    ]
   },
   {
+   "name": "git_submodule_clone",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional update options copied by value; nested callback state is borrowed only for synchronous invocations."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional output slot. When supplied, success transfers one independently owned repository; when absent, the completed clone is released internally."
+     }
+    },
+    {
+     "name": "submodule",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:submodule"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required submodule borrowed exclusively for the synchronous clone; repository opening through the installed callback updates its working-directory status cache."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_submodule_dup",
    "defined_in": "src/libgit2/submodule.c",
    "lifetime": {
@@ -33706,6 +33866,46 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the call; no pointee ownership transfers."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_update",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "_update_options",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:_update_options"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Despite the historical non-const declaration, the implementation only copies the optional options and invokes nested callback state synchronously; it does not write the options record."
+     }
+    },
+    {
+     "name": "sm",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:sm"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required submodule borrowed exclusively while its repository and cached working-directory status flags may be updated."
      }
     }
    ]

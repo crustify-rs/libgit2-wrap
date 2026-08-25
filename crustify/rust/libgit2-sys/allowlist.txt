@@ -412,3 +412,4 @@
 ^GIT_CLONE_OPTIONS_VERSION$
 ^git_submodule_update_options$
 ^GIT_SUBMODULE_UPDATE_OPTIONS_VERSION$
+^(git_clone|git_clone_init_options|git_submodule_clone|git_submodule_update)$
