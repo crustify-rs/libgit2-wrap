@@ -1151,3 +1151,85 @@ mod signature_tests {
         assert!(remaining >= 0);
     }
 }
+
+/// Wraps: git_submodule_recurse_t
+/// Selects whether an operation recurses into submodules.
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub enum GitSubmoduleRecurse {
+    /// Do not recurse into submodules.
+    #[default]
+    No = ffi::git_submodule_recurse_t_GIT_SUBMODULE_RECURSE_NO,
+    /// Always recurse into submodules.
+    Yes = ffi::git_submodule_recurse_t_GIT_SUBMODULE_RECURSE_YES,
+    /// Recurse only when the required commit is not already available.
+    OnDemand = ffi::git_submodule_recurse_t_GIT_SUBMODULE_RECURSE_ONDEMAND,
+}
+
+/// A raw value that is not a published [`GitSubmoduleRecurse`] policy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InvalidGitSubmoduleRecurse(ffi::git_submodule_recurse_t);
+
+impl InvalidGitSubmoduleRecurse {
+    /// Returns the unrecognized C value.
+    #[must_use]
+    pub const fn value(self) -> ffi::git_submodule_recurse_t {
+        self.0
+    }
+}
+
+impl From<GitSubmoduleRecurse> for ffi::git_submodule_recurse_t {
+    fn from(recurse: GitSubmoduleRecurse) -> Self {
+        recurse as Self
+    }
+}
+
+impl TryFrom<ffi::git_submodule_recurse_t> for GitSubmoduleRecurse {
+    type Error = InvalidGitSubmoduleRecurse;
+
+    fn try_from(value: ffi::git_submodule_recurse_t) -> Result<Self, Self::Error> {
+        match value {
+            ffi::git_submodule_recurse_t_GIT_SUBMODULE_RECURSE_NO => Ok(Self::No),
+            ffi::git_submodule_recurse_t_GIT_SUBMODULE_RECURSE_YES => Ok(Self::Yes),
+            ffi::git_submodule_recurse_t_GIT_SUBMODULE_RECURSE_ONDEMAND => Ok(Self::OnDemand),
+            value => Err(InvalidGitSubmoduleRecurse(value)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod submodule_recurse_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn published_recurse_policies_round_trip() {
+        for policy in [
+            GitSubmoduleRecurse::No,
+            GitSubmoduleRecurse::Yes,
+            GitSubmoduleRecurse::OnDemand,
+        ] {
+            let raw = ffi::git_submodule_recurse_t::from(policy);
+            assert_eq!(GitSubmoduleRecurse::try_from(raw), Ok(policy));
+        }
+
+        let invalid = ffi::git_submodule_recurse_t_GIT_SUBMODULE_RECURSE_ONDEMAND + 1;
+        assert_eq!(
+            GitSubmoduleRecurse::try_from(invalid).unwrap_err().value(),
+            invalid
+        );
+    }
+
+    #[test]
+    fn recurse_policy_preserves_the_c_enum_layout() {
+        assert_eq!(
+            size_of::<GitSubmoduleRecurse>(),
+            size_of::<ffi::git_submodule_recurse_t>()
+        );
+        assert_eq!(
+            align_of::<GitSubmoduleRecurse>(),
+            align_of::<ffi::git_submodule_recurse_t>()
+        );
+    }
+}

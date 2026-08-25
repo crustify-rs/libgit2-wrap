@@ -342,7 +342,7 @@ pub fn git_stash_save_with_opts(
 #[cfg(test)]
 mod save_options_init_tests {
     use super::*;
-    use crate::api::stash::GitStashSaveOptions;
+    use crate::api::stash::{GitStashFlags, GitStashSaveOptions};
 
     #[test]
     fn initializer_writes_the_published_defaults() {
@@ -353,7 +353,7 @@ mod save_options_init_tests {
             options.as_ref().version(),
             ffi::GIT_STASH_SAVE_OPTIONS_VERSION
         );
-        assert_eq!(options.as_ref().flags(), 0);
+        assert_eq!(options.as_ref().flags(), Ok(GitStashFlags::NONE));
         assert!(options.as_ref().stasher().is_none());
     }
 }

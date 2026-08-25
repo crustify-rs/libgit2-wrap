@@ -2,6 +2,7 @@
 
 use core::ffi::CStr;
 use core::marker::PhantomData;
+use core::ops::{BitOr, BitOrAssign};
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CCell, CPtr, CType, CVal, CValued};
@@ -217,11 +218,11 @@ impl<'object, 'data> GitStashSaveOptionsRef<'object, 'data> {
     }
 
     /// Field: git_stash_save_options.flags
-    /// Returns the raw combination of published `GIT_STASH_*` bits.
-    #[must_use]
-    pub fn flags(&self) -> u32 {
+    /// Returns the checked combination of published `GIT_STASH_*` bits.
+    pub fn flags(&self) -> Result<GitStashFlags, ffi::git_stash_flags> {
         // SAFETY: raw-place projection copies the initialized scalar field.
-        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+        let flags = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        GitStashFlags::try_from(flags)
     }
 
     /// Field: git_stash_save_options.version
@@ -287,10 +288,10 @@ impl<'object, 'data> GitStashSaveOptionsMut<'object, 'data> {
         unsafe { addr_of_mut!((*self.as_mut_ptr()).message).write(message) }
     }
 
-    /// Replaces the raw combination of published `GIT_STASH_*` bits.
-    pub fn set_flags(&mut self, flags: u32) {
+    /// Replaces the configured stash-save flags.
+    pub fn set_flags(&mut self, flags: GitStashFlags) {
         // SAFETY: this exclusive handle permits the scalar write.
-        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
     }
 
     /// Replaces the options ABI version.
@@ -361,7 +362,7 @@ mod save_options_tests {
         {
             let mut view = options.as_mut();
             view.set_message(Some(c"save this"));
-            view.set_flags(5);
+            view.set_flags(GitStashFlags::KEEP_INDEX | GitStashFlags::INCLUDE_IGNORED);
             view.set_paths(paths);
             view.set_stasher(Some(signature));
         }
@@ -369,7 +370,10 @@ mod save_options_tests {
         let view = options.as_ref();
         assert_eq!(view.version(), ffi::GIT_STASH_SAVE_OPTIONS_VERSION);
         assert_eq!(view.message(), Some(c"save this"));
-        assert_eq!(view.flags(), 5);
+        assert_eq!(
+            view.flags(),
+            Ok(GitStashFlags::KEEP_INDEX | GitStashFlags::INCLUDE_IGNORED)
+        );
         assert_eq!(view.paths().count(), 1);
         assert_eq!(view.paths().strings().unwrap().get(0), Some(c"tracked.txt"));
         assert_eq!(view.stasher().unwrap().as_ptr(), signature_ptr);
@@ -385,7 +389,9 @@ mod save_options_tests {
         let mut options = GitStashSaveOptions::new();
         options.as_mut().set_message(Some(message.as_c_str()));
         assert_eq!(options.as_ref().message(), Some(message.as_c_str()));
-        options.as_mut().set_flags(3);
+        options
+            .as_mut()
+            .set_flags(GitStashFlags::KEEP_INDEX | GitStashFlags::INCLUDE_UNTRACKED);
         assert_eq!(options.as_ref().message(), Some(message.as_c_str()));
     }
 }
@@ -518,11 +524,11 @@ impl<'object, 'data> GitStashApplyOptionsRef<'object, 'data> {
     }
 
     /// Field: git_stash_apply_options.flags
-    /// Returns the raw combination of published stash-apply bits.
-    #[must_use]
-    pub fn flags(&self) -> u32 {
+    /// Returns the checked combination of published stash-apply bits.
+    pub fn flags(&self) -> Result<GitStashApplyFlags, ffi::git_stash_apply_flags> {
         // SAFETY: raw-place projection copies the initialized scalar field.
-        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+        let flags = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        GitStashApplyFlags::try_from(flags)
     }
 
     /// Field: git_stash_apply_options.version
@@ -587,10 +593,10 @@ impl<'object, 'data> GitStashApplyOptionsMut<'object, 'data> {
         GitStashApplyOptionsRef(self.0.0)
     }
 
-    /// Replaces the raw combination of published stash-apply bits.
-    pub fn set_flags(&mut self, flags: u32) {
+    /// Replaces the configured stash-apply flags.
+    pub fn set_flags(&mut self, flags: GitStashApplyFlags) {
         // SAFETY: this exclusive handle permits the scalar write.
-        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
     }
 
     /// Replaces the options ABI version.
@@ -688,12 +694,12 @@ mod apply_options_tests {
         let mut options = GitStashApplyOptions::new();
         {
             let mut view = options.as_mut();
-            view.set_flags(1);
+            view.set_flags(GitStashApplyFlags::REINSTATE_INDEX);
             view.checkout_options_mut().set_disable_filters(true);
         }
         let view = options.as_ref();
         assert_eq!(view.version(), ffi::GIT_STASH_APPLY_OPTIONS_VERSION);
-        assert_eq!(view.flags(), 1);
+        assert_eq!(view.flags(), Ok(GitStashApplyFlags::REINSTATE_INDEX));
         assert_eq!(
             view.checkout_options().version(),
             ffi::GIT_CHECKOUT_OPTIONS_VERSION
@@ -731,5 +737,199 @@ mod apply_options_tests {
             assert!(!view.as_ref().has_progress_payload());
         }
         assert_eq!(seen, [StashApplyProgress::Done]);
+    }
+}
+
+/// Wraps: git_stash_apply_flags
+/// A checked set of flags controlling stash application.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct GitStashApplyFlags(ffi::git_stash_apply_flags);
+
+impl GitStashApplyFlags {
+    /// Apply a stash without optional behavior.
+    pub const NONE: Self = Self(ffi::git_stash_apply_flags_GIT_STASH_APPLY_DEFAULT);
+    /// Restore the stashed index in addition to working-tree changes.
+    pub const REINSTATE_INDEX: Self =
+        Self(ffi::git_stash_apply_flags_GIT_STASH_APPLY_REINSTATE_INDEX);
+    /// Every stash-apply flag published by this version of libgit2.
+    pub const ALL: Self = Self(Self::REINSTATE_INDEX.0);
+
+    /// Converts raw bits when every bit is published by libgit2.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_stash_apply_flags) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 bit set.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_stash_apply_flags {
+        self.0
+    }
+
+    /// Returns whether no optional behavior is selected.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every flag in `other` is present.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+}
+
+impl TryFrom<ffi::git_stash_apply_flags> for GitStashApplyFlags {
+    type Error = ffi::git_stash_apply_flags;
+
+    fn try_from(bits: ffi::git_stash_apply_flags) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl From<GitStashApplyFlags> for ffi::git_stash_apply_flags {
+    fn from(flags: GitStashApplyFlags) -> Self {
+        flags.bits()
+    }
+}
+
+impl BitOr for GitStashApplyFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitStashApplyFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+/// Wraps: git_stash_flags
+/// A checked set of flags controlling stash creation.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct GitStashFlags(ffi::git_stash_flags);
+
+impl GitStashFlags {
+    /// Create a stash with the default behavior.
+    pub const NONE: Self = Self(ffi::git_stash_flags_GIT_STASH_DEFAULT);
+    /// Leave changes already added to the index intact.
+    pub const KEEP_INDEX: Self = Self(ffi::git_stash_flags_GIT_STASH_KEEP_INDEX);
+    /// Include untracked files in the stash.
+    pub const INCLUDE_UNTRACKED: Self = Self(ffi::git_stash_flags_GIT_STASH_INCLUDE_UNTRACKED);
+    /// Include ignored files in the stash.
+    pub const INCLUDE_IGNORED: Self = Self(ffi::git_stash_flags_GIT_STASH_INCLUDE_IGNORED);
+    /// Leave all index and working-directory changes intact.
+    pub const KEEP_ALL: Self = Self(ffi::git_stash_flags_GIT_STASH_KEEP_ALL);
+    /// Every stash-creation flag published by this version of libgit2.
+    pub const ALL: Self = Self(
+        Self::KEEP_INDEX.0 | Self::INCLUDE_UNTRACKED.0 | Self::INCLUDE_IGNORED.0 | Self::KEEP_ALL.0,
+    );
+
+    /// Converts raw bits when every bit is published by libgit2.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_stash_flags) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 bit set.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_stash_flags {
+        self.0
+    }
+
+    /// Returns whether no optional behavior is selected.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every flag in `other` is present.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+}
+
+impl TryFrom<ffi::git_stash_flags> for GitStashFlags {
+    type Error = ffi::git_stash_flags;
+
+    fn try_from(bits: ffi::git_stash_flags) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl From<GitStashFlags> for ffi::git_stash_flags {
+    fn from(flags: GitStashFlags) -> Self {
+        flags.bits()
+    }
+}
+
+impl BitOr for GitStashFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitStashFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+#[cfg(test)]
+mod stash_flag_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn stash_flag_sets_validate_and_combine() {
+        let flags = GitStashFlags::KEEP_INDEX | GitStashFlags::INCLUDE_UNTRACKED;
+        assert!(flags.contains(GitStashFlags::KEEP_INDEX));
+        assert_eq!(GitStashFlags::try_from(flags.bits()), Ok(flags));
+        assert_eq!(
+            GitStashFlags::from_bits(GitStashFlags::ALL.bits() << 1),
+            None
+        );
+
+        let apply = GitStashApplyFlags::REINSTATE_INDEX;
+        assert!(!apply.is_empty());
+        assert_eq!(GitStashApplyFlags::try_from(apply.bits()), Ok(apply));
+        assert_eq!(GitStashApplyFlags::from_bits(apply.bits() << 1), None);
+    }
+
+    #[test]
+    fn stash_flag_wrappers_preserve_c_layout() {
+        assert_eq!(
+            size_of::<GitStashFlags>(),
+            size_of::<ffi::git_stash_flags>()
+        );
+        assert_eq!(
+            align_of::<GitStashFlags>(),
+            align_of::<ffi::git_stash_flags>()
+        );
+        assert_eq!(
+            size_of::<GitStashApplyFlags>(),
+            size_of::<ffi::git_stash_apply_flags>()
+        );
+        assert_eq!(
+            align_of::<GitStashApplyFlags>(),
+            align_of::<ffi::git_stash_apply_flags>()
+        );
     }
 }

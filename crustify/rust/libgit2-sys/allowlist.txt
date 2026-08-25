@@ -192,12 +192,16 @@
 ^git_status_show_t$
 ^git_status_t$
 ^git_stash_apply_progress_t$
+^git_stash_apply_flags$
+^git_stash_flags$
 ^git_stash_apply_progress_cb$
 ^git_stash_apply_options$
 ^GIT_STASH_APPLY_OPTIONS_VERSION$
 ^git_status_list$
 ^git_status_list_free$
 ^git_submodule_ignore_t$
+^git_submodule_recurse_t$
+^git_submodule_status_t$
 ^git_submodule_update_t$
 ^git_tree_update$
 ^git_tree_update_t$

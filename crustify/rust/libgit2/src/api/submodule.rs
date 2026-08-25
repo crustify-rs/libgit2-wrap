@@ -47,6 +47,7 @@ mod tests {
 }
 
 use core::marker::PhantomData;
+use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CCell, CPtr, CType, CVal, CValued};
@@ -383,6 +384,188 @@ mod update_options_tests {
         assert_eq!(
             options.as_ref().fetch_options().proxy_options().url(),
             Some(url.as_c_str())
+        );
+    }
+}
+
+/// Wraps: git_submodule_status_t
+/// A checked set of submodule location and modification status bits.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct GitSubmoduleStatusFlags(ffi::git_submodule_status_t);
+
+impl GitSubmoduleStatusFlags {
+    /// No location or modification status is present.
+    pub const NONE: Self = Self(0);
+    /// The superproject's `HEAD` contains the submodule.
+    pub const IN_HEAD: Self = Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_IN_HEAD);
+    /// The superproject index contains the submodule.
+    pub const IN_INDEX: Self = Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_IN_INDEX);
+    /// The superproject configuration contains the submodule.
+    pub const IN_CONFIG: Self = Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_IN_CONFIG);
+    /// The superproject working directory contains the submodule.
+    pub const IN_WORKDIR: Self = Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_IN_WD);
+    /// The index contains a submodule absent from `HEAD`.
+    pub const INDEX_ADDED: Self =
+        Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_INDEX_ADDED);
+    /// `HEAD` contains a submodule absent from the index.
+    pub const INDEX_DELETED: Self =
+        Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_INDEX_DELETED);
+    /// The index and `HEAD` record different submodule commits.
+    pub const INDEX_MODIFIED: Self =
+        Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_INDEX_MODIFIED);
+    /// The working-directory submodule is not initialized.
+    pub const WORKDIR_UNINITIALIZED: Self =
+        Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_WD_UNINITIALIZED);
+    /// The working directory contains a submodule absent from the index.
+    pub const WORKDIR_ADDED: Self = Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_WD_ADDED);
+    /// The index contains a submodule absent from the working directory.
+    pub const WORKDIR_DELETED: Self =
+        Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_WD_DELETED);
+    /// The working directory and index record different submodule commits.
+    pub const WORKDIR_MODIFIED: Self =
+        Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_WD_MODIFIED);
+    /// The submodule's own index contains changes.
+    pub const WORKDIR_INDEX_MODIFIED: Self =
+        Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_WD_INDEX_MODIFIED);
+    /// The submodule's own working directory contains modified files.
+    pub const WORKDIR_FILES_MODIFIED: Self =
+        Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_WD_WD_MODIFIED);
+    /// The submodule's own working directory contains untracked files.
+    pub const WORKDIR_UNTRACKED: Self =
+        Self(ffi::git_submodule_status_t_GIT_SUBMODULE_STATUS_WD_UNTRACKED);
+    /// Every status bit published by this version of libgit2.
+    pub const ALL: Self = Self(
+        Self::IN_HEAD.0
+            | Self::IN_INDEX.0
+            | Self::IN_CONFIG.0
+            | Self::IN_WORKDIR.0
+            | Self::INDEX_ADDED.0
+            | Self::INDEX_DELETED.0
+            | Self::INDEX_MODIFIED.0
+            | Self::WORKDIR_UNINITIALIZED.0
+            | Self::WORKDIR_ADDED.0
+            | Self::WORKDIR_DELETED.0
+            | Self::WORKDIR_MODIFIED.0
+            | Self::WORKDIR_INDEX_MODIFIED.0
+            | Self::WORKDIR_FILES_MODIFIED.0
+            | Self::WORKDIR_UNTRACKED.0,
+    );
+
+    /// Converts raw bits when every bit is published by libgit2.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_submodule_status_t) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 bit set.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_submodule_status_t {
+        self.0
+    }
+
+    /// Returns whether no status bits are present.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every status in `other` is present.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any status in `other` is present.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl TryFrom<ffi::git_submodule_status_t> for GitSubmoduleStatusFlags {
+    type Error = ffi::git_submodule_status_t;
+
+    fn try_from(bits: ffi::git_submodule_status_t) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl From<GitSubmoduleStatusFlags> for ffi::git_submodule_status_t {
+    fn from(status: GitSubmoduleStatusFlags) -> Self {
+        status.bits()
+    }
+}
+
+impl BitOr for GitSubmoduleStatusFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitSubmoduleStatusFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitSubmoduleStatusFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitSubmoduleStatusFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for GitSubmoduleStatusFlags {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(!self.0 & Self::ALL.0)
+    }
+}
+
+#[cfg(test)]
+mod status_flag_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn status_bits_validate_and_form_sets() {
+        let status =
+            GitSubmoduleStatusFlags::IN_INDEX | GitSubmoduleStatusFlags::WORKDIR_INDEX_MODIFIED;
+        assert!(status.contains(GitSubmoduleStatusFlags::IN_INDEX));
+        assert!(status.intersects(GitSubmoduleStatusFlags::WORKDIR_INDEX_MODIFIED));
+        assert_eq!(GitSubmoduleStatusFlags::try_from(status.bits()), Ok(status));
+        assert_eq!(
+            GitSubmoduleStatusFlags::from_bits(GitSubmoduleStatusFlags::ALL.bits() << 1),
+            None
+        );
+        assert_eq!(status & !status, GitSubmoduleStatusFlags::NONE);
+    }
+
+    #[test]
+    fn status_flags_preserve_the_c_enum_layout() {
+        assert_eq!(
+            size_of::<GitSubmoduleStatusFlags>(),
+            size_of::<ffi::git_submodule_status_t>()
+        );
+        assert_eq!(
+            align_of::<GitSubmoduleStatusFlags>(),
+            align_of::<ffi::git_submodule_status_t>()
         );
     }
 }
