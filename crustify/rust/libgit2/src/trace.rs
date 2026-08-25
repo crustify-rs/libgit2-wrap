@@ -1,5 +1,6 @@
 //! Safe wrappers for libgit2 trace APIs.
 
+use crate::api::trace::GitTraceCallback;
 use crate::ffi;
 use core::ffi::CStr;
 use std::sync::Mutex;
@@ -59,9 +60,6 @@ impl TryFrom<ffi::git_trace_level_t> for GitTraceLevel {
         }
     }
 }
-
-/// A process-global, thread-safe trace callback.
-pub type GitTraceCallback = fn(GitTraceLevel, &CStr);
 
 static TRACE_CALLBACK: Mutex<Option<GitTraceCallback>> = Mutex::new(None);
 

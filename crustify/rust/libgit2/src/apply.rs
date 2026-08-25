@@ -1,7 +1,7 @@
 //! Safe wrappers for libgit2 apply APIs.
 
 use crate::api::apply::{GitApplyOptionsMut, GitApplyOptionsRef};
-use crate::diff::DiffRef;
+use crate::diff::DiffMut;
 use crate::ffi;
 use crate::index::GitIndexOwned;
 use crate::repository::GitRepositoryMut;
@@ -91,19 +91,31 @@ mod tests {
 
 /// Wraps: git_apply
 /// Applies `diff` to the selected repository location.
+///
+/// The diff is borrowed exclusively. Applying a delta generates its patch
+/// through `git_patch_from_diff`, and patch generation writes into the diff:
+/// `git_diff_file_content__init_from_diff` runs the attribute lookup against
+/// `diff->attrsession`, whose first use sets `init_setup` and caches the
+/// preloaded attribute files, and loading a file's content stamps binary
+/// flags, sizes and object IDs into `delta->old_file` and `delta->new_file`
+/// inside `diff->deltas`. That is the same storage
+/// [`git_patch_from_diff`](crate::patch::git_patch_from_diff) and
+/// [`git_diff_print`](crate::diff_print::git_diff_print) already take
+/// exclusively.
 pub fn git_apply(
     repository: &mut GitRepositoryMut<'_>,
-    diff: DiffRef<'_>,
+    diff: &mut DiffMut<'_>,
     location: ApplyLocation,
     options: Option<GitApplyOptionsRef<'_, '_>>,
 ) -> Result<(), i32> {
     let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
-    // SAFETY: the repository is exclusively borrowed, while the diff and
-    // optional options remain live and read-only for the synchronous call.
+    // SAFETY: the repository and the diff are both exclusively borrowed for
+    // the writes the apply performs through them, and the optional options
+    // remain live and read-only for the synchronous call.
     let status = unsafe {
         ffi::git_apply(
             repository.as_mut_ptr(),
-            diff.as_ptr().cast_mut(),
+            diff.as_mut_ptr(),
             location.into(),
             options,
         )
@@ -112,7 +124,14 @@ pub fn git_apply(
 }
 
 /// Wraps: git_apply_options_init
-/// Initializes apply options for `version`.
+/// Fills `options` with the published apply defaults.
+///
+/// `version` is a compatibility bound, not the value written. C checks it
+/// first and returns `Err(-1)` without touching the storage when it is zero or
+/// above the compiled maximum; otherwise the whole template is copied over the
+/// storage, so the version left behind is `GIT_APPLY_OPTIONS_VERSION`. Every
+/// other `*_options_init` and `*_init_options` entry point in libgit2 forwards
+/// to the same `GIT_INIT_STRUCTURE_FROM_TEMPLATE` macro and behaves this way.
 pub fn git_apply_options_init(
     options: &mut GitApplyOptionsMut<'_, '_>,
     version: core::ffi::c_uint,
@@ -125,22 +144,29 @@ pub fn git_apply_options_init(
 
 /// Wraps: git_apply_to_tree
 /// Applies `diff` to `preimage` and returns the resulting in-memory index.
+///
+/// The diff is exclusive for the same reason it is in [`git_apply`]: this
+/// entry point reaches `apply_deltas` and therefore `git_patch_from_diff`.
+/// The tree stays shared, because `git_reader_for_tree` only records it in a
+/// reader that is freed before the call returns and reads it through
+/// `git_tree_entry_bypath`.
 pub fn git_apply_to_tree(
     repository: &mut GitRepositoryMut<'_>,
     preimage: GitTreeRef<'_>,
-    diff: DiffRef<'_>,
+    diff: &mut DiffMut<'_>,
     options: Option<GitApplyOptionsRef<'_, '_>>,
 ) -> Result<GitIndexOwned, i32> {
     let mut out = core::ptr::null_mut();
     let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
-    // SAFETY: `out` is writable, the repository is exclusive, and all other
-    // typed inputs remain live and read-only for the call.
+    // SAFETY: `out` is writable, the repository and the diff are exclusively
+    // borrowed for the writes the apply performs, and the tree and optional
+    // options remain live and read-only for the call.
     let status = unsafe {
         ffi::git_apply_to_tree(
             &mut out,
             repository.as_mut_ptr(),
             preimage.as_ptr().cast_mut(),
-            diff.as_ptr().cast_mut(),
+            diff.as_mut_ptr(),
             options,
         )
     };
@@ -156,11 +182,73 @@ pub fn git_apply_to_tree(
 mod scheduled_wrapper_tests {
     use super::*;
     use crate::api::apply::GitApplyOptions;
+    use crate::diff_generate::git_diff_tree_to_tree;
+    use crate::repository::git_repository_open_bare;
 
     #[test]
-    fn initializer_writes_the_requested_apply_version() {
+    fn initializer_writes_the_published_apply_version() {
         let mut options = GitApplyOptions::new();
         git_apply_options_init(&mut options.as_mut(), ffi::GIT_APPLY_OPTIONS_VERSION).unwrap();
         assert_eq!(options.as_ref().version(), ffi::GIT_APPLY_OPTIONS_VERSION);
+    }
+
+    /// The smallest on-disk bare repository `git_repository_open_bare`
+    /// accepts, so an empty generated diff exists without a working tree.
+    struct BareRepo(std::path::PathBuf);
+
+    impl BareRepo {
+        fn create(tag: &str) -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("crustify-apply-{}-{tag}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(path.join("objects")).expect("a private temporary directory");
+            std::fs::create_dir_all(path.join("refs/heads")).expect("a refs directory");
+            std::fs::write(path.join("HEAD"), b"ref: refs/heads/main\n").expect("a HEAD file");
+            std::fs::write(
+                path.join("config"),
+                b"[core]\n\trepositoryformatversion = 0\n\tbare = true\n",
+            )
+            .expect("a config file");
+            Self(path)
+        }
+
+        fn c_path(&self) -> std::ffi::CString {
+            std::ffi::CString::new(self.0.to_str().expect("a UTF-8 temporary path"))
+                .expect("a path without interior NUL")
+        }
+    }
+
+    impl Drop for BareRepo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn applying_a_diff_takes_the_repository_and_the_diff_exclusively() {
+        // SAFETY: process-global initialization is refcounted and balanced
+        // after every owner created here has been released.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let directory = BareRepo::create("index");
+        let mut owner = git_repository_open_bare(&directory.c_path())
+            .expect("the hand-built directory is a bare repository");
+        {
+            let mut repository = owner.as_mut();
+            // Both handles have to be exclusive: applying writes the index
+            // through the repository, and generating each delta's patch
+            // writes the attribute session and file records inside the diff.
+            let mut diff = git_diff_tree_to_tree(&mut repository, None, None, None)
+                .expect("two absent trees still diff");
+            git_apply(
+                &mut repository,
+                &mut diff.as_mut(),
+                ApplyLocation::Index,
+                None,
+            )
+            .expect("an empty diff applies to the index");
+        }
+        drop(owner);
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }

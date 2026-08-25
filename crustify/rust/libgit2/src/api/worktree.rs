@@ -22,7 +22,12 @@ impl GitWorktreePruneFlags {
     pub const VALID: Self = Self(ffi::git_worktree_prune_t_GIT_WORKTREE_PRUNE_VALID);
     /// Prune even when the worktree is locked.
     pub const LOCKED: Self = Self(ffi::git_worktree_prune_t_GIT_WORKTREE_PRUNE_LOCKED);
-    /// Prune a checked-out worktree.
+    /// Also delete the worktree's checked-out working directory.
+    ///
+    /// Unlike the other two overrides this relaxes no prunability check:
+    /// `git_worktree_prune` always removes the administrative data under the
+    /// parent repository's `worktrees/<name>`, and only removes the working
+    /// directory named by the worktree's gitlink when this bit is set.
     pub const WORKING_TREE: Self = Self(ffi::git_worktree_prune_t_GIT_WORKTREE_PRUNE_WORKING_TREE);
     /// Every prune override published by this version of libgit2.
     pub const ALL: Self = Self(Self::VALID.0 | Self::LOCKED.0 | Self::WORKING_TREE.0);
@@ -107,6 +112,8 @@ impl BitAndAssign for GitWorktreePruneFlags {
 impl Not for GitWorktreePruneFlags {
     type Output = Self;
 
+    /// Returns the published overrides this set omits, leaving every bit
+    /// libgit2 does not define clear.
     fn not(self) -> Self::Output {
         Self(!self.0 & Self::ALL.0)
     }
@@ -144,6 +151,25 @@ mod tests {
     }
 
     #[test]
+    fn prune_overrides_accumulate_and_convert_to_the_c_enum() {
+        let mut overrides = GitWorktreePruneFlags::NONE;
+        overrides |= GitWorktreePruneFlags::VALID;
+        overrides |= GitWorktreePruneFlags::WORKING_TREE;
+        assert_eq!(
+            ffi::git_worktree_prune_t::from(overrides),
+            ffi::git_worktree_prune_t_GIT_WORKTREE_PRUNE_VALID
+                | ffi::git_worktree_prune_t_GIT_WORKTREE_PRUNE_WORKING_TREE
+        );
+
+        overrides &= !GitWorktreePruneFlags::WORKING_TREE;
+        assert_eq!(overrides, GitWorktreePruneFlags::VALID);
+        assert_eq!(
+            GitWorktreePruneFlags::try_from(overrides.bits()),
+            Ok(GitWorktreePruneFlags::VALID)
+        );
+    }
+
+    #[test]
     fn prune_overrides_preserve_the_c_enum_layout() {
         assert_eq!(
             size_of::<GitWorktreePruneFlags>(),
@@ -159,10 +185,34 @@ mod tests {
 /// Wraps: git_worktree_add_options
 /// Layout-compatible worktree-add options borrowing their optional reference
 /// and all data nested in their checkout options for `'data`.
+///
+/// `'data` is invariant. [`GitWorktreeAddOptionsMut::set_reference`] stores a
+/// `&'data` reference in the C struct while
+/// [`GitWorktreeAddOptionsRef::reference`] hands it back out, and the nested
+/// checkout options behave the same way. A covariant `'data` would let safe
+/// code shrink the parameter on the exclusive handle, install a shorter-lived
+/// reference, and then read it back through a handle still typed at the
+/// longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::worktree::GitWorktreeAddOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitWorktreeAddOptionsMut<'object, 'static>,
+/// ) -> GitWorktreeAddOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitWorktreeAddOptions<'data> {
     inner: CType<ffi::git_worktree_add_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitWorktreeAddOptions`].

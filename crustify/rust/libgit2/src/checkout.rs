@@ -314,6 +314,12 @@ pub fn git_checkout_head(
 
 /// Wraps: git_checkout_index
 /// Updates the working tree from `index`, or from the repository index when absent.
+///
+/// libgit2 also accepts a null repository together with an index, deriving the
+/// repository from `git_index_owner`. This wrapper deliberately does not: that
+/// form checks a working tree out of a repository no Rust handle borrows, and
+/// it turns the "neither argument given" case into a runtime error instead of a
+/// type error. Callers pass the repository they already hold.
 pub fn git_checkout_index(
     repo: &mut crate::repository::GitRepositoryMut<'_>,
     mut index: Option<&mut crate::index::GitIndexMut<'_>>,
@@ -343,6 +349,10 @@ pub fn git_checkout_init_options(
 
 /// Wraps: git_checkout_tree
 /// Updates the index and worktree from `treeish`, or from HEAD when absent.
+///
+/// As with [`git_checkout_index`], libgit2's null-repository form — which takes
+/// the repository from `git_object_owner(treeish)` — is deliberately not
+/// exposed: it would write a working tree that no Rust handle borrows.
 pub fn git_checkout_tree(
     repo: &mut crate::repository::GitRepositoryMut<'_>,
     treeish: Option<crate::object::GitObjectRef<'_>>,

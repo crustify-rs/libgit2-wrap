@@ -152,10 +152,34 @@ pub trait GitApplyOptionsCallbacks: GitApplyDeltaCallback {
 
 /// Wraps: git_apply_options
 /// Layout-compatible apply options borrowing callback state for `'callback`.
+///
+/// `'callback` is invariant. [`GitApplyOptionsMut::set_callbacks`] stores a
+/// `&'callback mut` receiver in the C struct, and both handles keep handing
+/// the options back out at that lifetime. A covariant `'callback` would let
+/// safe code shrink the parameter on the exclusive handle, install a
+/// shorter-lived receiver, and leave options still typed at the longer
+/// lifetime carrying the released payload into a later `git_apply` call.
+///
+/// Shrinking `'callback` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::apply::GitApplyOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitApplyOptionsMut<'object, 'static>,
+/// ) -> GitApplyOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitApplyOptions<'callback> {
     inner: ffibox::CType<ffi::git_apply_options>,
-    _callback: core::marker::PhantomData<&'callback mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'callback` in
+    // both positions pins it. `&'callback ()` and `&'callback mut ()` are
+    // both covariant and would not. The `fn` pointer keeps the auto traits
+    // unchanged.
+    _callback: core::marker::PhantomData<fn(&'callback ()) -> &'callback ()>,
 }
 
 /// Shared borrow of [`GitApplyOptions`].

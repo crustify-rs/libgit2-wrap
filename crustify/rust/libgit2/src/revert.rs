@@ -40,17 +40,23 @@ pub fn git_revert_commit(
 
 /// Wraps: git_revert
 /// Reverts `commit` into the repository's index and working directory.
+///
+/// The commit is borrowed exclusively for the same reason
+/// [`git_cherrypick`](crate::cherrypick::git_cherrypick) is: the revert
+/// message is built from `git_commit_summary`, which fills the commit's lazy
+/// `summary` cache on first use.
 pub fn git_revert(
     repository: &mut crate::repository::GitRepositoryMut<'_>,
-    commit: crate::commit::GitCommitRef<'_>,
+    commit: &mut crate::commit::GitCommitMut<'_>,
     options: Option<GitRevertOptionsRef<'_, '_>>,
 ) -> Result<(), i32> {
-    // SAFETY: the repository is exclusive; the commit and optional options
-    // remain live and read-only for the synchronous operation.
+    // SAFETY: the repository and the commit are both exclusive for the writes
+    // this call performs through them; the optional options remain live and
+    // read-only for the synchronous operation.
     let status = unsafe {
         crate::ffi::git_revert(
             repository.as_mut_ptr(),
-            commit.as_ptr().cast_mut(),
+            commit.as_mut_ptr(),
             options.map_or(core::ptr::null(), |options| options.as_ptr()),
         )
     };
@@ -73,6 +79,21 @@ pub fn git_revert_options_init(
 mod scheduled_wrapper_tests {
     use super::*;
     use crate::api::revert::GitRevertOptions;
+
+    /// The shape of the working-directory revert.
+    type WorkdirRevert = fn(
+        &mut GitRepositoryMut<'_>,
+        &mut crate::commit::GitCommitMut<'_>,
+        Option<GitRevertOptionsRef<'_, '_>>,
+    ) -> Result<(), i32>;
+
+    #[test]
+    fn the_working_directory_revert_borrows_the_commit_exclusively() {
+        // `git_revert` builds its message from `git_commit_summary`, which
+        // populates `commit->summary` on first use, so the commit cannot be
+        // handed over as a shared handle.
+        let _: WorkdirRevert = git_revert;
+    }
 
     #[test]
     fn initializer_writes_the_current_version() {

@@ -1499,20 +1499,29 @@ pub fn git_merge(
 
 /// Wraps: git_merge_commits
 /// Computes the in-memory index produced by merging two commits.
+///
+/// The repository is borrowed exclusively for the same reason
+/// [`git_merge_trees`] is: this call reaches `git_merge__iterators` through
+/// `merge_annotated_commits`, whose `merge_normalize_opts` installs
+/// `repo->_config` through `git_repository_config__weakptr`, and whose
+/// merge-base walk opens the object database the same way. Both are writes to
+/// repository storage that a shared handle may not publish.
 pub fn git_merge_commits(
-    repo: GitRepositoryRef<'_>,
+    repo: &mut GitRepositoryMut<'_>,
     our_commit: crate::commit::GitCommitRef<'_>,
     their_commit: crate::commit::GitCommitRef<'_>,
     options: Option<crate::api::merge::GitMergeOptionsRef<'_, '_>>,
 ) -> Result<crate::index::GitIndexOwned, i32> {
     let mut out = core::ptr::null_mut();
     let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
-    // SAFETY: the output is writable and every borrowed input remains live for
-    // the synchronous merge; the result is an independent index allocation.
+    // SAFETY: the output is writable, the repository is exclusively borrowed
+    // for the lazy subsystem writes the merge performs, and every other
+    // borrowed input remains live for the synchronous merge; the result is an
+    // independent index allocation.
     let status = unsafe {
         ffi::git_merge_commits(
             &mut out,
-            repo.as_ptr().cast_mut(),
+            repo.as_mut_ptr(),
             our_commit.as_ptr(),
             their_commit.as_ptr(),
             options,
@@ -1543,6 +1552,31 @@ pub fn git_merge_init_options(
 #[cfg(test)]
 mod scheduled_merge_symbol_tests {
     use super::*;
+
+    /// The shape of an in-memory merge over two commits.
+    type CommitMerge = fn(
+        &mut GitRepositoryMut<'_>,
+        crate::commit::GitCommitRef<'_>,
+        crate::commit::GitCommitRef<'_>,
+        Option<crate::api::merge::GitMergeOptionsRef<'_, '_>>,
+    ) -> Result<crate::index::GitIndexOwned, i32>;
+
+    /// The shape of an in-memory merge over three trees.
+    type TreeMerge = fn(
+        &mut GitRepositoryMut<'_>,
+        Option<crate::tree::GitTreeRef<'_>>,
+        Option<crate::tree::GitTreeRef<'_>>,
+        Option<crate::tree::GitTreeRef<'_>>,
+        Option<crate::api::merge::GitMergeOptionsRef<'_, '_>>,
+    ) -> Result<crate::index::GitIndexOwned, i32>;
+
+    #[test]
+    fn in_memory_merges_borrow_the_repository_exclusively() {
+        // Both entry points reach `git_merge__iterators`, which installs the
+        // repository config on first use, so neither accepts a shared handle.
+        let _: CommitMerge = git_merge_commits;
+        let _: TreeMerge = git_merge_trees;
+    }
 
     #[test]
     fn deprecated_initializer_writes_current_merge_defaults() {

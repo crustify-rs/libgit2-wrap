@@ -1557,15 +1557,25 @@ pub fn git_diff_patchid_options_init() -> Result<DiffPatchIdOptions, i32> {
 
 /// Wraps: git_diff_format_email
 /// Appends the deprecated e-mail representation of `diff` to `out`.
+///
+/// The diff is borrowed exclusively. Formatting walks it through
+/// `git_diff_get_stats` and `git_patch_from_diff`, both of which up-reference
+/// the diff and let patch generation record binary and load state back into
+/// its deltas, so this is not a read-only traversal.
+///
+/// libgit2 requires `options` to carry a non-null summary, ID and author; a
+/// value missing any of them fails with an error status rather than
+/// formatting.
 pub fn git_diff_format_email(
     out: &mut GitBufMut<'_>,
-    diff: DiffRef<'_>,
+    diff: &mut DiffMut<'_>,
     options: DiffFormatEmailOptionsRef<'_>,
 ) -> Result<(), i32> {
     // SAFETY: all three typed borrows are live for this synchronous call. The
-    // C body writes only the buffer and merely reads the diff and options.
+    // exclusive diff handle permits the refcount and delta-state writes patch
+    // generation performs, and C retains no pointer after it returns.
     let status = unsafe {
-        ffi::git_diff_format_email(out.as_mut_ptr(), diff.as_ptr().cast_mut(), options.as_ptr())
+        ffi::git_diff_format_email(out.as_mut_ptr(), diff.as_mut_ptr(), options.as_ptr())
     };
     if status == 0 { Ok(()) } else { Err(status) }
 }

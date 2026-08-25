@@ -58,10 +58,38 @@ use crate::ffi;
 /// Wraps: git_submodule_update_options
 /// Layout-compatible submodule-update options borrowing all nested strings,
 /// objects and callback state for `'data`.
+///
+/// `'data` is invariant. The header itself owns no borrowed slot, but the
+/// embedded checkout and fetch options reached through
+/// [`GitSubmoduleUpdateOptionsMut::checkout_options_mut`] and
+/// [`GitSubmoduleUpdateOptionsMut::fetch_options_mut`] inherit `'data`, store
+/// `&'data` strings and callback receivers, and hand them back out through the
+/// matching shared getters. Those nested wrappers pin their own parameter, so
+/// a covariant `'data` here would reach them again: safe code could shrink the
+/// parameter on this exclusive handle, install a shorter-lived proxy URL,
+/// header array or callback receiver through `fetch_options_mut()`, and then
+/// read the released storage back through a handle still typed at the longer
+/// lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::submodule::GitSubmoduleUpdateOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitSubmoduleUpdateOptionsMut<'object, 'static>,
+/// ) -> GitSubmoduleUpdateOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitSubmoduleUpdateOptions<'data> {
     inner: CType<ffi::git_submodule_update_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitSubmoduleUpdateOptions`].
@@ -339,5 +367,22 @@ mod update_options_tests {
         assert!(!view.allow_fetch());
         assert!(view.checkout_options().disable_filters());
         assert_eq!(view.fetch_options().depth(), 2);
+    }
+
+    /// The pinned `'data` still accepts a referent that merely outlives the
+    /// options, so invariance does not force `'static` on callers.
+    #[test]
+    fn pinned_options_accept_a_scoped_referent() {
+        let url = std::ffi::CString::new("http://scoped.invalid/").unwrap();
+        let mut options = GitSubmoduleUpdateOptions::new();
+        options
+            .as_mut()
+            .fetch_options_mut()
+            .proxy_options_mut()
+            .set_url(Some(&url));
+        assert_eq!(
+            options.as_ref().fetch_options().proxy_options().url(),
+            Some(url.as_c_str())
+        );
     }
 }

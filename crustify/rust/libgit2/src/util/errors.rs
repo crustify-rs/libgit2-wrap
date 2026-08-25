@@ -124,7 +124,37 @@ mod tests {
         assert_eq!(snapshot.message.as_deref(), Some(c"wrapper is 100% ready"));
         assert_eq!(snapshot.klass, Ok(GitErrorClass::Ssh));
         assert_eq!(git_error_set(GitErrorClass::Filter, None), Ok(()));
-        assert_eq!(git_error_last().klass, Ok(GitErrorClass::Filter));
+        let snapshot = git_error_last();
+        assert_eq!(snapshot.klass, Ok(GitErrorClass::Filter));
+        // The null-format branch records the class over an emptied buffer.
+        assert_eq!(snapshot.message.as_deref(), Some(c""));
+        git_error_clear();
+        // SAFETY: balances this test's successful initialization.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
+    fn os_class_appends_the_platform_error_and_clears_errno() {
+        // SAFETY: initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        let failure = std::fs::File::open("/crustify/no/such/path").unwrap_err();
+        assert_eq!(failure.raw_os_error(), Some(2));
+        assert_eq!(std::io::Error::last_os_error().raw_os_error(), Some(2));
+
+        assert_eq!(
+            git_error_set(GitErrorClass::Os, Some(format_args!("open failed"))),
+            Ok(())
+        );
+
+        let snapshot = git_error_last();
+        assert_eq!(snapshot.klass, Ok(GitErrorClass::Os));
+        let message = snapshot.message.unwrap();
+        let message = message.to_str().unwrap();
+        assert_eq!(message, "open failed: No such file or directory");
+        // libgit2 consumed the platform error state while formatting.
+        assert_eq!(std::io::Error::last_os_error().raw_os_error(), Some(0));
+
         git_error_clear();
         // SAFETY: balances this test's successful initialization.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
@@ -222,7 +252,24 @@ pub fn git_error_last() -> GitErrorSnapshot {
 ///
 /// Rust performs the formatting so callers never need to satisfy C variadic
 /// argument rules. An interior NUL in the formatted message is rejected.
-/// Passing `None` preserves libgit2's supported null-format behavior.
+/// Passing `None` selects the explicit null-format branch of libgit2's
+/// `git_error_vset`, which records `error_class` with an empty message.
+///
+/// For [`GitErrorClass::Os`] libgit2 samples the calling thread's `errno` and
+/// appends its `strerror` text — behind `": "` when a message was supplied —
+/// then resets `errno` to zero. A caller that still needs the platform error
+/// must read it before calling. Rust renders the message before libgit2 takes
+/// that sample, so a `Display` implementation performing system calls can
+/// overwrite the `errno` libgit2 goes on to report.
+///
+/// libgit2 records nothing when it cannot allocate its thread-local error
+/// state or grow the message buffer, so `Ok(())` reports that the message was
+/// handed over, not that it was stored.
+///
+/// The process must have called `git_libgit2_init` before this function: the
+/// thread-local error state is reached through a TLS key that initialization
+/// allocates, and setting an error beforehand reads and writes through an
+/// unallocated key.
 pub fn git_error_set(
     error_class: GitErrorClass,
     message: Option<fmt::Arguments<'_>>,

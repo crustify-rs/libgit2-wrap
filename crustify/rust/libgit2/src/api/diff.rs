@@ -709,16 +709,10 @@ impl<'a> DiffSimilarityMetricRef<'a> {
         payload: Option<NonNull<core::ffi::c_void>>,
     ) -> Result<Option<DiffSimilaritySignature<'a>>, DiffSimilarityError> {
         if error < 0 {
-            if let Some(signature) = signature {
-                // SAFETY: even on failure libgit2's callback protocol cleans
-                // up a non-null output with the table's paired destructor.
-                unsafe {
-                    free(
-                        signature.as_ptr(),
-                        payload.map_or(core::ptr::null_mut(), NonNull::as_ptr),
-                    )
-                }
-            }
+            // A failing signature callback transfers no token: `similarity_sig`
+            // propagates the status and leaves whatever the callback wrote in
+            // the slot alone, so releasing it here could free a signature the
+            // callback still owns.
             return Err(DiffSimilarityError::Callback(error));
         }
         Ok(signature.map(|ptr| DiffSimilaritySignature {
@@ -880,6 +874,29 @@ mod similarity_metric_tests {
         0
     }
 
+    static PUBLISHING_FAILURE_FREES: AtomicUsize = AtomicUsize::new(0);
+
+    /// A failing signature callback that still writes its output slot, to
+    /// prove the wrapper does not release a token C never transferred.
+    unsafe extern "C" fn failing_file_signature(
+        out: *mut *mut core::ffi::c_void,
+        _file: *const ffi::git_diff_file,
+        _fullpath: *const core::ffi::c_char,
+        payload: *mut core::ffi::c_void,
+    ) -> core::ffi::c_int {
+        // SAFETY: the wrapper supplies a writable output slot, and this
+        // callback keeps ownership of the token it publishes there.
+        unsafe { *out = payload }
+        -1
+    }
+
+    unsafe extern "C" fn counting_free_signature(
+        _signature: *mut core::ffi::c_void,
+        _payload: *mut core::ffi::c_void,
+    ) {
+        PUBLISHING_FAILURE_FREES.fetch_add(1, Ordering::SeqCst);
+    }
+
     #[test]
     fn metric_preserves_layout_and_inline_ownership() {
         fn assert_cell<T: CCell>() {}
@@ -941,6 +958,37 @@ mod similarity_metric_tests {
         assert_eq!(payload.calls, 2);
         drop((from_file, from_buffer));
         assert_eq!(payload.frees, 2);
+    }
+
+    #[test]
+    fn a_failing_signature_callback_keeps_its_published_token() {
+        PUBLISHING_FAILURE_FREES.store(0, Ordering::SeqCst);
+        let mut token = 0u8;
+        let mut metric = CVal::new(DiffSimilarityMetric::zeroed());
+        {
+            let mut metric_mut = metric.as_mut();
+            // SAFETY: `token` outlives `metric`, and the destructor below is
+            // compatible with the tokens this signature callback publishes.
+            unsafe {
+                metric_mut.set_borrowed_payload(NonNull::new(
+                    addr_of_mut!(token).cast::<core::ffi::c_void>(),
+                ));
+                metric_mut.set_file_signature(failing_file_signature);
+                metric_mut.set_free_signature(counting_free_signature);
+            }
+        }
+
+        // SAFETY: as in the protocol test above, an all-zero diff file is
+        // valid initialized storage that the callback does not inspect.
+        let mut raw_file: ffi::git_diff_file = unsafe { core::mem::zeroed() };
+        // SAFETY: `raw_file` remains live and unmodified for this borrow.
+        let file = unsafe { crate::diff::DiffFileRef::from_ptr(addr_of_mut!(raw_file)) }.unwrap();
+
+        assert_eq!(
+            metric.as_ref().file_signature(file, c"file").err(),
+            Some(DiffSimilarityError::Callback(-1))
+        );
+        assert_eq!(PUBLISHING_FAILURE_FREES.load(Ordering::SeqCst), 0);
     }
 
     #[test]
@@ -1104,10 +1152,18 @@ impl DiffFindOptionsMut<'_> {
 
     /// Installs a borrowed custom similarity metric.
     ///
+    /// Unlike the option records that carry a `'data` parameter, this type is
+    /// generated from the plain C layout and cannot express the stored
+    /// borrow, so the obligation is the caller's.
+    ///
     /// # Safety
     ///
-    /// The metric and every payload its callbacks use must remain valid until
-    /// this options record is cleared or is no longer passed to libgit2.
+    /// The metric and every payload its callbacks use must remain valid for
+    /// as long as this options record can still be observed: both while
+    /// libgit2 is passed the record and while safe code can reach the stored
+    /// table again through [`DiffFindOptionsRef::metric`], whose returned
+    /// handle borrows only the options value. Clearing the slot with
+    /// [`clear_metric`](Self::clear_metric) ends the obligation.
     pub unsafe fn set_metric(&mut self, metric: DiffSimilarityMetricRef<'_>) {
         // SAFETY: this live exclusive handle permits the pointer write and the
         // caller upholds the stored borrow's lifetime and callback invariants.
@@ -1341,10 +1397,32 @@ pub trait GitDiffOptionsCallbacks {
 /// Wraps: git_diff_options
 /// Layout-compatible diff options borrowing strings, pathspec storage, and
 /// callback state for `'data`.
+///
+/// `'data` is invariant. The setters store a `&'data` referent into the C
+/// struct while the getters hand one back out, so a covariant `'data` would
+/// let safe code shrink the parameter on the exclusive handle, install a
+/// shorter-lived prefix, pathspec or callback receiver, and then read it
+/// back through a handle still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::diff::GitDiffOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitDiffOptionsMut<'object, 'static>,
+/// ) -> GitDiffOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitDiffOptions<'data> {
     inner: CType<ffi::git_diff_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitDiffOptions`].
@@ -1804,6 +1882,20 @@ mod diff_options_tests {
         assert!(!view.has_notify_callback());
         assert!(!view.has_progress_callback());
         assert!(!view.has_callback_payload());
+    }
+
+    #[test]
+    fn options_keep_a_scoped_data_borrow_across_shorter_object_borrows() {
+        // The `compile_fail` doctest on `GitDiffOptions` covers the direction
+        // that must be rejected. This covers the direction that must keep
+        // working: `'data` is a local scope rather than `'static`, and the
+        // value is reborrowed for several shorter `'object` lifetimes.
+        let prefix = std::ffi::CString::new("scoped/").unwrap();
+        let mut options = GitDiffOptions::new();
+        options.as_mut().set_prefixes(Some(prefix.as_c_str()), None);
+        assert_eq!(options.as_ref().old_prefix(), Some(prefix.as_c_str()));
+        options.as_mut().set_context_lines(9);
+        assert_eq!(options.as_ref().old_prefix(), Some(prefix.as_c_str()));
     }
 
     #[derive(Default)]

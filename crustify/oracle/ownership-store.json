@@ -1000,7 +1000,7 @@
   {
    "name": "git_config_backend_entry",
    "defined_in": "include/git2/sys/config.h",
-   "_comment_agent": "git_config_backend_entry embeds git_config_entry as its first member and installs a required static finalizer callback. Ownership is released by dispatching that callback, directly or through git_config_entry_free.",
+   "_comment_agent": "git_config_backend_entry embeds git_config_entry as its first member and installs a required static finalizer callback. Ownership is released by dispatching that callback, directly or through git_config_entry_free. Reviewed 2026-08-25: config_file, config_mem and config_list all install git_config_list_entry_free, which drops one reference on the owning git_config_list rather than freeing the entry allocation, so an owning wrapper models a claim on the entry.",
    "fields": [
     {
      "name": "free",
@@ -1016,7 +1016,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Every fully constructed backend entry installs a static concrete finalizer. git_config_entry_free casts the embedded base entry back to git_config_backend_entry and invokes this callback unconditionally."
+      "note": "Every fully constructed backend entry installs a static concrete finalizer. git_config_entry_free casts the embedded base entry back to git_config_backend_entry and invokes this callback unconditionally. It releases the caller's claim rather than necessarily freeing the entry: config_file, config_mem and config_list all install git_config_list_entry_free, which drops one reference on the git_config_list the entry is embedded in."
      }
     }
    ]
@@ -1644,7 +1644,7 @@
   {
    "name": "git_diff_similarity_metric",
    "defined_in": "include/git2/diff.h",
-   "_comment_agent": "A metric is a borrowed callback table. payload is an opaque application cookie passed unchanged to every callback; signatures returned by file_signature/buffer_signature are owned by that callback protocol and later released through free_signature, not by the metric struct itself. A valid installed metric supplies all four callbacks.",
+   "_comment_agent": "A metric is a borrowed callback table. payload is an opaque application cookie passed unchanged to every callback; signatures returned by file_signature/buffer_signature are owned by that callback protocol and later released through free_signature, not by the metric struct itself. A valid installed metric supplies all four callbacks. Reviewed 2026-08-25: a signature token transfers to the caller only when its producing callback returns zero; similarity_sig leaves a token published alongside a failure to the callback.",
    "fields": [
     {
      "name": "buffer_signature",
@@ -1660,7 +1660,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Required code pointer; creates an owned opaque signature token from borrowed buffer input."
+      "note": "Required code pointer; creates an owned opaque signature token from borrowed buffer input. As with file_signature, the token transfers on success only."
      }
     },
     {
@@ -1677,7 +1677,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Required code pointer; creates an owned opaque signature token from a borrowed file/path input."
+      "note": "Required code pointer; creates an owned opaque signature token from a borrowed file/path input. The token transfers to the caller on a zero return only: similarity_sig propagates a nonzero status and never releases the slot, and git_diff_find_similar__hashsig_for_file frees its own partial signature without writing the output."
      }
     },
     {
@@ -1857,6 +1857,12 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_fetch_options",
+   "defined_in": "include/git2/remote.h",
+   "_comment_agent": "Borrowed by-value configuration struct with no lifecycle operation: no destructor, disposer or cloner acts on it, and every member is by value. The callbacks, proxy_opts and custom_headers members carry all of the borrowed state; git_remote_connect_options__from_fetch_opts memcpy-shallow-copies them into connect options, and git_remote_connect_options_normalize deep-copies (git_proxy_options_dup, git_strarray_copy) only at connect time, so the caller's proxy URL, header strings and callback payload must stay live for the whole fetch call, not merely for the shallow copy. update_fetchhead is a git_remote_update_flags bit set, not a boolean.",
+   "fields": []
   },
   {
    "name": "git_index",
@@ -2105,7 +2111,7 @@
       },
       "nullable": true,
       "mutable": true,
-      "note": "Optional borrowed object database. indexer_new copies the pointer without up-ref and thin-pack repair uses it after options return, so it must outlive every indexer built from these options."
+      "note": "Optional borrowed object database. indexer_new copies the pointer without up-ref and thin-pack repair uses it after options return, so it must outlive every indexer built from these options and every later read of the options value itself, which hands the same pointer back."
      }
     },
     {
@@ -2681,7 +2687,7 @@
   {
    "name": "git_odb_backend",
    "defined_in": "include/git2/sys/odb_backend.h",
-   "_comment_agent": "git_odb_backend is a public polymorphic vtable. Its callback pointers are fixed borrowed code pointers (all operations optional except free); odb is a nullable mutable back-reference to the database that owns the backend.",
+   "_comment_agent": "git_odb_backend is a public polymorphic vtable. Its callback pointers are fixed borrowed code pointers (all operations optional except free); odb is a nullable mutable back-reference to the database that owns the backend. Reviewed 2026-08-25 against src/libgit2/odb.c: read/read_prefix transfer their git_odb_backend_data_alloc buffer to the caller on a zero return only, so a wrapper must not release a buffer published by a failing callback.",
    "fields": [
     {
      "name": "exists",
@@ -2799,7 +2805,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous. Its published buffer must come from git_odb_backend_data_alloc and transfers to the caller ONLY on a zero return: odb_read_1 propagates a nonzero status without touching the output slot, and frees the buffer with git__free only once a successful read handed it over."
      }
     },
     {
@@ -2833,7 +2839,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous."
+      "note": "Optional function callback borrowed for the complete backend lifetime; invocations are synchronous. As with read, the git_odb_backend_data_alloc buffer transfers on a zero return only; read_prefix_1 leaves a buffer published alongside a failure to the backend."
      }
     },
     {
@@ -3589,6 +3595,12 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_push_options",
+   "defined_in": "include/git2/remote.h",
+   "_comment_agent": "Borrowed by-value configuration struct with no lifecycle operation: no destructor, disposer or cloner acts on it, and every member is by value. The callbacks, proxy_opts, custom_headers and remote_push_options members carry all of the borrowed state, reaching the transport through the same shallow-copy-then-deep-copy path as git_fetch_options, so the caller's strings and callback payload must stay live for the whole push call.",
+   "fields": []
   },
   {
    "name": "git_push_update",
@@ -5284,7 +5296,7 @@
   {
    "name": "git_smart_subtransport_stream",
    "defined_in": "include/git2/sys/transport.h",
-   "_comment_agent": "A stream is a polymorphic header embedded at offset zero in a concrete allocation. Its three callbacks are required static code pointers. The stream borrows its owning subtransport, which outlives it, while ownership of the concrete stream allocation is released through the installed free callback.",
+   "_comment_agent": "A stream is a polymorphic header embedded at offset zero in a concrete allocation. `read` and `free` are required static code pointers; `write` is NOT - libgit2's own HTTP subtransport leaves it null for the two reference-advertisement (GET) services, so a safe wrapper must treat the slot as optional rather than assume it. The stream borrows its owning subtransport, which outlives it, while ownership of the concrete stream allocation is released through the installed free callback.",
    "fields": [
     {
      "name": "free",
@@ -5300,7 +5312,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Required static concrete destructor callback. Smart transport invokes it exactly once for an owned stream before freeing the originating subtransport."
+      "note": "Required static concrete destructor callback; installed by every observed constructor. git_smart__reset_stream (smart.c:57) invokes it exactly once for the current stream and clears the slot, and it always runs before git_smart__free releases the originating subtransport (smart.c:426)."
      }
     },
     {
@@ -5317,7 +5329,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Required static synchronous callback installed by every observed stream constructor; smart transport calls it without a null check."
+      "note": "Required static synchronous callback. Installed on every path of every observed stream constructor, including both http.c service methods (http.c:707 and http.c:710); smart.c:29 calls it without a null check."
      }
     },
     {
@@ -5334,7 +5346,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Every published stream constructor stores the originating subtransport. The stream never frees it; read/write callbacks may mutate it, and smart-transport teardown frees the stream before the subtransport."
+      "note": "Every published stream constructor stores the originating subtransport (git.c:165, http.c:704, ssh_exec.c:100, ssh_libssh2.c:225, winhttp.c:1546, tests/libgit2/transport/register.c:148). The stream never frees it; read/write callbacks may mutate it through OWNING_SUBTRANSPORT, and smart-transport teardown frees the stream before the subtransport."
      }
     },
     {
@@ -5349,9 +5361,9 @@
       "borrowed": {
        "lifetime": "static"
       },
-      "nullable": false,
+      "nullable": true,
       "mutable": false,
-      "note": "Required static synchronous callback installed by every observed stream constructor; smart transport calls it without a null check."
+      "note": "OPTIONAL static synchronous callback, corrected from the earlier 'required' judgement. http.c's http_action installs it only for the POST services (http.c:706-711): a stream created for GIT_SERVICE_UPLOADPACK_LS or GIT_SERVICE_RECEIVEPACK_LS is calloc'd and left with a null write slot. That is safe in C because the smart transport writes only to streams obtained for GIT_SERVICE_UPLOADPACK (smart.c:322) or GIT_SERVICE_RECEIVEPACK (git_smart__get_push_stream), plus the non-RPC goodbye flush in git_smart__close (smart.c:395), and never to an advertisement stream. Every other constructor (git.c:167, ssh_exec.c:102, ssh_libssh2.c:227, winhttp.c:1548, register.c:150) does install it, so nullability is a property of the concrete subtransport and the requested service, not of the struct."
      }
     }
    ]
@@ -6744,8 +6756,8 @@
        "lifetime": "arg:diff"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "diff is read only despite historical non-const spelling"
+      "mutable": true,
+      "note": "Exclusively borrows the diff; the non-const spelling is accurate, not historical. apply_deltas calls apply_one for every delta, which calls git_patch_from_diff. Patch generation writes into the diff: git_diff_file_content__init_from_diff resolves attributes through &diff->attrsession, whose first use preloads the attribute files and sets attr_session->init_setup, and loading a file's content stamps GIT_DIFF_FLAG_BINARY / NOT_BINARY / VALID_ID, the size and the object id into delta->old_file and delta->new_file inside diff->deltas. Ownership is not transferred."
      }
     },
     {
@@ -6842,7 +6854,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "initializer overwrites the options header and retains nothing"
+      "note": "Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]
@@ -6864,8 +6876,8 @@
        "lifetime": "arg:diff"
       },
       "nullable": false,
-      "mutable": false,
-      "note": ""
+      "mutable": true,
+      "note": "Exclusively borrows the diff, exactly as git_apply does: this entry point also reaches apply_deltas and therefore git_patch_from_diff, whose patch generation writes diff->attrsession and the per-delta file flags, sizes and object ids held in diff->deltas. Ownership is not transferred."
      }
     },
     {
@@ -6882,7 +6894,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional options, memcpy'd into a local git_apply_options before use; the nested delta_cb, hunk_cb and payload are only invoked during this call. Ownership is not transferred."
      }
     },
     {
@@ -6919,7 +6931,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": ""
+      "note": "Read-only for the call despite the non-const spelling: git_reader_for_tree only records the pointer in a tree_reader that is freed before this function returns, and tree_reader_read consults it through git_tree_entry_bypath and git_tree_owner. Ownership is not transferred and no reference count is taken."
      }
     },
     {
@@ -6936,7 +6948,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the repository: git_index_new_ext and the blob writes reached through apply_deltas open the object database with git_repository_odb__weakptr, which installs repo->_odb on first use. Ownership is not transferred and nothing retains the pointer."
      }
     }
    ]
@@ -7171,11 +7183,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:out"
       },
       "nullable": false,
       "mutable": false,
-      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+      "note": "RETAINED, not call-scoped: git_blame__alloc stores gbr->repository = repo with no refcount, so the repository must outlive the blame returned in out. git_blame_free does not release it."
      }
     }
    ]
@@ -7263,8 +7275,8 @@
        "lifetime": "arg:blame"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed only for this synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the blame: git_blame_hunk_byline searches with git_vector_bsearch2, which sorts the hunk vector in place and marks it sorted before the search. Ownership is not transferred."
      }
     }
    ],
@@ -8827,7 +8839,7 @@
       },
       "nullable": true,
       "mutable": true,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "note": "Optional index, exclusively borrowed: git_iterator_for_index snapshots it through git_index_snapshot_new, which sorts index->entries in place, and an index with no owner is temporarily re-owned by repo with GIT_REFCOUNT_OWN and released again before returning. A null index selects the repository index. Ownership is not transferred."
      }
     },
     {
@@ -8859,9 +8871,9 @@
       "borrowed": {
        "lifetime": "arg:repo"
       },
-      "nullable": false,
+      "nullable": true,
       "mutable": true,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "note": "Exclusively borrows the repository, which the checkout writes through. Null is accepted only together with a non-null index, whose git_index_owner then supplies the repository; supplying neither is rejected, and a mismatched pair is an error. Ownership is not transferred."
      }
     }
    ]
@@ -9093,9 +9105,9 @@
       "borrowed": {
        "lifetime": "arg:repo"
       },
-      "nullable": false,
+      "nullable": true,
       "mutable": true,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "note": "Exclusively borrows the repository, which the checkout writes through. Null is accepted only together with a non-null treeish, whose git_object_owner then supplies the repository; supplying neither is rejected, and an object from another repository is an error. Ownership is not transferred."
      }
     },
     {
@@ -9134,8 +9146,8 @@
        "lifetime": "arg:commit"
       },
       "nullable": false,
-      "mutable": false,
-      "note": ""
+      "mutable": true,
+      "note": "Exclusively borrows the commit; the non-const spelling is accurate. Building the merge message calls git_commit_summary(commit), which computes the first paragraph of the message and stores it in commit->summary on first use \u2014 the same lazy cache that makes git_commit_summary itself take a non-const commit. Ownership is not transferred and no reference count is taken."
      }
     },
     {
@@ -9152,7 +9164,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional options, copied by cherrypick_normalize_opts into a local git_cherrypick_options whose nested checkout callbacks and payloads are only used during this call. Ownership is not transferred."
      }
     },
     {
@@ -9169,7 +9181,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the repository: the call writes CHERRY_PICK_HEAD and MERGE_MSG, reaches git_merge_trees through git_cherrypick_commit (whose merge_normalize_opts installs repo->_config through git_repository_config__weakptr), takes the repository index and checks it out. Ownership is not transferred."
      }
     }
    ]
@@ -9262,8 +9274,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository: the call forwards it to git_merge_trees, whose merge_normalize_opts installs repo->_config through git_repository_config__weakptr and whose merge machinery opens the object database the same way. Ownership is not transferred and nothing retains the pointer."
      }
     }
    ]
@@ -9286,7 +9298,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Required writable options storage; a deprecated forward to git_cherrypick_options_init. Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]
@@ -9346,7 +9358,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrows a required output slot and writes one newly owned repository allocation on success; failures leave the slot null after releasing partial state."
+      "note": "Borrows a required output slot and writes one newly owned repository allocation on success. C assigns the slot exactly once, at the end of clone_repo; every earlier refusal (an unsupported options version, a non-empty destination reported as GIT_EEXISTS, a failing repository-creation callback, a failing local-clone probe) returns before that assignment and leaves the caller's value untouched. Only a failure that already created the repository stores null, after freeing it and removing the directory. Callers must therefore initialize the slot themselves rather than rely on a null-on-failure contract."
      }
     },
     {
@@ -11818,7 +11830,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "note": "Retained by the returned iterator, not merely read for this call: git_config_iterator_new and git_config_iterator_glob_new assign iter->config = config without a reference count, and all_iter_next reads iter->config->readers on every advance to reach the next backend (whose own iterator may refresh it). Ownership is not transferred."
      }
     },
     {
@@ -11838,7 +11850,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required writable out-slot; success transfers one newly owned iterator that stores the configuration (iter->config) with no reference count, so the iterator must not outlive it."
      }
     },
     {
@@ -11878,7 +11890,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "note": "Retained by the returned iterator, not merely read for this call: git_config_iterator_new and git_config_iterator_glob_new assign iter->config = config without a reference count, and all_iter_next reads iter->config->readers on every advance to reach the next backend (whose own iterator may refresh it). Ownership is not transferred."
      }
     },
     {
@@ -11898,7 +11910,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required writable out-slot; success transfers one newly owned iterator that stores the configuration (iter->config) with no reference count, so the iterator must not outlive it."
      }
     }
    ]
@@ -11921,7 +11933,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "note": "Retained by the returned iterator: the multivar iterator wraps the all_iter that git_config_iterator_new builds, which stores iter->config = config without a reference count and dereferences it on every advance. Ownership is not transferred."
      }
     },
     {
@@ -11958,7 +11970,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required writable out-slot; success transfers one newly owned iterator that stores the configuration (iter->config) with no reference count, so the iterator must not outlive it."
      }
     },
     {
@@ -13798,8 +13810,8 @@
        "lifetime": "arg:diff"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Reads the diff synchronously and retains no pointer."
+      "mutable": true,
+      "note": "Exclusively borrows the diff: formatting runs git_diff_get_stats and git_patch_from_diff, which up-reference it and let patch generation record binary/load state into its deltas. No pointer is retained."
      }
     },
     {
@@ -14087,8 +14099,8 @@
        "lifetime": "arg:new_index"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the index: git_iterator_for_index snapshots it through git_index_snapshot_new, which sorts index->entries in place and bumps the reader count before duplicating the vector. That reordering is the storage git_index_get_byindex addresses by position. Ownership is not transferred."
      }
     },
     {
@@ -14104,8 +14116,8 @@
        "lifetime": "arg:old_index"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the index: git_iterator_for_index snapshots it through git_index_snapshot_new, which sorts index->entries in place and bumps the reader count before duplicating the vector. That reordering is the storage git_index_get_byindex addresses by position. Ownership is not transferred."
      }
     },
     {
@@ -14142,7 +14154,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required output receives one newly owned generated diff on success; diff_generated_alloc stores the repository in diff->base.repo with no reference count, so the result must not outlive it."
      }
     },
     {
@@ -14158,8 +14170,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository and is retained by the returned diff: diff_generated_alloc stores it in diff->base.repo without a reference count, and diff_generated_apply_options runs git_repository_config_snapshot, which installs repo->_config through git_repository_config__weakptr. Ownership is not transferred."
      }
     }
    ]
@@ -14219,7 +14231,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required output receives one newly owned generated diff on success; diff_generated_alloc stores the repository in diff->base.repo with no reference count, so the result must not outlive it."
      }
     },
     {
@@ -14235,8 +14247,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository and is retained by the returned diff: diff_generated_alloc stores it in diff->base.repo without a reference count, diff_load_index re-reads the repository index with git_index_read (clearing it, and freeing every entry a live index handle is lending out, whenever the file changed on disk), and applying the diff options installs repo->_config through git_repository_config_snapshot. Ownership is not transferred."
      }
     }
    ]
@@ -14714,8 +14726,8 @@
        "lifetime": "arg:index"
       },
       "nullable": true,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the index: git_iterator_for_index snapshots it through git_index_snapshot_new, which sorts index->entries in place and bumps the reader count before duplicating the vector. That reordering is the storage git_index_get_byindex addresses by position. Ownership is not transferred. A null index selects the repository index, which diff_load_index re-reads from disk first."
      }
     },
     {
@@ -14769,7 +14781,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required output receives one newly owned generated diff on success; diff_generated_alloc stores the repository in diff->base.repo with no reference count, so the result must not outlive it."
      }
     },
     {
@@ -14785,8 +14797,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository and is retained by the returned diff: diff_generated_alloc stores it in diff->base.repo without a reference count, diff_load_index re-reads the repository index with git_index_read (clearing it, and freeing every entry a live index handle is lending out, whenever the file changed on disk), and applying the diff options installs repo->_config through git_repository_config_snapshot. Ownership is not transferred."
      }
     }
    ]
@@ -14863,7 +14875,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required output receives one newly owned generated diff on success; diff_generated_alloc stores the repository in diff->base.repo with no reference count, so the result must not outlive it."
      }
     },
     {
@@ -14879,8 +14891,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository and is retained by the returned diff: diff_generated_alloc stores it in diff->base.repo without a reference count, and diff_generated_apply_options runs git_repository_config_snapshot, which installs repo->_config through git_repository_config__weakptr. Ownership is not transferred."
      }
     }
    ]
@@ -14940,7 +14952,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required output receives one newly owned generated diff on success; diff_generated_alloc stores the repository in diff->base.repo with no reference count, so the result must not outlive it."
      }
     },
     {
@@ -14956,8 +14968,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository and is retained by the returned diff: diff_generated_alloc stores it in diff->base.repo without a reference count, and the call installs repo->_index through git_repository_index__weakptr and repo->_config through git_repository_config_snapshot. Ownership is not transferred."
      }
     }
    ]
@@ -15000,7 +15012,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Required writable out-slot; success transfers one newly owned pointee."
+      "note": "Required output receives one newly owned generated diff on success; diff_generated_alloc stores the repository in diff->base.repo with no reference count, so the result must not outlive it."
      }
     },
     {
@@ -15016,8 +15028,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository and is retained by the returned diff: diff_generated_alloc stores it in diff->base.repo without a reference count, diff_load_index re-reads the repository index with git_index_read (clearing it, and freeing every entry a live index handle is lending out, whenever the file changed on disk), and applying the diff options installs repo->_config through git_repository_config_snapshot. Ownership is not transferred."
      }
     },
     {
@@ -15056,8 +15068,8 @@
        "lifetime": "arg:commit"
       },
       "nullable": false,
-      "mutable": false,
-      "note": ""
+      "mutable": true,
+      "note": "Exclusively borrows the commit; the non-const spelling is accurate. The header is built from git_commit_summary and git_commit_body, which fill commit->summary and commit->body on first use, and the repository the patch is generated against is derived from the commit itself with git_commit_owner \u2014 so this call also performs the lazy repository writes every generated diff performs (the configuration snapshot and the index re-read) on a repository that is not an argument. Ownership is not transferred and no reference count is taken."
      }
     },
     {
@@ -15164,8 +15176,8 @@
        "lifetime": "arg:diff"
       },
       "nullable": false,
-      "mutable": false,
-      "note": ""
+      "mutable": true,
+      "note": "Exclusively borrows the diff; the non-const spelling is accurate. append_diffstat calls git_diff_get_stats and append_patches calls git_patch_from_diff once per delta; both generate patches, which sets attr_session->init_setup on diff->attrsession and stamps binary flags, sizes and object ids into delta->old_file and delta->new_file inside diff->deltas. Ownership is not transferred."
      }
     },
     {
@@ -15828,8 +15840,8 @@
        "lifetime": "arg:index"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+      "mutable": true,
+      "note": "Borrowed for this synchronous call, but WRITTEN THROUGH: the lookup runs git_index_find -> git_vector_bsearch2, which calls git_vector_sort and reorders index->entries in place before searching. Matches the mutable model already recorded for git_index_get_bypath / git_index_get_byindex / git_index_find_prefix. The callee retains no pointer."
      }
     },
     {
@@ -15936,11 +15948,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:index"
+       "lifetime": "arg:iterator_out"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Synchronous borrowed input; libgit2 retains no pointer."
+      "mutable": true,
+      "note": "RETAINED, not call-scoped: the constructor stores the bare pointer as it->index with no refcount, so index must outlive the iterator in iterator_out. git_index_conflict_next then reads through it and calls git_index_get_byindex, which sorts index->entries in place, so the borrow is exclusive for the iterator's whole life."
      }
     },
     {
@@ -17657,7 +17669,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Reads queued objects from the live mempack backend without taking ownership."
+      "note": "Reads queued commits from the live backend without taking ownership. The pointer is cast unchecked to the private memory_packer_db, so it must be an allocation from git_mempack_new; any other concrete backend is type confusion."
      }
     },
     {
@@ -17740,7 +17752,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Exclusively borrows the mempack backend while freeing and clearing all queued objects."
+      "note": "Exclusively borrows the backend while freeing and clearing all queued objects. The pointer is cast unchecked to the private memory_packer_db, so it must be an allocation from git_mempack_new; any other concrete backend is type confusion."
      }
     }
    ]
@@ -18338,8 +18350,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the repository, as git_merge_trees already records: merge_annotated_commits reaches merge_normalize_opts, which installs repo->_config through git_repository_config__weakptr, and compute_base's git_merge_bases_many opens the object database the same way. Both write repository storage. Ownership is not transferred and nothing retains the pointer."
      }
     },
     {
@@ -20587,11 +20599,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:db"
+       "lifetime": "arg:stream"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrowed for this synchronous call; the callee retains no ownership."
+      "note": "RETAINED, not call-scoped: the returned stream keeps stream->backend, a backend owned by db, and every later read / free dereferences it. db must outlive the stream."
      }
     },
     {
@@ -20681,11 +20693,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:db"
+       "lifetime": "arg:stream"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrowed for this synchronous call; the callee retains no ownership."
+      "note": "RETAINED, not call-scoped: the returned stream keeps stream->backend, a backend owned by db, and every later write / finalize_write / free dereferences it. db must outlive the stream."
      }
     },
     {
@@ -21085,11 +21097,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:db"
+       "lifetime": "arg:out"
       },
       "nullable": false,
       "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred."
+      "note": "RETAINED, not call-scoped: pack_backend__writepack forwards db as git_indexer_options.odb, and git_indexer_new stores it in the indexer the writepack owns. db must outlive the writepack in out."
      }
     },
     {
@@ -21122,11 +21134,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:progress_cb"
+       "lifetime": "arg:out"
       },
       "nullable": true,
       "mutable": true,
-      "note": "Borrowed callback function pointer; ownership is not transferred."
+      "note": "RETAINED, not call-scoped: the progress callback is stored in the writepack's indexer and invoked from append/commit, long after this constructor returns."
      }
     },
     {
@@ -21139,11 +21151,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:progress_payload"
+       "lifetime": "arg:out"
       },
       "nullable": true,
       "mutable": true,
-      "note": "Opaque caller payload borrowed by the paired callback; ownership is not transferred."
+      "note": "RETAINED, not call-scoped: stored beside the callback in the writepack's indexer and passed back on every later append/commit progress report, so it must outlive the writepack in out."
      }
     }
    ]
@@ -23068,8 +23080,8 @@
        "lifetime": "arg:index"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; ownership is not transferred."
+      "mutable": true,
+      "note": "Borrowed for this synchronous call, but WRITTEN THROUGH: git_iterator_for_index -> git_index_snapshot_new calls git_vector_sort on index->entries and increments index->readers for the duration of the walk; git_index_snapshot_release retires both before returning, so no pointer is retained."
      }
     },
     {
@@ -24084,7 +24096,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Required writable options storage; a deprecated forward to git_rebase_options_init. Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]
@@ -27345,7 +27357,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "callback table is copied; nested payload may be used until disconnect"
+      "note": "Optional callback table whose entries and payload outlive this call. The table is memcpy'd into a local git_remote_connect_options and handed to the transport, whose git_smart__connect calls git_remote_connect_options_normalize / git_remote_connect_options_dup and keeps the copy in t->connect_opts. The smart transport then calls callbacks->certificate_check and callbacks->credentials with that stored payload for every later request, until git_remote_disconnect or git_remote_free releases the transport. Ownership is not transferred."
      }
     },
     {
@@ -27362,7 +27374,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "optional string-array header is read by the transport"
+      "note": "Optional header list, deep-copied: git_remote_connect_options_dup calls git_strarray_copy, so neither the array nor its strings need to outlive this call. Ownership is not transferred."
      }
     },
     {
@@ -27379,7 +27391,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "proxy options are copied for transport connection"
+      "note": "Optional proxy options with the same retention as the callbacks: git_proxy_options_dup strdups the url but copies the credentials and certificate_check entries and the payload pointer into t->connect_opts, where the transport uses them until it is freed. Ownership is not transferred."
      }
     },
     {
@@ -27396,7 +27408,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the remote: a successful connect installs remote->transport, and a failure clears it again. Ownership is not transferred."
      }
     }
    ]
@@ -27819,7 +27831,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "NULL selects defaults. The options header is read and copied; nested callback and proxy state may be copied into the connection and remain reachable after download returns while the remote stays connected."
+      "note": "NULL selects defaults. The header is read and copied during the call, and git_remote_connect_options_dup deep-copies custom_headers (git_strarray_copy) and proxy_opts.url (git__strdup) but plain-copies callbacks.payload, proxy_opts.payload and every function pointer into the transport's connect options. Download never disconnects, so those copies stay installed and reachable by later requests (git_smart__credentials, git_smart__certificate_check, handle_proxy_auth); git_smart__close does not dispose them, so they outlive a later git_remote_disconnect and are cleared only by the next normalize or by freeing the transport. The two payload slots therefore need a lifetime longer than the call."
      }
     },
     {
@@ -27928,7 +27940,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "NULL selects defaults. The header is borrowed and copied; early errors after connecting can leave copied nested callback/proxy pointers reachable from the remote connection."
+      "note": "NULL selects defaults. The header is borrowed and copied exactly as for git_remote_download: headers and the proxy URL are deep-copied, while callbacks.payload, proxy_opts.payload and the function pointers are plain-copied into the transport's connect options. The closing git_remote_disconnect does not undo that - git_smart__close leaves connect_opts intact - and the git_remote_capabilities and git_remote_oid_type queries that follow connect_or_reset_options return early on failure without disconnecting at all, leaving the remote connected over the copied payload slots. Those slots therefore need a lifetime longer than the call."
      }
     },
     {
@@ -28146,7 +28158,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]
@@ -28450,7 +28462,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional callback table, used only for this call: git_remote_prune reads callbacks->update_refs / update_tips and callbacks->payload as it deletes each reference and stores no copy. Unlike git_remote_connect, nothing survives the call. Ownership is not transferred."
      }
     },
     {
@@ -28467,7 +28479,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the remote: pruning lists its advertised refs, walks remote->active_refspecs and deletes remote-tracking references through remote->repo. C rejects a remote with no repository (git_remote_create_detached) with GIT_ASSERT before doing any work. Ownership is not transferred."
      }
     }
    ]
@@ -28490,7 +28502,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "NULL selects defaults. The options and nested data are borrowed for the synchronous operation, which disconnects before returning and retains no input ownership."
+      "note": "NULL selects defaults. The options and their nested data are borrowed for the synchronous push and no ownership is taken, but two copies do outlive the call and are unreachable rather than absent: git_remote_connect_options_dup plain-copies callbacks.payload, proxy_opts.payload and the function pointers into the transport's connect options, and git_push_new memcpys the whole callback table into remote->push. Neither is read again - git_remote_push runs git_remote_disconnect on every path that reached git_remote_upload, every later reader of the transport copy normalizes over it first, only do_push reads remote->push->callbacks and it runs inside this call's git_push_finish, and a later git_remote_update_tips passes git_push_update_tips its own callbacks. The nested data therefore need only outlive the call."
      }
     },
     {
@@ -28859,7 +28871,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional callback table, used only for this call: update_tips_for_spec and opportunistic_updates read its update_refs / update_tips entry and payload as each tip is written and store no copy. Unlike git_remote_connect, nothing survives the call. Ownership is not transferred."
      }
     },
     {
@@ -28876,7 +28888,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional NUL-terminated reflog message, read while each reference is updated and copied into the reflog it writes. Ownership is not transferred."
      }
     },
     {
@@ -28893,7 +28905,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the remote: the call truncates FETCH_HEAD and writes remote-tracking references and reflogs through remote->repo, and may run git_remote_prune. Ownership is not transferred."
      }
     }
    ]
@@ -30679,8 +30691,8 @@
        "lifetime": "arg:commit"
       },
       "nullable": false,
-      "mutable": false,
-      "note": ""
+      "mutable": true,
+      "note": "Exclusively borrows the commit, exactly as git_cherrypick does: the revert message is built from git_commit_summary(commit), which fills the commit's lazy summary cache on first use. Ownership is not transferred and no reference count is taken."
      }
     },
     {
@@ -30697,7 +30709,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional options, copied by revert_normalize_opts into a local git_revert_options whose nested checkout callbacks and payloads are only used during this call. Ownership is not transferred."
      }
     },
     {
@@ -30714,7 +30726,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the repository: the call writes REVERT_HEAD and MERGE_MSG, reaches git_merge_trees through git_revert_commit (whose merge_normalize_opts installs repo->_config through git_repository_config__weakptr), takes the repository index and checks it out. Ownership is not transferred."
      }
     }
    ]
@@ -30831,7 +30843,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]
@@ -30947,11 +30959,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:object_out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+      "note": "The looked-up object stores this repository in `object->repo` (object.c) without a reference count, so the repository must outlive the object written to `object_out`. The same constraint binds `reference_out`: a git_reference holds the repository's refdb, which in turn points back at this repository."
      }
     },
     {
@@ -31007,11 +31019,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+      "note": "The looked-up object stores this repository in `object->repo` (object.c) without a reference count, so the repository must outlive the object written to `out`, not merely the call."
      }
     },
     {
@@ -31047,11 +31059,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:hide_cb"
+       "lifetime": "arg:walk"
       },
       "nullable": true,
       "mutable": true,
-      "note": "Borrowed callback function pointer; ownership is not transferred."
+      "note": "RETAINED, not call-scoped: stored as walk->hide_cb and invoked from later git_revwalk_next calls until it is replaced or the walker is freed."
      }
     },
     {
@@ -31064,11 +31076,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:payload"
+       "lifetime": "arg:walk"
       },
       "nullable": true,
       "mutable": true,
-      "note": "Opaque caller payload borrowed by the paired callback; ownership is not transferred."
+      "note": "RETAINED, not call-scoped: stored as walk->hide_cb_payload and handed back to the hide callback on every later walk, so it must outlive the walker or its replacement."
      }
     },
     {
@@ -31314,11 +31326,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:revwalk_out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+      "note": "The walker stores this repository in `walk->repo` (revwalk.c) without taking a reference count, so the repository must outlive the walker written to `revwalk_out`, not merely the call."
      }
     },
     {
@@ -32018,7 +32030,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional options, memcpy'd by normalize_apply_options into a local git_stash_apply_options. The nested progress_cb, progress_payload and checkout callbacks are only used during this call; nothing is retained afterwards. Ownership is not transferred."
      }
     },
     {
@@ -32035,7 +32047,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the repository: the call takes the repository index with git_repository_index, checks the stashed trees out over the working directory and finishes with git_index_write. Ownership is not transferred."
      }
     }
    ]
@@ -32058,7 +32070,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Required writable options storage; a deprecated forward to git_stash_apply_options_init. Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]
@@ -32102,9 +32114,9 @@
       "borrowed": {
        "lifetime": "arg:arg1"
       },
-      "nullable": false,
+      "nullable": true,
       "mutable": false,
-      "note": "NUL-terminated string borrowed only for the synchronous call."
+      "note": "NUL-terminated string borrowed only for the synchronous call. NULLABLE: git_stash_foreach passes git_reflog_entry_message(entry), which returns the entry's `msg` field verbatim. That field is left null by both writers -- refdb_fs.c's reflog parser only allocates it when the line carries a '\\t' message separator, and reflog.c's append only when its `msg` argument is non-null -- so a stash reflog line without a message part reaches the callback as NULL."
      }
     },
     {
@@ -32241,7 +32253,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional options, forwarded unchanged to git_stash_apply and copied there; nothing is retained after the call. Ownership is not transferred."
      }
     },
     {
@@ -32258,7 +32270,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the repository: the call is git_stash_apply followed by git_stash_drop, which rewrites the stash reflog. Ownership is not transferred."
      }
     }
    ]
@@ -32884,11 +32896,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+      "note": "Reaches git_submodule_lookup, and submodule_alloc stores this repository in `sm->repo` (submodule.c) without a reference count, so the repository must outlive the submodule written to `out`. When `out` is null the created submodule is neither returned nor freed (an upstream leak) and the borrow ends with the call."
      }
     },
     {
@@ -33400,11 +33412,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+      "note": "submodule_alloc stores this repository in `sm->repo` (submodule.c) without a reference count, so the repository must outlive the submodule written to `out`. When `out` is null -- the documented existence test -- no submodule survives the call and the borrow ends with it."
      }
     }
    ]
@@ -35265,11 +35277,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrowed for the call; no pointee ownership transfers."
+      "note": "The transaction stores this repository in `tx->repo` (transaction.c:103) without a reference count and reads it back at commit time (transaction.c:165), so the repository must outlive the transaction written to `out`. The refdb it also takes IS reference-counted; the repository pointer is not."
      }
     }
    ]
@@ -36458,11 +36470,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:object_out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrowed for the call; no pointee ownership transfers."
+      "note": "Delegates to git_object_lookup, whose result stores this repository in `object->repo` (object.c) without a reference count, so the repository must outlive the object written to `object_out`."
      }
     }
    ]
@@ -36630,11 +36642,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:out"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed for the call; no pointee ownership transfers."
+      "mutable": true,
+      "note": "Delegates to git_object_lookup, which stores this repository in `object->repo` (object.c:141) without a reference count and caches the parsed object in `repo->objects`, so the repository is written through and must outlive the tree written to `out`, not merely the call."
      }
     }
    ]
@@ -37035,11 +37047,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:builder_p"
       },
       "nullable": false,
       "mutable": false,
-      "note": "Repository borrowed and retained by the resulting builder; a safe owner must tether its lifetime."
+      "note": "Stored in `bld->repo` (tree.c) without a reference count and dereferenced by every later builder operation, so the repository must outlive the builder written to `builder_p`, not merely the call; `git_treebuilder_free` never releases it. This constructor itself only reads the repository: with a source tree it appends entries with validation off, so `check_entry` never runs here."
      }
     },
     {
@@ -37273,7 +37285,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": ""
+      "note": "Required NUL-terminated worktree name, read for path construction and copied into the returned git_worktree by open_worktree_dir. Ownership is not transferred."
      }
     },
     {
@@ -37290,7 +37302,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": ""
+      "note": "Optional options, memcpy'd into a local git_worktree_add_options. opts->ref is validated and duplicated with git_reference_dup rather than retained, and the nested checkout options are only used during this call. Ownership is not transferred."
      }
     },
     {
@@ -37327,7 +37339,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Exclusively borrows the repository: the call may create a branch with git_branch_create, creates the worktree administrative directory under repo->commondir and looks the result up again with git_worktree_lookup. The returned git_worktree stores only owned strings, so it does not retain the repository. Ownership is not transferred."
      }
     },
     {
@@ -37344,7 +37356,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": ""
+      "note": "Required NUL-terminated working-directory path, created on disk and prettified into a local buffer. Ownership is not transferred."
      }
     }
    ]
@@ -37367,7 +37379,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": ""
+      "note": "Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
      }
     }
    ]

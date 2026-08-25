@@ -9,7 +9,7 @@ use ffibox::{CBox, CDropped};
 use crate::api::diff::DiffDeltaRef;
 use crate::diff::{DiffMut, DiffRef};
 use crate::ffi;
-use crate::index::GitIndexRef;
+use crate::index::GitIndexMut;
 use crate::repository::GitRepositoryMut;
 use crate::strarray::GitStrArrayRef;
 use crate::tree::GitTreeRef;
@@ -339,19 +339,24 @@ mod tests {
 
 /// Wraps: git_pathspec_match_index
 /// Matches an index and returns an independently owned list of copied paths.
+///
+/// The index is taken exclusively: building the traversal calls
+/// `git_index_snapshot_new`, which sorts the index's entry vector in place and
+/// registers a reader on it for the duration of the walk.
 pub fn git_pathspec_match_index(
-    index: GitIndexRef<'_>,
+    index: &mut GitIndexMut<'_>,
     flags: u32,
     pathspec: GitPathspecRef<'_>,
 ) -> Result<GitPathspecMatchListOwned, i32> {
     let mut output = core::ptr::null_mut();
-    // SAFETY: the output slot is writable and both shared inputs remain live
-    // for the synchronous traversal. The result owns its pathspec count and
-    // copies matched index pathnames.
+    // SAFETY: the output slot is writable, the index is exclusively borrowed
+    // for the in-place sort and snapshot reader the traversal takes, and the
+    // shared pathspec stays live for it. The result owns its pathspec count
+    // and copies matched index pathnames.
     let status = unsafe {
         ffi::git_pathspec_match_index(
             core::ptr::addr_of_mut!(output),
-            index.as_ptr().cast_mut(),
+            index.as_mut_ptr(),
             flags,
             pathspec.as_ptr().cast_mut(),
         )
@@ -402,6 +407,50 @@ pub fn git_pathspec_match_list_diff_entry<'a>(
     // Otherwise the delta remains valid for the match-list borrow, whose
     // owning wrapper itself retains the source diff lifetime.
     unsafe { DiffDeltaRef::from_ptr(delta.cast_mut()) }
+}
+
+#[cfg(test)]
+mod index_match_tests {
+    use super::*;
+
+    #[test]
+    fn index_match_takes_the_index_exclusively() {
+        // Building the traversal calls `git_index_snapshot_new`, which sorts
+        // the index's entry vector in place and registers a reader on it, so
+        // the index cannot be passed as a shared borrow.
+        let _: fn(
+            &mut GitIndexMut<'_>,
+            u32,
+            GitPathspecRef<'_>,
+        ) -> Result<GitPathspecMatchListOwned, i32> = git_pathspec_match_index;
+
+        // SAFETY: libgit2 initialization is refcounted and balanced once every
+        // allocation this test creates has been released.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        let mut strings = [c"*".as_ptr().cast_mut()];
+        let mut raw = ffi::git_strarray {
+            strings: strings.as_mut_ptr(),
+            count: strings.len(),
+        };
+        // SAFETY: the stack header, pointer run, and static C string remain
+        // live and unchanged while the compiler copies their contents.
+        let source = unsafe { GitStrArrayRef::from_ptr(core::ptr::addr_of_mut!(raw)) }.unwrap();
+        let compiled = git_pathspec_new(source).expect("the pattern should compile");
+
+        let mut index = crate::index::git_index_new().expect("an in-memory index");
+        let matches = git_pathspec_match_index(&mut index.as_mut(), 0, compiled.as_ref())
+            .expect("an empty index matches nothing without failing");
+        assert_eq!(git_pathspec_match_list_entrycount(matches.as_ref()), 0);
+
+        drop(matches);
+        drop(index);
+        drop(compiled);
+
+        // SAFETY: balances the successful initialization after all libgit2
+        // allocations created by this test have been released.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
 }
 
 #[cfg(test)]

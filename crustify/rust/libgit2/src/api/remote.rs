@@ -177,6 +177,12 @@ pub trait GitRemoteCallbackHandler {
     }
 
     /// Receives the deprecated per-reference update notification.
+    ///
+    /// Libgit2 calls the `update_tips` slot only when `update_refs` is unset,
+    /// and [`GitRemoteCallbacksMut::set_handler`] installs every slot. The
+    /// default [`Self::update_refs`] therefore forwards here, so a handler
+    /// that implements only this method still observes every update, exactly
+    /// as a C table that sets only the deprecated slot does.
     fn update_tips(
         &mut self,
         _refname: &CStr,
@@ -211,12 +217,21 @@ pub trait GitRemoteCallbackHandler {
         0
     }
 
-    /// Optionally creates a custom transport. `Ok(None)` selects libgit2's
-    /// registered transport for the URL.
-    fn transport(
+    /// Optionally creates a custom transport for `remote`. `Ok(None)` selects
+    /// libgit2's registered transport for the URL.
+    ///
+    /// A returned transport is transferred to libgit2, which attaches it to
+    /// `remote` and releases it with the remote. Transports built for a remote
+    /// retain it — `git_transport_smart` stores the owner in `transport_smart`
+    /// and dereferences `owner->repo` on every connect — so the result is
+    /// coupled to `'remote` rather than to a free-standing owner. This is the
+    /// same contract as [`GitTransportCallback`](crate::api::transport::GitTransportCallback),
+    /// which wraps the identical `git_transport_cb` slot on the registration
+    /// side.
+    fn transport<'remote>(
         &mut self,
-        _remote: crate::remote::GitRemoteMut<'_>,
-    ) -> Result<Option<crate::sys::transport::GitTransportOwned>, i32> {
+        _remote: crate::remote::GitRemoteMut<'remote>,
+    ) -> Result<Option<crate::sys::transport::GitTransportWithRemote<'remote>>, i32> {
         Ok(None)
     }
 
@@ -240,24 +255,52 @@ pub trait GitRemoteCallbackHandler {
     }
 
     /// Receives the preferred local-reference update notification.
+    ///
+    /// The default forwards to [`Self::update_tips`], because libgit2 prefers
+    /// this slot whenever both are installed and `set_handler` always installs
+    /// both. Overriding this method supersedes `update_tips`, matching a C
+    /// table that sets both.
     fn update_refs(
         &mut self,
-        _refname: &CStr,
-        _old: crate::oid::OidRef<'_>,
-        _new: crate::oid::OidRef<'_>,
+        refname: &CStr,
+        old: crate::oid::OidRef<'_>,
+        new: crate::oid::OidRef<'_>,
         _spec: crate::refspec::GitRefspecRef<'_>,
     ) -> i32 {
-        0
+        self.update_tips(refname, old, new)
     }
 }
 
 /// Wraps: git_remote_callbacks
 /// Layout-compatible remote callback table borrowing one typed receiver for
 /// the table's data lifetime.
+///
+/// `'data` is invariant. [`GitRemoteCallbacksMut::set_handler`] stores a
+/// `&'data mut` receiver in the payload slot, and libgit2 copies the whole
+/// table into connection and push state that outlives the call. A covariant
+/// `'data` would let safe code shrink the parameter on the exclusive handle,
+/// install a shorter-lived receiver, and hand a table still typed at the
+/// longer lifetime to an operation that then calls back into released state.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::remote::GitRemoteCallbacksMut;
+///
+/// fn shrink<'object, 'short>(
+///     callbacks: GitRemoteCallbacksMut<'object, 'static>,
+/// ) -> GitRemoteCallbacksMut<'object, 'short> {
+///     callbacks
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitRemoteCallbacks<'data> {
     inner: ffibox::CType<crate::ffi::git_remote_callbacks>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitRemoteCallbacks`].
@@ -511,6 +554,11 @@ impl<'object, 'data> GitRemoteCallbacksMut<'object, 'data> {
     }
 
     /// Installs every callback trampoline over one typed receiver.
+    ///
+    /// Every slot is filled, so libgit2's preference for `update_refs` over
+    /// the deprecated `update_tips` always applies; see
+    /// [`GitRemoteCallbackHandler::update_tips`] for how the trait keeps both
+    /// reachable.
     ///
     /// # Safety
     /// Libgit2 may copy this table into longer-lived connection and push
@@ -808,7 +856,10 @@ unsafe extern "C" fn transport<H: GitRemoteCallbackHandler>(
     };
     match handler.transport(remote) {
         Ok(transport) => {
-            let raw = transport.map_or(core::ptr::null_mut(), ffibox::CBox::into_raw);
+            let raw = transport.map_or(
+                core::ptr::null_mut(),
+                crate::sys::transport::GitTransportWithRemote::into_raw,
+            );
             // SAFETY: the validated output slot accepts null or the transferred owner.
             unsafe { out.as_ptr().write(raw) };
             0
@@ -897,8 +948,13 @@ unsafe extern "C" fn update_refs<H: GitRemoteCallbackHandler>(
 #[cfg(test)]
 mod remote_callbacks_tests {
     use core::mem::{align_of, size_of};
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    use crate::sys::transport::{GitTransportOwned, GitTransportWithRemote};
 
     use super::*;
+
+    static FACTORY_TRANSPORT_FREES: AtomicUsize = AtomicUsize::new(0);
 
     struct Handler {
         bytes: usize,
@@ -957,15 +1013,212 @@ mod remote_callbacks_tests {
         drop(callbacks);
         assert_eq!(handler.bytes, 3);
     }
+
+    unsafe extern "C" fn free_factory_transport(transport: *mut crate::ffi::git_transport) {
+        FACTORY_TRANSPORT_FREES.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: this destructor is installed only on the unique `Box`
+        // allocation the factory below hands to the C seam.
+        drop(unsafe { Box::from_raw(transport) });
+    }
+
+    /// Builds a transport whose Rust type records the remote it is coupled to,
+    /// exactly as `git_transport_smart` records `t->owner`.
+    struct TransportFactory;
+
+    impl GitRemoteCallbackHandler for TransportFactory {
+        fn transport<'remote>(
+            &mut self,
+            remote: crate::remote::GitRemoteMut<'remote>,
+        ) -> Result<Option<GitTransportWithRemote<'remote>>, i32> {
+            // SAFETY: every field of the bindgen vtable admits the all-zero bit
+            // pattern; each callback slot is a nullable `Option<fn>`.
+            let mut raw: crate::ffi::git_transport = unsafe { core::mem::zeroed() };
+            raw.version = crate::ffi::GIT_TRANSPORT_VERSION;
+            raw.free = Some(free_factory_transport);
+            let raw = Box::into_raw(Box::new(raw));
+            // SAFETY: `raw` is a unique fully initialized transport whose
+            // installed destructor reclaims that exact allocation.
+            let owned = unsafe { GitTransportOwned::from_raw(raw) }.unwrap();
+            Ok(Some(GitTransportWithRemote::from_owned(owned, remote)))
+        }
+    }
+
+    /// Opaque stand-in storage for the remote the trampoline borrows. Nothing
+    /// dereferences it: the factory only records the borrow.
+    fn remote_storage() -> *mut crate::ffi::git_remote {
+        Box::into_raw(Box::new(
+            core::mem::MaybeUninit::<crate::ffi::git_remote>::zeroed(),
+        ))
+        .cast()
+    }
+
+    /// Releases the storage `remote_storage` produced.
+    ///
+    /// # Safety
+    ///
+    /// `raw` must be a pointer `remote_storage` returned and not yet released,
+    /// with no surviving handle over it.
+    unsafe fn drop_remote_storage(raw: *mut crate::ffi::git_remote) {
+        // SAFETY: the caller supplies exactly that allocation, which this
+        // recovers without interpreting its opaque contents.
+        drop(unsafe {
+            Box::from_raw(raw.cast::<core::mem::MaybeUninit<crate::ffi::git_remote>>())
+        });
+    }
+
+    /// Opaque stand-in storage for the refspec the update trampoline borrows.
+    /// Nothing dereferences it: `update_refs` only forwards the handle.
+    fn refspec_storage() -> *mut crate::ffi::git_refspec {
+        Box::into_raw(Box::new(
+            core::mem::MaybeUninit::<crate::ffi::git_refspec>::zeroed(),
+        ))
+        .cast()
+    }
+
+    /// Releases the storage `refspec_storage` produced.
+    ///
+    /// # Safety
+    ///
+    /// `raw` must be a pointer `refspec_storage` returned and not yet
+    /// released, with no surviving handle over it.
+    unsafe fn drop_refspec_storage(raw: *mut crate::ffi::git_refspec) {
+        // SAFETY: the caller supplies exactly that allocation, which this
+        // recovers without interpreting its opaque contents.
+        drop(unsafe {
+            Box::from_raw(raw.cast::<core::mem::MaybeUninit<crate::ffi::git_refspec>>())
+        });
+    }
+
+    /// A handler that implements only the deprecated notification, as a C
+    /// caller filling just `update_tips` would.
+    struct DeprecatedTipsOnly {
+        tips: Vec<std::ffi::CString>,
+    }
+
+    impl GitRemoteCallbackHandler for DeprecatedTipsOnly {
+        fn update_tips(
+            &mut self,
+            refname: &CStr,
+            _old: crate::oid::OidRef<'_>,
+            _new: crate::oid::OidRef<'_>,
+        ) -> i32 {
+            self.tips.push(refname.to_owned());
+            0
+        }
+    }
+
+    #[test]
+    fn update_refs_reaches_a_handler_that_only_implements_update_tips() {
+        // `set_handler` fills both slots and libgit2 then calls `update_refs`
+        // alone, so the deprecated method is reachable only by delegation.
+        let mut handler = DeprecatedTipsOnly { tips: Vec::new() };
+        let raw_spec = refspec_storage();
+        let old = crate::oid::Oid::zeroed();
+        let new = crate::oid::Oid::zeroed();
+        // SAFETY: both IDs and the opaque refspec storage are live for the
+        // call, the name is NUL-terminated, and `handler` is the live typed
+        // receiver this trampoline is instantiated for.
+        let status = unsafe {
+            update_refs::<DeprecatedTipsOnly>(
+                c"refs/heads/main".as_ptr(),
+                core::ptr::addr_of!(old).cast(),
+                core::ptr::addr_of!(new).cast(),
+                raw_spec,
+                core::ptr::addr_of_mut!(handler).cast(),
+            )
+        };
+        assert_eq!(status, 0);
+        assert_eq!(
+            handler.tips,
+            [std::ffi::CString::new("refs/heads/main").unwrap()]
+        );
+        // SAFETY: no handle to the refspec storage survives.
+        unsafe { drop_refspec_storage(raw_spec) };
+    }
+
+    #[test]
+    fn transport_trampoline_transfers_a_remote_coupled_owner() {
+        let before = FACTORY_TRANSPORT_FREES.load(Ordering::SeqCst);
+        let mut handler = TransportFactory;
+        let raw_remote = remote_storage();
+        let mut out: *mut crate::ffi::git_transport = core::ptr::null_mut();
+        // SAFETY: the output slot is writable, the opaque remote storage is
+        // live and exclusively borrowed for the call, and `handler` is the
+        // live typed receiver this trampoline is instantiated for.
+        let status = unsafe {
+            transport::<TransportFactory>(
+                core::ptr::addr_of_mut!(out),
+                raw_remote,
+                core::ptr::addr_of_mut!(handler).cast(),
+            )
+        };
+        assert_eq!(status, 0);
+        assert!(!out.is_null());
+        // SAFETY: the trampoline surrendered exactly one owner through `out`;
+        // libgit2 would take it here, so this test releases it instead.
+        drop(unsafe { GitTransportOwned::from_raw(out) }.unwrap());
+        assert_eq!(FACTORY_TRANSPORT_FREES.load(Ordering::SeqCst), before + 1);
+        // SAFETY: no handle to the remote storage survives.
+        unsafe { drop_remote_storage(raw_remote) };
+    }
+
+    #[test]
+    fn transport_trampoline_defers_to_libgit2_without_a_factory() {
+        let mut handler = Handler { bytes: 0 };
+        let raw_remote = remote_storage();
+        let mut sentinel = 0u8;
+        // A non-null starting value: the trampoline must overwrite the slot,
+        // not merely leave whatever libgit2 had there.
+        let mut out: *mut crate::ffi::git_transport = core::ptr::addr_of_mut!(sentinel).cast();
+        // SAFETY: as above; the default handler builds no transport and the
+        // trampoline must still initialize the output slot.
+        let status = unsafe {
+            transport::<Handler>(
+                core::ptr::addr_of_mut!(out),
+                raw_remote,
+                core::ptr::addr_of_mut!(handler).cast(),
+            )
+        };
+        assert_eq!(status, 0);
+        assert!(out.is_null());
+        // SAFETY: no handle to the remote storage survives.
+        unsafe { drop_remote_storage(raw_remote) };
+    }
 }
 
 /// Wraps: git_fetch_options
 /// Layout-compatible fetch options borrowing their nested callback, proxy and
 /// string-array data for `'data`.
+///
+/// `'data` is invariant. [`GitFetchOptionsMut::set_custom_headers`] stores a
+/// `&'data` string run in the C struct, and the embedded callback and proxy
+/// headers reached through [`GitFetchOptionsMut::callbacks_mut`] and
+/// [`GitFetchOptionsMut::proxy_options_mut`] inherit `'data` and store their
+/// own referents the same way. Every one of those is read back out through a
+/// shared handle, so a covariant `'data` would let safe code shrink the
+/// parameter on the exclusive handle, install a shorter-lived proxy URL,
+/// header array or callback receiver, and then read the released storage back
+/// through a handle still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::remote::GitFetchOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitFetchOptionsMut<'object, 'static>,
+/// ) -> GitFetchOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitFetchOptions<'data> {
     inner: ffibox::CType<crate::ffi::git_fetch_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitFetchOptions`].
@@ -1294,10 +1547,32 @@ impl<'object, 'data> GitFetchOptionsMut<'object, 'data> {
 /// Wraps: git_push_options
 /// Layout-compatible push options borrowing their nested callback, proxy and
 /// string-array data for `'data`.
+///
+/// `'data` is invariant, for the reason given on [`GitFetchOptions`].
+/// [`GitPushOptionsMut::set_custom_headers`] and
+/// [`GitPushOptionsMut::set_remote_push_options`] each store a `&'data` string
+/// run, the embedded callback and proxy headers inherit `'data`, and the
+/// shared handle hands all of them back out.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::remote::GitPushOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitPushOptionsMut<'object, 'static>,
+/// ) -> GitPushOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitPushOptions<'data> {
     inner: ffibox::CType<crate::ffi::git_push_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitPushOptions`].
@@ -1726,5 +2001,69 @@ mod fetch_and_push_options_tests {
         );
         assert_eq!(view.custom_headers().count(), 0);
         assert_eq!(view.remote_push_options().count(), 0);
+    }
+
+    #[test]
+    fn borrowed_data_survives_for_the_pinned_options_lifetime() {
+        let header = c"X-Crustify: 1";
+        let url = c"http://proxy.invalid/";
+        let mut strings = [header.as_ptr().cast_mut()];
+        let mut raw = crate::ffi::git_strarray {
+            strings: strings.as_mut_ptr(),
+            count: strings.len(),
+        };
+        // SAFETY: `raw` is an initialized header whose single entry addresses a
+        // `'static` NUL-terminated string, and nothing else borrows it here.
+        let borrowed =
+            unsafe { crate::strarray::GitStrArrayRef::from_ptr(core::ptr::addr_of_mut!(raw)) }
+                .expect("a stack header is non-null");
+
+        let mut fetch = GitFetchOptions::new();
+        {
+            let mut view = fetch.as_mut();
+            view.set_custom_headers(borrowed);
+            view.proxy_options_mut().set_url(Some(url));
+        }
+        let view = fetch.as_ref();
+        assert_eq!(view.custom_headers().count(), 1);
+        assert_eq!(
+            view.custom_headers().strings().and_then(|run| run.get(0)),
+            Some(header)
+        );
+        assert_eq!(view.proxy_options().url(), Some(url));
+
+        let mut push = GitPushOptions::new();
+        {
+            let mut view = push.as_mut();
+            view.set_custom_headers(borrowed);
+            view.set_remote_push_options(borrowed);
+            view.proxy_options_mut().set_url(Some(url));
+        }
+        let view = push.as_ref();
+        assert_eq!(
+            view.custom_headers().strings().and_then(|run| run.get(0)),
+            Some(header)
+        );
+        assert_eq!(
+            view.remote_push_options()
+                .strings()
+                .and_then(|run| run.get(0)),
+            Some(header)
+        );
+        assert_eq!(view.proxy_options().url(), Some(url));
+    }
+
+    /// The pinned `'data` still accepts a referent that merely outlives the
+    /// options, so the invariance fix does not force `'static` on callers.
+    #[test]
+    fn pinned_options_accept_a_scoped_referent() {
+        let url = std::ffi::CString::new("http://scoped.invalid/").unwrap();
+        let mut fetch = GitFetchOptions::new();
+        fetch.as_mut().proxy_options_mut().set_url(Some(&url));
+        assert_eq!(fetch.as_ref().proxy_options().url(), Some(url.as_c_str()));
+
+        let mut push = GitPushOptions::new();
+        push.as_mut().proxy_options_mut().set_url(Some(&url));
+        assert_eq!(push.as_ref().proxy_options().url(), Some(url.as_c_str()));
     }
 }

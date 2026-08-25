@@ -15,10 +15,32 @@ use crate::transports::credential::GitCredentialType;
 /// Wraps: git_proxy_options
 /// Layout-compatible proxy options borrowing their URL and callback state for
 /// the options data lifetime.
+///
+/// `'data` is invariant. The setters store a `&'data` referent into the C
+/// struct while the getters hand one back out, so a covariant `'data` would
+/// let safe code shrink the parameter on the exclusive handle, install a
+/// shorter-lived URL or callback receiver, and then read it back through a
+/// handle still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::proxy::GitProxyOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitProxyOptionsMut<'object, 'static>,
+/// ) -> GitProxyOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitProxyOptions<'data> {
     inner: CType<ffi::git_proxy_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitProxyOptions`].
@@ -403,6 +425,20 @@ mod tests {
         assert_eq!(status, 7);
         drop(options);
         assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn options_keep_a_scoped_data_borrow_across_shorter_object_borrows() {
+        // The `compile_fail` doctest on `GitProxyOptions` covers the direction
+        // that must be rejected. This covers the direction that must keep
+        // working: `'data` is a local scope rather than `'static`, and the
+        // value is reborrowed for several shorter `'object` lifetimes.
+        let url = std::ffi::CString::new("http://scoped.example").unwrap();
+        let mut options = GitProxyOptions::new();
+        options.as_mut().set_url(Some(url.as_c_str()));
+        assert_eq!(options.as_ref().url(), Some(url.as_c_str()));
+        options.as_mut().set_proxy_type(ProxyType::Specified);
+        assert_eq!(options.as_ref().url(), Some(url.as_c_str()));
     }
 
     #[test]

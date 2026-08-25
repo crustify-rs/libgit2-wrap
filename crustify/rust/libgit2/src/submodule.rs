@@ -441,6 +441,10 @@ pub fn git_submodule_clone(
     submodule: &mut GitSubmoduleMut<'_>,
     options: Option<GitSubmoduleUpdateOptionsRef<'_, '_>>,
 ) -> Result<GitRepositoryOwned, i32> {
+    // C assigns this slot only on the success path, after the clone has
+    // completed; every failure jumps to the cleanup label ahead of that
+    // assignment and leaves the caller's value in place. The null below is
+    // therefore what makes a failure observable, not a defensive extra.
     let mut output = core::ptr::null_mut();
     let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
     // SAFETY: the output is writable, the submodule is live and exclusive for
@@ -454,7 +458,7 @@ pub fn git_submodule_clone(
         )
     };
     // SAFETY: a non-null output is one complete repository owner transferred
-    // by a successful clone; failure leaves it null.
+    // by a successful clone; a failure leaves the initialized null in place.
     let repository = unsafe { GitRepositoryOwned::from_raw(output) };
     submodule_clone_result(status, repository)
 }
@@ -476,6 +480,12 @@ pub fn git_submodule_clone_without_repository(
 
 /// Wraps: git_submodule_update
 /// Initializes when requested, fetches as needed, and checks out the index commit.
+///
+/// The options are taken as a shared handle even though C declares them
+/// `git_submodule_update_options *` without `const`: the implementation copies
+/// the record into a local and works on that copy alone, so the caller's
+/// storage is never written. `git_submodule_clone` already declares the same
+/// argument `const`, and the two agree in behaviour.
 pub fn git_submodule_update(
     submodule: &mut GitSubmoduleMut<'_>,
     initialize: bool,
@@ -594,6 +604,136 @@ mod tests {
         assert_eq!(
             submodule_clone_result(0, None).unwrap_err(),
             ffi::git_error_code_GIT_ERROR
+        );
+    }
+
+    /// A balanced hold on the process-global libgit2 initialization, which
+    /// every allocation below the FFI seam requires.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and refcounted;
+            // `Drop` below balances this successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard; every owner taken under it is dropped first.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// A temporary directory tree removed when the test ends.
+    struct Scratch(std::path::PathBuf);
+
+    impl Scratch {
+        fn new(tag: &str) -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("crustify-submodule-{}-{tag}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            Self(path)
+        }
+
+        /// Writes the minimum object store, ref namespace, `HEAD` and config
+        /// libgit2 needs to open a repository at `git_dir`.
+        fn write_git_dir(git_dir: &std::path::Path, bare: bool) {
+            std::fs::create_dir_all(git_dir.join("objects/info")).expect("an object directory");
+            std::fs::create_dir_all(git_dir.join("objects/pack")).expect("a pack directory");
+            std::fs::create_dir_all(git_dir.join("refs/heads")).expect("a branch namespace");
+            std::fs::create_dir_all(git_dir.join("refs/tags")).expect("a tag namespace");
+            std::fs::write(git_dir.join("HEAD"), b"ref: refs/heads/main\n").expect("a HEAD file");
+            std::fs::write(
+                git_dir.join("config"),
+                format!("[core]\n\trepositoryformatversion = 0\n\tbare = {bare}\n"),
+            )
+            .expect("a config file");
+        }
+
+        /// An empty bare repository, usable as a submodule's clone source.
+        fn into_bare_repository(self) -> Self {
+            Self::write_git_dir(&self.0, true);
+            self
+        }
+
+        /// An empty repository with a working directory, so it can own
+        /// submodules.
+        fn into_working_repository(self) -> Self {
+            Self::write_git_dir(&self.0.join(".git"), false);
+            self
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+
+        fn c_path(&self) -> std::ffi::CString {
+            std::ffi::CString::new(self.0.to_str().expect("a UTF-8 temporary path"))
+                .expect("a path without interior NUL")
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn submodule_clone_transfers_the_checked_out_repository() {
+        let _init = Libgit2Init::acquire();
+        let source = Scratch::new("clone-source").into_bare_repository();
+        let parent = Scratch::new("clone-parent").into_working_repository();
+        let mut repository = crate::repository::git_repository_open(&parent.c_path())
+            .expect("the hand-built parent repository opens");
+        let mut submodule =
+            git_submodule_add_setup(repository.as_mut(), &source.c_path(), c"sub", true)
+                .expect("the submodule structure is created");
+
+        let checkout = git_submodule_clone(&mut submodule.as_mut(), None)
+            .expect("the configured local source clones into the submodule");
+        let path = crate::repository::git_repository_path(checkout.as_ref())
+            .expect("an on-disk submodule repository path");
+        assert_eq!(
+            std::path::Path::new(path.to_str().expect("a UTF-8 path").trim_end_matches('/')),
+            parent.path().join(".git/modules/sub"),
+            "a gitlink submodule keeps its repository under the parent's modules directory"
+        );
+
+        // The same operation without an output slot releases the repository
+        // inside C instead of transferring it.
+        assert_eq!(
+            git_submodule_clone_without_repository(&mut submodule.as_mut(), None),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn submodule_update_reports_the_missing_index_entry() {
+        let _init = Libgit2Init::acquire();
+        let source = Scratch::new("update-source").into_bare_repository();
+        let parent = Scratch::new("update-parent").into_working_repository();
+        let mut repository = crate::repository::git_repository_open(&parent.c_path())
+            .expect("the hand-built parent repository opens");
+        let mut submodule =
+            git_submodule_add_setup(repository.as_mut(), &source.c_path(), c"sub", true)
+                .expect("the submodule structure is created");
+
+        // `git_submodule_add_setup` prepares the working directory but does
+        // not record the submodule in the parent index, which is where update
+        // reads the commit it should check out.
+        assert_eq!(
+            git_submodule_update(&mut submodule.as_mut(), true, None),
+            Err(-1)
+        );
+        let error = crate::util::errors::git_error_last();
+        assert_eq!(
+            error.message.as_deref(),
+            Some(c"could not get ID of submodule in index")
         );
     }
 

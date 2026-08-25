@@ -89,6 +89,11 @@ pub fn git_clone(
     local_path: &CStr,
     options: Option<GitCloneOptionsRef<'_, '_>>,
 ) -> Result<GitRepositoryOwned, i32> {
+    // C does not always write this slot. Its early refusals — an unsupported
+    // options version, a non-empty destination (`GIT_EEXISTS`), a failing
+    // repository-creation callback — all return before the single assignment
+    // at the end of `clone_repo`, so the caller's initial value is what
+    // survives them. The null below is therefore load-bearing, not defensive.
     let mut output = core::ptr::null_mut();
     let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
     // SAFETY: the output slot is writable, both strings are live and
@@ -102,14 +107,19 @@ pub fn git_clone(
             options,
         )
     };
-    // SAFETY: the C contract leaves `output` null on failure or transfers one
-    // complete repository allocation on success.
+    // SAFETY: `output` is either the null it was initialized to, the null C
+    // stores after releasing the partial clone, or one complete repository
+    // allocation transferred on success.
     let repository = unsafe { GitRepositoryOwned::from_raw(output) };
     clone_result(status, repository)
 }
 
 /// Wraps: git_clone_init_options
 /// Initializes deprecated clone-options storage for `version`.
+///
+/// C accepts only a `version` in `1..=GIT_CLONE_OPTIONS_VERSION`. Any other
+/// value is refused before the template is copied, so a failed call leaves the
+/// storage exactly as the caller left it rather than resetting it.
 pub fn git_clone_init_options(
     options: &mut GitCloneOptionsMut<'_, '_>,
     version: core::ffi::c_uint,
@@ -122,7 +132,169 @@ pub fn git_clone_init_options(
 
 #[cfg(test)]
 mod scheduled_clone_symbol_tests {
+    use std::ffi::CString;
+    use std::path::{Path, PathBuf};
+
     use super::*;
+    use crate::api::clone::GitCloneOptions;
+    use crate::api::repository::GitRepositoryInitFlags;
+    use crate::repository::{
+        GitRepositoryOwned, git_repository_init_ext, git_repository_init_init_options,
+        git_repository_is_bare, git_repository_path,
+    };
+
+    /// A balanced hold on the process-global libgit2 initialization, which
+    /// every allocation below the FFI seam requires.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and refcounted;
+            // `Drop` below balances this successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard; every owner taken under it is dropped first.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// A temporary directory tree removed when the test ends.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(tag: &str) -> Self {
+            let path =
+                std::env::temp_dir().join(format!("crustify-clone-{}-{tag}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            Self(path)
+        }
+
+        /// Writes the minimum on-disk bare repository libgit2 will open: an
+        /// object store, a ref namespace, a symbolic `HEAD` and a config. It
+        /// holds no objects, which is exactly the empty-clone case.
+        fn into_empty_bare_repository(self) -> Self {
+            std::fs::create_dir_all(self.0.join("objects/info")).expect("an object directory");
+            std::fs::create_dir_all(self.0.join("objects/pack")).expect("a pack directory");
+            std::fs::create_dir_all(self.0.join("refs/heads")).expect("a branch namespace");
+            std::fs::create_dir_all(self.0.join("refs/tags")).expect("a tag namespace");
+            std::fs::write(self.0.join("HEAD"), b"ref: refs/heads/main\n").expect("a HEAD file");
+            std::fs::write(
+                self.0.join("config"),
+                b"[core]\n\trepositoryformatversion = 0\n\tbare = true\n",
+            )
+            .expect("a config file");
+            self
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+
+        fn c_path(&self) -> CString {
+            CString::new(self.0.to_str().expect("a UTF-8 temporary path"))
+                .expect("a path without interior NUL")
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn assert_bare_repository_at(repository: &GitRepositoryOwned, expected: &Path) {
+        assert!(git_repository_is_bare(repository.as_ref()));
+        let path = git_repository_path(repository.as_ref()).expect("an on-disk repository path");
+        let path = path.to_str().expect("a UTF-8 repository path");
+        assert_eq!(
+            Path::new(path.trim_end_matches('/')),
+            expected,
+            "the clone landed at the requested destination"
+        );
+    }
+
+    #[test]
+    fn cloning_a_local_bare_source_transfers_one_owned_repository() {
+        let _init = Libgit2Init::acquire();
+        let source = Scratch::new("local-source").into_empty_bare_repository();
+        let destination = Scratch::new("local-destination");
+
+        let mut options = GitCloneOptions::new();
+        options.as_mut().set_bare(true);
+        let repository = git_clone(
+            &source.c_path(),
+            &destination.c_path(),
+            Some(options.as_ref()),
+        )
+        .expect("an empty local source clones");
+
+        assert_bare_repository_at(&repository, destination.path());
+    }
+
+    #[test]
+    fn a_refused_clone_reports_the_error_without_a_repository() {
+        let _init = Libgit2Init::acquire();
+        let source = Scratch::new("eexists-source").into_empty_bare_repository();
+        let destination = Scratch::new("eexists-destination");
+        std::fs::create_dir_all(destination.path()).expect("a destination directory");
+        std::fs::write(destination.path().join("occupant"), b"in the way")
+            .expect("a file that makes the destination non-empty");
+
+        // C refuses this before it assigns the output slot, so the wrapper
+        // observes only the null it installed itself. A wrapper that trusted
+        // C to null the slot would hand back uninitialized storage here.
+        let refusal = git_clone(&source.c_path(), &destination.c_path(), None);
+        assert_eq!(
+            refusal.err(),
+            Some(ffi::git_error_code_GIT_EEXISTS),
+            "a non-empty destination is refused and yields no repository"
+        );
+    }
+
+    #[test]
+    fn clone_creates_its_repository_through_a_typed_callback() {
+        let _init = Libgit2Init::acquire();
+        let source = Scratch::new("callback-source").into_empty_bare_repository();
+        let destination = Scratch::new("callback-destination");
+
+        let mut requested: Vec<(CString, bool)> = Vec::new();
+        let mut create = |path: &CStr, bare: bool| {
+            requested.push((path.to_owned(), bare));
+            let mut init = git_repository_init_init_options(1)?;
+            init.as_mut()
+                .set_flags(GitRepositoryInitFlags::MKPATH | GitRepositoryInitFlags::BARE);
+            git_repository_init_ext(path, &mut init.as_mut())
+        };
+
+        let repository = {
+            let mut options = GitCloneOptions::new();
+            {
+                let mut view = options.as_mut();
+                view.set_bare(true);
+                view.set_repository_callback(&mut create);
+            }
+            assert!(options.as_ref().has_repository_callback());
+            git_clone(
+                &source.c_path(),
+                &destination.c_path(),
+                Some(options.as_ref()),
+            )
+            .expect("the callback-created repository clones")
+        };
+
+        assert_bare_repository_at(&repository, destination.path());
+        assert_eq!(
+            requested,
+            vec![(destination.c_path(), true)],
+            "clone asked the callback exactly once, forwarding the bare flag"
+        );
+    }
 
     #[test]
     fn deprecated_initializer_writes_current_clone_defaults() {
@@ -132,6 +304,26 @@ mod scheduled_clone_symbol_tests {
         assert_eq!(view.version(), ffi::GIT_CLONE_OPTIONS_VERSION);
         assert!(!view.bare());
         assert_eq!(view.local(), Ok(GitCloneLocal::Auto));
+    }
+
+    #[test]
+    fn deprecated_initializer_rejects_an_unsupported_version() {
+        let mut options = crate::api::clone::GitCloneOptions::new();
+        options.as_mut().set_bare(true);
+        options.as_mut().set_local(GitCloneLocal::NoLinks);
+
+        for version in [0, ffi::GIT_CLONE_OPTIONS_VERSION + 1] {
+            assert_eq!(
+                git_clone_init_options(&mut options.as_mut(), version),
+                Err(ffi::git_error_code_GIT_ERROR)
+            );
+        }
+
+        // The refusal happens before the template is copied, so the caller's
+        // own values survive it.
+        let view = options.as_ref();
+        assert!(view.bare());
+        assert_eq!(view.local(), Ok(GitCloneLocal::NoLinks));
     }
 
     #[test]

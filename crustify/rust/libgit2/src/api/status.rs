@@ -218,10 +218,32 @@ mod tests {
 /// Wraps: git_status_options
 /// Layout-compatible status options whose baseline and pathspec borrow
 /// caller-owned values for the options lifetime.
+///
+/// `'data` is invariant. The setters store a `&'data` referent into the C
+/// struct while the getters hand one back out, so a covariant `'data` would
+/// let safe code shrink the parameter on the exclusive handle, install a
+/// shorter-lived tree or pathspec, and then read it back through a handle
+/// still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::status::GitStatusOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitStatusOptionsMut<'object, 'static>,
+/// ) -> GitStatusOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitStatusOptions<'data> {
     inner: CType<ffi::git_status_options>,
-    _data: PhantomData<&'data ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitStatusOptions`].
@@ -522,6 +544,29 @@ mod options_tests {
             options.show().unwrap_err().value(),
             ffi::git_status_show_t_GIT_STATUS_SHOW_WORKDIR_ONLY + 1
         );
+    }
+
+    #[test]
+    fn options_keep_a_scoped_data_borrow_across_shorter_object_borrows() {
+        // The `compile_fail` doctest on `GitStatusOptions` covers the direction
+        // that must be rejected. This covers the direction that must keep
+        // working: `'data` is a local scope rather than `'static`, and the
+        // value is reborrowed for several shorter `'object` lifetimes.
+        let mut entries = [c"src/*.c".as_ptr().cast_mut()];
+        let mut raw = ffi::git_strarray {
+            strings: entries.as_mut_ptr(),
+            count: entries.len(),
+        };
+        // SAFETY: the stack header, its pointer slot and the static string all
+        // outlive the options value and are only read.
+        let pathspec = unsafe { GitStrArrayRef::from_ptr(addr_of_mut!(raw)) }.unwrap();
+
+        let mut options = GitStatusOptions::new();
+        options.as_mut().set_pathspec(pathspec);
+        assert_eq!(options.as_ref().pathspec().count(), 1);
+        options.as_mut().set_rename_threshold(60);
+        assert_eq!(options.as_ref().pathspec().count(), 1);
+        assert_eq!(options.as_ref().rename_threshold(), 60);
     }
 }
 

@@ -39,10 +39,34 @@ where
 /// Wraps: git_rebase_options
 /// Layout-compatible rebase options borrowing strings, nested option data,
 /// and callback state for `'data`.
+///
+/// `'data` is invariant. [`GitRebaseOptionsMut::set_rewrite_notes_ref`]
+/// stores a `&'data` string and the two callback setters store a `&'data mut`
+/// receiver, while the getters hand the string back out and libgit2 keeps the
+/// payload for the life of the rebase. A covariant `'data` would let safe
+/// code shrink the parameter on the exclusive handle, install a shorter-lived
+/// string or receiver, and use it through a handle still typed at the longer
+/// lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::rebase::GitRebaseOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitRebaseOptionsMut<'object, 'static>,
+/// ) -> GitRebaseOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitRebaseOptions<'data> {
     inner: CType<ffi::git_rebase_options>,
-    _data: core::marker::PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: core::marker::PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitRebaseOptions`].
@@ -509,38 +533,44 @@ mod tests {
     #[test]
     fn signing_callback_is_typed_invoked_and_cleared() {
         let mut calls = 0usize;
-        let mut callback = |_: &mut GitBufMut<'_>, _: &mut GitBufMut<'_>, content: &CStr| {
-            assert_eq!(content, c"tree deadbeef\n");
-            calls += 1;
-            17
-        };
-        let mut options = GitRebaseOptions::new();
         {
-            let mut view = options.as_mut();
-            view.set_signing_callback(&mut callback);
+            // The receiver is borrowed for the options' whole `'data`, which
+            // the invariant marker pins, so `calls` is readable only once the
+            // options and the closure are both gone.
+            let mut callback = |_: &mut GitBufMut<'_>, _: &mut GitBufMut<'_>, content: &CStr| {
+                assert_eq!(content, c"tree deadbeef\n");
+                calls += 1;
+                17
+            };
+            let mut options = GitRebaseOptions::new();
+            {
+                let mut view = options.as_mut();
+                view.set_signing_callback(&mut callback);
+            }
+
+            let raw = options.as_ref().as_ptr();
+            // SAFETY: the options setter installed this callback with its
+            // matching live payload, and both local buffer headers are valid
+            // and disjoint.
+            let result = unsafe {
+                let mut signature: ffi::git_buf = core::mem::zeroed();
+                let mut field: ffi::git_buf = core::mem::zeroed();
+                addr_of!((*raw).signing_cb)
+                    .read()
+                    .expect("callback installed")(
+                    addr_of_mut!(signature),
+                    addr_of_mut!(field),
+                    c"tree deadbeef\n".as_ptr(),
+                    addr_of!((*raw).payload).read(),
+                )
+            };
+            assert_eq!(result, 17);
+
+            options.as_mut().clear_callbacks();
+            let view = options.as_ref();
+            assert!(!view.has_signing_callback());
+            assert!(!view.has_callback_payload());
         }
-
-        let raw = options.as_ref().as_ptr();
-        // SAFETY: the options setter installed this callback with its matching
-        // live payload, and both local buffer headers are valid and disjoint.
-        let result = unsafe {
-            let mut signature: ffi::git_buf = core::mem::zeroed();
-            let mut field: ffi::git_buf = core::mem::zeroed();
-            addr_of!((*raw).signing_cb)
-                .read()
-                .expect("callback installed")(
-                addr_of_mut!(signature),
-                addr_of_mut!(field),
-                c"tree deadbeef\n".as_ptr(),
-                addr_of!((*raw).payload).read(),
-            )
-        };
-        assert_eq!(result, 17);
         assert_eq!(calls, 1);
-
-        options.as_mut().clear_callbacks();
-        let view = options.as_ref();
-        assert!(!view.has_signing_callback());
-        assert!(!view.has_callback_payload());
     }
 }

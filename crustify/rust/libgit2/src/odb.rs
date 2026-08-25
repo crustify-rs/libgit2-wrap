@@ -611,6 +611,13 @@ where
 ///
 /// On failure, the backend is returned with the status code because libgit2
 /// has not taken ownership of it.
+///
+/// The transfer consumes the owner, and this crate exposes no safe way to
+/// borrow an installed backend back out of the database. A caller that must
+/// keep operating on a concrete backend after installing it — the mempack
+/// dump-and-reset cycle is the published example — recovers its typed handle
+/// through the documented unsafe seam, such as
+/// [`GitMempackBackendRef::from_odb_backend`](crate::odb_mempack::GitMempackBackendRef::from_odb_backend).
 pub fn git_odb_add_backend(
     odb: &mut GitOdbMut<'_>,
     backend: GitOdbBackendOwned,
@@ -711,9 +718,72 @@ mod scheduled_object_api_tests {
         // balanced after the ODB has destroyed its installed backend.
         assert!(unsafe { ffi::git_libgit2_init() } > 0);
         let mut odb = git_odb_new().unwrap();
-        let backend = crate::odb_mempack::git_mempack_new().unwrap();
+        let backend = crate::odb_mempack::GitMempackBackend::into_odb_backend(
+            crate::odb_mempack::git_mempack_new().unwrap(),
+        );
         git_odb_add_backend(&mut odb.as_mut(), backend, 999)
             .unwrap_or_else(|(status, _)| panic!("backend insertion failed: {status}"));
+        drop(odb);
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
+    fn a_read_object_is_an_independently_counted_cache_reference() {
+        use crate::cache::{CacheStoreKind, GitCachedObjRef};
+
+        // SAFETY: initialization is process-global and refcounted; shutdown is
+        // balanced after every owner created here has been dropped.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let mut odb = git_odb_new().unwrap();
+        let backend = crate::odb_mempack::GitMempackBackend::into_odb_backend(
+            crate::odb_mempack::git_mempack_new().unwrap(),
+        );
+        git_odb_add_backend(&mut odb.as_mut(), backend, 999)
+            .unwrap_or_else(|(status, _)| panic!("backend insertion failed: {status}"));
+
+        let body = b"crustify odb object";
+        let mut id = git_odb_write(odb.as_ref(), body, GitObjectType::BLOB).unwrap();
+        // SAFETY: the object ID lives on this stack frame for the whole test
+        // and is only read through the borrowed handle.
+        let id = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(id).cast()) }.unwrap();
+
+        let object = git_odb_read(&mut odb.as_mut(), id).unwrap();
+        assert_eq!(git_odb_object_size(object.as_ref()), body.len());
+        assert_eq!(git_odb_object_type(object.as_ref()), Ok(GitObjectType::BLOB));
+        assert_eq!(
+            git_odb_object_id(object.as_ref()).raw_bytes().elems().take(20).collect::<Vec<_>>(),
+            id.raw_bytes().elems().take(20).collect::<Vec<_>>()
+        );
+        let mut seen = vec![0u8; body.len()];
+        assert!(git_odb_object_data(object.as_ref()).unwrap().copy_to_slice(&mut seen));
+        assert_eq!(seen.as_slice(), body.as_slice());
+
+        // `git_odb_object` is layout-compatible with the cache prefix it embeds
+        // first, which is where its reference count lives.
+        let count = |object: &GitOdbObjectOwned| {
+            // SAFETY: `cached` is the first member of `git_odb_object`, so the
+            // object's address is also the address of a live `git_cached_obj`,
+            // and the handle only outlives this call.
+            let cached = unsafe {
+                GitCachedObjRef::from_ptr(object.as_ref().as_ptr().cast_mut().cast())
+            }
+            .expect("a live object has a non-null address");
+            assert_eq!(cached.store_kind(), Ok(CacheStoreKind::Raw));
+            cached.refcount()
+        };
+
+        // Cloning acquires another reference to the same object rather than
+        // copying it, and dropping the clone leaves the original usable.
+        let before = count(&object);
+        let duplicate = object.clone();
+        assert_eq!(duplicate.as_ref().as_ptr(), object.as_ref().as_ptr());
+        assert_eq!(count(&object), before + 1);
+        drop(duplicate);
+        assert_eq!(count(&object), before);
+        assert_eq!(git_odb_object_size(object.as_ref()), body.len());
+
+        git_odb_object_free(object);
         drop(odb);
         // SAFETY: balances this test's successful initialization call.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);

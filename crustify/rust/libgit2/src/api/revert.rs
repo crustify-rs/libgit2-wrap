@@ -12,10 +12,33 @@ use crate::ffi;
 /// Wraps: git_revert_options
 /// Layout-compatible revert options whose embedded merge and checkout options
 /// borrow their configured data for `'data`.
+///
+/// `'data` is invariant. [`GitRevertOptionsMut::set_merge_options`] copies a
+/// `&'data`-borrowing header into the C struct and the embedded headers hand
+/// their referents back out. A covariant `'data` would let safe code shrink
+/// the parameter on the exclusive handle, install a shorter-lived similarity
+/// metric, merge driver name or checkout string, and then read it back
+/// through a handle still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::revert::GitRevertOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitRevertOptionsMut<'object, 'static>,
+/// ) -> GitRevertOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitRevertOptions<'data> {
     inner: CType<ffi::git_revert_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitRevertOptions`].

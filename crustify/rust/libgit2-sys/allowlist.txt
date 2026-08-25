@@ -147,6 +147,7 @@
 ^git_odb_object_dup$
 ^git_odb_object_free$
 ^git_odb_options$
+^GIT_ODB_OPTIONS_VERSION$
 ^git_oid$
 ^git_oid_t$
 ^git_oidarray$
@@ -413,3 +414,4 @@
 ^git_submodule_update_options$
 ^GIT_SUBMODULE_UPDATE_OPTIONS_VERSION$
 ^(git_clone|git_clone_init_options|git_submodule_clone|git_submodule_update)$
+^GIT_TRANSPORT_VERSION$
