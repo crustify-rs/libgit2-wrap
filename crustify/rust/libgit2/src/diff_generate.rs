@@ -22,10 +22,8 @@ impl RepositoryDiff<'_> {
 
 fn diff_result<'repo>(
     status: i32,
-    out: *mut crate::ffi::git_diff,
+    inner: Option<crate::diff::DiffOwned>,
 ) -> Result<RepositoryDiff<'repo>, i32> {
-    // SAFETY: a non-null constructor output transfers one complete diff count.
-    let inner = unsafe { crate::diff::DiffOwned::from_raw(out) };
     if status == 0 {
         Ok(RepositoryDiff {
             inner: inner.ok_or(crate::ffi::git_error_code_GIT_ERROR)?,
@@ -43,6 +41,24 @@ fn options_ptr(
     options.map_or(core::ptr::null(), |options| options.as_ptr())
 }
 
+#[cfg(test)]
+mod owner_result_tests {
+    use super::*;
+
+    #[test]
+    fn typed_diff_result_rejects_a_null_success_output() {
+        assert!(matches!(
+            diff_result::<'static>(0, None),
+            Err(crate::ffi::git_error_code_GIT_ERROR)
+        ));
+    }
+
+    #[test]
+    fn typed_diff_result_preserves_a_constructor_error() {
+        assert!(matches!(diff_result::<'static>(-7, None), Err(-7)));
+    }
+}
+
 /// Wraps: git_diff_index_to_index
 /// Creates a generated diff between two index snapshots.
 pub fn git_diff_index_to_index<'repo>(
@@ -53,17 +69,19 @@ pub fn git_diff_index_to_index<'repo>(
 ) -> Result<RepositoryDiff<'repo>, i32> {
     let mut out = core::ptr::null_mut();
     // SAFETY: the output is writable and all borrowed inputs remain live for
-    // generation; the returned wrapper keeps the stored repository live.
-    let status = unsafe {
-        crate::ffi::git_diff_index_to_index(
+    // generation. A non-null output transfers one complete count, which is
+    // adopted before leaving this FFI seam.
+    let (status, inner) = unsafe {
+        let status = crate::ffi::git_diff_index_to_index(
             &mut out,
             repo.as_ptr().cast_mut(),
             old_index.as_ptr().cast_mut(),
             new_index.as_ptr().cast_mut(),
             options_ptr(options),
-        )
+        );
+        (status, crate::diff::DiffOwned::from_raw(out))
     };
-    diff_result(status, out)
+    diff_result(status, inner)
 }
 
 /// Wraps: git_diff_index_to_workdir
@@ -78,16 +96,18 @@ pub fn git_diff_index_to_workdir<'repo>(
         .as_mut()
         .map_or(core::ptr::null_mut(), |index| index.as_mut_ptr());
     // SAFETY: output and optional index are writable, all inputs are live for
-    // generation, and the result carries the retained repository lifetime.
-    let status = unsafe {
-        crate::ffi::git_diff_index_to_workdir(
+    // generation, and a transferred output count is adopted before leaving
+    // the seam. The result carries the retained repository lifetime.
+    let (status, inner) = unsafe {
+        let status = crate::ffi::git_diff_index_to_workdir(
             &mut out,
             repo.as_ptr().cast_mut(),
             index,
             options_ptr(options),
-        )
+        );
+        (status, crate::diff::DiffOwned::from_raw(out))
     };
-    diff_result(status, out)
+    diff_result(status, inner)
 }
 
 /// Wraps: git_diff_tree_to_index
@@ -101,18 +121,20 @@ pub fn git_diff_tree_to_index<'repo>(
     let mut out = core::ptr::null_mut();
     let old_tree = old_tree.map_or(core::ptr::null_mut(), |tree| tree.as_ptr().cast_mut());
     let index = index.map_or(core::ptr::null_mut(), |index| index.as_ptr().cast_mut());
-    // SAFETY: the output is writable, optional inputs are null or live, and
-    // the result retains only the repository pointer whose lifetime it carries.
-    let status = unsafe {
-        crate::ffi::git_diff_tree_to_index(
+    // SAFETY: the output is writable, optional inputs are null or live, and a
+    // non-null output transfers one complete count. The result retains only
+    // the repository pointer whose lifetime it carries.
+    let (status, inner) = unsafe {
+        let status = crate::ffi::git_diff_tree_to_index(
             &mut out,
             repo.as_ptr().cast_mut(),
             old_tree,
             index,
             options_ptr(options),
-        )
+        );
+        (status, crate::diff::DiffOwned::from_raw(out))
     };
-    diff_result(status, out)
+    diff_result(status, inner)
 }
 
 /// Wraps: git_diff_tree_to_tree
@@ -126,18 +148,20 @@ pub fn git_diff_tree_to_tree<'repo>(
     let mut out = core::ptr::null_mut();
     let old_tree = old_tree.map_or(core::ptr::null_mut(), |tree| tree.as_ptr().cast_mut());
     let new_tree = new_tree.map_or(core::ptr::null_mut(), |tree| tree.as_ptr().cast_mut());
-    // SAFETY: the output is writable and every non-null borrowed input remains
-    // live for generation; the result keeps the stored repository live.
-    let status = unsafe {
-        crate::ffi::git_diff_tree_to_tree(
+    // SAFETY: the output is writable, every non-null borrowed input remains
+    // live for generation, and a non-null output transfers one complete count.
+    // The result keeps the stored repository live.
+    let (status, inner) = unsafe {
+        let status = crate::ffi::git_diff_tree_to_tree(
             &mut out,
             repo.as_ptr().cast_mut(),
             old_tree,
             new_tree,
             options_ptr(options),
-        )
+        );
+        (status, crate::diff::DiffOwned::from_raw(out))
     };
-    diff_result(status, out)
+    diff_result(status, inner)
 }
 
 /// Wraps: git_diff_tree_to_workdir
@@ -149,17 +173,19 @@ pub fn git_diff_tree_to_workdir<'repo>(
 ) -> Result<RepositoryDiff<'repo>, i32> {
     let mut out = core::ptr::null_mut();
     let old_tree = old_tree.map_or(core::ptr::null_mut(), |tree| tree.as_ptr().cast_mut());
-    // SAFETY: the output is writable and optional inputs are null or live; the
-    // result's repository borrow covers every later use of its stored pointer.
-    let status = unsafe {
-        crate::ffi::git_diff_tree_to_workdir(
+    // SAFETY: the output is writable, optional inputs are null or live, and a
+    // non-null output transfers one complete count. The result's repository
+    // borrow covers every later use of its stored pointer.
+    let (status, inner) = unsafe {
+        let status = crate::ffi::git_diff_tree_to_workdir(
             &mut out,
             repo.as_ptr().cast_mut(),
             old_tree,
             options_ptr(options),
-        )
+        );
+        (status, crate::diff::DiffOwned::from_raw(out))
     };
-    diff_result(status, out)
+    diff_result(status, inner)
 }
 
 /// Wraps: git_diff_tree_to_workdir_with_index
@@ -171,15 +197,17 @@ pub fn git_diff_tree_to_workdir_with_index<'repo>(
 ) -> Result<RepositoryDiff<'repo>, i32> {
     let mut out = core::ptr::null_mut();
     let tree = tree.map_or(core::ptr::null_mut(), |tree| tree.as_ptr().cast_mut());
-    // SAFETY: the output is writable and optional inputs are null or live; the
-    // returned wrapper retains the repository lifetime stored by the diff.
-    let status = unsafe {
-        crate::ffi::git_diff_tree_to_workdir_with_index(
+    // SAFETY: the output is writable, optional inputs are null or live, and a
+    // non-null output transfers one complete count. The returned wrapper
+    // retains the repository lifetime stored by the diff.
+    let (status, inner) = unsafe {
+        let status = crate::ffi::git_diff_tree_to_workdir_with_index(
             &mut out,
             repo.as_ptr().cast_mut(),
             tree,
             options_ptr(options),
-        )
+        );
+        (status, crate::diff::DiffOwned::from_raw(out))
     };
-    diff_result(status, out)
+    diff_result(status, inner)
 }

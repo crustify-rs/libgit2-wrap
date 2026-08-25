@@ -33,13 +33,31 @@ impl GitGeneratedPatch<'_> {
     }
 }
 
-fn patch_result(status: i32, raw: *mut ffi::git_patch) -> Result<GitPatchOwned, i32> {
-    if status != 0 {
-        return Err(status);
+fn patch_result(status: i32, patch: Option<GitPatchOwned>) -> Result<GitPatchOwned, i32> {
+    if status == 0 {
+        patch.ok_or(ffi::git_error_code_GIT_ERROR)
+    } else {
+        drop(patch);
+        Err(status)
     }
-    // SAFETY: a successful patch constructor publishes one complete owned
-    // patch reference in its required output slot.
-    unsafe { GitPatchOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+#[cfg(test)]
+mod owner_result_tests {
+    use super::*;
+
+    #[test]
+    fn typed_patch_result_rejects_a_null_success_output() {
+        assert!(matches!(
+            patch_result(0, None),
+            Err(ffi::git_error_code_GIT_ERROR)
+        ));
+    }
+
+    #[test]
+    fn typed_patch_result_preserves_a_constructor_error() {
+        assert!(matches!(patch_result(-7, None), Err(-7)));
+    }
 }
 
 /// Wraps: git_patch_from_blob_and_buffer
@@ -53,10 +71,10 @@ pub fn git_patch_from_blob_and_buffer<'input>(
 ) -> Result<GitGeneratedPatch<'input>, i32> {
     let mut raw = core::ptr::null_mut();
     // SAFETY: the output slot is writable; every optional object, string and
-    // options value is live for the call. `buffer` stays borrowed by the
-    // returned wrapper because the generated patch retains spans into it.
-    let status = unsafe {
-        ffi::git_patch_from_blob_and_buffer(
+    // options value is live for the call. Success transfers one complete patch
+    // count. `buffer` stays borrowed because the patch retains spans into it.
+    let (status, patch) = unsafe {
+        let status = ffi::git_patch_from_blob_and_buffer(
             core::ptr::addr_of_mut!(raw),
             old_blob.map_or(core::ptr::null(), |blob| blob.as_ptr()),
             old_path.map_or(core::ptr::null(), |path| path.as_ptr()),
@@ -64,10 +82,14 @@ pub fn git_patch_from_blob_and_buffer<'input>(
             buffer.len(),
             buffer_path.map_or(core::ptr::null(), |path| path.as_ptr()),
             options.map_or(core::ptr::null(), |options| options.as_ptr()),
-        )
+        );
+        let patch = (status == 0)
+            .then(|| GitPatchOwned::from_raw(raw))
+            .flatten();
+        (status, patch)
     };
     Ok(GitGeneratedPatch {
-        patch: patch_result(status, raw)?,
+        patch: patch_result(status, patch)?,
         _inputs: PhantomData,
     })
 }
@@ -83,20 +105,24 @@ pub fn git_patch_from_blobs<'input>(
 ) -> Result<GitGeneratedPatch<'input>, i32> {
     let mut raw = core::ptr::null_mut();
     // SAFETY: the output slot is writable and all optional borrowed inputs
-    // remain live for the call. Libgit2 duplicates blob references and copies
-    // the paths needed by the returned patch.
-    let status = unsafe {
-        ffi::git_patch_from_blobs(
+    // remain live for the call. Success transfers one complete patch count.
+    // Libgit2 duplicates blob references and copies the retained paths.
+    let (status, patch) = unsafe {
+        let status = ffi::git_patch_from_blobs(
             core::ptr::addr_of_mut!(raw),
             old_blob.map_or(core::ptr::null(), |blob| blob.as_ptr()),
             old_path.map_or(core::ptr::null(), |path| path.as_ptr()),
             new_blob.map_or(core::ptr::null(), |blob| blob.as_ptr()),
             new_path.map_or(core::ptr::null(), |path| path.as_ptr()),
             options.map_or(core::ptr::null(), |options| options.as_ptr()),
-        )
+        );
+        let patch = (status == 0)
+            .then(|| GitPatchOwned::from_raw(raw))
+            .flatten();
+        (status, patch)
     };
     Ok(GitGeneratedPatch {
-        patch: patch_result(status, raw)?,
+        patch: patch_result(status, patch)?,
         _inputs: PhantomData,
     })
 }
@@ -112,9 +138,10 @@ pub fn git_patch_from_buffers<'input>(
 ) -> Result<GitGeneratedPatch<'input>, i32> {
     let mut raw = core::ptr::null_mut();
     // SAFETY: the output slot is writable; strings and options are live for
-    // the call, and both buffers stay borrowed for the returned patch's life.
-    let status = unsafe {
-        ffi::git_patch_from_buffers(
+    // the call, and success transfers one complete patch count. Both buffers
+    // stay borrowed for the returned patch's life.
+    let (status, patch) = unsafe {
+        let status = ffi::git_patch_from_buffers(
             core::ptr::addr_of_mut!(raw),
             old_buffer.as_ptr().cast(),
             old_buffer.len(),
@@ -123,10 +150,14 @@ pub fn git_patch_from_buffers<'input>(
             new_buffer.len(),
             new_path.map_or(core::ptr::null(), |path| path.as_ptr()),
             options.map_or(core::ptr::null(), |options| options.as_ptr()),
-        )
+        );
+        let patch = (status == 0)
+            .then(|| GitPatchOwned::from_raw(raw))
+            .flatten();
+        (status, patch)
     };
     Ok(GitGeneratedPatch {
-        patch: patch_result(status, raw)?,
+        patch: patch_result(status, patch)?,
         _inputs: PhantomData,
     })
 }
