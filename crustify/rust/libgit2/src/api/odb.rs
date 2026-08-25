@@ -1,5 +1,6 @@
 //! Safe wrappers for libgit2 odb APIs.
 
+use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CVal, CValued};
@@ -160,5 +161,145 @@ mod tests {
         // handle.
         let options = unsafe { GitOdbOptionsRef::from_ptr(&raw mut raw) }.unwrap();
         assert_eq!(options.oid_type().unwrap_err().value(), invalid);
+    }
+}
+
+/// Wraps: git_odb_lookup_flags_t
+/// A checked set of flags controlling object-database lookups.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitOdbLookupFlags(ffi::git_odb_lookup_flags_t);
+
+impl GitOdbLookupFlags {
+    /// Refresh the object database after a failed first lookup.
+    pub const DEFAULT: Self = Self(0);
+    /// Do not refresh after a failed lookup.
+    pub const NO_REFRESH: Self = Self(ffi::git_odb_lookup_flags_t_GIT_ODB_LOOKUP_NO_REFRESH);
+    /// Every lookup flag published by this libgit2 version.
+    pub const ALL: Self = Self(Self::NO_REFRESH.0);
+
+    /// Converts raw bits when every bit is published by libgit2.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_odb_lookup_flags_t) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 bit set.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_odb_lookup_flags_t {
+        self.0
+    }
+
+    /// Returns whether the default lookup behavior is selected.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every flag in `other` is present.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any flag in `other` is present.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl From<GitOdbLookupFlags> for ffi::git_odb_lookup_flags_t {
+    fn from(flags: GitOdbLookupFlags) -> Self {
+        flags.bits()
+    }
+}
+
+impl TryFrom<ffi::git_odb_lookup_flags_t> for GitOdbLookupFlags {
+    type Error = ffi::git_odb_lookup_flags_t;
+
+    fn try_from(bits: ffi::git_odb_lookup_flags_t) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl BitOr for GitOdbLookupFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitOdbLookupFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitOdbLookupFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitOdbLookupFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for GitOdbLookupFlags {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(!self.0 & Self::ALL.0)
+    }
+}
+
+#[cfg(test)]
+mod lookup_flag_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn published_lookup_flags_validate_and_convert() {
+        assert_eq!(
+            GitOdbLookupFlags::from_bits(0),
+            Some(GitOdbLookupFlags::DEFAULT)
+        );
+        assert!(GitOdbLookupFlags::DEFAULT.is_empty());
+        assert!(GitOdbLookupFlags::NO_REFRESH.contains(GitOdbLookupFlags::NO_REFRESH));
+        assert!(GitOdbLookupFlags::NO_REFRESH.intersects(GitOdbLookupFlags::NO_REFRESH));
+        assert_eq!(
+            ffi::git_odb_lookup_flags_t::from(GitOdbLookupFlags::NO_REFRESH),
+            GitOdbLookupFlags::NO_REFRESH.bits()
+        );
+    }
+
+    #[test]
+    fn unknown_lookup_flags_are_rejected() {
+        let unknown = GitOdbLookupFlags::ALL.bits() << 1;
+        assert_eq!(GitOdbLookupFlags::from_bits(unknown), None);
+        assert_eq!(GitOdbLookupFlags::try_from(unknown), Err(unknown));
+    }
+
+    #[test]
+    fn lookup_flags_preserve_the_c_enum_layout() {
+        assert_eq!(
+            size_of::<GitOdbLookupFlags>(),
+            size_of::<ffi::git_odb_lookup_flags_t>()
+        );
+        assert_eq!(
+            align_of::<GitOdbLookupFlags>(),
+            align_of::<ffi::git_odb_lookup_flags_t>()
+        );
     }
 }

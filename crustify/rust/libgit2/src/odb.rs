@@ -6,6 +6,7 @@ use core::ptr::NonNull;
 
 use ffibox::{CBox, CCloned, CSlice};
 
+pub use crate::api::odb::GitOdbLookupFlags;
 use crate::api::odb_backend::{
     GitOdbStreamMut, GitOdbStreamOwned, OdbWritepackMut, OdbWritepackOwned, OdbWritepackRef,
 };
@@ -137,24 +138,6 @@ impl GitOdbScopedStream<'_> {
     /// Exclusively reborrows the underlying stream.
     pub fn as_mut(&mut self) -> GitOdbStreamMut<'_> {
         self.inner.as_mut()
-    }
-}
-
-/// Checked lookup flags for [`git_odb_exists_ext`].
-#[repr(transparent)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct GitOdbLookupFlags(u32);
-
-impl GitOdbLookupFlags {
-    /// Automatically refresh the ODB after a failed first lookup.
-    pub const DEFAULT: Self = Self(0);
-    /// Do not refresh after a failed lookup.
-    pub const NO_REFRESH: Self = Self(ffi::git_odb_lookup_flags_t_GIT_ODB_LOOKUP_NO_REFRESH);
-
-    /// Returns the raw published bit set.
-    #[must_use]
-    pub const fn bits(self) -> u32 {
-        self.0
     }
 }
 

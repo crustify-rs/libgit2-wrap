@@ -4,6 +4,7 @@
 #include <git2/sys/config.h>
 #include <git2/sys/odb_backend.h>
 #include <git2/sys/mempack.h>
+#include <git2/sys/midx.h>
 #include <git2/sys/refdb_backend.h>
 #include <git2/sys/repository.h>
 #include <git2/sys/transport.h>

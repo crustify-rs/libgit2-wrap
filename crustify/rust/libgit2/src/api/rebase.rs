@@ -140,7 +140,7 @@ impl<'data> GitRebaseOptions<'data> {
             view.merge_options_mut()
                 .set_version(ffi::GIT_MERGE_OPTIONS_VERSION);
             view.merge_options_mut()
-                .set_flags(ffi::git_merge_flag_t_GIT_MERGE_FIND_RENAMES);
+                .set_flags(crate::api::merge::GitMergeFlags::FIND_RENAMES);
             view.checkout_options_mut()
                 .set_version(ffi::GIT_CHECKOUT_OPTIONS_VERSION);
         }
@@ -498,7 +498,7 @@ mod tests {
         assert!(view.rewrite_notes_ref().is_none());
         assert_eq!(
             view.merge_options().flags(),
-            ffi::git_merge_flag_t_GIT_MERGE_FIND_RENAMES
+            Ok(crate::api::merge::GitMergeFlags::FIND_RENAMES)
         );
         assert_eq!(
             view.checkout_options().version(),

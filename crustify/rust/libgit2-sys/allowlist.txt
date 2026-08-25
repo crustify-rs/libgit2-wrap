@@ -80,6 +80,8 @@
 ^git_revwalk_free$
 ^git_merge_file_favor_t$
 ^git_merge_flag_t$
+^git_midx_writer$
+^git_midx_writer_free$
 ^git_merge_options$
 ^GIT_MERGE_OPTIONS_VERSION$
 ^git_merge_file_input$
@@ -367,6 +369,7 @@
 ^git_note_(author|committer|create|remove)$
 ^git_odb_(add_disk_alternate|exists|exists_ext|exists_prefix|foreach|new|open_rstream|open_wstream|read_header|refresh|stream_finalize_write|stream_read|stream_write)$
 ^git_odb_lookup_flags_t$
+^git_odb_backend_loose_flag_t$
 ^git_submodule_(add_finalize|add_setup|add_to_index|branch|head_id|ignore|index_id|init|lookup|name|open|path|reload|repo_init|set_branch|set_ignore)$
 ^git_stash_save_options$
 ^GIT_STASH_SAVE_OPTIONS_VERSION$

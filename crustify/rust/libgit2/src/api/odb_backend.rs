@@ -1,5 +1,6 @@
 //! Safe wrappers for libgit2 odb_backend APIs.
 
+use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 use core::ptr::NonNull;
 
 use ffibox::CBox;
@@ -801,5 +802,145 @@ mod writepack_tests {
 
         drop(writepack);
         assert_eq!(FREES.load(Ordering::SeqCst), 1);
+    }
+}
+
+/// Wraps: git_odb_backend_loose_flag_t
+/// A checked set of flags configuring a loose-object backend.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitOdbBackendLooseFlags(ffi::git_odb_backend_loose_flag_t);
+
+impl GitOdbBackendLooseFlags {
+    /// Use the backend's default durability behavior.
+    pub const NONE: Self = Self(0);
+    /// Flush loose-object data to durable storage when writing.
+    pub const FSYNC: Self = Self(ffi::git_odb_backend_loose_flag_t_GIT_ODB_BACKEND_LOOSE_FSYNC);
+    /// Every loose-backend flag published by this libgit2 version.
+    pub const ALL: Self = Self(Self::FSYNC.0);
+
+    /// Converts raw bits when every bit is published by libgit2.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_odb_backend_loose_flag_t) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 bit set.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_odb_backend_loose_flag_t {
+        self.0
+    }
+
+    /// Returns whether no optional behavior is selected.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every flag in `other` is present.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any flag in `other` is present.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl From<GitOdbBackendLooseFlags> for ffi::git_odb_backend_loose_flag_t {
+    fn from(flags: GitOdbBackendLooseFlags) -> Self {
+        flags.bits()
+    }
+}
+
+impl TryFrom<ffi::git_odb_backend_loose_flag_t> for GitOdbBackendLooseFlags {
+    type Error = ffi::git_odb_backend_loose_flag_t;
+
+    fn try_from(bits: ffi::git_odb_backend_loose_flag_t) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl BitOr for GitOdbBackendLooseFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitOdbBackendLooseFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitOdbBackendLooseFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitOdbBackendLooseFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for GitOdbBackendLooseFlags {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(!self.0 & Self::ALL.0)
+    }
+}
+
+#[cfg(test)]
+mod loose_flag_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn published_loose_backend_flags_validate_and_convert() {
+        assert_eq!(
+            GitOdbBackendLooseFlags::from_bits(0),
+            Some(GitOdbBackendLooseFlags::NONE)
+        );
+        assert!(GitOdbBackendLooseFlags::NONE.is_empty());
+        assert!(GitOdbBackendLooseFlags::FSYNC.contains(GitOdbBackendLooseFlags::FSYNC));
+        assert!(GitOdbBackendLooseFlags::FSYNC.intersects(GitOdbBackendLooseFlags::FSYNC));
+        assert_eq!(
+            ffi::git_odb_backend_loose_flag_t::from(GitOdbBackendLooseFlags::FSYNC),
+            GitOdbBackendLooseFlags::FSYNC.bits()
+        );
+    }
+
+    #[test]
+    fn unknown_loose_backend_flags_are_rejected() {
+        let unknown = GitOdbBackendLooseFlags::ALL.bits() << 1;
+        assert_eq!(GitOdbBackendLooseFlags::from_bits(unknown), None);
+        assert_eq!(GitOdbBackendLooseFlags::try_from(unknown), Err(unknown));
+    }
+
+    #[test]
+    fn loose_backend_flags_preserve_the_c_enum_layout() {
+        assert_eq!(
+            size_of::<GitOdbBackendLooseFlags>(),
+            size_of::<ffi::git_odb_backend_loose_flag_t>()
+        );
+        assert_eq!(
+            align_of::<GitOdbBackendLooseFlags>(),
+            align_of::<ffi::git_odb_backend_loose_flag_t>()
+        );
     }
 }

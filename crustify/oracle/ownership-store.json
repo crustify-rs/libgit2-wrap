@@ -2570,6 +2570,12 @@
    ]
   },
   {
+   "name": "git_midx_writer",
+   "defined_in": "src/libgit2/midx.h",
+   "_comment_agent": "The public API exposes git_midx_writer as an opaque heap object. Its by-value internal git_str and git_vector fields are initialized by git_midx_writer_new and torn down only by the full destructor git_midx_writer_free; no public field accessors are appropriate.",
+   "fields": []
+  },
+  {
    "name": "git_note",
    "defined_in": "src/libgit2/notes.h",
    "_comment_agent": "A successfully constructed git_note uniquely owns both duplicated signatures and its duplicated message; git_note_free releases all fields then the header.",
@@ -18886,6 +18892,196 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for this synchronous call; the callee retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_midx_writer_add",
+   "defined_in": "src/libgit2/midx.c",
+   "ptr_args": [
+    {
+     "name": "idx_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:idx_path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated index path; it is copied into temporary storage and not retained."
+     }
+    },
+    {
+     "name": "w",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:w"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient exclusive writer borrow; the function inserts an owned pack reference into its vector and does not consume the writer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_midx_writer_commit",
+   "defined_in": "src/libgit2/midx.c",
+   "ptr_args": [
+    {
+     "name": "w",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:w"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient exclusive writer borrow; writing may sort the writer's pack vector but does not consume it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_midx_writer_dump",
+   "defined_in": "src/libgit2/midx.c",
+   "ptr_args": [
+    {
+     "name": "midx",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:midx"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient exclusive output-buffer borrow; on success the function replaces its contents with the generated MIDX bytes."
+     }
+    },
+    {
+     "name": "w",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:w"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required transient exclusive writer borrow; dumping may sort the writer's pack vector but does not consume it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_midx_writer_free",
+   "defined_in": "src/libgit2/midx.c",
+   "lifetime": {
+    "for": "w",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "w",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and fully destroys the writer allocation, its pack references, vector, and directory string; null is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_midx_writer_new",
+   "defined_in": "src/libgit2/midx.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional transient options input; the constructor reads scalar configuration and retains no pointer to the options value."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; on success it receives one newly allocated writer owned by the caller and released by git_midx_writer_free."
+     }
+    },
+    {
+     "name": "pack_dir",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pack_dir"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required transient NUL-terminated directory path; git_str_sets copies it and the writer retains no pointer into caller storage."
      }
     }
    ]

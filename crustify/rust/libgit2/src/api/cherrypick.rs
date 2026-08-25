@@ -107,7 +107,7 @@ impl<'data> GitCherrypickOptions<'data> {
             {
                 let mut merge = view.merge_options_mut();
                 merge.set_version(ffi::GIT_MERGE_OPTIONS_VERSION);
-                merge.set_flags(ffi::git_merge_flag_t_GIT_MERGE_FIND_RENAMES);
+                merge.set_flags(crate::api::merge::GitMergeFlags::FIND_RENAMES);
             }
             view.checkout_options_mut()
                 .set_version(ffi::GIT_CHECKOUT_OPTIONS_VERSION);
@@ -263,7 +263,7 @@ mod tests {
         );
         assert_eq!(
             options.as_ref().merge_options().flags(),
-            ffi::git_merge_flag_t_GIT_MERGE_FIND_RENAMES
+            Ok(crate::api::merge::GitMergeFlags::FIND_RENAMES)
         );
         assert_eq!(
             options.as_ref().checkout_options().version(),

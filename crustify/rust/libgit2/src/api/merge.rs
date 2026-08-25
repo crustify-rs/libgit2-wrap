@@ -263,7 +263,7 @@ impl<'data> GitMergeOptions<'data> {
         {
             let mut view = options.as_mut();
             view.set_version(ffi::GIT_MERGE_OPTIONS_VERSION);
-            view.set_flags(ffi::git_merge_flag_t_GIT_MERGE_FIND_RENAMES);
+            view.set_flags(GitMergeFlags::FIND_RENAMES);
         }
         options
     }
@@ -291,12 +291,11 @@ impl<'object, 'data> GitMergeOptionsRef<'object, 'data> {
     }
 
     /// Field: git_merge_options.flags
-    /// Returns the merge behavior bits. Unknown bits are retained for forward
-    /// compatibility with newer libgit2 versions.
-    #[must_use]
-    pub fn flags(&self) -> u32 {
+    /// Returns the checked merge behavior flags.
+    pub fn flags(&self) -> Result<GitMergeFlags, ffi::git_merge_flag_t> {
         // SAFETY: this live shared handle permits the scalar raw-place read.
-        unsafe { addr_of!((*self.as_ptr()).flags).read() }
+        let raw = unsafe { addr_of!((*self.as_ptr()).flags).read() };
+        GitMergeFlags::try_from(raw)
     }
 
     /// Field: git_merge_options.version
@@ -398,11 +397,11 @@ impl<'object, 'data> GitMergeOptionsMut<'object, 'data> {
         GitMergeOptionsRef(self.0.0)
     }
 
-    /// Replaces the merge behavior bits, retaining unknown bits.
-    pub fn set_flags(&mut self, flags: u32) {
-        // SAFETY: this exclusive handle permits the scalar write. Libgit2
-        // defines the field as a bit mask and ignores no storage invariant.
-        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags) }
+    /// Replaces the merge behavior flags.
+    pub fn set_flags(&mut self, flags: GitMergeFlags) {
+        // SAFETY: this exclusive handle permits the scalar write and the
+        // wrapper contains only flags published by this libgit2 version.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).flags).write(flags.bits()) }
     }
 
     /// Sets the options ABI version.
@@ -486,7 +485,7 @@ mod merge_options_tests {
         let options = GitMergeOptions::new();
         let view = options.as_ref();
         assert_eq!(view.version(), ffi::GIT_MERGE_OPTIONS_VERSION);
-        assert_eq!(view.flags(), ffi::git_merge_flag_t_GIT_MERGE_FIND_RENAMES);
+        assert_eq!(view.flags(), Ok(GitMergeFlags::FIND_RENAMES));
         assert_eq!(view.rename_threshold(), 0);
         assert_eq!(view.target_limit(), 0);
         assert!(view.metric().is_none());
@@ -502,7 +501,7 @@ mod merge_options_tests {
         let mut options = GitMergeOptions::new();
         {
             let mut view = options.as_mut();
-            view.set_flags(0x11);
+            view.set_flags(GitMergeFlags::FIND_RENAMES | GitMergeFlags::VIRTUAL_BASE);
             view.set_default_driver(Some(c"custom"));
             view.set_metric(Some(metric.as_ref()));
             view.set_rename_threshold(72);
@@ -513,7 +512,10 @@ mod merge_options_tests {
         }
 
         let view = options.as_ref();
-        assert_eq!(view.flags(), 0x11);
+        assert_eq!(
+            view.flags(),
+            Ok(GitMergeFlags::FIND_RENAMES | GitMergeFlags::VIRTUAL_BASE)
+        );
         assert_eq!(view.default_driver(), Some(c"custom"));
         assert_eq!(view.metric().unwrap().as_ptr(), metric.as_ref().as_ptr());
         assert_eq!(view.rename_threshold(), 72);
@@ -544,7 +546,7 @@ mod merge_options_tests {
     fn getters_reject_invalid_enums_and_file_flags() {
         let mut raw = ffi::git_merge_options {
             version: ffi::GIT_MERGE_OPTIONS_VERSION,
-            flags: 0,
+            flags: GitMergeFlags::ALL.bits() << 1,
             rename_threshold: 0,
             target_limit: 0,
             metric: core::ptr::null_mut(),
@@ -556,7 +558,158 @@ mod merge_options_tests {
         // SAFETY: all fields are initialized, pointer fields are null, and the
         // raw value remains live and unmodified for this shared handle.
         let options = unsafe { GitMergeOptionsRef::from_ptr(addr_of_mut!(raw)) }.unwrap();
+        assert!(options.flags().is_err());
         assert!(options.file_favor().is_err());
         assert!(options.file_flags().is_err());
+    }
+}
+
+/// Wraps: git_merge_flag_t
+/// A checked set of behavior flags for tree-level merges.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct GitMergeFlags(ffi::git_merge_flag_t);
+
+impl GitMergeFlags {
+    /// Use no optional merge behavior.
+    pub const NONE: Self = Self(0);
+    /// Detect renames on either side of the merge.
+    pub const FIND_RENAMES: Self = Self(ffi::git_merge_flag_t_GIT_MERGE_FIND_RENAMES);
+    /// Stop as soon as a conflict is found.
+    pub const FAIL_ON_CONFLICT: Self = Self(ffi::git_merge_flag_t_GIT_MERGE_FAIL_ON_CONFLICT);
+    /// Do not write the resolve-undo index extension.
+    pub const SKIP_REUC: Self = Self(ffi::git_merge_flag_t_GIT_MERGE_SKIP_REUC);
+    /// Use the first merge base instead of constructing a recursive base.
+    pub const NO_RECURSIVE: Self = Self(ffi::git_merge_flag_t_GIT_MERGE_NO_RECURSIVE);
+    /// Produce a virtual recursive merge base.
+    pub const VIRTUAL_BASE: Self = Self(ffi::git_merge_flag_t_GIT_MERGE_VIRTUAL_BASE);
+    /// Every merge behavior flag published by this libgit2 version.
+    pub const ALL: Self = Self(
+        Self::FIND_RENAMES.0
+            | Self::FAIL_ON_CONFLICT.0
+            | Self::SKIP_REUC.0
+            | Self::NO_RECURSIVE.0
+            | Self::VIRTUAL_BASE.0,
+    );
+
+    /// Converts raw bits when every bit is published by libgit2.
+    #[must_use]
+    pub const fn from_bits(bits: ffi::git_merge_flag_t) -> Option<Self> {
+        if bits & !Self::ALL.0 == 0 {
+            Some(Self(bits))
+        } else {
+            None
+        }
+    }
+
+    /// Returns the underlying libgit2 bit set.
+    #[must_use]
+    pub const fn bits(self) -> ffi::git_merge_flag_t {
+        self.0
+    }
+
+    /// Returns whether no optional behavior is selected.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns whether every flag in `other` is present.
+    #[must_use]
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    /// Returns whether any flag in `other` is present.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        self.0 & other.0 != 0
+    }
+}
+
+impl From<GitMergeFlags> for ffi::git_merge_flag_t {
+    fn from(flags: GitMergeFlags) -> Self {
+        flags.bits()
+    }
+}
+
+impl TryFrom<ffi::git_merge_flag_t> for GitMergeFlags {
+    type Error = ffi::git_merge_flag_t;
+
+    fn try_from(bits: ffi::git_merge_flag_t) -> Result<Self, Self::Error> {
+        Self::from_bits(bits).ok_or(bits)
+    }
+}
+
+impl BitOr for GitMergeFlags {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for GitMergeFlags {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for GitMergeFlags {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitAndAssign for GitMergeFlags {
+    fn bitand_assign(&mut self, rhs: Self) {
+        self.0 &= rhs.0;
+    }
+}
+
+impl Not for GitMergeFlags {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        Self(!self.0 & Self::ALL.0)
+    }
+}
+
+#[cfg(test)]
+mod merge_flag_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn published_merge_flags_combine_and_validate() {
+        let mut flags = GitMergeFlags::FIND_RENAMES | GitMergeFlags::SKIP_REUC;
+        assert!(flags.contains(GitMergeFlags::FIND_RENAMES));
+        assert!(flags.intersects(GitMergeFlags::SKIP_REUC));
+        flags |= GitMergeFlags::VIRTUAL_BASE;
+        assert_eq!(GitMergeFlags::try_from(flags.bits()), Ok(flags));
+        assert_eq!(ffi::git_merge_flag_t::from(flags), flags.bits());
+        assert!(GitMergeFlags::NONE.is_empty());
+    }
+
+    #[test]
+    fn unknown_merge_flags_are_rejected() {
+        let unknown = GitMergeFlags::ALL.bits() << 1;
+        assert_eq!(GitMergeFlags::from_bits(unknown), None);
+        assert_eq!(GitMergeFlags::try_from(unknown), Err(unknown));
+    }
+
+    #[test]
+    fn merge_flags_preserve_the_c_enum_layout() {
+        assert_eq!(
+            size_of::<GitMergeFlags>(),
+            size_of::<ffi::git_merge_flag_t>()
+        );
+        assert_eq!(
+            align_of::<GitMergeFlags>(),
+            align_of::<ffi::git_merge_flag_t>()
+        );
     }
 }
