@@ -88,6 +88,42 @@ pub fn git_refdb_compress(refdb: &mut GitRefdbMut<'_>) -> Result<(), i32> {
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
+/// Wraps: git_refdb_new
+/// Creates an empty reference database tied to its repository.
+pub fn git_refdb_new<'repo>(
+    repository: &'repo mut GitRepositoryMut<'_>,
+) -> Result<GitRepositoryRefdbOwned<'repo>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: `output` is writable and the exclusive repository is live. On
+    // success C transfers one refdb count that borrows this repository.
+    let status = unsafe { ffi::git_refdb_new(&mut output, repository.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one non-null fully initialized owned refdb.
+    let inner = unsafe { GitRefdbOwned::from_raw(output) }
+        .expect("git_refdb_new succeeded without a refdb");
+    Ok(GitRepositoryRefdbOwned::from_inner(inner))
+}
+
+/// Wraps: git_refdb_open
+/// Opens the repository's configured reference database and default backend.
+pub fn git_refdb_open<'repo>(
+    repository: &'repo mut GitRepositoryMut<'_>,
+) -> Result<GitRepositoryRefdbOwned<'repo>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: `output` is writable and the exclusive repository is live. On
+    // success C transfers one refdb count that borrows this repository.
+    let status = unsafe { ffi::git_refdb_open(&mut output, repository.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one non-null fully initialized owned refdb.
+    let inner = unsafe { GitRefdbOwned::from_raw(output) }
+        .expect("git_refdb_open succeeded without a refdb");
+    Ok(GitRepositoryRefdbOwned::from_inner(inner))
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
@@ -148,40 +184,4 @@ mod tests {
         assert_eq!(size_of::<GitRefdbType>(), size_of::<ffi::git_refdb_t>());
         assert_eq!(align_of::<GitRefdbType>(), align_of::<ffi::git_refdb_t>());
     }
-}
-
-/// Wraps: git_refdb_new
-/// Creates an empty reference database tied to its repository.
-pub fn git_refdb_new<'repo>(
-    repository: &'repo mut GitRepositoryMut<'_>,
-) -> Result<GitRepositoryRefdbOwned<'repo>, i32> {
-    let mut output = core::ptr::null_mut();
-    // SAFETY: `output` is writable and the exclusive repository is live. On
-    // success C transfers one refdb count that borrows this repository.
-    let status = unsafe { ffi::git_refdb_new(&mut output, repository.as_mut_ptr()) };
-    if status != 0 {
-        return Err(status);
-    }
-    // SAFETY: success returns one non-null fully initialized owned refdb.
-    let inner = unsafe { GitRefdbOwned::from_raw(output) }
-        .expect("git_refdb_new succeeded without a refdb");
-    Ok(GitRepositoryRefdbOwned::from_inner(inner))
-}
-
-/// Wraps: git_refdb_open
-/// Opens the repository's configured reference database and default backend.
-pub fn git_refdb_open<'repo>(
-    repository: &'repo mut GitRepositoryMut<'_>,
-) -> Result<GitRepositoryRefdbOwned<'repo>, i32> {
-    let mut output = core::ptr::null_mut();
-    // SAFETY: `output` is writable and the exclusive repository is live. On
-    // success C transfers one refdb count that borrows this repository.
-    let status = unsafe { ffi::git_refdb_open(&mut output, repository.as_mut_ptr()) };
-    if status != 0 {
-        return Err(status);
-    }
-    // SAFETY: success returns one non-null fully initialized owned refdb.
-    let inner = unsafe { GitRefdbOwned::from_raw(output) }
-        .expect("git_refdb_open succeeded without a refdb");
-    Ok(GitRepositoryRefdbOwned::from_inner(inner))
 }

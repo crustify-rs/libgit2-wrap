@@ -23,6 +23,30 @@ pub fn git_diff_from_buffer(content: &[u8]) -> Result<DiffOwned, i32> {
     unsafe { DiffOwned::from_raw(out) }.ok_or(-1)
 }
 
+/// Wraps: git_diff_from_buffer_ext
+/// Parses a patch using explicit parse options.
+pub fn git_diff_from_buffer_ext(
+    content: &[u8],
+    options: &mut crate::api::diff::DiffParseOptionsMut<'_>,
+) -> Result<DiffOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output is writable, content covers its exact byte length, and
+    // options is exclusively borrowed for this non-retaining parse.
+    let status = unsafe {
+        ffi::git_diff_from_buffer_ext(
+            &mut out,
+            content.as_ptr().cast(),
+            content.len(),
+            options.as_mut_ptr(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete owned diff.
+    unsafe { DiffOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,28 +84,4 @@ mod tests {
         let options = crate::diff::git_diff_patchid_options_init().unwrap();
         let _oid = crate::diff::git_diff_patchid(&mut diff.as_mut(), Some(options)).unwrap();
     }
-}
-
-/// Wraps: git_diff_from_buffer_ext
-/// Parses a patch using explicit parse options.
-pub fn git_diff_from_buffer_ext(
-    content: &[u8],
-    options: &mut crate::api::diff::DiffParseOptionsMut<'_>,
-) -> Result<DiffOwned, i32> {
-    let mut out = core::ptr::null_mut();
-    // SAFETY: output is writable, content covers its exact byte length, and
-    // options is exclusively borrowed for this non-retaining parse.
-    let status = unsafe {
-        ffi::git_diff_from_buffer_ext(
-            &mut out,
-            content.as_ptr().cast(),
-            content.len(),
-            options.as_mut_ptr(),
-        )
-    };
-    if status != 0 {
-        return Err(status);
-    }
-    // SAFETY: success transfers one complete owned diff.
-    unsafe { DiffOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
 }

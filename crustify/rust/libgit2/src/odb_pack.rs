@@ -25,27 +25,6 @@ pub fn git_odb_backend_pack_options_init(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn c_initializer_sets_pack_backend_version() {
-        let options = git_odb_backend_pack_options_init(ffi::GIT_ODB_BACKEND_PACK_OPTIONS_VERSION)
-            .expect("the published version initializes");
-        assert_eq!(options.as_ref().version(), 1);
-        assert_eq!(options.as_ref().oid_type(), Ok(None));
-    }
-
-    #[test]
-    fn constructor_helper_rejects_null_success_output() {
-        assert!(matches!(
-            backend_result(|_| 0),
-            Err(ffi::git_error_code_GIT_ERROR)
-        ));
-    }
-}
-
 /// Wraps: git_odb_backend_one_pack
 /// Creates a backend for the pack described by `index_file`.
 pub fn git_odb_backend_one_pack(
@@ -95,4 +74,25 @@ fn backend_result(
     // SAFETY: either constructor returns one complete backend with its
     // concrete destructor installed when it reports success.
     unsafe { GitOdbBackendOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn c_initializer_sets_pack_backend_version() {
+        let options = git_odb_backend_pack_options_init(ffi::GIT_ODB_BACKEND_PACK_OPTIONS_VERSION)
+            .expect("the published version initializes");
+        assert_eq!(options.as_ref().version(), 1);
+        assert_eq!(options.as_ref().oid_type(), Ok(None));
+    }
+
+    #[test]
+    fn constructor_helper_rejects_null_success_output() {
+        assert!(matches!(
+            backend_result(|_| 0),
+            Err(ffi::git_error_code_GIT_ERROR)
+        ));
+    }
 }
