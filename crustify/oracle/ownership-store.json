@@ -1181,6 +1181,113 @@
    ]
   },
   {
+   "name": "git_commit_create_options",
+   "defined_in": "include/git2/commit.h",
+   "_comment_agent": "The options header owns no resource. Author and committer are optional borrowed signatures; message encoding and extra headers are optional borrowed synchronous inputs. The callback/payload pair borrows mutable caller state and is copied into extended options only for the synchronous commit operation.",
+   "fields": [
+    {
+     "name": "author",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed signature read synchronously during commit creation; libgit2 neither retains nor frees it."
+     }
+    },
+    {
+     "name": "committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed signature read synchronously during commit creation; libgit2 neither retains nor frees it."
+     }
+    },
+    {
+     "name": "extra_headers",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed array of extra header descriptors, read for extra_headers_len elements during commit creation."
+     }
+    },
+    {
+     "name": "message_encoding",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed NUL-terminated message encoding read synchronously."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller state passed to the installed signing callback; copied into transient extended options but never retained or freed by libgit2."
+     }
+    },
+    {
+     "name": "sign",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable callback code address invoked synchronously and never freed."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_commit_graph",
    "defined_in": "src/libgit2/commit_graph.h",
    "_comment_agent": "git_commit_graph_new zero-initializes file, optionally opens it, get_file lazily installs it, refresh may free and clear it, and git_commit_graph_free always disposes the current file.",
@@ -1235,6 +1342,31 @@
       "nullable": false,
       "mutable": false,
       "note": "Required borrowed NUL-terminated header value; callers keep the storage alive while the header descriptor is used. Formatting only reads it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commitarray",
+   "defined_in": "include/git2/commit.h",
+   "_comment_agent": "Library-produced commit arrays own the detached pointer allocation and one independently releasable git_commit reference per element. git_commitarray_dispose frees every commit, frees the outer pointer array, and zeroes the by-value header.",
+   "fields": [
+    {
+     "name": "commits",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Nullable when count is zero; otherwise an owned count-element pointer array whose non-null git_commit elements are each owned references released by git_commit_free."
      }
     }
    ]
@@ -12468,6 +12600,35 @@
      "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
     }
    }
+  },
+  {
+   "name": "git_commitarray_dispose",
+   "defined_in": "src/libgit2/commit.c",
+   "lifetime": {
+    "for": "array",
+    "is_dropper": false,
+    "is_disposer": true,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "array",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:array"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Nullable mutable borrow of the by-value header; disposal releases all owned elements and outer storage, then zeroes the header."
+     }
+    }
+   ]
   },
   {
    "name": "git_commitbuilder_add_header",
