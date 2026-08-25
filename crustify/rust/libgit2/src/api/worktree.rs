@@ -22,7 +22,12 @@ impl GitWorktreePruneFlags {
     pub const VALID: Self = Self(ffi::git_worktree_prune_t_GIT_WORKTREE_PRUNE_VALID);
     /// Prune even when the worktree is locked.
     pub const LOCKED: Self = Self(ffi::git_worktree_prune_t_GIT_WORKTREE_PRUNE_LOCKED);
-    /// Prune a checked-out worktree.
+    /// Also delete the worktree's checked-out working directory.
+    ///
+    /// Unlike the other two overrides this relaxes no prunability check:
+    /// `git_worktree_prune` always removes the administrative data under the
+    /// parent repository's `worktrees/<name>`, and only removes the working
+    /// directory named by the worktree's gitlink when this bit is set.
     pub const WORKING_TREE: Self = Self(ffi::git_worktree_prune_t_GIT_WORKTREE_PRUNE_WORKING_TREE);
     /// Every prune override published by this version of libgit2.
     pub const ALL: Self = Self(Self::VALID.0 | Self::LOCKED.0 | Self::WORKING_TREE.0);
@@ -107,6 +112,8 @@ impl BitAndAssign for GitWorktreePruneFlags {
 impl Not for GitWorktreePruneFlags {
     type Output = Self;
 
+    /// Returns the published overrides this set omits, leaving every bit
+    /// libgit2 does not define clear.
     fn not(self) -> Self::Output {
         Self(!self.0 & Self::ALL.0)
     }
@@ -140,6 +147,25 @@ mod tests {
         assert_eq!(
             !GitWorktreePruneFlags::VALID,
             GitWorktreePruneFlags::LOCKED | GitWorktreePruneFlags::WORKING_TREE
+        );
+    }
+
+    #[test]
+    fn prune_overrides_accumulate_and_convert_to_the_c_enum() {
+        let mut overrides = GitWorktreePruneFlags::NONE;
+        overrides |= GitWorktreePruneFlags::VALID;
+        overrides |= GitWorktreePruneFlags::WORKING_TREE;
+        assert_eq!(
+            ffi::git_worktree_prune_t::from(overrides),
+            ffi::git_worktree_prune_t_GIT_WORKTREE_PRUNE_VALID
+                | ffi::git_worktree_prune_t_GIT_WORKTREE_PRUNE_WORKING_TREE
+        );
+
+        overrides &= !GitWorktreePruneFlags::WORKING_TREE;
+        assert_eq!(overrides, GitWorktreePruneFlags::VALID);
+        assert_eq!(
+            GitWorktreePruneFlags::try_from(overrides.bits()),
+            Ok(GitWorktreePruneFlags::VALID)
         );
     }
 
