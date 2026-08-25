@@ -1184,6 +1184,19 @@ mod scheduled_wrapper_tests {
         assert_eq!(git_index_entrycount(index.as_ref()), 0);
         assert!(!git_index_has_conflicts(index.as_ref()));
         assert_eq!(git_index_path(index.as_ref()), None);
+        assert_eq!(
+            git_index_caps(index.as_ref()),
+            crate::api::index::GitIndexCapabilities::NONE
+        );
+        git_index_set_caps(
+            &mut index.as_mut(),
+            crate::api::index::GitIndexCapabilities::IGNORE_CASE,
+        )
+        .unwrap();
+        assert_eq!(
+            git_index_caps(index.as_ref()),
+            crate::api::index::GitIndexCapabilities::IGNORE_CASE
+        );
         assert_eq!(git_index_version(&mut index.as_mut()), 2);
         git_index_set_version(&mut index.as_mut(), 3).unwrap();
         assert_eq!(git_index_version(&mut index.as_mut()), 3);
@@ -1198,9 +1211,18 @@ ffibox::define_ctype!(
     /// Wraps: git_index_iterator
     /// Opaque storage for an iterator over a stable snapshot of an index.
     ///
-    /// The iterator stores the index pointer supplied to its constructor
-    /// without taking another ordinary owner. Safe construction must therefore
-    /// carry an exclusive borrow of that index until the iterator is dropped.
+    /// `git_index_iterator_new` builds its snapshot with
+    /// `git_index_snapshot_new`, which takes a refcounted share of the index
+    /// (`GIT_REFCOUNT_INC`) and registers the iterator in `index->readers`;
+    /// `git_index_iterator_free` releases both through `git_index_free`. The
+    /// allocation therefore keeps its source index alive on its own and needs
+    /// no borrow to outlive it.
+    ///
+    /// Construction still needs exclusive access: `git_index_snapshot_new`
+    /// sorts `index->entries` in place before duplicating the entry pointers.
+    /// Entries handed out by `git_index_iterator_next` point into the index's
+    /// own storage, which the reader registration keeps alive, so they belong
+    /// to the iterator's borrow rather than to the index argument.
     GitIndexIterator,
     GitIndexIteratorRef,
     GitIndexIteratorMut,
@@ -1208,17 +1230,17 @@ ffibox::define_ctype!(
 );
 
 /// Wraps: git_index_iterator_free
-/// A raw owning iterator allocation.
+/// An exclusively owned iterator allocation.
 ///
-/// This ownership building block does not encode the iterator's borrow of its
-/// source index. A safe constructor must place it in a lifetime-carrying owner
-/// before returning it.
+/// The iterator's refcounted share of its source index is released by the same
+/// destructor, so this owner needs no additional lifetime parameter.
 pub type GitIndexIteratorOwned = CBox<GitIndexIterator>;
 
 // SAFETY: `git_index_iterator_free` is the public destructor for a fully
 // formed iterator allocation. `CBox` supplies one live non-null allocation
-// exactly once. The destructor releases the iterator's snapshot through its
-// borrowed index, whose lifetime must be carried by every safe constructor.
+// exactly once, although C also accepts null. The destructor releases the
+// snapshot vector and the iterator's own refcounted share of the index, so it
+// touches no storage this wrapper leaves borrowed elsewhere.
 ffibox::impl_dropped!(
     GitIndexIterator,
     ffi::git_index_iterator,
@@ -1261,6 +1283,38 @@ mod index_iterator_type_tests {
             size_of::<GitIndexIteratorOwned>(),
             size_of::<*mut ffi::git_index_iterator>()
         );
+    }
+
+    #[test]
+    fn an_iterator_keeps_its_source_index_alive_by_itself() {
+        // `git_index_snapshot_new` takes a refcounted share of the index and
+        // registers a reader; `git_index_iterator_free` releases both. The
+        // caller's own owner is therefore free to go first.
+        // SAFETY: process-global initialization is refcounted and balanced
+        // below, after every libgit2 object is dropped.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        let mut index = git_index_new().expect("an in-memory index");
+        let mut raw = ptr::null_mut();
+        // SAFETY: `raw` is a writable out-slot and the index is exclusively
+        // borrowed for the in-place entry sort the snapshot performs.
+        let status = unsafe { ffi::git_index_iterator_new(&mut raw, index.as_mut().as_mut_ptr()) };
+        assert_eq!(status, 0);
+        // SAFETY: success transfers one fully formed iterator allocation.
+        let mut iterator = unsafe { GitIndexIteratorOwned::from_raw(raw) }.expect("an iterator");
+
+        drop(index);
+
+        let mut entry = ptr::null();
+        // SAFETY: the iterator is live and `entry` is a writable out-slot; the
+        // iterator's own share keeps the snapshotted index alive.
+        let status =
+            unsafe { ffi::git_index_iterator_next(&mut entry, iterator.as_mut().as_mut_ptr()) };
+        assert_eq!(status, ffi::git_error_code_GIT_ITEROVER);
+
+        drop(iterator);
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 
     #[test]
@@ -1336,10 +1390,17 @@ pub fn git_index_add_from_buffer(
 }
 
 /// Wraps: git_index_caps
+/// Returns the index's currently effective filesystem capabilities.
+///
+/// The C implementation composes the result from the three published
+/// capability bits alone, so it never reports the `FROM_OWNER` request that
+/// [`git_index_set_caps`] accepts.
 #[must_use]
-pub fn git_index_caps(index: GitIndexRef<'_>) -> i32 {
+pub fn git_index_caps(index: GitIndexRef<'_>) -> crate::api::index::GitIndexCapabilities {
     // SAFETY: the live index is only queried.
-    unsafe { ffi::git_index_caps(index.as_ptr()) }
+    let raw = unsafe { ffi::git_index_caps(index.as_ptr()) };
+    crate::api::index::GitIndexCapabilities::from_bits(raw)
+        .expect("git_index_caps returns only published capability bits")
 }
 
 /// Wraps: git_index_checksum

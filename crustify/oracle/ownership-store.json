@@ -2138,6 +2138,12 @@
    ]
   },
   {
+   "name": "git_diff_flag_t",
+   "defined_in": "include/git2/diff.h",
+   "_comment_agent": "git_diff_flag_t is a fieldless public bitmask enum with five bits (BINARY, NOT_BINARY, VALID_ID, EXISTS, VALID_SIZE) stored in the uint32_t flags words of git_diff_delta and git_diff_file. It is passed and stored by value with no pointer, lifecycle, refcount or locking semantics. The header reserves values outside the published range, and diff_generate.h really does use them: GIT_DIFF_FLAG__FREE_PATH through GIT_DIFF_FLAG__HAS_SELF_SIMILARITY occupy bits 7-20, and GIT_DIFF_FLAG__CLEAR_INTERNAL only masks the word down to its low sixteen bits, so a caller-visible flags word can carry unpublished bits.",
+   "fields": []
+  },
+  {
    "name": "git_diff_format_email_options",
    "defined_in": "include/git2/deprecated.h",
    "_comment_agent": "All four pointers are non-owning inputs. The default initializer stores NULL in each slot; git_diff_format_email requires id, author and summary at call time while body remains optional. The pointed-to values are only read synchronously and are never retained or released by this options value.",
@@ -2494,6 +2500,18 @@
    ]
   },
   {
+   "name": "git_feature_t",
+   "defined_in": "include/git2/common.h",
+   "_comment_agent": "git_feature_t is a fieldless public bitmask enum with thirteen bits (THREADS through HTTP). It is returned by value from git_libgit2_features as a set and passed by value as a single selector to git_libgit2_feature_backend; it has no pointer, lifecycle, refcount or locking semantics. A newer linked library may report bits this header does not publish, so a set read back from the library must be retained rather than validated.",
+   "fields": []
+  },
+  {
+   "name": "git_fetch_depth_t",
+   "defined_in": "include/git2/remote.h",
+   "_comment_agent": "git_fetch_depth_t is a fieldless public enum naming the two endpoints of the signed int git_fetch_options.depth field: FULL = 0 and UNSHALLOW = INT_MAX. Intermediate positive values are ordinary commit counts rather than named enumerators, so the type is a bounded scalar, not a selector or a bit set. It is passed and stored by value and has no pointer, lifecycle, refcount or locking semantics.",
+   "fields": []
+  },
+  {
    "name": "git_fetch_negotiation",
    "defined_in": "include/git2/sys/transport.h",
    "_comment_agent": "git_fetch_negotiation has no whole-value destructor. refs is a borrowed pointer container; shallow_roots is a temporary owned counted buffer whose enclosing fetch path explicitly releases it.",
@@ -2544,6 +2562,12 @@
    "fields": []
   },
   {
+   "name": "git_filter_flag_t",
+   "defined_in": "include/git2/filter.h",
+   "_comment_agent": "git_filter_flag_t is a fieldless public bitmask enum with DEFAULT = 0 and four bits (ALLOW_UNSAFE, NO_SYSTEM_ATTRIBUTES, ATTRIBUTES_FROM_HEAD, ATTRIBUTES_FROM_COMMIT). It is stored by value in git_filter_options.flags and copied wholesale into git_filter_list.source.options; it has no pointer, lifecycle, refcount or locking semantics. ATTRIBUTES_FROM_COMMIT is only meaningful together with the commit ID carried by git_filter_options.",
+   "fields": []
+  },
+  {
    "name": "git_filter_list",
    "defined_in": "src/libgit2/filter.c",
    "_comment_agent": "git_filter_list is public but opaque. Its internal array owns only the entry buffer; entry filter/name pointers borrow the global registry and payload cleanup is delegated to each filter. temp_buf is optional borrowed session scratch storage.",
@@ -2581,6 +2605,12 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_filter_mode_t",
+   "defined_in": "include/git2/filter.h",
+   "_comment_agent": "git_filter_mode_t is a fieldless public selector enum with two distinct values, TO_WORKTREE = 0 and TO_ODB = 1; SMUDGE and CLEAN are aliases of those two, not additional states. It is passed and stored by value (git_filter_source.mode) and has no pointer, lifecycle, refcount or locking semantics.",
+   "fields": []
   },
   {
    "name": "git_filter_options",
@@ -2733,6 +2763,18 @@
    ]
   },
   {
+   "name": "git_index_add_option_t",
+   "defined_in": "include/git2/index.h",
+   "_comment_agent": "git_index_add_option_t is a fieldless public bitmask enum with DEFAULT = 0 and three bits (FORCE, DISABLE_PATHSPEC_MATCH, CHECK_PATHSPEC). It is passed by value to the bulk index add/update entry points and has no pointer, lifecycle, refcount or locking semantics.",
+   "fields": []
+  },
+  {
+   "name": "git_index_capability_t",
+   "defined_in": "include/git2/index.h",
+   "_comment_agent": "git_index_capability_t is a fieldless public enum that mixes a bit set with a sentinel: IGNORE_CASE = 1, NO_FILEMODE = 2 and NO_SYMLINKS = 4 combine, while FROM_OWNER = -1 is a distinct request that git_index_set_caps tests for equality before taking the bitwise branch, so it never combines with the explicit bits. git_index_caps only ever composes the three explicit bits and never returns FROM_OWNER. The type is passed by value as a signed int and has no pointer, lifecycle, refcount or locking semantics.",
+   "fields": []
+  },
+  {
    "name": "git_index_conflict_iterator",
    "defined_in": "src/libgit2/index.h",
    "_comment_agent": "The conflict iterator exclusively owns only its allocation and borrows the external index stored in `index`.",
@@ -2779,6 +2821,12 @@
    ]
   },
   {
+   "name": "git_index_entry_extended_flag_t",
+   "defined_in": "include/git2/index.h",
+   "_comment_agent": "git_index_entry_extended_flag_t is a fieldless public bitmask enum over the uint16_t git_index_entry.flags_extended word: INTENT_TO_ADD (1<<13) and SKIP_WORKTREE (1<<14) are the on-disk bits, EXTENDED_FLAGS is their union rather than a separate state, and UPTODATE (1<<2) is in-memory only. It is stored by value and has no pointer, lifecycle, refcount or locking semantics. read_entry copies the on-disk word verbatim into flags_extended, so a word loaded from an index file may carry bits this enum does not publish.",
+   "fields": []
+  },
+  {
    "name": "git_index_entry_flag_t",
    "defined_in": "include/git2/index.h",
    "_comment_agent": "git_index_entry_flag_t is a fieldless public bitmask enum with EXTENDED and VALID bits. It is stored by value and has no pointer, lifecycle, refcount, or locking semantics; zero and the combination of both published bits are valid flag sets.",
@@ -2787,7 +2835,7 @@
   {
    "name": "git_index_iterator",
    "defined_in": "src/libgit2/index.h",
-   "_comment_agent": "The iterator owns its snapshot vector and allocation, but its index field is a non-null external mutable borrow whose lifetime must be carried by the safe iterator owner.",
+   "_comment_agent": "The iterator owns its allocation and snapshot vector and, contrary to an earlier finding, also owns a refcounted share of its source index: git_index_iterator_new delegates to git_index_snapshot_new, which runs GIT_REFCOUNT_INC(index) and registers a reader, and git_index_iterator_free releases both through git_index_snapshot_release's git_index_free. The safe owner therefore needs no lifetime parameter; only construction needs exclusive access, because the snapshot sorts index->entries in place.",
    "fields": [
     {
      "name": "index",
@@ -2797,13 +2845,11 @@
       },
       "array": null,
       "string": false,
-      "owned": false,
-      "borrowed": {
-       "lifetime": "other"
-      },
+      "owned": true,
+      "borrowed": null,
       "nullable": false,
       "mutable": true,
-      "note": "git_index_iterator_new stores the caller's index pointer without transferring ownership; snapshot_new registers a reader and iterator_free uses the pointer to release that snapshot, so the source index must remain live and exclusively borrowed until the iterator is dropped."
+      "note": "git_index_snapshot_new acquires a refcounted share (GIT_REFCOUNT_INC) of the caller's index and bumps index->readers; git_index_iterator_free hands the same pointer to git_index_snapshot_release, which decrements readers and calls git_index_free. The share is balanced by the destructor, so the iterator keeps the index alive by itself. Construction mutates the index (git_vector_sort on index->entries) and requires exclusive access; entries yielded by git_index_iterator_next point into the index's own storage, kept alive by the reader registration."
      }
     }
    ]
@@ -3252,6 +3298,12 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_merge_flag_t",
+   "defined_in": "include/git2/merge.h",
+   "_comment_agent": "git_merge_flag_t is a fieldless public bitmask enum with five bits (FIND_RENAMES, FAIL_ON_CONFLICT, SKIP_REUC, NO_RECURSIVE, VIRTUAL_BASE) stored by value in git_merge_options.flags. It has no pointer, lifecycle, refcount or locking semantics.",
+   "fields": []
   },
   {
    "name": "git_merge_options",

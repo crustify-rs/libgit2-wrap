@@ -2393,6 +2393,14 @@ impl From<GitDiffFindFlags> for ffi::git_diff_find_t {
 
 /// Wraps: git_diff_flag_t
 /// A checked set of state flags attached to diff deltas and files.
+///
+/// libgit2 reserves the bits outside this published range for itself, and
+/// `diff_generate.h` uses bits 7 through 20 of the same word. Only the top
+/// half of the word is cleared before a delta is handed back
+/// (`GIT_DIFF_FLAG__CLEAR_INTERNAL` masks with `0x00FFFF`), so a `flags` word
+/// read from a live delta or file may carry private bits that
+/// [`Self::from_bits`] rejects; the field accessors return the raw word in
+/// that case.
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct GitDiffFlags(ffi::git_diff_flag_t);

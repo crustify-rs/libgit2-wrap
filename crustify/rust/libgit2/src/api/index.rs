@@ -350,6 +350,12 @@ impl TryFrom<ffi::git_index_capability_t> for GitIndexCapabilities {
 
 /// Wraps: git_index_entry_extended_flag_t
 /// A checked set of extended state bits stored in an index entry.
+///
+/// [`Self::PERSISTED`] is the union of the two on-disk bits rather than a
+/// state of its own, and [`Self::UPTODATE`] is in-memory only. `read_entry`
+/// copies the on-disk extended-flags word into the entry verbatim, so an entry
+/// loaded from an index file may carry bits this enum does not publish;
+/// [`Self::from_bits`] reports those by returning `None`.
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct GitIndexEntryExtendedFlags(ffi::git_index_entry_extended_flag_t);
@@ -541,7 +547,14 @@ mod entry_flag_and_stage_tests {
 }
 
 /// Wraps: git_index_entry_flag_t
-/// A checked set of flags stored in `git_index_entry.flags`.
+/// A checked set of the boolean flags packed into `git_index_entry.flags`.
+///
+/// The C field is not a plain bit set: it packs four subfields, of which this
+/// enum publishes only the two boolean ones. The low twelve bits hold the path
+/// length (`GIT_INDEX_ENTRY_NAMEMASK`) and bits 12-13 hold the stage
+/// (`GIT_INDEX_ENTRY_STAGEMASK`, read through `git_index_entry_stage`).
+/// [`Self::from_bits`] therefore rejects a raw `flags` word taken from a real
+/// entry; use [`Self::from_entry_flags`] to extract just the boolean bits.
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct GitIndexEntryFlags(ffi::git_index_entry_flag_t);
@@ -552,14 +565,28 @@ impl GitIndexEntryFlags {
     /// The entry is assumed to remain valid in the working directory.
     pub const VALID: Self = Self(ffi::git_index_entry_flag_t_GIT_INDEX_ENTRY_VALID);
 
+    /// Every boolean flag published by this libgit2 version.
+    pub const ALL: Self = Self(Self::EXTENDED.0 | Self::VALID.0);
+
     /// Builds a flag set if it contains only published bits.
+    ///
+    /// This rejects the packed subfields of a real `git_index_entry.flags`
+    /// word; [`Self::from_entry_flags`] accepts one.
+    #[must_use]
     pub const fn from_bits(bits: ffi::git_index_entry_flag_t) -> Option<Self> {
-        let all = Self::EXTENDED.0 | Self::VALID.0;
-        if bits & !all == 0 {
+        if bits & !Self::ALL.0 == 0 {
             Some(Self(bits))
         } else {
             None
         }
+    }
+
+    /// Extracts the boolean flags from a packed `git_index_entry.flags` word.
+    ///
+    /// The path-length and stage subfields sharing the word are discarded.
+    #[must_use]
+    pub const fn from_entry_flags(flags: u16) -> Self {
+        Self(flags as ffi::git_index_entry_flag_t & Self::ALL.0)
     }
 
     /// Returns the underlying libgit2 bit set.
@@ -661,6 +688,25 @@ mod enum_tests {
         assert!(flags.contains(GitIndexEntryFlags::VALID));
         assert_eq!(GitIndexEntryFlags::from_bits(flags.bits()), Some(flags));
         assert_eq!(GitIndexEntryFlags::from_bits(1), None);
+    }
+
+    #[test]
+    fn entry_flags_ignore_the_packed_name_and_stage_subfields() {
+        // A stage-2 entry with an eleven-byte path and the VALID bit set.
+        let packed: u16 = 11 | (2 << 12) | 0x8000;
+        assert_eq!(GitIndexEntryFlags::from_bits(packed.into()), None);
+        assert_eq!(
+            GitIndexEntryFlags::from_entry_flags(packed),
+            GitIndexEntryFlags::VALID
+        );
+        assert_eq!(
+            GitIndexEntryFlags::from_entry_flags(0),
+            GitIndexEntryFlags::default()
+        );
+        assert_eq!(
+            GitIndexEntryFlags::from_entry_flags(u16::MAX),
+            GitIndexEntryFlags::ALL
+        );
     }
 
     #[test]
