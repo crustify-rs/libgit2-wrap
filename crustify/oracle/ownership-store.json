@@ -157,6 +157,47 @@
    ]
   },
   {
+   "name": "git_attr_options",
+   "defined_in": "include/git2/attr.h",
+   "_comment_agent": "The deprecated commit_id slot is an optional non-owning git_oid input read synchronously; the current inline attr_commit_id supersedes it. Under GIT_DEPRECATE_HARD the same ABI slot is named reserved and must remain NULL. The options value owns and frees no pointer.",
+   "fields": [
+    {
+     "name": "commit_id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Deprecated optional borrowed commit ID; read but never retained, mutated, or freed."
+     }
+    },
+    {
+     "name": "reserved",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Conditional ABI alias of commit_id under GIT_DEPRECATE_HARD; unused and required to remain NULL."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_attr_value_t",
    "defined_in": "include/git2/attr.h",
    "_comment_agent": "git_attr_value_t is a fieldless enum with no pointer, lifecycle, refcount, or locking semantics.",
@@ -483,6 +524,47 @@
       "nullable": true,
       "mutable": false,
       "note": "When raw is set, this is a caller-owned byte buffer stored by git_blob__parse_raw with data.raw.size; the blob neither copies nor frees it. Empty input may use null."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_filter_options",
+   "defined_in": "include/git2/blob.h",
+   "_comment_agent": "The deprecated commit_id slot is an optional non-owning git_oid input copied synchronously; the current inline attr_commit_id supersedes it. Under GIT_DEPRECATE_HARD the same ABI slot is named reserved and must remain NULL. The options value owns and frees no pointer.",
+   "fields": [
+    {
+     "name": "commit_id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Deprecated optional borrowed commit ID; copied but never retained, mutated, or freed."
+     }
+    },
+    {
+     "name": "reserved",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Conditional ABI alias of commit_id under GIT_DEPRECATE_HARD; unused and required to remain NULL."
      }
     }
    ]
@@ -1011,6 +1093,94 @@
    ]
   },
   {
+   "name": "git_commit_create_ext_options",
+   "defined_in": "include/git2/commit.h",
+   "_comment_agent": "All data pointers are non-owning inputs consumed synchronously. extra_headers is a nullable counted array, both char pointers are optional NUL strings, and the callback/payload pair borrows mutable caller state for synchronous invocation. The options header owns and frees nothing.",
+   "fields": [
+    {
+     "name": "extra_headers",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed array of extra header descriptors, read for extra_headers_len elements during commit creation."
+     }
+    },
+    {
+     "name": "message_encoding",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed NUL-terminated message encoding read synchronously."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "self"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller state passed to the installed signing callback; never retained or freed by libgit2."
+     }
+    },
+    {
+     "name": "sign",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable callback code address invoked synchronously and never freed."
+     }
+    },
+    {
+     "name": "update_ref",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed NUL-terminated reference name read synchronously."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_commit_graph",
    "defined_in": "src/libgit2/commit_graph.h",
    "_comment_agent": "git_commit_graph_new zero-initializes file, optionally opens it, get_file lazily installs it, refresh may free and clear it, and git_commit_graph_free always disposes the current file.",
@@ -1241,6 +1411,28 @@
       "nullable": false,
       "mutable": false,
       "note": "Required static synchronous callback installed by every completed iterator; it mutates iterator state and returns a backend entry borrowed until the next advance or iterator destruction."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_configmap",
+   "defined_in": "include/git2/config.h",
+   "_comment_agent": "str_match is a non-owning NUL string input. It is NULL for Boolean and integer mapping variants and non-NULL for string mappings; mapping lookup only reads it synchronously and never retains or frees it.",
+   "fields": [
+    {
+     "name": "str_match",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Nullable borrowed match string, used only for GIT_CONFIGMAP_STRING entries."
      }
     }
    ]

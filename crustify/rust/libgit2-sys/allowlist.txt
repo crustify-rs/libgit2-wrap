@@ -470,3 +470,10 @@
 ^git_libgit2_prerelease$
 ^git_reference_foreach_name_cb$
 ^git_status_cb$
+^git_attr_options$
+^GIT_ATTR_OPTIONS_VERSION$
+^git_blob_filter_options$
+^GIT_BLOB_FILTER_OPTIONS_VERSION$
+^git_commit_create_ext_options$
+^GIT_COMMIT_CREATE_EXT_OPTIONS_VERSION$
+^git_configmap$
