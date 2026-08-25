@@ -181,6 +181,47 @@ fn status_result(status: i32) -> Result<(), i32> {
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
+unsafe extern "C" fn hide_trampoline(oid: *const ffi::git_oid, payload: *mut c_void) -> i32 {
+    if oid.is_null() || payload.is_null() {
+        return 0;
+    }
+    // SAFETY: the payload points to the address-stable boxed trait object held
+    // by the owning walker for as long as this callback remains registered.
+    let callback = unsafe { &mut *payload.cast::<Box<dyn GitRevwalkHideCallback>>() };
+    // SAFETY: libgit2 supplies a live transient commit ID for this invocation.
+    let oid = unsafe { OidRef::from_ptr(oid.cast_mut()) }.expect("checked non-null");
+    callback.call(oid)
+}
+
+/// Wraps: git_revwalk_add_hide_cb
+/// Installs, replaces, or clears the callback retained by a revision walker.
+pub fn git_revwalk_add_hide_cb(
+    walk: &mut GitRevwalkOwned<'_>,
+    callback: Option<Box<dyn GitRevwalkHideCallback>>,
+) -> Result<(), i32> {
+    let replacement = callback.map(Box::new);
+    let function: ffi::git_revwalk_hide_cb = if replacement.is_some() {
+        Some(hide_trampoline)
+    } else {
+        None
+    };
+    let payload = replacement.as_ref().map_or(core::ptr::null_mut(), |boxed| {
+        core::ptr::from_ref::<Box<dyn GitRevwalkHideCallback>>(boxed.as_ref())
+            .cast_mut()
+            .cast()
+    });
+    let mut handle = walk.inner.as_mut();
+    // SAFETY: the walker is exclusive and `payload` is null or points into the
+    // address-stable replacement box. Libgit2 stores it only on success.
+    let status = unsafe { ffi::git_revwalk_add_hide_cb(handle.as_mut_ptr(), function, payload) };
+    if status == 0 {
+        walk.hide = replacement;
+        Ok(())
+    } else {
+        Err(status)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
@@ -227,7 +268,7 @@ mod tests {
     fn constructor_tethers_a_reusable_walker_to_its_repository() {
         // SAFETY: process-global initialization is refcounted and balanced below.
         assert!(unsafe { ffi::git_libgit2_init() } > 0);
-        let mut repository = crate::repository::git_repository_open(c"../..").unwrap();
+        let mut repository = crate::repository::git_repository_open(c"../../..").unwrap();
         let mut walker = git_revwalk_new(repository.as_mut()).unwrap();
         assert_eq!(git_revwalk_sorting(&mut walker.as_mut(), 0), Ok(()));
         assert_eq!(
@@ -239,46 +280,5 @@ mod tests {
         drop(repository);
         // SAFETY: balances this test's successful initialization.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
-    }
-}
-
-unsafe extern "C" fn hide_trampoline(oid: *const ffi::git_oid, payload: *mut c_void) -> i32 {
-    if oid.is_null() || payload.is_null() {
-        return 0;
-    }
-    // SAFETY: the payload points to the address-stable boxed trait object held
-    // by the owning walker for as long as this callback remains registered.
-    let callback = unsafe { &mut *payload.cast::<Box<dyn GitRevwalkHideCallback>>() };
-    // SAFETY: libgit2 supplies a live transient commit ID for this invocation.
-    let oid = unsafe { OidRef::from_ptr(oid.cast_mut()) }.expect("checked non-null");
-    callback.call(oid)
-}
-
-/// Wraps: git_revwalk_add_hide_cb
-/// Installs, replaces, or clears the callback retained by a revision walker.
-pub fn git_revwalk_add_hide_cb(
-    walk: &mut GitRevwalkOwned<'_>,
-    callback: Option<Box<dyn GitRevwalkHideCallback>>,
-) -> Result<(), i32> {
-    let replacement = callback.map(Box::new);
-    let function: ffi::git_revwalk_hide_cb = if replacement.is_some() {
-        Some(hide_trampoline)
-    } else {
-        None
-    };
-    let payload = replacement.as_ref().map_or(core::ptr::null_mut(), |boxed| {
-        core::ptr::from_ref::<Box<dyn GitRevwalkHideCallback>>(boxed.as_ref())
-            .cast_mut()
-            .cast()
-    });
-    let mut handle = walk.inner.as_mut();
-    // SAFETY: the walker is exclusive and `payload` is null or points into the
-    // address-stable replacement box. Libgit2 stores it only on success.
-    let status = unsafe { ffi::git_revwalk_add_hide_cb(handle.as_mut_ptr(), function, payload) };
-    if status == 0 {
-        walk.hide = replacement;
-        Ok(())
-    } else {
-        Err(status)
     }
 }

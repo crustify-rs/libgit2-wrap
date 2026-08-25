@@ -172,51 +172,6 @@ pub fn git_tag_list_match(
     if status == 0 { Ok(names) } else { Err(status) }
 }
 
-#[cfg(test)]
-mod tests {
-    use core::mem::{align_of, size_of};
-    use core::ptr;
-
-    use ffibox::{CCell, CDropped};
-
-    use super::*;
-
-    #[test]
-    fn opaque_tag_preserves_layout_and_refcount_contracts() {
-        fn assert_cell<T: CCell>() {}
-        fn assert_refcounted<T: CDropped + CCloned>() {}
-
-        assert_cell::<GitTag>();
-        assert_refcounted::<GitTag>();
-        assert_eq!(size_of::<GitTag>(), size_of::<ffi::git_tag>());
-        assert_eq!(align_of::<GitTag>(), align_of::<ffi::git_tag>());
-        assert_eq!(size_of::<GitTagRef<'_>>(), size_of::<*const ffi::git_tag>());
-        assert_eq!(size_of::<GitTagMut<'_>>(), size_of::<*mut ffi::git_tag>());
-        assert_eq!(size_of::<GitTagOwned>(), size_of::<*mut ffi::git_tag>());
-    }
-
-    #[test]
-    fn null_tag_seams_create_no_handle() {
-        // SAFETY: these conversions explicitly accept null and return `None`
-        // without borrowing or adopting an object.
-        unsafe {
-            assert!(GitTagRef::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitTagMut::from_ptr(ptr::null_mut()).is_none());
-            assert!(GitTagOwned::from_raw(ptr::null_mut()).is_none());
-        }
-    }
-
-    #[test]
-    fn tag_names_are_checked_through_the_safe_surface() {
-        // SAFETY: initialization is refcounted and balanced below.
-        assert!(unsafe { ffi::git_libgit2_init() } > 0);
-        assert_eq!(git_tag_name_is_valid(Some(c"v1.0")), Ok(true));
-        assert_eq!(git_tag_name_is_valid(None), Ok(false));
-        // SAFETY: balances this test's successful initialization.
-        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
-    }
-}
-
 /// Wraps: git_tag_annotation_create
 /// Writes an annotated tag object without creating a reference.
 pub fn git_tag_annotation_create(
@@ -383,4 +338,49 @@ pub fn git_tag_target_type(tag: GitTagRef<'_>) -> Result<GitObjectType, ffi::git
     // SAFETY: the shared tag is live and the getter retains no pointer.
     let raw = unsafe { ffi::git_tag_target_type(tag.as_ptr()) };
     GitObjectType::from_raw(raw).ok_or(raw)
+}
+
+#[cfg(test)]
+mod tests {
+    use core::mem::{align_of, size_of};
+    use core::ptr;
+
+    use ffibox::{CCell, CDropped};
+
+    use super::*;
+
+    #[test]
+    fn opaque_tag_preserves_layout_and_refcount_contracts() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_refcounted<T: CDropped + CCloned>() {}
+
+        assert_cell::<GitTag>();
+        assert_refcounted::<GitTag>();
+        assert_eq!(size_of::<GitTag>(), size_of::<ffi::git_tag>());
+        assert_eq!(align_of::<GitTag>(), align_of::<ffi::git_tag>());
+        assert_eq!(size_of::<GitTagRef<'_>>(), size_of::<*const ffi::git_tag>());
+        assert_eq!(size_of::<GitTagMut<'_>>(), size_of::<*mut ffi::git_tag>());
+        assert_eq!(size_of::<GitTagOwned>(), size_of::<*mut ffi::git_tag>());
+    }
+
+    #[test]
+    fn null_tag_seams_create_no_handle() {
+        // SAFETY: these conversions explicitly accept null and return `None`
+        // without borrowing or adopting an object.
+        unsafe {
+            assert!(GitTagRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitTagMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitTagOwned::from_raw(ptr::null_mut()).is_none());
+        }
+    }
+
+    #[test]
+    fn tag_names_are_checked_through_the_safe_surface() {
+        // SAFETY: initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        assert_eq!(git_tag_name_is_valid(Some(c"v1.0")), Ok(true));
+        assert_eq!(git_tag_name_is_valid(None), Ok(false));
+        // SAFETY: balances this test's successful initialization.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
 }

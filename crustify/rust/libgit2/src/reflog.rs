@@ -213,6 +213,40 @@ pub fn git_reflog_write(reflog: &mut GitReflogMut<'_>) -> Result<(), i32> {
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
+/// Wraps: git_reflog_append
+/// Appends a copied entry to an in-memory reflog.
+pub fn git_reflog_append(
+    reflog: &mut GitReflogMut<'_>,
+    new_oid: OidRef<'_>,
+    committer: GitSignatureRef<'_>,
+    message: Option<&CStr>,
+) -> Result<(), i32> {
+    // SAFETY: the reflog is exclusively borrowed; the OID, signature and
+    // optional message are live borrowed inputs that libgit2 duplicates before
+    // returning, so no caller pointer is retained.
+    let status = unsafe {
+        ffi::git_reflog_append(
+            reflog.as_mut_ptr(),
+            new_oid.as_ptr(),
+            committer.as_ptr(),
+            message.map_or(core::ptr::null(), CStr::as_ptr),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_reflog_entry_committer
+/// Borrows the committer signature owned by a reflog entry.
+#[must_use]
+pub fn git_reflog_entry_committer<'a>(entry: GitReflogEntryRef<'a>) -> GitSignatureRef<'a> {
+    // SAFETY: `entry` is live and shared; the result is its initialized owned
+    // signature and remains live for the entry borrow.
+    let signature = unsafe { ffi::git_reflog_entry_committer(entry.as_ptr()) };
+    // SAFETY: every complete reflog entry has a non-null committer signature.
+    unsafe { GitSignatureRef::from_ptr(signature.cast_mut()) }
+        .expect("a complete reflog entry has a committer")
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
@@ -293,38 +327,4 @@ mod tests {
             assert!(GitReflogEntryMut::from_ptr(ptr::null_mut()).is_none());
         }
     }
-}
-
-/// Wraps: git_reflog_append
-/// Appends a copied entry to an in-memory reflog.
-pub fn git_reflog_append(
-    reflog: &mut GitReflogMut<'_>,
-    new_oid: OidRef<'_>,
-    committer: GitSignatureRef<'_>,
-    message: Option<&CStr>,
-) -> Result<(), i32> {
-    // SAFETY: the reflog is exclusively borrowed; the OID, signature and
-    // optional message are live borrowed inputs that libgit2 duplicates before
-    // returning, so no caller pointer is retained.
-    let status = unsafe {
-        ffi::git_reflog_append(
-            reflog.as_mut_ptr(),
-            new_oid.as_ptr(),
-            committer.as_ptr(),
-            message.map_or(core::ptr::null(), CStr::as_ptr),
-        )
-    };
-    if status == 0 { Ok(()) } else { Err(status) }
-}
-
-/// Wraps: git_reflog_entry_committer
-/// Borrows the committer signature owned by a reflog entry.
-#[must_use]
-pub fn git_reflog_entry_committer<'a>(entry: GitReflogEntryRef<'a>) -> GitSignatureRef<'a> {
-    // SAFETY: `entry` is live and shared; the result is its initialized owned
-    // signature and remains live for the entry borrow.
-    let signature = unsafe { ffi::git_reflog_entry_committer(entry.as_ptr()) };
-    // SAFETY: every complete reflog entry has a non-null committer signature.
-    unsafe { GitSignatureRef::from_ptr(signature.cast_mut()) }
-        .expect("a complete reflog entry has a committer")
 }

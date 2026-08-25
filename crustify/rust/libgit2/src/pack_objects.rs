@@ -354,6 +354,49 @@ pub fn git_packbuilder_written(builder: GitPackbuilderRef<'_>) -> usize {
     unsafe { ffi::git_packbuilder_written(builder.as_ptr().cast_mut()) }
 }
 
+/// Wraps: git_packbuilder_write
+/// Writes the completed pack to `path`, reporting synchronous index progress.
+///
+/// Passing `None` uses the repository's default objects/pack directory.
+pub fn git_packbuilder_write<C>(
+    builder: &mut GitPackbuilderMut<'_>,
+    path: Option<&CStr>,
+    mode: u32,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: GitIndexerProgressCallback,
+{
+    unsafe extern "C" fn trampoline<C: GitIndexerProgressCallback>(
+        stats: *const ffi::git_indexer_progress,
+        payload: *mut c_void,
+    ) -> i32 {
+        if stats.is_null() || payload.is_null() {
+            return -1;
+        }
+        // SAFETY: the wrapper passes this exact live exclusive callback for
+        // the duration of the synchronous write.
+        let callback = unsafe { &mut *payload.cast::<C>() };
+        // SAFETY: libgit2 supplies a live transient progress record.
+        let stats = unsafe { IndexerProgressRef::from_ptr(stats.cast_mut()) }
+            .expect("the null case was rejected above");
+        callback.call(stats)
+    }
+
+    // SAFETY: the builder is exclusively borrowed; `path` is null or a live C
+    // string, and callback plus payload remain live until this call returns.
+    let status = unsafe {
+        ffi::git_packbuilder_write(
+            builder.as_mut_ptr(),
+            path.map_or(core::ptr::null(), CStr::as_ptr),
+            mode,
+            Some(trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
@@ -540,47 +583,4 @@ mod tests {
         let status = unsafe { progress_trampoline(0, 0, 0, core::ptr::null_mut()) };
         assert_eq!(status, -1);
     }
-}
-
-/// Wraps: git_packbuilder_write
-/// Writes the completed pack to `path`, reporting synchronous index progress.
-///
-/// Passing `None` uses the repository's default objects/pack directory.
-pub fn git_packbuilder_write<C>(
-    builder: &mut GitPackbuilderMut<'_>,
-    path: Option<&CStr>,
-    mode: u32,
-    callback: &mut C,
-) -> Result<(), i32>
-where
-    C: GitIndexerProgressCallback,
-{
-    unsafe extern "C" fn trampoline<C: GitIndexerProgressCallback>(
-        stats: *const ffi::git_indexer_progress,
-        payload: *mut c_void,
-    ) -> i32 {
-        if stats.is_null() || payload.is_null() {
-            return -1;
-        }
-        // SAFETY: the wrapper passes this exact live exclusive callback for
-        // the duration of the synchronous write.
-        let callback = unsafe { &mut *payload.cast::<C>() };
-        // SAFETY: libgit2 supplies a live transient progress record.
-        let stats = unsafe { IndexerProgressRef::from_ptr(stats.cast_mut()) }
-            .expect("the null case was rejected above");
-        callback.call(stats)
-    }
-
-    // SAFETY: the builder is exclusively borrowed; `path` is null or a live C
-    // string, and callback plus payload remain live until this call returns.
-    let status = unsafe {
-        ffi::git_packbuilder_write(
-            builder.as_mut_ptr(),
-            path.map_or(core::ptr::null(), CStr::as_ptr),
-            mode,
-            Some(trampoline::<C>),
-            core::ptr::from_mut(callback).cast(),
-        )
-    };
-    if status == 0 { Ok(()) } else { Err(status) }
 }

@@ -60,48 +60,6 @@ impl TryFrom<ffi::git_trace_level_t> for GitTraceLevel {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use core::mem::{align_of, size_of};
-
-    #[test]
-    fn published_trace_levels_round_trip_in_threshold_order() {
-        let levels = [
-            GitTraceLevel::None,
-            GitTraceLevel::Fatal,
-            GitTraceLevel::Error,
-            GitTraceLevel::Warn,
-            GitTraceLevel::Info,
-            GitTraceLevel::Debug,
-            GitTraceLevel::Trace,
-        ];
-
-        for (raw, level) in levels.into_iter().enumerate() {
-            assert_eq!(ffi::git_trace_level_t::from(level), raw as u32);
-            assert_eq!(GitTraceLevel::try_from(raw as u32), Ok(level));
-        }
-    }
-
-    #[test]
-    fn invalid_trace_levels_are_rejected() {
-        let raw = ffi::git_trace_level_t_GIT_TRACE_TRACE + 1;
-        assert_eq!(GitTraceLevel::try_from(raw).unwrap_err().value(), raw);
-    }
-
-    #[test]
-    fn trace_level_matches_the_c_abi_scalar() {
-        assert_eq!(
-            size_of::<GitTraceLevel>(),
-            size_of::<ffi::git_trace_level_t>()
-        );
-        assert_eq!(
-            align_of::<GitTraceLevel>(),
-            align_of::<ffi::git_trace_level_t>()
-        );
-    }
-}
-
 /// A process-global, thread-safe trace callback.
 pub type GitTraceCallback = fn(GitTraceLevel, &CStr);
 
@@ -154,5 +112,47 @@ pub fn git_trace_set(level: GitTraceLevel, callback: Option<GitTraceCallback>) -
     } else {
         *slot = previous;
         Err(status)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::mem::{align_of, size_of};
+
+    #[test]
+    fn published_trace_levels_round_trip_in_threshold_order() {
+        let levels = [
+            GitTraceLevel::None,
+            GitTraceLevel::Fatal,
+            GitTraceLevel::Error,
+            GitTraceLevel::Warn,
+            GitTraceLevel::Info,
+            GitTraceLevel::Debug,
+            GitTraceLevel::Trace,
+        ];
+
+        for (raw, level) in levels.into_iter().enumerate() {
+            assert_eq!(ffi::git_trace_level_t::from(level), raw as u32);
+            assert_eq!(GitTraceLevel::try_from(raw as u32), Ok(level));
+        }
+    }
+
+    #[test]
+    fn invalid_trace_levels_are_rejected() {
+        let raw = ffi::git_trace_level_t_GIT_TRACE_TRACE + 1;
+        assert_eq!(GitTraceLevel::try_from(raw).unwrap_err().value(), raw);
+    }
+
+    #[test]
+    fn trace_level_matches_the_c_abi_scalar() {
+        assert_eq!(
+            size_of::<GitTraceLevel>(),
+            size_of::<ffi::git_trace_level_t>()
+        );
+        assert_eq!(
+            align_of::<GitTraceLevel>(),
+            align_of::<ffi::git_trace_level_t>()
+        );
     }
 }

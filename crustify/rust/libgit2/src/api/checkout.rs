@@ -1010,19 +1010,17 @@ mod checkout_options_tests {
             // SAFETY: as above; this merely copies the opaque pointer.
             let payload = unsafe { addr_of!((*ptr).notify_payload).read() };
             // SAFETY: the callback and payload remain live and exclusively reserved.
-            assert_eq!(
-                unsafe {
-                    function(
-                        crate::checkout::CheckoutNotify::UPDATED.bits(),
-                        c"file".as_ptr(),
-                        core::ptr::null(),
-                        core::ptr::null(),
-                        core::ptr::null(),
-                        payload,
-                    )
-                },
-                0
-            );
+            let rc = unsafe {
+                function(
+                    crate::checkout::CheckoutNotify::UPDATED.bits(),
+                    c"file".as_ptr(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    payload,
+                )
+            };
+            assert_eq!(rc, 0);
             view.clear_notify_callback();
             assert!(!view.as_ref().has_notify_callback());
             assert!(!view.as_ref().has_notify_payload());

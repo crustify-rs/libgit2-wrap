@@ -131,44 +131,6 @@ pub fn git_patch_from_buffers<'input>(
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn generated_buffer_patch_exposes_owned_patch_access() {
-        // SAFETY: libgit2 initialization is refcounted and balanced below.
-        assert!(unsafe { ffi::git_libgit2_init() } > 0);
-        let old = b"old\n";
-        let new = b"new\n";
-        let blob_patch = git_patch_from_blobs(None, None, None, None, None)
-            .expect("two empty blob sides still produce a patch");
-        assert_eq!(crate::patch::git_patch_num_hunks(blob_patch.as_ref()), 0);
-        drop(blob_patch);
-        let one_sided = git_patch_from_blob_and_buffer(None, None, new, None, None)
-            .expect("an empty blob and one buffer produce a patch");
-        assert_eq!(crate::patch::git_patch_num_hunks(one_sided.as_ref()), 1);
-        drop(one_sided);
-        let mut patch = git_patch_from_buffers(old, Some(c"a"), new, Some(c"a"), None)
-            .expect("valid buffers produce a patch");
-        assert_eq!(crate::patch::git_patch_num_hunks(patch.as_ref()), 1);
-        assert_eq!(
-            crate::patch::git_patch_num_lines_in_hunk(patch.as_ref(), 0).unwrap(),
-            2
-        );
-        assert_eq!(
-            crate::patch::git_patch_line_stats(patch.as_ref())
-                .unwrap()
-                .additions,
-            1
-        );
-        let _ = patch.as_mut();
-        drop(patch);
-        // SAFETY: balances the successful initialization above.
-        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
-    }
-}
-
 /// Wraps: git_diff_blobs
 /// Compares two optional blobs and reports differences synchronously.
 #[allow(clippy::too_many_arguments)]
@@ -227,4 +189,42 @@ pub fn git_diff_blobs<'callbacks>(
         )
     };
     if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_buffer_patch_exposes_owned_patch_access() {
+        // SAFETY: libgit2 initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let old = b"old\n";
+        let new = b"new\n";
+        let blob_patch = git_patch_from_blobs(None, None, None, None, None)
+            .expect("two empty blob sides still produce a patch");
+        assert_eq!(crate::patch::git_patch_num_hunks(blob_patch.as_ref()), 0);
+        drop(blob_patch);
+        let one_sided = git_patch_from_blob_and_buffer(None, None, new, None, None)
+            .expect("an empty blob and one buffer produce a patch");
+        assert_eq!(crate::patch::git_patch_num_hunks(one_sided.as_ref()), 1);
+        drop(one_sided);
+        let mut patch = git_patch_from_buffers(old, Some(c"a"), new, Some(c"a"), None)
+            .expect("valid buffers produce a patch");
+        assert_eq!(crate::patch::git_patch_num_hunks(patch.as_ref()), 1);
+        assert_eq!(
+            crate::patch::git_patch_num_lines_in_hunk(patch.as_ref(), 0).unwrap(),
+            2
+        );
+        assert_eq!(
+            crate::patch::git_patch_line_stats(patch.as_ref())
+                .unwrap()
+                .additions,
+            1
+        );
+        let _ = patch.as_mut();
+        drop(patch);
+        // SAFETY: balances the successful initialization above.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
 }

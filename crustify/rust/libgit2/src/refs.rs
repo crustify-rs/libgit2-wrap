@@ -660,6 +660,64 @@ pub fn git_reference_type(
     GitReferenceType::try_from(unsafe { ffi::git_reference_type(reference.as_ptr()) })
 }
 
+/// Wraps: git_reference_iterator_glob_new
+/// Creates an owned reference iterator filtered by `glob`.
+pub fn git_reference_iterator_glob_new(
+    repository: &mut GitRepositoryMut<'_>,
+    glob: &CStr,
+) -> Result<GitReferenceIteratorOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot is writable, the repository is exclusively
+    // available for lazy refdb initialization, and `glob` is copied by the
+    // backend before returning. The iterator acquires its own refdb count.
+    let status = unsafe {
+        ffi::git_reference_iterator_glob_new(
+            core::ptr::addr_of_mut!(output),
+            repository.as_mut_ptr(),
+            glob.as_ptr(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete iterator allocation.
+    unsafe { GitReferenceIteratorOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_reference_iterator_new
+/// Creates an owned iterator over all repository references.
+pub fn git_reference_iterator_new(
+    repository: &mut GitRepositoryMut<'_>,
+) -> Result<GitReferenceIteratorOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output is writable and the exclusive repository handle
+    // permits lazy refdb initialization. The result owns a refdb count.
+    let status = unsafe {
+        ffi::git_reference_iterator_new(core::ptr::addr_of_mut!(output), repository.as_mut_ptr())
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete iterator allocation.
+    unsafe { GitReferenceIteratorOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_reference_next
+/// Advances an iterator and returns an independently owned reference.
+pub fn git_reference_next(
+    iterator: &mut GitReferenceIteratorMut<'_>,
+) -> Result<GitReferenceOwned, i32> {
+    iterator.next_reference()
+}
+
+/// Wraps: git_reference_next_name
+/// Advances an iterator and borrows its current backend-owned name.
+pub fn git_reference_next_name<'a>(
+    iterator: &'a mut GitReferenceIteratorMut<'_>,
+) -> Result<&'a CStr, i32> {
+    iterator.next_name()
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
@@ -756,62 +814,4 @@ mod tests {
     fn failed_result_accepts_an_empty_typed_owner() {
         assert!(matches!(adopt_reference(-123, None), Err(-123)));
     }
-}
-
-/// Wraps: git_reference_iterator_glob_new
-/// Creates an owned reference iterator filtered by `glob`.
-pub fn git_reference_iterator_glob_new(
-    repository: &mut GitRepositoryMut<'_>,
-    glob: &CStr,
-) -> Result<GitReferenceIteratorOwned, i32> {
-    let mut output = core::ptr::null_mut();
-    // SAFETY: the output slot is writable, the repository is exclusively
-    // available for lazy refdb initialization, and `glob` is copied by the
-    // backend before returning. The iterator acquires its own refdb count.
-    let status = unsafe {
-        ffi::git_reference_iterator_glob_new(
-            core::ptr::addr_of_mut!(output),
-            repository.as_mut_ptr(),
-            glob.as_ptr(),
-        )
-    };
-    if status != 0 {
-        return Err(status);
-    }
-    // SAFETY: success transfers one complete iterator allocation.
-    unsafe { GitReferenceIteratorOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
-}
-
-/// Wraps: git_reference_iterator_new
-/// Creates an owned iterator over all repository references.
-pub fn git_reference_iterator_new(
-    repository: &mut GitRepositoryMut<'_>,
-) -> Result<GitReferenceIteratorOwned, i32> {
-    let mut output = core::ptr::null_mut();
-    // SAFETY: the output is writable and the exclusive repository handle
-    // permits lazy refdb initialization. The result owns a refdb count.
-    let status = unsafe {
-        ffi::git_reference_iterator_new(core::ptr::addr_of_mut!(output), repository.as_mut_ptr())
-    };
-    if status != 0 {
-        return Err(status);
-    }
-    // SAFETY: success transfers one complete iterator allocation.
-    unsafe { GitReferenceIteratorOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
-}
-
-/// Wraps: git_reference_next
-/// Advances an iterator and returns an independently owned reference.
-pub fn git_reference_next(
-    iterator: &mut GitReferenceIteratorMut<'_>,
-) -> Result<GitReferenceOwned, i32> {
-    iterator.next_reference()
-}
-
-/// Wraps: git_reference_next_name
-/// Advances an iterator and borrows its current backend-owned name.
-pub fn git_reference_next_name<'a>(
-    iterator: &'a mut GitReferenceIteratorMut<'_>,
-) -> Result<&'a CStr, i32> {
-    iterator.next_name()
 }

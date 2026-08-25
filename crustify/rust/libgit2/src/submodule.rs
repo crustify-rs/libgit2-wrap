@@ -491,6 +491,46 @@ pub fn git_submodule_update(
     status_result(status)
 }
 
+/// Wraps: git_submodule_foreach
+/// Visits a stable snapshot of the repository's submodules.
+pub fn git_submodule_foreach<C>(
+    repository: &mut GitRepositoryMut<'_>,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: GitSubmoduleCallback,
+{
+    unsafe extern "C" fn trampoline<C: GitSubmoduleCallback>(
+        submodule: *mut ffi::git_submodule,
+        name: *const core::ffi::c_char,
+        payload: *mut c_void,
+    ) -> i32 {
+        if submodule.is_null() || name.is_null() || payload.is_null() {
+            return -1;
+        }
+        // SAFETY: the wrapper supplies this live exclusive callback throughout
+        // the synchronous traversal.
+        let callback = unsafe { &mut *payload.cast::<C>() };
+        // SAFETY: the snapshot holds a count on this non-null submodule and
+        // invokes callbacks serially, granting exclusive access for the call.
+        let submodule = unsafe { GitSubmoduleMut::from_ptr(submodule) }.expect("checked non-null");
+        // SAFETY: `name` is the submodule-owned NUL string, live for this call.
+        let name = unsafe { CStr::from_ptr(name) };
+        callback.call(submodule, name)
+    }
+
+    // SAFETY: the repository and callback remain exclusively borrowed for the
+    // synchronous traversal and libgit2 retains neither pointer afterwards.
+    let status = unsafe {
+        ffi::git_submodule_foreach(
+            repository.as_mut_ptr(),
+            Some(trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
@@ -574,44 +614,4 @@ mod tests {
         ) -> Result<(), i32> = git_submodule_update;
         let _ = (clone, clone_without_output, update);
     }
-}
-
-/// Wraps: git_submodule_foreach
-/// Visits a stable snapshot of the repository's submodules.
-pub fn git_submodule_foreach<C>(
-    repository: &mut GitRepositoryMut<'_>,
-    callback: &mut C,
-) -> Result<(), i32>
-where
-    C: GitSubmoduleCallback,
-{
-    unsafe extern "C" fn trampoline<C: GitSubmoduleCallback>(
-        submodule: *mut ffi::git_submodule,
-        name: *const core::ffi::c_char,
-        payload: *mut c_void,
-    ) -> i32 {
-        if submodule.is_null() || name.is_null() || payload.is_null() {
-            return -1;
-        }
-        // SAFETY: the wrapper supplies this live exclusive callback throughout
-        // the synchronous traversal.
-        let callback = unsafe { &mut *payload.cast::<C>() };
-        // SAFETY: the snapshot holds a count on this non-null submodule and
-        // invokes callbacks serially, granting exclusive access for the call.
-        let submodule = unsafe { GitSubmoduleMut::from_ptr(submodule) }.expect("checked non-null");
-        // SAFETY: `name` is the submodule-owned NUL string, live for this call.
-        let name = unsafe { CStr::from_ptr(name) };
-        callback.call(submodule, name)
-    }
-
-    // SAFETY: the repository and callback remain exclusively borrowed for the
-    // synchronous traversal and libgit2 retains neither pointer afterwards.
-    let status = unsafe {
-        ffi::git_submodule_foreach(
-            repository.as_mut_ptr(),
-            Some(trampoline::<C>),
-            core::ptr::from_mut(callback).cast(),
-        )
-    };
-    if status == 0 { Ok(()) } else { Err(status) }
 }

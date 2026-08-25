@@ -69,6 +69,33 @@ where
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
+/// Wraps: git_diff_print
+/// Formats a diff and delivers each transient output line to `callback`.
+pub fn git_diff_print(
+    diff: &mut crate::diff::DiffMut<'_>,
+    format: crate::diff::DiffFormat,
+    callback: &mut dyn crate::api::diff::GitDiffLineCallback,
+) -> Result<(), i32> {
+    let mut callbacks = crate::diff::DiffCallbacks {
+        file: None,
+        binary: None,
+        hunk: None,
+        line: Some(callback),
+    };
+    // SAFETY: the diff is exclusive and the callback payload remains live for
+    // the complete synchronous formatting operation. The trampoline catches
+    // Rust panics and validates every transient C pointer.
+    let status = unsafe {
+        ffi::git_diff_print(
+            diff.as_mut_ptr(),
+            format.into(),
+            Some(crate::diff::diff_line_trampoline),
+            core::ptr::from_mut(&mut callbacks).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
 #[cfg(test)]
 mod print_tests {
     use super::*;
@@ -125,31 +152,4 @@ mod print_tests {
         // SAFETY: balances the successful initialization above.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
-}
-
-/// Wraps: git_diff_print
-/// Formats a diff and delivers each transient output line to `callback`.
-pub fn git_diff_print(
-    diff: &mut crate::diff::DiffMut<'_>,
-    format: crate::diff::DiffFormat,
-    callback: &mut dyn crate::api::diff::GitDiffLineCallback,
-) -> Result<(), i32> {
-    let mut callbacks = crate::diff::DiffCallbacks {
-        file: None,
-        binary: None,
-        hunk: None,
-        line: Some(callback),
-    };
-    // SAFETY: the diff is exclusive and the callback payload remains live for
-    // the complete synchronous formatting operation. The trampoline catches
-    // Rust panics and validates every transient C pointer.
-    let status = unsafe {
-        ffi::git_diff_print(
-            diff.as_mut_ptr(),
-            format.into(),
-            Some(crate::diff::diff_line_trampoline),
-            core::ptr::from_mut(&mut callbacks).cast(),
-        )
-    };
-    if status == 0 { Ok(()) } else { Err(status) }
 }

@@ -138,6 +138,60 @@ pub fn git_transaction_set_reflog(
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
+/// Wraps: git_transaction_set_symbolic_target
+/// Sets a locked reference's symbolic target and copies all optional reflog
+/// data into transaction-owned storage.
+pub fn git_transaction_set_symbolic_target(
+    transaction: &mut GitTransactionMut<'_>,
+    refname: &CStr,
+    target: &CStr,
+    signature: Option<GitSignatureRef<'_>>,
+    message: Option<&CStr>,
+) -> Result<(), i32> {
+    let signature = signature.map_or(core::ptr::null(), |value| value.as_ptr());
+    let message = message.map_or(core::ptr::null(), CStr::as_ptr);
+    // SAFETY: the transaction is live and exclusive, required strings are
+    // live C strings, and optional pointers are null or live for the call.
+    // Libgit2 copies the target, signature, and message before returning.
+    let status = unsafe {
+        ffi::git_transaction_set_symbolic_target(
+            transaction.as_mut_ptr(),
+            refname.as_ptr(),
+            target.as_ptr(),
+            signature,
+            message,
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_transaction_set_target
+/// Sets a locked reference's direct target and copies all optional reflog data
+/// into transaction-owned storage.
+pub fn git_transaction_set_target(
+    transaction: &mut GitTransactionMut<'_>,
+    refname: &CStr,
+    target: OidRef<'_>,
+    signature: Option<GitSignatureRef<'_>>,
+    message: Option<&CStr>,
+) -> Result<(), i32> {
+    let signature = signature.map_or(core::ptr::null(), |value| value.as_ptr());
+    let message = message.map_or(core::ptr::null(), CStr::as_ptr);
+    // SAFETY: the transaction is live and exclusive; all required inputs are
+    // live for the call; optional pointers are null or live. Libgit2 copies
+    // the target and optional reflog data before returning.
+    let status = unsafe {
+        ffi::git_transaction_set_target(
+            transaction.as_mut_ptr(),
+            refname.as_ptr(),
+            target.as_ptr(),
+            signature,
+            message,
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
@@ -200,58 +254,4 @@ mod tests {
         fn assert_dropped<T: CDropped>() {}
         assert_dropped::<GitTransaction>();
     }
-}
-
-/// Wraps: git_transaction_set_symbolic_target
-/// Sets a locked reference's symbolic target and copies all optional reflog
-/// data into transaction-owned storage.
-pub fn git_transaction_set_symbolic_target(
-    transaction: &mut GitTransactionMut<'_>,
-    refname: &CStr,
-    target: &CStr,
-    signature: Option<GitSignatureRef<'_>>,
-    message: Option<&CStr>,
-) -> Result<(), i32> {
-    let signature = signature.map_or(core::ptr::null(), |value| value.as_ptr());
-    let message = message.map_or(core::ptr::null(), CStr::as_ptr);
-    // SAFETY: the transaction is live and exclusive, required strings are
-    // live C strings, and optional pointers are null or live for the call.
-    // Libgit2 copies the target, signature, and message before returning.
-    let status = unsafe {
-        ffi::git_transaction_set_symbolic_target(
-            transaction.as_mut_ptr(),
-            refname.as_ptr(),
-            target.as_ptr(),
-            signature,
-            message,
-        )
-    };
-    if status == 0 { Ok(()) } else { Err(status) }
-}
-
-/// Wraps: git_transaction_set_target
-/// Sets a locked reference's direct target and copies all optional reflog data
-/// into transaction-owned storage.
-pub fn git_transaction_set_target(
-    transaction: &mut GitTransactionMut<'_>,
-    refname: &CStr,
-    target: OidRef<'_>,
-    signature: Option<GitSignatureRef<'_>>,
-    message: Option<&CStr>,
-) -> Result<(), i32> {
-    let signature = signature.map_or(core::ptr::null(), |value| value.as_ptr());
-    let message = message.map_or(core::ptr::null(), CStr::as_ptr);
-    // SAFETY: the transaction is live and exclusive; all required inputs are
-    // live for the call; optional pointers are null or live. Libgit2 copies
-    // the target and optional reflog data before returning.
-    let status = unsafe {
-        ffi::git_transaction_set_target(
-            transaction.as_mut_ptr(),
-            refname.as_ptr(),
-            target.as_ptr(),
-            signature,
-            message,
-        )
-    };
-    if status == 0 { Ok(()) } else { Err(status) }
 }
