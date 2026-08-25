@@ -565,3 +565,6 @@
 ^GIT_CONFIG_BACKEND_VERSION$
 ^git_remote_connect_options$
 ^GIT_REMOTE_CONNECT_OPTIONS_VERSION$
+
+# wrap batch 6e706dcc
+^(git_fetch_options_init|git_push_options_init|git_remote_upload)$

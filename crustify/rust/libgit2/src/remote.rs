@@ -1513,7 +1513,7 @@ mod scheduled_transfer_tests {
         let fetch_options = GitFetchOptions::new();
         let push_options = GitPushOptions::new();
 
-        // All three reject a repository-less remote before reading the
+        // All four reject a repository-less remote before reading the
         // options, so each records the same `GIT_ERROR_INVALID` refusal.
         fn assert_detached_refusal(status: Result<(), i32>) {
             assert_eq!(status, Err(-1));
@@ -1535,6 +1535,11 @@ mod scheduled_transfer_tests {
             Some(refspecs.as_ref()),
             Some(fetch_options.as_ref()),
             Some(c"fetch test"),
+        ));
+        assert_detached_refusal(git_remote_upload(
+            &mut remote.as_mut(),
+            Some(refspecs.as_ref()),
+            Some(push_options.as_ref()),
         ));
         assert_detached_refusal(git_remote_push(
             &mut remote.as_mut(),
@@ -1855,4 +1860,47 @@ fn remote_create_with_opts_raw(
     // SAFETY: `raw` is null or one complete transferred remote allocation.
     let remote = unsafe { GitRemoteOwned::from_raw(raw) };
     remote_result(status, remote)
+}
+
+/// Wraps: git_remote_upload
+/// Uploads the selected refspecs and leaves the remote connected.
+///
+/// Refspec strings, HTTP headers, the proxy URL and remote push options are
+/// copied by libgit2. Callback and proxy payload slots are not: they are
+/// copied into the connected transport, and callbacks are also copied into
+/// the push state retained by the remote. Because this operation deliberately
+/// leaves both states installed for later remote operations, nested option
+/// data must be `'static`.
+///
+/// A shorter-lived proxy payload is therefore rejected:
+///
+/// ```compile_fail
+/// use core::ffi::CStr;
+///
+/// use libgit2::api::remote::GitPushOptions;
+/// use libgit2::remote::{GitRemoteMut, git_remote_upload};
+///
+/// fn upload(remote: &mut GitRemoteMut<'_>, proxy: &CStr) {
+///     let proxy = proxy.to_owned();
+///     let mut options = GitPushOptions::new();
+///     options.as_mut().proxy_options_mut().set_url(Some(&proxy));
+///     let _ = git_remote_upload(remote, None, Some(options.as_ref()));
+/// }
+/// ```
+pub fn git_remote_upload(
+    remote: &mut GitRemoteMut<'_>,
+    refspecs: Option<GitStrArrayRef<'_>>,
+    options: Option<GitPushOptionsRef<'_, 'static>>,
+) -> Result<(), i32> {
+    // SAFETY: the remote is live and exclusive, refspecs remain live until
+    // their strings have been copied, and any nested payload pointer copied
+    // into the retained transport or push state is valid for the program.
+    let status = unsafe {
+        ffi::git_remote_upload(
+            remote.as_mut_ptr(),
+            refspecs.map_or(core::ptr::null(), |values| values.as_ptr()),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

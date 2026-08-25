@@ -1,6 +1,23 @@
 //! Safe wrappers for libgit2 push APIs.
 
+use crate::api::remote::GitPushOptions;
 use crate::ffi;
+
+/// Wraps: git_push_options_init
+/// Creates push options initialized for `version`.
+pub fn git_push_options_init<'data>(
+    version: core::ffi::c_uint,
+) -> Result<ffibox::CVal<GitPushOptions<'data>>, i32> {
+    let mut options = GitPushOptions::<'data>::new();
+    // SAFETY: the inline options storage is exclusively writable and the C
+    // initializer retains no pointer to it or to any of its cleared fields.
+    let status = unsafe { ffi::git_push_options_init(options.as_mut().as_mut_ptr(), version) };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
 
 ffibox::define_ctype!(
     /// Wraps: git_push
@@ -73,5 +90,22 @@ mod tests {
         // SAFETY: `raw` came from this `Box::into_raw`, no handle remains, and
         // the cast recovers the allocation's original type.
         drop(unsafe { Box::from_raw(raw.cast::<MaybeUninit<ffi::git_push>>()) });
+    }
+
+    #[test]
+    fn current_initializer_writes_published_push_defaults() {
+        let options = git_push_options_init(ffi::GIT_PUSH_OPTIONS_VERSION)
+            .expect("the published push-options version initializes");
+        let options = options.as_ref();
+        assert_eq!(options.version(), ffi::GIT_PUSH_OPTIONS_VERSION);
+        assert_eq!(options.packbuilder_parallelism(), 1);
+        assert_eq!(
+            options.callbacks().version(),
+            ffi::GIT_REMOTE_CALLBACKS_VERSION
+        );
+        assert_eq!(
+            options.proxy_options().version(),
+            ffi::GIT_PROXY_OPTIONS_VERSION
+        );
     }
 }

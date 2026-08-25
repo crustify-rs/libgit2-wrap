@@ -20783,6 +20783,29 @@
    ]
   },
   {
+   "name": "git_fetch_options_init",
+   "defined_in": "src/libgit2/fetch.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-owned single options record. On a supported version the body copies the complete static template into it, retains no pointer, and never takes ownership; the published contract requires non-null writable storage."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_filter_list_apply_to_blob",
    "defined_in": "src/libgit2/filter.c",
    "ptr_args": [
@@ -33113,6 +33136,29 @@
    ]
   },
   {
+   "name": "git_push_options_init",
+   "defined_in": "src/libgit2/push.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Caller-owned single options record. On a supported version the body copies the complete static template into it, retains no pointer, and never takes ownership; the published contract requires non-null writable storage."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_push_transfer_progress_cb",
    "defined_in": null,
    "ptr_args": [
@@ -39470,6 +39516,63 @@
       "nullable": false,
       "mutable": true,
       "note": "Exclusively borrows the remote: the call truncates FETCH_HEAD and writes remote-tracking references and reflogs through remote->repo, and may run git_remote_prune. Ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_upload",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed options header. The outer record is transient, but callbacks and payload slots are plain-copied into the transport and remote->push; standalone upload leaves that connection and push state installed, while proxy URL, custom headers, remote push options and refspec strings are deep-copied. A safe wrapper must therefore keep nested callback/proxy payload data alive for the later remote operations that can reach those copies."
+     }
+    },
+    {
+     "name": "refspecs",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:refspecs"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed git_strarray header. Each selected refspec string is parsed and copied into push-owned state during the call; neither the header nor its string pointers are retained."
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required caller-owned remote. Upload mutates connection state, active refspecs, and remote->push, but neither frees nor retains a new reference to the remote itself."
      }
     }
    ]
