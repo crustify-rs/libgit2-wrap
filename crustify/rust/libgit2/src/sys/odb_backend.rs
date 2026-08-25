@@ -159,19 +159,17 @@ impl GitOdbBackendData {
         self.len() == 0
     }
 
-    fn from_callback_parts(data: *mut c_void, len: usize) -> Result<Self, GitOdbBackendError> {
-        if data.is_null() {
+    fn from_callback_bytes(
+        bytes: Option<CVec<u8, GitMallocFree>>,
+        len: usize,
+    ) -> Result<Self, GitOdbBackendError> {
+        if bytes.is_none() {
             return if len == 0 {
                 Ok(Self { bytes: None })
             } else {
                 Err(GitOdbBackendError::MissingData)
             };
         }
-
-        // SAFETY: the successful backend callback transfers a unique run of
-        // `len` bytes allocated with `git_odb_backend_data_alloc`, which uses
-        // libgit2's configured allocator and therefore matches this strategy.
-        let bytes = unsafe { CVec::from_raw_parts(data.cast::<u8>(), len) };
         Ok(Self { bytes })
     }
 }
@@ -243,7 +241,11 @@ impl GitOdbBackendMut<'_> {
             }
             return Err(GitOdbBackendError::Libgit2(status));
         }
-        let data = GitOdbBackendData::from_callback_parts(data, len)?;
+        // SAFETY: the successful backend callback transfers a unique run of
+        // `len` bytes allocated with `git_odb_backend_data_alloc`, which uses
+        // libgit2's configured allocator and therefore matches this strategy.
+        let data = unsafe { CVec::from_raw_parts(data.cast::<u8>(), len) };
+        let data = GitOdbBackendData::from_callback_bytes(data, len)?;
         let kind =
             GitObjectType::from_raw(kind).ok_or(GitOdbBackendError::InvalidObjectType(kind))?;
         Ok((data, kind))
@@ -287,7 +289,11 @@ impl GitOdbBackendMut<'_> {
             }
             return Err(GitOdbBackendError::Libgit2(status));
         }
-        let data = GitOdbBackendData::from_callback_parts(data, len)?;
+        // SAFETY: the successful backend callback transfers a unique run of
+        // `len` bytes allocated with `git_odb_backend_data_alloc`, which uses
+        // libgit2's configured allocator and therefore matches this strategy.
+        let data = unsafe { CVec::from_raw_parts(data.cast::<u8>(), len) };
+        let data = GitOdbBackendData::from_callback_bytes(data, len)?;
         let kind =
             GitObjectType::from_raw(kind).ok_or(GitOdbBackendError::InvalidObjectType(kind))?;
         Ok((oid, data, kind))
@@ -509,11 +515,8 @@ impl GitOdbBackendMut<'_> {
         progress: C,
     ) -> Result<GitOdbBackendWritepack<'owners, C>, GitOdbBackendError> {
         let mut progress = Box::new(progress);
-        let inner = self.write_pack_impl(
-            odb,
-            Some(progress_trampoline::<C>),
-            (&raw mut *progress).cast(),
-        )?;
+        let inner =
+            self.write_pack_impl(odb, Some(progress.as_mut()), Some(progress_trampoline::<C>))?;
         Ok(GitOdbBackendWritepack {
             inner,
             _progress: Some(progress),
@@ -526,7 +529,7 @@ impl GitOdbBackendMut<'_> {
         &'owners mut self,
         odb: &'owners mut GitOdbMut<'_>,
     ) -> Result<GitOdbBackendWritepack<'owners>, GitOdbBackendError> {
-        let inner = self.write_pack_impl(odb, None, null_mut())?;
+        let inner = self.write_pack_impl::<()>(odb, None, None)?;
         Ok(GitOdbBackendWritepack {
             inner,
             _progress: None,
@@ -534,15 +537,16 @@ impl GitOdbBackendMut<'_> {
         })
     }
 
-    fn write_pack_impl(
+    fn write_pack_impl<C>(
         &mut self,
         odb: &mut GitOdbMut<'_>,
+        progress_state: Option<&mut C>,
         progress: ffi::git_indexer_progress_cb,
-        payload: *mut c_void,
     ) -> Result<OdbWritepackOwned, GitOdbBackendError> {
         let backend = self.as_mut_ptr();
         let open = backend_callback!(self, backend, writepack, GitOdbBackendOperation::WritePack)?;
         let mut writepack = null_mut();
+        let payload = progress_state.map_or(null_mut(), |state| (state as *mut C).cast());
         // SAFETY: the output is writable and both typed handles are exclusively
         // borrowed. Any progress payload is paired with its trampoline; the
         // public constructors tether that stable payload and both handles to
@@ -760,6 +764,15 @@ mod tests {
                 GitOdbBackendOperation::Refresh
             ))
         );
+    }
+
+    #[test]
+    fn backend_data_keeps_missing_storage_typed() {
+        let empty = GitOdbBackendData::from_callback_bytes(None, 0);
+        assert!(matches!(empty, Ok(data) if data.is_empty()));
+
+        let missing = GitOdbBackendData::from_callback_bytes(None, 1);
+        assert!(matches!(missing, Err(GitOdbBackendError::MissingData)));
     }
 
     #[test]

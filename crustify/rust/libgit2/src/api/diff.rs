@@ -573,7 +573,7 @@ pub enum DiffSimilarityError {
 pub struct DiffSimilaritySignature<'a> {
     ptr: NonNull<core::ffi::c_void>,
     metric: NonNull<ffi::git_diff_similarity_metric>,
-    payload: *mut core::ffi::c_void,
+    payload: Option<NonNull<core::ffi::c_void>>,
     free: DiffFreeSignatureCallback,
     _lifetime: core::marker::PhantomData<DiffSimilarityMetricRef<'a>>,
 }
@@ -583,7 +583,12 @@ impl Drop for DiffSimilaritySignature<'_> {
         // SAFETY: this token was produced by one of the table's signature
         // callbacks and carries that same table's required destructor and
         // payload. It is consumed exactly once here.
-        unsafe { (self.free)(self.ptr.as_ptr(), self.payload) }
+        unsafe {
+            (self.free)(
+                self.ptr.as_ptr(),
+                self.payload.map_or(core::ptr::null_mut(), NonNull::as_ptr),
+            )
+        }
     }
 }
 
@@ -619,7 +624,7 @@ impl<'a> DiffSimilarityMetricRef<'a> {
         // `signature` is a valid output slot, and the table's validity
         // contract couples the callback to its payload.
         let error = unsafe { callback(&mut signature, file.as_ptr(), fullpath.as_ptr(), payload) };
-        self.finish_signature(error, signature, free, payload)
+        self.finish_signature(error, NonNull::new(signature), free, NonNull::new(payload))
     }
 
     /// Field: git_diff_similarity_metric.buffer_signature
@@ -653,7 +658,7 @@ impl<'a> DiffSimilarityMetricRef<'a> {
                 payload,
             )
         };
-        self.finish_signature(error, signature, free, payload)
+        self.finish_signature(error, NonNull::new(signature), free, NonNull::new(payload))
     }
 
     /// Field: git_diff_similarity_metric.free_signature
@@ -699,19 +704,24 @@ impl<'a> DiffSimilarityMetricRef<'a> {
     fn finish_signature(
         &self,
         error: core::ffi::c_int,
-        signature: *mut core::ffi::c_void,
+        signature: Option<NonNull<core::ffi::c_void>>,
         free: DiffFreeSignatureCallback,
-        payload: *mut core::ffi::c_void,
+        payload: Option<NonNull<core::ffi::c_void>>,
     ) -> Result<Option<DiffSimilaritySignature<'a>>, DiffSimilarityError> {
         if error < 0 {
-            if let Some(signature) = NonNull::new(signature) {
+            if let Some(signature) = signature {
                 // SAFETY: even on failure libgit2's callback protocol cleans
                 // up a non-null output with the table's paired destructor.
-                unsafe { free(signature.as_ptr(), payload) }
+                unsafe {
+                    free(
+                        signature.as_ptr(),
+                        payload.map_or(core::ptr::null_mut(), NonNull::as_ptr),
+                    )
+                }
             }
             return Err(DiffSimilarityError::Callback(error));
         }
-        Ok(NonNull::new(signature).map(|ptr| DiffSimilaritySignature {
+        Ok(signature.map(|ptr| DiffSimilaritySignature {
             ptr,
             metric: NonNull::new(self.as_ptr().cast_mut())
                 .expect("a live borrowed handle is non-null"),
@@ -788,6 +798,7 @@ impl DiffSimilarityMetricMut<'_> {
 #[cfg(test)]
 mod similarity_metric_tests {
     use core::mem::{align_of, size_of};
+    use core::sync::atomic::{AtomicUsize, Ordering};
 
     use ffibox::{CCell, CValued};
 
@@ -798,6 +809,8 @@ mod similarity_metric_tests {
         calls: usize,
         frees: usize,
     }
+
+    static NULL_PAYLOAD_FREES: AtomicUsize = AtomicUsize::new(0);
 
     unsafe extern "C" fn file_signature(
         out: *mut *mut core::ffi::c_void,
@@ -843,6 +856,15 @@ mod similarity_metric_tests {
         // SAFETY: the test payload remains live and exclusively accessed by
         // these sequential callbacks.
         unsafe { (*payload.cast::<Payload>()).frees += 1 }
+    }
+
+    unsafe extern "C" fn free_signature_without_payload(
+        signature: *mut core::ffi::c_void,
+        payload: *mut core::ffi::c_void,
+    ) {
+        assert!(!signature.is_null());
+        assert!(payload.is_null());
+        NULL_PAYLOAD_FREES.fetch_add(1, Ordering::SeqCst);
     }
 
     unsafe extern "C" fn similarity(
@@ -919,6 +941,25 @@ mod similarity_metric_tests {
         assert_eq!(payload.calls, 2);
         drop((from_file, from_buffer));
         assert_eq!(payload.frees, 2);
+    }
+
+    #[test]
+    fn signature_owner_preserves_a_null_callback_payload() {
+        NULL_PAYLOAD_FREES.store(0, Ordering::SeqCst);
+        let metric = CVal::new(DiffSimilarityMetric::zeroed());
+        let signature = metric
+            .as_ref()
+            .finish_signature(
+                0,
+                Some(NonNull::dangling()),
+                free_signature_without_payload,
+                None,
+            )
+            .unwrap()
+            .unwrap();
+
+        drop(signature);
+        assert_eq!(NULL_PAYLOAD_FREES.load(Ordering::SeqCst), 1);
     }
 }
 
