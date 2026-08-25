@@ -29,11 +29,8 @@ impl GitConfigIteratorOwned<'_> {
 
 fn iterator_result<'config>(
     status: i32,
-    out: *mut ffi::git_config_iterator,
+    inner: Option<crate::sys::config::GitConfigIteratorOwned>,
 ) -> Result<GitConfigIteratorOwned<'config>, i32> {
-    // SAFETY: a non-null constructor output is a complete iterator allocation
-    // whose installed finalizer is represented by the raw owner.
-    let inner = unsafe { crate::sys::config::GitConfigIteratorOwned::from_raw(out) };
     if status == 0 {
         Ok(GitConfigIteratorOwned {
             inner: inner.ok_or(ffi::git_error_code_GIT_ERROR)?,
@@ -42,6 +39,24 @@ fn iterator_result<'config>(
     } else {
         drop(inner);
         Err(status)
+    }
+}
+
+#[cfg(test)]
+mod iterator_owner_result_tests {
+    use super::*;
+
+    #[test]
+    fn typed_iterator_result_rejects_a_null_success_output() {
+        assert!(matches!(
+            iterator_result::<'static>(0, None),
+            Err(ffi::git_error_code_GIT_ERROR)
+        ));
+    }
+
+    #[test]
+    fn typed_iterator_result_preserves_a_constructor_error() {
+        assert!(matches!(iterator_result::<'static>(-7, None), Err(-7)));
     }
 }
 
@@ -812,9 +827,16 @@ pub fn git_config_iterator_glob_new<'config>(
     let mut out = core::ptr::null_mut();
     let regexp = regexp.map_or(core::ptr::null(), CStr::as_ptr);
     // SAFETY: the output is writable, the config and optional expression are
-    // live, and the returned owner retains the config borrow that C stores.
-    let status = unsafe { ffi::git_config_iterator_glob_new(&mut out, config.as_ptr(), regexp) };
-    iterator_result(status, out)
+    // live, and a transferred iterator is adopted before leaving the FFI seam.
+    // The returned owner retains the config borrow that C stores.
+    let (status, inner) = unsafe {
+        let status = ffi::git_config_iterator_glob_new(&mut out, config.as_ptr(), regexp);
+        (
+            status,
+            crate::sys::config::GitConfigIteratorOwned::from_raw(out),
+        )
+    };
+    iterator_result(status, inner)
 }
 
 /// Wraps: git_config_iterator_new
@@ -823,10 +845,17 @@ pub fn git_config_iterator_new<'config>(
     config: GitConfigRef<'config>,
 ) -> Result<GitConfigIteratorOwned<'config>, i32> {
     let mut out = core::ptr::null_mut();
-    // SAFETY: the output is writable and `config` remains borrowed for the
-    // lifetime carried by the returned iterator owner.
-    let status = unsafe { ffi::git_config_iterator_new(&mut out, config.as_ptr()) };
-    iterator_result(status, out)
+    // SAFETY: the output is writable and a transferred iterator is adopted
+    // before leaving the FFI seam. `config` remains borrowed for the lifetime
+    // carried by the returned iterator owner.
+    let (status, inner) = unsafe {
+        let status = ffi::git_config_iterator_new(&mut out, config.as_ptr());
+        (
+            status,
+            crate::sys::config::GitConfigIteratorOwned::from_raw(out),
+        )
+    };
+    iterator_result(status, inner)
 }
 
 /// Wraps: git_config_multivar_iterator_new
@@ -838,12 +867,18 @@ pub fn git_config_multivar_iterator_new<'config>(
 ) -> Result<GitConfigIteratorOwned<'config>, i32> {
     let mut out = core::ptr::null_mut();
     let regexp = regexp.map_or(core::ptr::null(), CStr::as_ptr);
-    // SAFETY: the output is writable; all strings are live for the call, and
-    // the returned iterator's stored config pointer is lifetime-bound here.
-    let status = unsafe {
-        ffi::git_config_multivar_iterator_new(&mut out, config.as_ptr(), name.as_ptr(), regexp)
+    // SAFETY: the output is writable, all strings are live for the call, and
+    // a transferred iterator is adopted before leaving the FFI seam. The
+    // returned iterator's stored config pointer is lifetime-bound here.
+    let (status, inner) = unsafe {
+        let status =
+            ffi::git_config_multivar_iterator_new(&mut out, config.as_ptr(), name.as_ptr(), regexp);
+        (
+            status,
+            crate::sys::config::GitConfigIteratorOwned::from_raw(out),
+        )
     };
-    iterator_result(status, out)
+    iterator_result(status, inner)
 }
 
 /// Wraps: git_config_next
