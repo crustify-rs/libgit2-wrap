@@ -1,8 +1,13 @@
 //! Safe wrappers for libgit2 worktree APIs.
 
+use core::marker::PhantomData;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+use core::ptr::{NonNull, addr_of, addr_of_mut};
+
+use ffibox::{CCell, CPtr, CType, CVal, CValued};
 
 use crate::ffi;
+use crate::refs::GitReferenceRef;
 
 /// Wraps: git_worktree_prune_t
 /// A checked set of overrides for pruning a linked worktree.
@@ -148,5 +153,291 @@ mod tests {
             align_of::<GitWorktreePruneFlags>(),
             align_of::<ffi::git_worktree_prune_t>()
         );
+    }
+}
+
+/// Wraps: git_worktree_add_options
+/// Layout-compatible worktree-add options borrowing their optional reference
+/// and all data nested in their checkout options for `'data`.
+#[repr(transparent)]
+pub struct GitWorktreeAddOptions<'data> {
+    inner: CType<ffi::git_worktree_add_options>,
+    _data: PhantomData<&'data mut ()>,
+}
+
+/// Shared borrow of [`GitWorktreeAddOptions`].
+#[repr(transparent)]
+pub struct GitWorktreeAddOptionsRef<'object, 'data>(CPtr<'object, GitWorktreeAddOptions<'data>>);
+
+impl Clone for GitWorktreeAddOptionsRef<'_, '_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl Copy for GitWorktreeAddOptionsRef<'_, '_> {}
+
+/// Exclusive borrow of [`GitWorktreeAddOptions`].
+#[repr(transparent)]
+pub struct GitWorktreeAddOptionsMut<'object, 'data>(GitWorktreeAddOptionsRef<'object, 'data>);
+
+// SAFETY: the layout type is transparent over the matching bindgen struct;
+// both handles are pointer-sized and never form references to C-visible
+// storage, and the shared handle exposes no writes.
+unsafe impl<'data> CCell for GitWorktreeAddOptions<'data> {
+    type C = ffi::git_worktree_add_options;
+    type Ref<'object>
+        = GitWorktreeAddOptionsRef<'object, 'data>
+    where
+        Self: 'object;
+    type Mut<'object>
+        = GitWorktreeAddOptionsMut<'object, 'data>
+    where
+        Self: 'object;
+
+    unsafe fn ref_from_raw<'object>(ptr: NonNull<Self>) -> Self::Ref<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller guarantees that `ptr` is a live shared object.
+        GitWorktreeAddOptionsRef(unsafe { CPtr::new(ptr) })
+    }
+
+    unsafe fn mut_from_raw<'object>(ptr: NonNull<Self>) -> Self::Mut<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller additionally guarantees exclusive access.
+        GitWorktreeAddOptionsMut(GitWorktreeAddOptionsRef(unsafe { CPtr::new(ptr) }))
+    }
+}
+
+// SAFETY: this options header only borrows its reference and every pointer
+// nested in its checkout options; disposing inline storage is a no-op.
+unsafe impl CValued for GitWorktreeAddOptions<'_> {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+impl<'data> GitWorktreeAddOptions<'data> {
+    /// Constructs options equivalent to `GIT_WORKTREE_ADD_OPTIONS_INIT`.
+    #[must_use]
+    pub fn new() -> CVal<Self> {
+        // SAFETY: every field of the bindgen struct admits the all-zero bit
+        // pattern; both required ABI versions are installed before return.
+        let inner = unsafe { CType::zeroed() };
+        let mut options = CVal::new(Self {
+            inner,
+            _data: PhantomData,
+        });
+        {
+            let mut view = options.as_mut();
+            view.set_version(ffi::GIT_WORKTREE_ADD_OPTIONS_VERSION);
+            view.checkout_options_mut()
+                .set_version(ffi::GIT_CHECKOUT_OPTIONS_VERSION);
+        }
+        options
+    }
+}
+
+impl<'object, 'data> GitWorktreeAddOptionsRef<'object, 'data> {
+    /// Borrows a raw C options pointer, returning `None` for null.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must identify initialized options live for `'object`. The
+    /// optional reference and every value borrowed by the nested checkout
+    /// options must remain live for `'data`, which must outlive `'object`.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_worktree_add_options) -> Option<Self> {
+        NonNull::new(ptr.cast::<GitWorktreeAddOptions<'data>>()).map(|ptr| {
+            // SAFETY: the caller supplies the required live shared object.
+            Self(unsafe { CPtr::new(ptr) })
+        })
+    }
+
+    /// Returns the C pointer for read-only FFI calls.
+    #[must_use]
+    pub fn as_ptr(&self) -> *const ffi::git_worktree_add_options {
+        self.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Field: git_worktree_add_options.version
+    /// Returns the options ABI version.
+    #[must_use]
+    pub fn version(&self) -> core::ffi::c_uint {
+        // SAFETY: raw-place projection copies the initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).version).read() }
+    }
+
+    /// Field: git_worktree_add_options.ref
+    /// Borrows the optional reference selected for the new worktree HEAD.
+    #[must_use]
+    pub fn reference(&self) -> Option<GitReferenceRef<'object>> {
+        // SAFETY: raw-place projection copies the initialized pointer field.
+        let reference = unsafe { addr_of!((*self.as_ptr()).ref_).read() };
+        // SAFETY: the outer options contract keeps a non-null reference live
+        // for this shared object borrow.
+        unsafe { GitReferenceRef::from_ptr(reference) }
+    }
+
+    /// Field: git_worktree_add_options.lock
+    /// Returns whether the newly created worktree should be locked.
+    #[must_use]
+    pub fn lock(&self) -> bool {
+        // SAFETY: raw-place projection copies the initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).lock).read() != 0 }
+    }
+
+    /// Field: git_worktree_add_options.checkout_options
+    /// Borrows the inline checkout options.
+    #[must_use]
+    pub fn checkout_options(&self) -> crate::api::checkout::GitCheckoutOptionsRef<'object, 'data> {
+        // SAFETY: raw-place projection locates the initialized inline field
+        // without forming a reference to C-visible storage.
+        let checkout = unsafe { addr_of!((*self.as_ptr()).checkout_options).cast_mut() };
+        // SAFETY: the projected options live for this outer options borrow and
+        // inherit its nested-data lifetime contract.
+        unsafe { crate::api::checkout::GitCheckoutOptionsRef::from_ptr(checkout) }
+            .expect("an inline field is non-null")
+    }
+
+    /// Field: git_worktree_add_options.checkout_existing
+    /// Returns whether an existing branch matching the worktree name may be
+    /// checked out.
+    #[must_use]
+    pub fn checkout_existing(&self) -> bool {
+        // SAFETY: raw-place projection copies the initialized scalar field.
+        unsafe { addr_of!((*self.as_ptr()).checkout_existing).read() != 0 }
+    }
+}
+
+impl<'object, 'data> GitWorktreeAddOptionsMut<'object, 'data> {
+    /// Exclusively borrows a raw C options pointer, returning `None` for null.
+    ///
+    /// # Safety
+    ///
+    /// The shared-handle requirements apply, and no other access path to the
+    /// options value may be used for `'object`.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_worktree_add_options) -> Option<Self> {
+        // SAFETY: the caller supplies a live exclusively accessible object.
+        unsafe { GitWorktreeAddOptionsRef::from_ptr(ptr) }.map(Self)
+    }
+
+    /// Returns the writable C pointer for FFI calls and raw-place writes.
+    #[must_use]
+    pub fn as_mut_ptr(&mut self) -> *mut ffi::git_worktree_add_options {
+        self.0.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Reborrows this exclusive handle as shared.
+    #[must_use]
+    pub fn as_ref(&self) -> GitWorktreeAddOptionsRef<'_, 'data> {
+        GitWorktreeAddOptionsRef(self.0.0)
+    }
+
+    /// Replaces the options ABI version.
+    pub fn set_version(&mut self, version: core::ffi::c_uint) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+
+    /// Stores an optional borrowed reference for the new worktree HEAD.
+    pub fn set_reference(&mut self, reference: Option<GitReferenceRef<'data>>) {
+        let reference = reference.map_or(core::ptr::null(), |reference| reference.as_ptr());
+        // SAFETY: this exclusive handle permits the pointer write, and the
+        // wrapper lifetime keeps a non-null reference live and shared-only.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).ref_).write(reference.cast_mut()) }
+    }
+
+    /// Selects whether the newly created worktree should be locked.
+    pub fn set_lock(&mut self, lock: bool) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).lock).write(core::ffi::c_int::from(lock)) }
+    }
+
+    /// Exclusively borrows the inline checkout options.
+    #[must_use]
+    pub fn checkout_options_mut(
+        &mut self,
+    ) -> crate::api::checkout::GitCheckoutOptionsMut<'_, 'data> {
+        // SAFETY: raw-place projection originates from this exclusive handle.
+        let checkout = unsafe { addr_of_mut!((*self.as_mut_ptr()).checkout_options) };
+        // SAFETY: the projected field is initialized, exclusively borrowed,
+        // and inherits the outer options' nested-data lifetime contract.
+        unsafe { crate::api::checkout::GitCheckoutOptionsMut::from_ptr(checkout) }
+            .expect("an inline field is non-null")
+    }
+
+    /// Copies a non-owning checkout-options header into the inline field.
+    pub fn set_checkout_options(
+        &mut self,
+        checkout: crate::api::checkout::GitCheckoutOptionsRef<'_, 'data>,
+    ) {
+        // SAFETY: the source identifies initialized layout-compatible options.
+        // Copying the C header transfers no ownership, and `'data` retains all
+        // nested borrows for the outer options' lifetime.
+        let checkout = unsafe { checkout.as_ptr().read() };
+        // SAFETY: this exclusive handle permits replacing the inline field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).checkout_options).write(checkout) }
+    }
+
+    /// Selects whether an existing branch matching the worktree name may be
+    /// checked out.
+    pub fn set_checkout_existing(&mut self, checkout_existing: bool) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe {
+            addr_of_mut!((*self.as_mut_ptr()).checkout_existing)
+                .write(core::ffi::c_int::from(checkout_existing))
+        }
+    }
+}
+
+#[cfg(test)]
+mod add_options_tests {
+    use core::mem::{align_of, size_of};
+
+    use super::*;
+
+    #[test]
+    fn add_options_preserve_layout_defaults_and_mutable_access() {
+        assert_eq!(
+            size_of::<GitWorktreeAddOptions<'static>>(),
+            size_of::<ffi::git_worktree_add_options>()
+        );
+        assert_eq!(
+            align_of::<GitWorktreeAddOptions<'static>>(),
+            align_of::<ffi::git_worktree_add_options>()
+        );
+        assert_eq!(
+            size_of::<GitWorktreeAddOptionsRef<'static, 'static>>(),
+            size_of::<*const ffi::git_worktree_add_options>()
+        );
+
+        let mut options = GitWorktreeAddOptions::new();
+        {
+            let mut view = options.as_mut();
+            view.set_lock(true);
+            view.set_checkout_existing(true);
+            view.checkout_options_mut().set_disable_filters(true);
+        }
+        let view = options.as_ref();
+        assert_eq!(view.version(), ffi::GIT_WORKTREE_ADD_OPTIONS_VERSION);
+        assert!(view.reference().is_none());
+        assert!(view.lock());
+        assert!(view.checkout_existing());
+        assert_eq!(
+            view.checkout_options().version(),
+            ffi::GIT_CHECKOUT_OPTIONS_VERSION
+        );
+        assert!(view.checkout_options().disable_filters());
+    }
+
+    #[test]
+    fn checkout_options_header_can_be_copied_without_transferring_ownership() {
+        let mut checkout = crate::api::checkout::GitCheckoutOptions::new();
+        checkout.as_mut().set_file_mode(0o100644);
+
+        let mut options = GitWorktreeAddOptions::new();
+        options.as_mut().set_checkout_options(checkout.as_ref());
+        assert_eq!(options.as_ref().checkout_options().file_mode(), 0o100644);
     }
 }

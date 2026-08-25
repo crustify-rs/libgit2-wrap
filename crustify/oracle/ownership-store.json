@@ -4748,6 +4748,47 @@
    ]
   },
   {
+   "name": "git_stash_apply_options",
+   "defined_in": "include/git2/stash.h",
+   "_comment_agent": "git_stash_apply_options is a non-owning public configuration header. Its optional callback is static code paired with caller-owned mutable payload state; git_stash_apply invokes it synchronously and neither field is retained or released by the options header.",
+   "fields": [
+    {
+     "name": "progress_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer invoked synchronously during stash application with the paired externally borrowed payload; code has static lifetime."
+     }
+    },
+    {
+     "name": "progress_payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional type-erased caller-owned state passed to progress_cb; the callback may mutate it and libgit2 never releases it."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_stash_save_options",
    "defined_in": "include/git2/stash.h",
    "_comment_agent": "The public save-options header owns none of its pointer fields. git_stash_save_with_opts reads the optional message, required stasher and optional string-array entries only during the call; no path stores, clones, mutates or releases them. Callers must keep every configured referent alive for the options value's use.",
@@ -5554,6 +5595,30 @@
       "nullable": true,
       "mutable": false,
       "note": "Allocated dirname string; nullable during fallible construction; released by git_worktree_free."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_worktree_add_options",
+   "defined_in": "include/git2/worktree.h",
+   "_comment_agent": "git_worktree_add_options is a non-owning public configuration header. Its optional reference is caller-owned, read during the synchronous add operation, duplicated when selected as HEAD, and never released through the options header.",
+   "fields": [
+    {
+     "name": "ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned reference used read-only by git_worktree_add and duplicated before storage; the options header neither takes ownership nor releases it."
      }
     }
    ]
