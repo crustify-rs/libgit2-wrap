@@ -83,15 +83,15 @@ in Notes.
 
 ## Overview
 
-- **Rust LoC, non-test** — `18,452`
-- **Rust LoC, tests** — `10,231`
+- **Rust LoC, non-test** — `24,849`
+- **Rust LoC, tests** — `14,445`
 - **C LoC** — `171,084`
 - **ported types** — `0`
 - **ported symbols** — `0`
-- **wrapped types** — `170` (`64.6`% of API)
-- **wrapped symbols** — `638` (`63.4`% of API)
-- **remaining types** — `92` with no anchor
-- **remaining symbols** — `387` with no anchor
+- **wrapped types** — `230` (`88.5`% of API)
+- **wrapped symbols** — `899` (`85.0`% of API)
+- **remaining types** — `30` with no anchor
+- **remaining symbols** — `158` with no anchor
 
 Implementation `openai/gpt-5.6-sol` via `codex`; review `anthropic/claude-opus-5`
 via `claude`. Each row names the model that produced it.
