@@ -1,5 +1,6 @@
 //! Safe wrappers for libgit2 config APIs.
 
+use core::ffi::CStr;
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CBox, CDropped};
@@ -191,15 +192,15 @@ impl GitConfigIteratorRef<'_> {
     }
 
     /// Field: git_config_iterator.backend
-    /// Returns whether a custom iterator records its originating backend.
-    ///
-    /// In-tree iterators leave this optional extension slot empty. Its
-    /// concrete type will gain a borrowed handle when `git_config_backend` is
-    /// wrapped; no raw pointer escapes in the meantime.
+    /// Borrows the originating backend when a custom iterator records one.
     #[must_use]
-    pub fn has_backend(&self) -> bool {
+    pub fn backend(&self) -> Option<GitConfigBackendRef<'_>> {
         // SAFETY: this live shared handle permits a raw-place pointer read.
-        !unsafe { addr_of!((*self.as_ptr()).backend).read() }.is_null()
+        let backend = unsafe { addr_of!((*self.as_ptr()).backend).read() };
+        // SAFETY: a non-null extension slot points to the backend that owns or
+        // otherwise outlives this iterator, and the result is tied to the
+        // iterator borrow.
+        unsafe { GitConfigBackendRef::from_ptr(backend) }
     }
 }
 
@@ -332,7 +333,7 @@ mod iterator_tests {
         let mut iterator =
             unsafe { GitConfigIteratorMut::from_ptr(addr_of_mut!(raw.parent)) }.unwrap();
         assert_eq!(iterator.as_ref().flags(), 0);
-        assert!(!iterator.as_ref().has_backend());
+        assert!(iterator.as_ref().backend().is_none());
         iterator.set_flags(7);
         assert_eq!(iterator.as_ref().flags(), 7);
         assert_eq!(
@@ -351,5 +352,450 @@ mod iterator_tests {
             unsafe { GitConfigIteratorOwned::from_raw(addr_of_mut!((*raw).parent)) }.unwrap();
         drop(owned);
         assert_eq!(ITERATOR_FREES.load(Ordering::SeqCst), 1);
+    }
+}
+
+ffibox::define_ctype!(
+    /// Wraps: git_config_backend
+    /// A layout-compatible polymorphic configuration backend.
+    ///
+    /// Safe methods dispatch the concrete backend's callback table without
+    /// exposing its raw pointer contracts. An owned handle represents a
+    /// backend not yet transferred to a [`crate::config::GitConfig`].
+    GitConfigBackend,
+    GitConfigBackendRef,
+    GitConfigBackendMut,
+    ffi::git_config_backend
+);
+
+/// A uniquely owned configuration backend allocation.
+pub type GitConfigBackendOwned = CBox<GitConfigBackend>;
+
+/// A backend operation that a concrete implementation did not install.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GitConfigBackendOperation {
+    /// Open and parse the backing store.
+    Open,
+    /// Look up one entry.
+    Get,
+    /// Replace one entry.
+    Set,
+    /// Replace all matching values.
+    SetMultivar,
+    /// Delete one entry.
+    Delete,
+    /// Delete all matching values.
+    DeleteMultivar,
+    /// Create an iterator.
+    Iterator,
+    /// Create a read-only snapshot.
+    Snapshot,
+    /// Lock the backing store.
+    Lock,
+    /// Commit or roll back and unlock the backing store.
+    Unlock,
+}
+
+/// Failure while dispatching a configuration-backend callback.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GitConfigBackendError {
+    /// The concrete backend omitted the requested callback.
+    Unsupported(GitConfigBackendOperation),
+    /// The callback returned a libgit2 status code.
+    Libgit2(i32),
+    /// A successful callback did not initialize its required output.
+    MissingOutput(GitConfigBackendOperation),
+}
+
+/// An owned iterator tethered to the backend recorded in its extension slot.
+pub struct GitConfigBackendIteratorOwned<'backend> {
+    inner: GitConfigIteratorOwned,
+    _backend: core::marker::PhantomData<GitConfigBackendRef<'backend>>,
+}
+
+impl GitConfigBackendIteratorOwned<'_> {
+    /// Borrows the iterator without advancing it.
+    #[must_use]
+    pub fn as_ref(&self) -> GitConfigIteratorRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the iterator exclusively for advancing it.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitConfigIteratorMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+/// Field: git_config_backend.free
+// SAFETY: every fully constructed backend installs a concrete finalizer that
+// accepts the embedded base pointer and releases the complete allocation once.
+unsafe impl CDropped for GitConfigBackend {
+    unsafe fn c_drop(backend: NonNull<Self>) {
+        let backend = backend.as_ptr().cast::<ffi::git_config_backend>();
+        // SAFETY: the lifecycle contract supplies a live initialized backend;
+        // raw-place projection reads its callback without forming a reference.
+        let free = unsafe { addr_of!((*backend).free).read() }
+            .expect("a complete configuration backend has a free callback");
+        // SAFETY: the callback is the finalizer paired with this uniquely
+        // owned concrete backend allocation.
+        unsafe { free(backend) }
+    }
+}
+
+impl<'a> GitConfigBackendRef<'a> {
+    /// Field: git_config_backend.version
+    /// Returns the public backend ABI version.
+    #[must_use]
+    pub fn version(&self) -> core::ffi::c_uint {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        unsafe { addr_of!((*self.as_ptr()).version).read() }
+    }
+
+    /// Field: git_config_backend.cfg
+    /// Borrows the owning configuration after this backend is attached.
+    #[must_use]
+    pub fn config(&self) -> Option<crate::config::GitConfigRef<'a>> {
+        // SAFETY: raw-place projection copies the nullable back-reference.
+        let config = unsafe { addr_of!((*self.as_ptr()).cfg).read() };
+        // SAFETY: an attached configuration owns and destroys the backend
+        // before releasing its own storage, so it outlives this backend borrow.
+        unsafe { crate::config::GitConfigRef::from_ptr(config) }
+    }
+
+    /// Field: git_config_backend.readonly
+    /// Returns whether the backend rejects writes as a snapshot.
+    #[must_use]
+    pub fn is_readonly(&self) -> bool {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        unsafe { addr_of!((*self.as_ptr()).readonly).read() != 0 }
+    }
+}
+
+impl GitConfigBackendMut<'_> {
+    fn callback<T: Copy>(
+        &self,
+        field: *const Option<T>,
+        operation: GitConfigBackendOperation,
+    ) -> Result<T, GitConfigBackendError> {
+        // SAFETY: every caller projects `field` from this live backend and
+        // names the exact initialized callback slot.
+        unsafe { field.read() }.ok_or(GitConfigBackendError::Unsupported(operation))
+    }
+
+    /// Replaces the public backend ABI version.
+    pub fn set_version(&mut self, version: core::ffi::c_uint) {
+        // SAFETY: this live exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+
+    /// Replaces the read-only marker.
+    pub fn set_readonly(&mut self, readonly: bool) {
+        // SAFETY: this live exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).readonly).write(i32::from(readonly)) }
+    }
+
+    /// Field: git_config_backend.open
+    /// Opens the backend at `level`, optionally relative to a repository.
+    ///
+    /// # Safety
+    /// A concrete backend may retain `repository` for later refreshes (the
+    /// built-in file backend does). When present, it must therefore remain
+    /// live until this backend is destroyed or opened again with another
+    /// repository.
+    pub unsafe fn open(
+        &mut self,
+        level: crate::config::GitConfigLevel,
+        repository: Option<crate::repository::GitRepositoryRef<'_>>,
+    ) -> Result<(), GitConfigBackendError> {
+        let backend = self.as_mut_ptr();
+        let callback = self.callback(
+            // SAFETY: the raw-place projection is derived from this handle.
+            unsafe { addr_of!((*backend).open) },
+            GitConfigBackendOperation::Open,
+        )?;
+        let repository = repository.map_or(core::ptr::null(), |repo| repo.as_ptr());
+        // SAFETY: all arguments are live for this synchronous call and the
+        // exclusive handle grants backend mutation.
+        let status = unsafe { callback(backend, level.as_raw(), repository) };
+        Self::status(status)
+    }
+
+    /// Field: git_config_backend.get
+    /// Looks up one entry and takes the caller's independently releasable claim.
+    pub fn get(&mut self, key: &CStr) -> Result<GitConfigBackendEntryOwned, GitConfigBackendError> {
+        let backend = self.as_mut_ptr();
+        let callback = self.callback(
+            // SAFETY: the raw-place projection is derived from this handle.
+            unsafe { addr_of!((*backend).get) },
+            GitConfigBackendOperation::Get,
+        )?;
+        let mut entry = core::ptr::null_mut();
+        // SAFETY: `entry` is writable, `key` is a live C string, and this
+        // exclusive handle supplies the live backend.
+        let status = unsafe { callback(backend, key.as_ptr(), &mut entry) };
+        if status != 0 {
+            return Err(GitConfigBackendError::Libgit2(status));
+        }
+        // SAFETY: success transfers one releasable entry claim to the caller.
+        unsafe { GitConfigBackendEntryOwned::from_raw(entry) }.ok_or(
+            GitConfigBackendError::MissingOutput(GitConfigBackendOperation::Get),
+        )
+    }
+
+    /// Field: git_config_backend.set
+    /// Replaces one string value.
+    pub fn set(&mut self, key: &CStr, value: &CStr) -> Result<(), GitConfigBackendError> {
+        let backend = self.as_mut_ptr();
+        let callback = self.callback(
+            // SAFETY: the raw-place projection is derived from this handle.
+            unsafe { addr_of!((*backend).set) },
+            GitConfigBackendOperation::Set,
+        )?;
+        // SAFETY: both strings and the exclusively borrowed backend remain
+        // live for this synchronous callback.
+        Self::status(unsafe { callback(backend, key.as_ptr(), value.as_ptr()) })
+    }
+
+    /// Field: git_config_backend.set_multivar
+    /// Replaces values matching `regexp`.
+    pub fn set_multivar(
+        &mut self,
+        name: &CStr,
+        regexp: &CStr,
+        value: &CStr,
+    ) -> Result<(), GitConfigBackendError> {
+        let backend = self.as_mut_ptr();
+        let callback = self.callback(
+            // SAFETY: the raw-place projection is derived from this handle.
+            unsafe { addr_of!((*backend).set_multivar) },
+            GitConfigBackendOperation::SetMultivar,
+        )?;
+        // SAFETY: all strings and the backend remain live synchronously.
+        Self::status(unsafe { callback(backend, name.as_ptr(), regexp.as_ptr(), value.as_ptr()) })
+    }
+
+    /// Field: git_config_backend.del
+    /// Deletes one entry.
+    pub fn delete(&mut self, key: &CStr) -> Result<(), GitConfigBackendError> {
+        let backend = self.as_mut_ptr();
+        let callback = self.callback(
+            // SAFETY: the raw-place projection is derived from this handle.
+            unsafe { addr_of!((*backend).del) },
+            GitConfigBackendOperation::Delete,
+        )?;
+        // SAFETY: `key` and the backend remain live synchronously.
+        Self::status(unsafe { callback(backend, key.as_ptr()) })
+    }
+
+    /// Field: git_config_backend.del_multivar
+    /// Deletes values matching `regexp`.
+    pub fn delete_multivar(
+        &mut self,
+        key: &CStr,
+        regexp: &CStr,
+    ) -> Result<(), GitConfigBackendError> {
+        let backend = self.as_mut_ptr();
+        let callback = self.callback(
+            // SAFETY: the raw-place projection is derived from this handle.
+            unsafe { addr_of!((*backend).del_multivar) },
+            GitConfigBackendOperation::DeleteMultivar,
+        )?;
+        // SAFETY: both strings and the backend remain live synchronously.
+        Self::status(unsafe { callback(backend, key.as_ptr(), regexp.as_ptr()) })
+    }
+
+    /// Field: git_config_backend.iterator
+    /// Creates an iterator tied to this backend's lifetime.
+    pub fn iterator(&mut self) -> Result<GitConfigBackendIteratorOwned<'_>, GitConfigBackendError> {
+        let backend = self.as_mut_ptr();
+        let callback = self.callback(
+            // SAFETY: the raw-place projection is derived from this handle.
+            unsafe { addr_of!((*backend).iterator) },
+            GitConfigBackendOperation::Iterator,
+        )?;
+        let mut iterator = core::ptr::null_mut();
+        // SAFETY: `iterator` is writable and the backend remains exclusively
+        // borrowed for the returned tether's lifetime.
+        let status = unsafe { callback(&mut iterator, backend) };
+        if status != 0 {
+            return Err(GitConfigBackendError::Libgit2(status));
+        }
+        // SAFETY: success transfers one complete iterator allocation.
+        let inner = unsafe { GitConfigIteratorOwned::from_raw(iterator) }.ok_or(
+            GitConfigBackendError::MissingOutput(GitConfigBackendOperation::Iterator),
+        )?;
+        Ok(GitConfigBackendIteratorOwned {
+            inner,
+            _backend: core::marker::PhantomData,
+        })
+    }
+
+    /// Field: git_config_backend.snapshot
+    /// Creates an independently owned read-only backend snapshot.
+    pub fn snapshot(&mut self) -> Result<GitConfigBackendOwned, GitConfigBackendError> {
+        let backend = self.as_mut_ptr();
+        let callback = self.callback(
+            // SAFETY: the raw-place projection is derived from this handle.
+            unsafe { addr_of!((*backend).snapshot) },
+            GitConfigBackendOperation::Snapshot,
+        )?;
+        let mut snapshot = core::ptr::null_mut();
+        // SAFETY: `snapshot` is writable and this handle supplies the live
+        // source backend for the synchronous copy.
+        let status = unsafe { callback(&mut snapshot, backend) };
+        if status != 0 {
+            return Err(GitConfigBackendError::Libgit2(status));
+        }
+        // SAFETY: success transfers one fully constructed backend allocation.
+        unsafe { GitConfigBackendOwned::from_raw(snapshot) }.ok_or(
+            GitConfigBackendError::MissingOutput(GitConfigBackendOperation::Snapshot),
+        )
+    }
+
+    /// Field: git_config_backend.lock
+    /// Locks the backend's backing store against concurrent writers.
+    pub fn lock(&mut self) -> Result<(), GitConfigBackendError> {
+        let backend = self.as_mut_ptr();
+        let callback = self.callback(
+            // SAFETY: the raw-place projection is derived from this handle.
+            unsafe { addr_of!((*backend).lock) },
+            GitConfigBackendOperation::Lock,
+        )?;
+        // SAFETY: this exclusive handle supplies the live backend.
+        Self::status(unsafe { callback(backend) })
+    }
+
+    /// Field: git_config_backend.unlock
+    /// Unlocks the backend, committing when `success` is true and rolling back
+    /// otherwise.
+    pub fn unlock(&mut self, success: bool) -> Result<(), GitConfigBackendError> {
+        let backend = self.as_mut_ptr();
+        let callback = self.callback(
+            // SAFETY: the raw-place projection is derived from this handle.
+            unsafe { addr_of!((*backend).unlock) },
+            GitConfigBackendOperation::Unlock,
+        )?;
+        // SAFETY: this exclusive handle supplies the live backend.
+        Self::status(unsafe { callback(backend, i32::from(success)) })
+    }
+
+    fn status(status: i32) -> Result<(), GitConfigBackendError> {
+        if status == 0 {
+            Ok(())
+        } else {
+            Err(GitConfigBackendError::Libgit2(status))
+        }
+    }
+}
+
+#[cfg(test)]
+mod backend_tests {
+    use core::mem::{align_of, size_of};
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    use ffibox::{CCell, CDropped};
+
+    use super::*;
+
+    static BACKEND_FREES: AtomicUsize = AtomicUsize::new(0);
+
+    unsafe extern "C" fn free_backend(backend: *mut ffi::git_config_backend) {
+        BACKEND_FREES.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: the test transfers exactly this fresh Box allocation to its
+        // one backend owner.
+        drop(unsafe { Box::from_raw(backend) });
+    }
+
+    unsafe extern "C" fn lock_backend(backend: *mut ffi::git_config_backend) -> i32 {
+        // SAFETY: the callback contract supplies the live backend exclusively.
+        unsafe { addr_of_mut!((*backend).readonly).write(1) };
+        0
+    }
+
+    unsafe extern "C" fn unlock_backend(
+        backend: *mut ffi::git_config_backend,
+        success: i32,
+    ) -> i32 {
+        // SAFETY: the callback contract supplies the live backend exclusively.
+        unsafe { addr_of_mut!((*backend).readonly).write(0) };
+        if success != 0 { 0 } else { -7 }
+    }
+
+    fn raw_backend() -> ffi::git_config_backend {
+        ffi::git_config_backend {
+            version: ffi::GIT_CONFIG_BACKEND_VERSION,
+            readonly: 0,
+            cfg: core::ptr::null_mut(),
+            open: None,
+            get: None,
+            set: None,
+            set_multivar: None,
+            del: None,
+            del_multivar: None,
+            iterator: None,
+            snapshot: None,
+            lock: Some(lock_backend),
+            unlock: Some(unlock_backend),
+            free: Some(free_backend),
+        }
+    }
+
+    #[test]
+    fn backend_matches_the_c_layout_and_lifecycle_contract() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_dropped<T: CDropped>() {}
+
+        assert_cell::<GitConfigBackend>();
+        assert_dropped::<GitConfigBackend>();
+        assert_eq!(
+            size_of::<GitConfigBackend>(),
+            size_of::<ffi::git_config_backend>()
+        );
+        assert_eq!(
+            align_of::<GitConfigBackend>(),
+            align_of::<ffi::git_config_backend>()
+        );
+        assert_eq!(
+            size_of::<GitConfigBackendRef<'_>>(),
+            size_of::<*const ffi::git_config_backend>()
+        );
+        assert_eq!(
+            size_of::<GitConfigBackendOwned>(),
+            size_of::<*mut ffi::git_config_backend>()
+        );
+    }
+
+    #[test]
+    fn scalar_fields_and_missing_callbacks_are_safe() {
+        let mut raw = raw_backend();
+        // SAFETY: `raw` remains live and is exclusively accessed by this handle.
+        let mut backend = unsafe { GitConfigBackendMut::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(backend.as_ref().version(), ffi::GIT_CONFIG_BACKEND_VERSION);
+        assert!(!backend.as_ref().is_readonly());
+        assert!(backend.as_ref().config().is_none());
+        backend.set_readonly(true);
+        assert!(backend.as_ref().is_readonly());
+        backend.lock().unwrap();
+        assert!(backend.as_ref().is_readonly());
+        backend.unlock(true).unwrap();
+        assert!(!backend.as_ref().is_readonly());
+        assert_eq!(
+            backend.delete(c"missing"),
+            Err(GitConfigBackendError::Unsupported(
+                GitConfigBackendOperation::Delete
+            ))
+        );
+    }
+
+    #[test]
+    fn owned_backend_dispatches_its_concrete_finalizer_once() {
+        BACKEND_FREES.store(0, Ordering::SeqCst);
+        let raw = Box::into_raw(Box::new(raw_backend()));
+        // SAFETY: `raw` is a fresh, fully initialized allocation whose
+        // callback reclaims it exactly once.
+        let backend = unsafe { GitConfigBackendOwned::from_raw(raw) }.unwrap();
+        drop(backend);
+        assert_eq!(BACKEND_FREES.load(Ordering::SeqCst), 1);
     }
 }

@@ -1407,6 +1407,217 @@
    ]
   },
   {
+   "name": "git_config_backend",
+   "defined_in": "include/git2/sys/config.h",
+   "_comment_agent": "All callback slots are non-owning static code pointers. cfg is the nullable non-owning parent-config back-reference installed on transfer into git_config.",
+   "fields": [
+    {
+     "name": "cfg",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Non-owning back-reference assigned by git_config_add_backend; null until attached, and the owning config destroys the backend before itself."
+     }
+    },
+    {
+     "name": "del",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional stored code pointer with static lifetime."
+     }
+    },
+    {
+     "name": "del_multivar",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional stored code pointer with static lifetime."
+     }
+    },
+    {
+     "name": "free",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Stored code pointer; initialized backends install a static finalizer, while the public zero/default state is null."
+     }
+    },
+    {
+     "name": "get",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional stored code pointer with static lifetime."
+     }
+    },
+    {
+     "name": "iterator",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional stored code pointer with static lifetime."
+     }
+    },
+    {
+     "name": "lock",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional stored code pointer with static lifetime."
+     }
+    },
+    {
+     "name": "open",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional stored code pointer with static lifetime."
+     }
+    },
+    {
+     "name": "set",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional stored code pointer with static lifetime."
+     }
+    },
+    {
+     "name": "set_multivar",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional stored code pointer with static lifetime."
+     }
+    },
+    {
+     "name": "snapshot",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional stored code pointer with static lifetime."
+     }
+    },
+    {
+     "name": "unlock",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional stored code pointer with static lifetime."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_config_backend_entry",
    "defined_in": "include/git2/sys/config.h",
    "_comment_agent": "git_config_backend_entry embeds git_config_entry as its first member and installs a required static finalizer callback. Ownership is released by dispatching that callback, directly or through git_config_entry_free. Reviewed 2026-08-25: config_file, config_mem and config_list all install git_config_list_entry_free, which drops one reference on the owning git_config_list rather than freeing the entry allocation, so an owning wrapper models a claim on the entry.",
@@ -5197,6 +5408,12 @@
    "name": "git_remote_completion_t",
    "defined_in": "include/git2/remote.h",
    "_comment_agent": "Reviewed against include/git2/remote.h. Closed domain of three contiguous values from 0; it is only ever an argument to the completion callback in git_remote_callbacks, never a stored options field, so it has no unspecified state and needs no default.",
+   "fields": []
+  },
+  {
+   "name": "git_remote_connect_options",
+   "defined_in": "include/git2/remote.h",
+   "_comment_agent": "The type has no direct pointer fields; callback payloads, proxy strings, and header arrays are carried by its already-analyzed by-value dependencies.",
    "fields": []
   },
   {
@@ -14182,6 +14399,33 @@
       "nullable": true,
       "mutable": false,
       "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_backend_free",
+   "defined_in": "src/libgit2/config_backend.h",
+   "lifetime": {
+    "for": "cfg",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "cfg",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes a backend by invoking its concrete free callback; null is accepted."
      }
     }
    ]
@@ -37086,6 +37330,84 @@
       "nullable": false,
       "mutable": true,
       "note": "Exclusively borrows the remote: a successful connect installs remote->transport, and a failure clears it again. Ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_connect_options_dispose",
+   "defined_in": "src/libgit2/remote.c",
+   "lifetime": {
+    "for": "opts",
+    "is_dropper": false,
+    "is_disposer": true,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Disposes owned proxy/header fields in place and accepts null; it retains the options storage."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_connect_options_dup",
+   "defined_in": "src/libgit2/remote.c",
+   "lifetime": {
+    "for": "src",
+    "is_dropper": false,
+    "is_disposer": false,
+    "is_cloner": {
+     "deep": true,
+     "upref": false
+    }
+   },
+   "ptr_args": [
+    {
+     "name": "dst",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:dst"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Writable destination slot initialized with a field-deep copy."
+     }
+    },
+    {
+     "name": "src",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:src"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Source is read transiently while proxy and header fields are deep-copied."
      }
     }
    ]

@@ -2680,3 +2680,332 @@ mod remote_create_options_tests {
         assert_eq!(options.flags(), Err(1 << 2));
     }
 }
+
+/// Wraps: git_remote_connect_options
+/// Layout-compatible connection options borrowing their callback, proxy and
+/// string-array data for `'data`.
+///
+/// This is the caller-initialized, borrowing form accepted by
+/// `git_remote_connect_ext`. It deliberately performs no field disposal:
+/// `git_remote_connect_options_dispose` is only valid for the independently
+/// allocated fields returned by `git_transport_remote_connect_options`.
+///
+/// `'data` is invariant for the same reason as on [`GitFetchOptions`]: the
+/// mutable handle can store borrowed callback, proxy and header data that a
+/// later shared handle reads back.
+#[repr(transparent)]
+pub struct GitRemoteConnectOptions<'data> {
+    inner: ffibox::CType<crate::ffi::git_remote_connect_options>,
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
+}
+
+/// Shared borrow of [`GitRemoteConnectOptions`].
+#[repr(transparent)]
+pub struct GitRemoteConnectOptionsRef<'object, 'data>(
+    ffibox::CPtr<'object, GitRemoteConnectOptions<'data>>,
+);
+
+impl Clone for GitRemoteConnectOptionsRef<'_, '_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl Copy for GitRemoteConnectOptionsRef<'_, '_> {}
+
+/// Exclusive borrow of [`GitRemoteConnectOptions`].
+#[repr(transparent)]
+pub struct GitRemoteConnectOptionsMut<'object, 'data>(GitRemoteConnectOptionsRef<'object, 'data>);
+
+// SAFETY: the layout type is transparent over the matching bindgen struct;
+// both handles are pointer-sized and touch C-visible storage only through raw
+// place projections. The shared handle exposes no writes.
+unsafe impl<'data> ffibox::CCell for GitRemoteConnectOptions<'data> {
+    type C = crate::ffi::git_remote_connect_options;
+    type Ref<'object>
+        = GitRemoteConnectOptionsRef<'object, 'data>
+    where
+        Self: 'object;
+    type Mut<'object>
+        = GitRemoteConnectOptionsMut<'object, 'data>
+    where
+        Self: 'object;
+
+    unsafe fn ref_from_raw<'object>(p: NonNull<Self>) -> Self::Ref<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller guarantees that `p` is a live shared object.
+        GitRemoteConnectOptionsRef(unsafe { ffibox::CPtr::new(p) })
+    }
+
+    unsafe fn mut_from_raw<'object>(p: NonNull<Self>) -> Self::Mut<'object>
+    where
+        Self: 'object,
+    {
+        // SAFETY: the caller additionally guarantees exclusive access.
+        GitRemoteConnectOptionsMut(GitRemoteConnectOptionsRef(unsafe { ffibox::CPtr::new(p) }))
+    }
+}
+
+// SAFETY: caller-initialized connect options only borrow their nested data.
+// The public disposer has a narrower contract and is reserved for the owned
+// copies produced by the transport API, so dropping this borrowing form is a
+// no-op.
+unsafe impl CValued for GitRemoteConnectOptions<'_> {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
+
+impl<'data> GitRemoteConnectOptions<'data> {
+    /// Constructs options equivalent to `GIT_REMOTE_CONNECT_OPTIONS_INIT`.
+    #[must_use]
+    pub fn new() -> CVal<Self> {
+        // SAFETY: every raw field admits zero. Required version fields are
+        // installed before the initialized wrapper is returned.
+        let inner = unsafe { ffibox::CType::zeroed() };
+        let mut options = CVal::new(Self {
+            inner,
+            _data: PhantomData,
+        });
+        {
+            let mut view = options.as_mut();
+            view.set_version(crate::ffi::GIT_REMOTE_CONNECT_OPTIONS_VERSION);
+            view.callbacks_mut()
+                .set_version(crate::ffi::GIT_REMOTE_CALLBACKS_VERSION);
+            view.proxy_options_mut()
+                .set_version(crate::ffi::GIT_PROXY_OPTIONS_VERSION);
+        }
+        options
+    }
+}
+
+impl<'object, 'data> GitRemoteConnectOptionsRef<'object, 'data> {
+    /// Borrows a raw options pointer, returning `None` for null.
+    ///
+    /// # Safety
+    /// `ptr` must identify initialized options live for `'object`. Every
+    /// callback payload, proxy URL and header string reachable through it must
+    /// remain live for `'data`, which must outlive `'object`.
+    pub unsafe fn from_ptr(ptr: *mut crate::ffi::git_remote_connect_options) -> Option<Self> {
+        NonNull::new(ptr.cast::<GitRemoteConnectOptions<'data>>()).map(|ptr| {
+            // SAFETY: the caller supplies the required live shared object.
+            Self(unsafe { ffibox::CPtr::new(ptr) })
+        })
+    }
+
+    /// Returns the C pointer for read-only FFI calls.
+    #[must_use]
+    pub fn as_ptr(&self) -> *const crate::ffi::git_remote_connect_options {
+        self.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Field: git_remote_connect_options.version
+    /// Returns the options ABI version.
+    #[must_use]
+    pub fn version(&self) -> core::ffi::c_uint {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        unsafe { addr_of!((*self.as_ptr()).version).read() }
+    }
+
+    /// Field: git_remote_connect_options.callbacks
+    /// Borrows the embedded callback table.
+    #[must_use]
+    pub fn callbacks(&self) -> GitRemoteCallbacksRef<'object, 'data> {
+        // SAFETY: raw-place projection locates the initialized inline field.
+        let field = unsafe { addr_of!((*self.as_ptr()).callbacks).cast_mut() };
+        // SAFETY: the field lives for the enclosing options borrow and retains
+        // the enclosing data lifetime.
+        unsafe { GitRemoteCallbacksRef::from_ptr(field) }.expect("an inline field is non-null")
+    }
+
+    /// Field: git_remote_connect_options.custom_headers
+    /// Borrows the counted array of extra HTTP headers.
+    #[must_use]
+    pub fn custom_headers(&self) -> crate::strarray::GitStrArrayRef<'object> {
+        // SAFETY: raw-place projection locates the initialized inline field.
+        let field = unsafe { addr_of!((*self.as_ptr()).custom_headers).cast_mut() };
+        // SAFETY: the projected header and its entries live for the enclosing
+        // options borrow by the wrapper's data-lifetime contract.
+        unsafe { crate::strarray::GitStrArrayRef::from_ptr(field) }
+            .expect("an inline field is non-null")
+    }
+
+    /// Field: git_remote_connect_options.follow_redirects
+    /// Returns the redirect policy, with `None` meaning consult configuration.
+    pub fn follow_redirects(
+        &self,
+    ) -> Result<Option<crate::remote::GitRemoteRedirect>, crate::ffi::git_remote_redirect_t> {
+        // SAFETY: this live shared handle permits the scalar raw-place read.
+        let value = unsafe { addr_of!((*self.as_ptr()).follow_redirects).read() };
+        crate::remote::GitRemoteRedirect::from_field(value)
+    }
+
+    /// Field: git_remote_connect_options.proxy_opts
+    /// Borrows the embedded proxy options.
+    #[must_use]
+    pub fn proxy_options(&self) -> crate::api::proxy::GitProxyOptionsRef<'object, 'data> {
+        // SAFETY: raw-place projection locates the initialized inline field.
+        let field = unsafe { addr_of!((*self.as_ptr()).proxy_opts).cast_mut() };
+        // SAFETY: the field lives for the enclosing options borrow and retains
+        // the enclosing data lifetime.
+        unsafe { crate::api::proxy::GitProxyOptionsRef::from_ptr(field) }
+            .expect("an inline field is non-null")
+    }
+}
+
+impl<'object, 'data> GitRemoteConnectOptionsMut<'object, 'data> {
+    /// Exclusively borrows a raw options pointer, returning `None` for null.
+    ///
+    /// # Safety
+    /// The shared-handle requirements apply, and no other access path may use
+    /// the options for `'object`.
+    pub unsafe fn from_ptr(ptr: *mut crate::ffi::git_remote_connect_options) -> Option<Self> {
+        // SAFETY: the caller supplies a live exclusively accessible object.
+        unsafe { GitRemoteConnectOptionsRef::from_ptr(ptr) }.map(Self)
+    }
+
+    /// Returns the writable C pointer for FFI calls and raw-place writes.
+    #[must_use]
+    pub fn as_mut_ptr(&mut self) -> *mut crate::ffi::git_remote_connect_options {
+        self.0.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Reborrows this exclusive handle as shared.
+    #[must_use]
+    pub fn as_ref(&self) -> GitRemoteConnectOptionsRef<'_, 'data> {
+        GitRemoteConnectOptionsRef(self.0.0)
+    }
+
+    /// Replaces the options ABI version.
+    pub fn set_version(&mut self, version: core::ffi::c_uint) {
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
+    }
+
+    /// Replaces the redirect policy; `None` selects configuration lookup.
+    pub fn set_follow_redirects(&mut self, redirects: Option<crate::remote::GitRemoteRedirect>) {
+        let redirects = crate::remote::GitRemoteRedirect::to_field(redirects);
+        // SAFETY: this exclusive handle permits the scalar write.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).follow_redirects).write(redirects) }
+    }
+
+    /// Copies a borrowed string-array header into the custom-header field.
+    pub fn set_custom_headers(&mut self, headers: crate::strarray::GitStrArrayRef<'data>) {
+        // SAFETY: the source is initialized; copying transfers no ownership,
+        // and the outer data lifetime keeps its storage live.
+        let headers = unsafe { headers.as_ptr().read() };
+        // SAFETY: this exclusive handle permits replacing the inline field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).custom_headers).write(headers) }
+    }
+
+    /// Copies a callback table into the inline field.
+    ///
+    /// # Safety
+    /// No callback invocation may overlap between the source table, this copy,
+    /// or any further C copies. The payload remains exclusively reserved for
+    /// `'data`.
+    pub unsafe fn set_callbacks(&mut self, callbacks: GitRemoteCallbacksRef<'_, 'data>) {
+        // SAFETY: the source identifies an initialized borrowed table.
+        let callbacks = unsafe { callbacks.as_ptr().read() };
+        // SAFETY: this exclusive handle permits replacing the inline field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).callbacks).write(callbacks) }
+    }
+
+    /// Copies proxy options into the inline field.
+    ///
+    /// # Safety
+    /// If callbacks are configured, invocations through this and all copied
+    /// headers must not overlap. Their shared payload remains exclusively
+    /// reserved for `'data`.
+    pub unsafe fn set_proxy_options(
+        &mut self,
+        options: crate::api::proxy::GitProxyOptionsRef<'_, 'data>,
+    ) {
+        // SAFETY: the source identifies an initialized borrowed header.
+        let options = unsafe { options.as_ptr().read() };
+        // SAFETY: this exclusive handle permits replacing the inline field.
+        unsafe { addr_of_mut!((*self.as_mut_ptr()).proxy_opts).write(options) }
+    }
+
+    /// Exclusively borrows the embedded callback table.
+    #[must_use]
+    pub fn callbacks_mut(&mut self) -> GitRemoteCallbacksMut<'_, 'data> {
+        // SAFETY: this exclusive handle reaches the initialized inline field.
+        let field = unsafe { addr_of_mut!((*self.as_mut_ptr()).callbacks) };
+        // SAFETY: the projected field is exclusively borrowed for the result.
+        unsafe { GitRemoteCallbacksMut::from_ptr(field) }.expect("an inline field is non-null")
+    }
+
+    /// Exclusively borrows the embedded custom-header array.
+    #[must_use]
+    pub fn custom_headers_mut(&mut self) -> crate::strarray::GitStrArrayMut<'_> {
+        // SAFETY: this exclusive handle reaches the initialized inline field.
+        let field = unsafe { addr_of_mut!((*self.as_mut_ptr()).custom_headers) };
+        // SAFETY: the projected field is exclusively borrowed for the result.
+        unsafe { crate::strarray::GitStrArrayMut::from_ptr(field) }
+            .expect("an inline field is non-null")
+    }
+
+    /// Exclusively borrows the embedded proxy options.
+    #[must_use]
+    pub fn proxy_options_mut(&mut self) -> crate::api::proxy::GitProxyOptionsMut<'_, 'data> {
+        // SAFETY: this exclusive handle reaches the initialized inline field.
+        let field = unsafe { addr_of_mut!((*self.as_mut_ptr()).proxy_opts) };
+        // SAFETY: the projected field is exclusively borrowed for the result.
+        unsafe { crate::api::proxy::GitProxyOptionsMut::from_ptr(field) }
+            .expect("an inline field is non-null")
+    }
+}
+
+#[cfg(test)]
+mod remote_connect_options_tests {
+    use core::mem::{align_of, size_of};
+
+    use ffibox::{CCell, CValued};
+
+    use super::*;
+
+    #[test]
+    fn wrapper_preserves_layout_and_default_versions() {
+        fn assert_cell<T: CCell>() {}
+        fn assert_valued<T: CValued>() {}
+
+        assert_cell::<GitRemoteConnectOptions<'static>>();
+        assert_valued::<GitRemoteConnectOptions<'static>>();
+        assert_eq!(
+            size_of::<GitRemoteConnectOptions<'static>>(),
+            size_of::<crate::ffi::git_remote_connect_options>()
+        );
+        assert_eq!(
+            align_of::<GitRemoteConnectOptions<'static>>(),
+            align_of::<crate::ffi::git_remote_connect_options>()
+        );
+
+        let options = GitRemoteConnectOptions::new();
+        assert_eq!(
+            options.as_ref().version(),
+            crate::ffi::GIT_REMOTE_CONNECT_OPTIONS_VERSION
+        );
+        assert_eq!(
+            options.as_ref().callbacks().version(),
+            crate::ffi::GIT_REMOTE_CALLBACKS_VERSION
+        );
+        assert_eq!(
+            options.as_ref().proxy_options().version(),
+            crate::ffi::GIT_PROXY_OPTIONS_VERSION
+        );
+        assert_eq!(options.as_ref().follow_redirects(), Ok(None));
+        assert_eq!(options.as_ref().custom_headers().count(), 0);
+    }
+
+    #[test]
+    fn mutable_fields_round_trip_through_shared_handles() {
+        let mut options = GitRemoteConnectOptions::new();
+        options
+            .as_mut()
+            .set_follow_redirects(Some(crate::remote::GitRemoteRedirect::Initial));
+        assert_eq!(
+            options.as_ref().follow_redirects(),
+            Ok(Some(crate::remote::GitRemoteRedirect::Initial))
+        );
+    }
+}

@@ -553,3 +553,9 @@
 
 # wrap batch 27dc0b27
 ^(git_checkout_options_init|git_diff_blob_to_buffer|git_diff_buffers|git_diff_find_options_init|git_diff_options_init|git_merge_options_init|git_proxy_options_init|git_reset_from_annotated)$
+
+# wrap batch e255c4de
+^git_config_backend$
+^GIT_CONFIG_BACKEND_VERSION$
+^git_remote_connect_options$
+^GIT_REMOTE_CONNECT_OPTIONS_VERSION$
