@@ -168,10 +168,32 @@ mod tests {
 /// Wraps: git_merge_options
 /// Layout-compatible merge options borrowing a default-driver string and
 /// optional similarity table for `'data`.
+///
+/// `'data` is invariant. The setters store a `&'data` referent into the C
+/// struct while the getters hand one back out, so a covariant `'data` would
+/// let safe code shrink the parameter on the exclusive handle, install a
+/// shorter-lived driver name or similarity table, and then read it back
+/// through a handle still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::merge::GitMergeOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitMergeOptionsMut<'object, 'static>,
+/// ) -> GitMergeOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitMergeOptions<'data> {
     inner: CType<ffi::git_merge_options>,
-    _data: PhantomData<&'data ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitMergeOptions`].
@@ -502,6 +524,20 @@ mod merge_options_tests {
         assert_eq!(view.file_favor(), Ok(MergeFileFavor::Ours));
         assert_eq!(view.recursion_limit(), 5);
         assert_eq!(view.target_limit(), 240);
+    }
+
+    #[test]
+    fn options_keep_a_scoped_data_borrow_across_shorter_object_borrows() {
+        // The `compile_fail` doctest on `GitMergeOptions` covers the direction
+        // that must be rejected. This covers the direction that must keep
+        // working: `'data` is a local scope rather than `'static`, and the
+        // value is reborrowed for several shorter `'object` lifetimes.
+        let driver = std::ffi::CString::new("scoped").unwrap();
+        let mut options = GitMergeOptions::new();
+        options.as_mut().set_default_driver(Some(driver.as_c_str()));
+        assert_eq!(options.as_ref().default_driver(), Some(driver.as_c_str()));
+        options.as_mut().set_target_limit(11);
+        assert_eq!(options.as_ref().default_driver(), Some(driver.as_c_str()));
     }
 
     #[test]

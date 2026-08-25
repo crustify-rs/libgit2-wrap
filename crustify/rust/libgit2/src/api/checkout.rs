@@ -310,10 +310,32 @@ mod callback_surface_tests {
 /// Wraps: git_checkout_options
 /// Layout-compatible checkout options whose configured pointers borrow
 /// caller-owned values for the options lifetime.
+///
+/// `'data` is invariant. The setters store a `&'data` referent into the C
+/// struct while the getters hand one back out, so a covariant `'data` would
+/// let safe code shrink the parameter on the exclusive handle, install a
+/// shorter-lived label, directory, tree or index, and then read it back
+/// through a handle still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::checkout::GitCheckoutOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitCheckoutOptionsMut<'object, 'static>,
+/// ) -> GitCheckoutOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitCheckoutOptions<'data> {
     inner: ffibox::CType<ffi::git_checkout_options>,
-    _data: core::marker::PhantomData<&'data ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: core::marker::PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitCheckoutOptions`].
@@ -982,6 +1004,28 @@ mod checkout_options_tests {
         assert_eq!(view.ancestor_label(), Some(c"base"));
         assert_eq!(view.our_label(), Some(c"ours"));
         assert_eq!(view.their_label(), Some(c"theirs"));
+    }
+
+    #[test]
+    fn options_keep_a_scoped_data_borrow_across_shorter_object_borrows() {
+        // The `compile_fail` doctest on `GitCheckoutOptions` covers the
+        // direction that must be rejected. This covers the direction that must
+        // keep working: `'data` is a local scope rather than `'static`, and
+        // the value is reborrowed for several shorter `'object` lifetimes.
+        let directory = std::ffi::CString::new("scoped").unwrap();
+        let mut options = GitCheckoutOptions::new();
+        options
+            .as_mut()
+            .set_target_directory(Some(directory.as_c_str()));
+        assert_eq!(
+            options.as_ref().target_directory(),
+            Some(directory.as_c_str())
+        );
+        options.as_mut().set_dir_mode(0o700);
+        assert_eq!(
+            options.as_ref().target_directory(),
+            Some(directory.as_c_str())
+        );
     }
 
     #[test]

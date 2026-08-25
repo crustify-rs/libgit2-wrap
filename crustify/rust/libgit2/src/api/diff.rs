@@ -1152,10 +1152,18 @@ impl DiffFindOptionsMut<'_> {
 
     /// Installs a borrowed custom similarity metric.
     ///
+    /// Unlike the option records that carry a `'data` parameter, this type is
+    /// generated from the plain C layout and cannot express the stored
+    /// borrow, so the obligation is the caller's.
+    ///
     /// # Safety
     ///
-    /// The metric and every payload its callbacks use must remain valid until
-    /// this options record is cleared or is no longer passed to libgit2.
+    /// The metric and every payload its callbacks use must remain valid for
+    /// as long as this options record can still be observed: both while
+    /// libgit2 is passed the record and while safe code can reach the stored
+    /// table again through [`DiffFindOptionsRef::metric`], whose returned
+    /// handle borrows only the options value. Clearing the slot with
+    /// [`clear_metric`](Self::clear_metric) ends the obligation.
     pub unsafe fn set_metric(&mut self, metric: DiffSimilarityMetricRef<'_>) {
         // SAFETY: this live exclusive handle permits the pointer write and the
         // caller upholds the stored borrow's lifetime and callback invariants.
@@ -1389,10 +1397,32 @@ pub trait GitDiffOptionsCallbacks {
 /// Wraps: git_diff_options
 /// Layout-compatible diff options borrowing strings, pathspec storage, and
 /// callback state for `'data`.
+///
+/// `'data` is invariant. The setters store a `&'data` referent into the C
+/// struct while the getters hand one back out, so a covariant `'data` would
+/// let safe code shrink the parameter on the exclusive handle, install a
+/// shorter-lived prefix, pathspec or callback receiver, and then read it
+/// back through a handle still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::diff::GitDiffOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitDiffOptionsMut<'object, 'static>,
+/// ) -> GitDiffOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitDiffOptions<'data> {
     inner: CType<ffi::git_diff_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitDiffOptions`].
@@ -1852,6 +1882,20 @@ mod diff_options_tests {
         assert!(!view.has_notify_callback());
         assert!(!view.has_progress_callback());
         assert!(!view.has_callback_payload());
+    }
+
+    #[test]
+    fn options_keep_a_scoped_data_borrow_across_shorter_object_borrows() {
+        // The `compile_fail` doctest on `GitDiffOptions` covers the direction
+        // that must be rejected. This covers the direction that must keep
+        // working: `'data` is a local scope rather than `'static`, and the
+        // value is reborrowed for several shorter `'object` lifetimes.
+        let prefix = std::ffi::CString::new("scoped/").unwrap();
+        let mut options = GitDiffOptions::new();
+        options.as_mut().set_prefixes(Some(prefix.as_c_str()), None);
+        assert_eq!(options.as_ref().old_prefix(), Some(prefix.as_c_str()));
+        options.as_mut().set_context_lines(9);
+        assert_eq!(options.as_ref().old_prefix(), Some(prefix.as_c_str()));
     }
 
     #[derive(Default)]
