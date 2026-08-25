@@ -6048,6 +6048,46 @@
    }
   },
   {
+   "name": "git_apply_delta_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient read-only callback input owned by libgit2 for this invocation."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "User payload is borrowed unchanged for this transient callback invocation and may be null."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_attr_get",
    "defined_in": "src/libgit2/attr.c",
    "ptr_args": [
@@ -6312,6 +6352,84 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_blame_get_hunk_byindex",
+   "defined_in": "src/libgit2/blame.c",
+   "ptr_args": [
+    {
+     "name": "blame",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blame"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed only for this synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:blame"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional internal hunk borrowed from the blame result."
+    }
+   }
+  },
+  {
+   "name": "git_blame_get_hunk_byline",
+   "defined_in": "src/libgit2/blame.c",
+   "ptr_args": [
+    {
+     "name": "blame",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blame"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed only for this synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:blame"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional internal hunk borrowed from the blame result."
+    }
+   }
   },
   {
    "name": "git_blame_get_hunk_count",
@@ -11663,6 +11781,183 @@
    ]
   },
   {
+   "name": "git_diff_binary_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient read-only callback input owned by libgit2 for this invocation."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient read-only callback input owned by libgit2 for this invocation."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "User payload is borrowed unchanged for this transient callback invocation and may be null."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_file_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient read-only callback input owned by libgit2 for this invocation."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "User payload is borrowed unchanged for this transient callback invocation and may be null."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_format_email",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads the diff synchronously and retains no pointer."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads required formatting options synchronously and retains no pointer."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows and replaces/appends to the caller-owned buffer header."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_format_email_options_init",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows writable options storage for initialization."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_free",
    "defined_in": "src/libgit2/diff.c",
    "lifetime": {
@@ -11733,6 +12028,45 @@
    ]
   },
   {
+   "name": "git_diff_get_delta",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed only for this synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:diff"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional internal delta borrowed from the diff result."
+    }
+   }
+  },
+  {
    "name": "git_diff_get_stats",
    "defined_in": "src/libgit2/diff_stats.c",
    "ptr_args": [
@@ -11776,6 +12110,63 @@
    ]
   },
   {
+   "name": "git_diff_hunk_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient read-only callback input owned by libgit2 for this invocation."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient read-only callback input owned by libgit2 for this invocation."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "User payload is borrowed unchanged for this transient callback invocation and may be null."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_is_sorted_icase",
    "defined_in": "src/libgit2/diff.c",
    "ptr_args": [
@@ -11794,6 +12185,80 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_line_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient read-only callback input owned by libgit2 for this invocation."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Transient read-only callback input owned by libgit2 for this invocation."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Transient read-only callback input owned by libgit2 for this invocation."
+     }
+    },
+    {
+     "name": "arg3",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg3"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "User payload is borrowed unchanged for this transient callback invocation and may be null."
      }
     }
    ]
@@ -13999,6 +14464,89 @@
    }
   },
   {
+   "name": "git_indexer_new",
+   "defined_in": "src/libgit2/indexer.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional options are copied; their configured ODB and callback payload remain borrowed by the constructed indexer."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a non-null output slot and writes one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "prefix",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:prefix"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required NUL-terminated path borrowed only while the constructor copies/uses it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_indexer_options_init",
+   "defined_in": "src/libgit2/indexer.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows writable options storage for initialization."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_indexer_progress_cb",
    "defined_in": null,
    "ptr_args": [
@@ -14408,6 +14956,112 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for this synchronous call; the callee retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_mempack_dump",
+   "defined_in": "src/libgit2/odb_mempack.c",
+   "ptr_args": [
+    {
+     "name": "_backend",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:_backend"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Reads queued objects from the live mempack backend without taking ownership."
+     }
+    },
+    {
+     "name": "pack",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pack"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows the output buffer and replaces its owned byte allocation."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows the active repository while pack construction may use its mutable internal caches."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_mempack_new",
+   "defined_in": "src/libgit2/odb_mempack.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a non-null output slot and writes one newly owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_mempack_reset",
+   "defined_in": "src/libgit2/odb_mempack.c",
+   "ptr_args": [
+    {
+     "name": "_backend",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:_backend"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows the mempack backend while freeing and clearing all queued objects."
      }
     }
    ]
@@ -16286,6 +16940,44 @@
    }
   },
   {
+   "name": "git_odb_add_backend",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "backend",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": false,
+      "mutable": true,
+      "note": "Transfers the complete backend allocation to the ODB on success; the caller retains it on failure."
+     }
+    },
+    {
+     "name": "odb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:odb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows the ODB while installing and ordering a backend."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_odb_add_disk_alternate",
    "defined_in": "src/libgit2/odb.c",
    "ptr_args": [
@@ -16693,6 +17385,45 @@
    ]
   },
   {
+   "name": "git_odb_object_data",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "object",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:object"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed only for this synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": null,
+     "array": {
+      "by_val": true
+     },
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:object"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed counted byte buffer owned by the object; its length is returned by git_odb_object_size."
+    }
+   }
+  },
+  {
    "name": "git_odb_object_dup",
    "defined_in": "src/libgit2/odb.c",
    "lifetime": {
@@ -16767,6 +17498,91 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one object cache reference; null is accepted and the final decrement releases the owned buffer and object allocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_object_id",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "object",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:object"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed only for this synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:object"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Non-null inline OID borrowed from the object."
+    }
+   }
+  },
+  {
+   "name": "git_odb_object_size",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "object",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:object"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed only for this synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_object_type",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "object",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:object"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed only for this synchronous call; ownership is not transferred."
      }
     }
    ]
@@ -16904,6 +17720,66 @@
       "nullable": false,
       "mutable": true,
       "note": "Writable out-slot receiving one newly owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_read",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "db",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:db"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows the ODB because a cache miss may refresh its backends."
+     }
+    },
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed only for this synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a non-null output slot and writes one newly owned allocation on success."
      }
     }
    ]
@@ -18396,6 +19272,45 @@
    ]
   },
   {
+   "name": "git_patch_get_delta",
+   "defined_in": "src/libgit2/patch.c",
+   "ptr_args": [
+    {
+     "name": "patch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:patch"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed only for this synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:patch"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Internal non-null delta borrowed from the patch."
+    }
+   }
+  },
+  {
    "name": "git_patch_get_hunk",
    "defined_in": "src/libgit2/patch.c",
    "ptr_args": [
@@ -18831,6 +19746,45 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_pathspec_match_list_diff_entry",
+   "defined_in": "src/libgit2/pathspec.c",
+   "ptr_args": [
+    {
+     "name": "m",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:m"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed only for this synchronous call; ownership is not transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:m"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional internal diff delta borrowed from this diff-backed match list."
+    }
+   }
   },
   {
    "name": "git_pathspec_match_list_entry",
@@ -27052,6 +28006,86 @@
    ]
   },
   {
+   "name": "git_stash_save_options_init",
+   "defined_in": "src/libgit2/stash.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows writable options storage for initialization."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_stash_save_with_opts",
+   "defined_in": "src/libgit2/stash.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrows required stash options and their nested pointers for the synchronous save."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a non-null output slot and writes the created stash commit ID on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows the repository while refs, index and worktree are updated."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_status_file",
    "defined_in": "src/libgit2/status.c",
    "ptr_args": [
@@ -27109,6 +28143,29 @@
    ]
   },
   {
+   "name": "git_status_init_options",
+   "defined_in": "src/libgit2/status.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows writable options storage for initialization."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_status_list_entrycount",
    "defined_in": "src/libgit2/status.c",
    "ptr_args": [
@@ -27154,6 +28211,66 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and destroys the complete status-list allocation; null is explicitly accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_status_list_new",
+   "defined_in": "src/libgit2/status.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional options and nested borrowed values are consumed synchronously; the result retains only owned diffs and scalar flags."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrows a non-null output slot and writes one newly owned allocation on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows the repository while status refreshes and reads its index/worktree."
      }
     }
    ]

@@ -4,7 +4,7 @@ use core::ffi::{CStr, c_void};
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
-use ffibox::{CBox, CCloned};
+use ffibox::{CBox, CCloned, CSlice};
 
 use crate::api::odb_backend::{
     GitOdbStreamMut, GitOdbStreamOwned, OdbWritepackMut, OdbWritepackOwned, OdbWritepackRef,
@@ -13,6 +13,7 @@ use crate::api::types::GitObjectType;
 use crate::ffi;
 use crate::indexer::{GitIndexerProgressCallback, IndexerProgressRef};
 use crate::oid::{Oid, OidRef};
+use crate::sys::odb_backend::GitOdbBackendOwned;
 
 ffibox::define_ctype!(
     /// Wraps: git_odb
@@ -603,4 +604,124 @@ where
         callback,
         _database: PhantomData,
     })
+}
+
+/// Wraps: git_odb_add_backend
+/// Transfers `backend` into the object database at the requested priority.
+///
+/// On failure, the backend is returned with the status code because libgit2
+/// has not taken ownership of it.
+pub fn git_odb_add_backend(
+    odb: &mut GitOdbMut<'_>,
+    backend: GitOdbBackendOwned,
+    priority: i32,
+) -> Result<(), (i32, GitOdbBackendOwned)> {
+    let raw = backend.into_raw();
+    // SAFETY: `odb` is exclusively borrowed and `raw` transfers one complete
+    // backend owner. Success stores it in the ODB; failure leaves it untouched.
+    let status = unsafe { ffi::git_odb_add_backend(odb.as_mut_ptr(), raw, priority) };
+    if status == 0 {
+        Ok(())
+    } else {
+        // SAFETY: every failing path returns before backend insertion, so the
+        // original uniquely owned complete backend is returned to Rust.
+        let backend = unsafe { GitOdbBackendOwned::from_raw(raw) }
+            .expect("the transferred backend pointer was non-null");
+        Err((status, backend))
+    }
+}
+
+/// Wraps: git_odb_object_data
+/// Borrows the object's uncompressed raw bytes.
+///
+/// `None` is the valid representation of an empty object whose data pointer is
+/// null. A nonempty live object always returns a counted view.
+#[must_use]
+pub fn git_odb_object_data<'a>(object: GitOdbObjectRef<'a>) -> Option<CSlice<'a, u8>> {
+    // SAFETY: the live object is shared and both accessors only read fields.
+    let (data, size) = unsafe {
+        (
+            ffi::git_odb_object_data(object.as_ptr().cast_mut()),
+            ffi::git_odb_object_size(object.as_ptr().cast_mut()),
+        )
+    };
+    let data = NonNull::new(data.cast_mut().cast::<u8>())?;
+    // SAFETY: libgit2 guarantees the object owns `size` initialized bytes at
+    // its non-null data pointer for the object's remaining lifetime.
+    Some(unsafe { CSlice::from_raw_parts(data, size) })
+}
+
+/// Wraps: git_odb_object_free
+/// Releases one independently owned object-cache reference.
+pub fn git_odb_object_free(object: GitOdbObjectOwned) {
+    drop(object);
+}
+
+/// Wraps: git_odb_object_id
+/// Borrows the object identifier embedded in an object-database value.
+#[must_use]
+pub fn git_odb_object_id<'a>(object: GitOdbObjectRef<'a>) -> OidRef<'a> {
+    // SAFETY: the shared live object is only read and always contains an
+    // initialized inline cached-object identifier.
+    let id = unsafe { ffi::git_odb_object_id(object.as_ptr().cast_mut()) };
+    // SAFETY: C returns the non-null address of that inline identifier, whose
+    // lifetime is exactly the object borrow carried into this function.
+    unsafe { OidRef::from_ptr(id.cast_mut()) }.expect("an inline OID is non-null")
+}
+
+/// Wraps: git_odb_object_size
+/// Returns the length of the object's raw data buffer.
+#[must_use]
+pub fn git_odb_object_size(object: GitOdbObjectRef<'_>) -> usize {
+    // SAFETY: the shared live object is only read and no pointer is retained.
+    unsafe { ffi::git_odb_object_size(object.as_ptr().cast_mut()) }
+}
+
+/// Wraps: git_odb_object_type
+/// Returns the object's checked Git kind.
+pub fn git_odb_object_type(
+    object: GitOdbObjectRef<'_>,
+) -> Result<GitObjectType, InvalidOdbObjectType> {
+    // SAFETY: the shared live object is only read and no pointer is retained.
+    let raw = unsafe { ffi::git_odb_object_type(object.as_ptr().cast_mut()) };
+    GitObjectType::from_raw(raw).ok_or(InvalidOdbObjectType(raw))
+}
+
+/// Wraps: git_odb_read
+/// Reads an object and returns one independently owned cache reference.
+pub fn git_odb_read(odb: &mut GitOdbMut<'_>, id: OidRef<'_>) -> Result<GitOdbObjectOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: the output slot is writable, the ODB is exclusively borrowed
+    // because a cache miss may refresh it, and the ID is live for the call.
+    let status = unsafe { ffi::git_odb_read(&mut out, odb.as_mut_ptr(), id.as_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one independently releasable object count.
+    unsafe { GitOdbObjectOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+#[cfg(test)]
+mod scheduled_object_api_tests {
+    use super::*;
+
+    #[test]
+    fn add_backend_transfers_its_owner_to_the_odb() {
+        // SAFETY: initialization is process-global and refcounted; shutdown is
+        // balanced after the ODB has destroyed its installed backend.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let mut odb = git_odb_new().unwrap();
+        let backend = crate::odb_mempack::git_mempack_new().unwrap();
+        git_odb_add_backend(&mut odb.as_mut(), backend, 999)
+            .unwrap_or_else(|(status, _)| panic!("backend insertion failed: {status}"));
+        drop(odb);
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
+    fn object_borrows_are_tied_to_the_object_handle() {
+        let _: for<'a> fn(GitOdbObjectRef<'a>) -> Option<CSlice<'a, u8>> = git_odb_object_data;
+        let _: for<'a> fn(GitOdbObjectRef<'a>) -> OidRef<'a> = git_odb_object_id;
+    }
 }

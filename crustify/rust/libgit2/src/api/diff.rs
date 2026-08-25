@@ -1864,3 +1864,122 @@ mod diff_options_tests {
         assert_eq!(callbacks.status, Some(crate::diff::Delta::Added));
     }
 }
+
+/// Wraps: git_diff_binary_cb
+/// Safe callable surface for one transient binary diff record.
+pub trait GitDiffBinaryCallback {
+    /// Returns zero to continue or an error code to stop traversal.
+    fn call(
+        &mut self,
+        delta: DiffDeltaRef<'_>,
+        contains_data: bool,
+        old_file: crate::diff::DiffBinaryFileRef<'_>,
+        new_file: crate::diff::DiffBinaryFileRef<'_>,
+    ) -> i32;
+}
+
+impl<F> GitDiffBinaryCallback for F
+where
+    F: for<'a> FnMut(
+        DiffDeltaRef<'a>,
+        bool,
+        crate::diff::DiffBinaryFileRef<'a>,
+        crate::diff::DiffBinaryFileRef<'a>,
+    ) -> i32,
+{
+    fn call(
+        &mut self,
+        delta: DiffDeltaRef<'_>,
+        contains_data: bool,
+        old_file: crate::diff::DiffBinaryFileRef<'_>,
+        new_file: crate::diff::DiffBinaryFileRef<'_>,
+    ) -> i32 {
+        self(delta, contains_data, old_file, new_file)
+    }
+}
+
+/// Wraps: git_diff_file_cb
+/// Safe callable surface for per-file diff progress.
+pub trait GitDiffFileCallback {
+    /// Returns zero to continue or an error code to stop traversal.
+    fn call(&mut self, delta: DiffDeltaRef<'_>, progress: f32) -> i32;
+}
+
+impl<F> GitDiffFileCallback for F
+where
+    F: for<'a> FnMut(DiffDeltaRef<'a>, f32) -> i32,
+{
+    fn call(&mut self, delta: DiffDeltaRef<'_>, progress: f32) -> i32 {
+        self(delta, progress)
+    }
+}
+
+/// Wraps: git_diff_hunk_cb
+/// Safe callable surface for one transient text-diff hunk.
+pub trait GitDiffHunkCallback {
+    /// Returns zero to continue or an error code to stop traversal.
+    fn call(&mut self, delta: DiffDeltaRef<'_>, hunk: crate::diff::DiffHunkRef<'_>) -> i32;
+}
+
+impl<F> GitDiffHunkCallback for F
+where
+    F: for<'a> FnMut(DiffDeltaRef<'a>, crate::diff::DiffHunkRef<'a>) -> i32,
+{
+    fn call(&mut self, delta: DiffDeltaRef<'_>, hunk: crate::diff::DiffHunkRef<'_>) -> i32 {
+        self(delta, hunk)
+    }
+}
+
+/// Wraps: git_diff_line_cb
+/// Safe callable surface for a transient diff line or formatted header.
+pub trait GitDiffLineCallback {
+    /// `hunk` is absent for file headers, hunk headers and binary markers
+    /// emitted by the formatting APIs.
+    fn call(
+        &mut self,
+        delta: DiffDeltaRef<'_>,
+        hunk: Option<crate::diff::DiffHunkRef<'_>>,
+        line: crate::diff::DiffLineRef<'_>,
+    ) -> i32;
+}
+
+impl<F> GitDiffLineCallback for F
+where
+    F: for<'a> FnMut(
+        DiffDeltaRef<'a>,
+        Option<crate::diff::DiffHunkRef<'a>>,
+        crate::diff::DiffLineRef<'a>,
+    ) -> i32,
+{
+    fn call(
+        &mut self,
+        delta: DiffDeltaRef<'_>,
+        hunk: Option<crate::diff::DiffHunkRef<'_>>,
+        line: crate::diff::DiffLineRef<'_>,
+    ) -> i32 {
+        self(delta, hunk, line)
+    }
+}
+
+#[cfg(test)]
+mod scheduled_callback_tests {
+    use super::*;
+
+    #[test]
+    fn callback_traits_accept_typed_callable_shapes() {
+        fn binary<C: GitDiffBinaryCallback>(_: &mut C) {}
+        fn file<C: GitDiffFileCallback>(_: &mut C) {}
+        fn hunk<C: GitDiffHunkCallback>(_: &mut C) {}
+        fn line<C: GitDiffLineCallback>(_: &mut C) {}
+
+        binary(&mut |_: DiffDeltaRef<'_>,
+                     _: bool,
+                     _: crate::diff::DiffBinaryFileRef<'_>,
+                     _: crate::diff::DiffBinaryFileRef<'_>| 0);
+        file(&mut |_: DiffDeltaRef<'_>, _: f32| 0);
+        hunk(&mut |_: DiffDeltaRef<'_>, _: crate::diff::DiffHunkRef<'_>| 0);
+        line(&mut |_: DiffDeltaRef<'_>,
+                   _: Option<crate::diff::DiffHunkRef<'_>>,
+                   _: crate::diff::DiffLineRef<'_>| 0);
+    }
+}

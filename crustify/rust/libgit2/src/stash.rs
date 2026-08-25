@@ -2,7 +2,7 @@
 
 use core::ffi::{CStr, c_void};
 
-use crate::api::stash::GitStashCallback;
+use crate::api::stash::{GitStashCallback, GitStashSaveOptionsMut, GitStashSaveOptionsRef};
 use crate::api::types::GitSignatureRef;
 use crate::ffi;
 use crate::oid::{Oid, OidRef};
@@ -194,4 +194,54 @@ pub fn git_stash_save(
         )
     };
     if status == 0 { Ok(output) } else { Err(status) }
+}
+
+/// Wraps: git_stash_save_options_init
+/// Initializes stash-save options for the requested ABI version.
+pub fn git_stash_save_options_init(
+    options: &mut GitStashSaveOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle exposes writable layout-compatible options
+    // storage, and initialization retains no pointer.
+    let status = unsafe { ffi::git_stash_save_options_init(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_stash_save_with_opts
+/// Saves the selected worktree changes and returns the stash commit ID.
+pub fn git_stash_save_with_opts(
+    repository: &mut GitRepositoryMut<'_>,
+    options: GitStashSaveOptionsRef<'_, '_>,
+) -> Result<Oid, i32> {
+    let mut output = Oid::zeroed();
+    // SAFETY: the output is writable, the repository is exclusively borrowed,
+    // and the options type retains every nested borrow for this call.
+    let status = unsafe {
+        ffi::git_stash_save_with_opts(
+            core::ptr::addr_of_mut!(output).cast(),
+            repository.as_mut_ptr(),
+            options.as_ptr(),
+        )
+    };
+    if status == 0 { Ok(output) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod save_options_init_tests {
+    use super::*;
+    use crate::api::stash::GitStashSaveOptions;
+
+    #[test]
+    fn initializer_writes_the_published_defaults() {
+        let mut storage = GitStashSaveOptions::<'static>::new();
+        let mut options = storage.as_mut();
+        git_stash_save_options_init(&mut options, ffi::GIT_STASH_SAVE_OPTIONS_VERSION).unwrap();
+        assert_eq!(
+            options.as_ref().version(),
+            ffi::GIT_STASH_SAVE_OPTIONS_VERSION
+        );
+        assert_eq!(options.as_ref().flags(), 0);
+        assert!(options.as_ref().stasher().is_none());
+    }
 }

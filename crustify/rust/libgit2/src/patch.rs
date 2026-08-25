@@ -4,6 +4,7 @@ use core::ptr::NonNull;
 
 use ffibox::{CBox, CDropped};
 
+use crate::api::diff::DiffDeltaRef;
 use crate::diff::{DiffHunkRef, DiffLineRef, DiffMut};
 use crate::ffi;
 
@@ -296,4 +297,27 @@ pub fn git_patch_get_hunk<'a>(
     let hunk = unsafe { DiffHunkRef::from_ptr(raw.cast_mut()) }
         .expect("a successful hunk lookup returns non-null");
     Ok((hunk, lines))
+}
+
+/// Wraps: git_patch_get_delta
+/// Borrows the delta associated with a patch.
+#[must_use]
+pub fn git_patch_get_delta<'a>(patch: GitPatchRef<'a>) -> DiffDeltaRef<'a> {
+    // SAFETY: the live shared patch owns its delta and the accessor only reads
+    // the stored pointer.
+    let delta = unsafe { ffi::git_patch_get_delta(patch.as_ptr()) };
+    // SAFETY: every complete patch has a non-null delta that remains live for
+    // the patch borrow carried into this result.
+    unsafe { DiffDeltaRef::from_ptr(delta.cast_mut()) }
+        .expect("a complete patch always carries a delta")
+}
+
+#[cfg(test)]
+mod delta_accessor_tests {
+    use super::*;
+
+    #[test]
+    fn delta_borrow_is_tied_to_the_patch() {
+        let _: for<'a> fn(GitPatchRef<'a>) -> DiffDeltaRef<'a> = git_patch_get_delta;
+    }
 }

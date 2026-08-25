@@ -4,6 +4,7 @@ use core::ffi::CStr;
 
 use ffibox::CBox;
 
+use crate::api::indexer::{GitIndexerOptionsMut, GitIndexerOptionsRef};
 use crate::ffi;
 
 ffibox::define_ctype!(
@@ -484,5 +485,61 @@ mod callback_tests {
         let progress = unsafe { IndexerProgressRef::from_ptr(&raw mut raw) }.unwrap();
         let mut callback = |value: IndexerProgressRef<'_>| value.total_objects() as i32;
         assert_eq!(GitIndexerProgressCallback::call(&mut callback, progress), 9);
+    }
+}
+
+/// Wraps: git_indexer_new
+/// Creates an indexer that writes its temporary pack in `prefix`.
+///
+/// Options configured with the unsafe borrowed-ODB or callback setters retain
+/// those external obligations until the returned indexer is dropped.
+pub fn git_indexer_new(
+    prefix: &CStr,
+    options: Option<GitIndexerOptionsRef<'_>>,
+) -> Result<IndexerOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    let options = options.map_or(core::ptr::null_mut(), |value| value.as_ptr().cast_mut());
+    // SAFETY: `out` is writable and `prefix` is a live C string. The optional
+    // options value is initialized; any retained pointee obligations originate
+    // only from its explicitly unsafe setters and therefore remain in force.
+    let status = unsafe { ffi::git_indexer_new(&mut out, prefix.as_ptr(), options) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one fully initialized indexer allocation.
+    unsafe { IndexerOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_indexer_options_init
+/// Initializes indexer options for the requested ABI version.
+pub fn git_indexer_options_init(
+    options: &mut GitIndexerOptionsMut<'_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle exposes writable layout-compatible options
+    // storage, and initialization retains no pointer to the header.
+    let status = unsafe { ffi::git_indexer_options_init(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod constructor_tests {
+    use super::*;
+    use crate::api::indexer::GitIndexerOptions;
+
+    #[test]
+    fn options_initializer_sets_the_current_version() {
+        let mut raw = GitIndexerOptions::zeroed();
+        // SAFETY: this layout-compatible stack value remains live and is
+        // exclusively accessed through the handle.
+        let mut options = unsafe {
+            GitIndexerOptionsMut::from_ptr(
+                core::ptr::addr_of_mut!(raw).cast::<ffi::git_indexer_options>(),
+            )
+        }
+        .unwrap();
+        git_indexer_options_init(&mut options, ffi::GIT_INDEXER_OPTIONS_VERSION).unwrap();
+        assert_eq!(options.as_ref().version(), ffi::GIT_INDEXER_OPTIONS_VERSION);
+        assert_eq!(options.as_ref().mode(), 0);
     }
 }

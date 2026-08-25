@@ -2,6 +2,7 @@
 
 use core::ops::{BitOr, BitOrAssign};
 
+use crate::api::diff::DiffDeltaRef;
 use crate::ffi;
 
 /// Wraps: git_apply_flags_t
@@ -102,5 +103,42 @@ mod tests {
             align_of::<GitApplyFlags>(),
             align_of::<ffi::git_apply_flags_t>()
         );
+    }
+}
+
+/// Wraps: git_apply_delta_cb
+/// Safe callable surface for deciding whether to apply one transient delta.
+pub trait GitApplyDeltaCallback {
+    /// Returns zero to apply, a positive value to skip, or a negative value
+    /// to abort the operation.
+    fn call(&mut self, delta: DiffDeltaRef<'_>) -> i32;
+}
+
+impl<F> GitApplyDeltaCallback for F
+where
+    F: for<'a> FnMut(DiffDeltaRef<'a>) -> i32,
+{
+    fn call(&mut self, delta: DiffDeltaRef<'_>) -> i32 {
+        self(delta)
+    }
+}
+
+#[cfg(test)]
+mod callback_tests {
+    use super::*;
+
+    #[test]
+    fn delta_callback_accepts_a_typed_transient_borrow() {
+        let mut raw = crate::api::diff::DiffDelta::zeroed();
+        // SAFETY: this initialized layout value remains live and immutable for
+        // the callback invocation, and the handle is the only access path.
+        let delta = unsafe {
+            DiffDeltaRef::from_ptr(
+                core::ptr::addr_of_mut!(raw).cast::<crate::ffi::git_diff_delta>(),
+            )
+        }
+        .unwrap();
+        let mut callback = |_: DiffDeltaRef<'_>| 7;
+        assert_eq!(GitApplyDeltaCallback::call(&mut callback, delta), 7);
     }
 }

@@ -5,7 +5,9 @@ use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CBox, CDropped};
 
-use crate::api::diff::{DiffLineOrigin, InvalidDiffLineOrigin};
+use crate::api::buffer::GitBufMut;
+use crate::api::deprecated::{DiffFormatEmailOptionsMut, DiffFormatEmailOptionsRef};
+use crate::api::diff::{DiffDeltaRef, DiffLineOrigin, InvalidDiffLineOrigin};
 use crate::ffi;
 
 /// The kind of change represented by a diff delta.
@@ -1444,5 +1446,75 @@ pub fn git_diff_patchid_options_init() -> Result<DiffPatchIdOptions, i32> {
         Ok(options)
     } else {
         Err(status)
+    }
+}
+
+/// Wraps: git_diff_format_email
+/// Appends the deprecated e-mail representation of `diff` to `out`.
+pub fn git_diff_format_email(
+    out: &mut GitBufMut<'_>,
+    diff: DiffRef<'_>,
+    options: DiffFormatEmailOptionsRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: all three typed borrows are live for this synchronous call. The
+    // C body writes only the buffer and merely reads the diff and options.
+    let status = unsafe {
+        ffi::git_diff_format_email(out.as_mut_ptr(), diff.as_ptr().cast_mut(), options.as_ptr())
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_diff_format_email_options_init
+/// Initializes deprecated e-mail options for the requested ABI version.
+pub fn git_diff_format_email_options_init(
+    options: &mut DiffFormatEmailOptionsMut<'_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle exposes writable layout-compatible options
+    // storage, and C retains no pointer after initialization.
+    let status = unsafe { ffi::git_diff_format_email_options_init(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_diff_get_delta
+/// Borrows a delta by zero-based index.
+#[must_use]
+pub fn git_diff_get_delta<'a>(diff: DiffRef<'a>, index: usize) -> Option<DiffDeltaRef<'a>> {
+    // SAFETY: `diff` is live and shared; the accessor only reads its delta
+    // vector, and a non-null result remains owned by that diff.
+    let delta = unsafe { ffi::git_diff_get_delta(diff.as_ptr(), index) };
+    // SAFETY: null denotes an out-of-range index. Otherwise the returned
+    // pointer is internal to `diff` and lives for the carried `'a` borrow.
+    unsafe { DiffDeltaRef::from_ptr(delta.cast_mut()) }
+}
+
+#[cfg(test)]
+mod scheduled_accessor_tests {
+    use super::*;
+    use crate::api::deprecated::DiffFormatEmailOptions;
+
+    #[test]
+    fn email_options_initializer_writes_documented_defaults() {
+        let mut raw = DiffFormatEmailOptions::zeroed();
+        // SAFETY: `raw` is live layout-compatible storage exclusively accessed
+        // through this handle for the duration of the call.
+        let mut options = unsafe {
+            DiffFormatEmailOptionsMut::from_ptr(
+                core::ptr::addr_of_mut!(raw).cast::<ffi::git_diff_format_email_options>(),
+            )
+        }
+        .unwrap();
+        git_diff_format_email_options_init(
+            &mut options,
+            ffi::GIT_DIFF_FORMAT_EMAIL_OPTIONS_VERSION,
+        )
+        .unwrap();
+        assert_eq!(options.as_ref().patch_no(), 1);
+        assert_eq!(options.as_ref().total_patches(), 1);
+    }
+
+    #[test]
+    fn delta_lookup_carries_the_diff_lifetime() {
+        let _: for<'a> fn(DiffRef<'a>, usize) -> Option<DiffDeltaRef<'a>> = git_diff_get_delta;
     }
 }

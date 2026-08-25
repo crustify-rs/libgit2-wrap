@@ -4,6 +4,7 @@ use core::ptr::{NonNull, addr_of, addr_of_mut};
 
 use ffibox::{CDropped, define_ctype};
 
+use crate::api::blame::GitBlameHunkRef;
 use crate::ffi;
 use crate::oid::{OidMut, OidRef};
 
@@ -407,4 +408,47 @@ pub fn git_blame_init_options(
     // SAFETY: `options` exclusively exposes a writable options header.
     let status = unsafe { ffi::git_blame_init_options(options.as_mut_ptr(), version) };
     if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_blame_get_hunk_byindex
+/// Borrows a hunk by zero-based index.
+#[must_use]
+pub fn git_blame_get_hunk_byindex<'a>(
+    blame: GitBlameRef<'a>,
+    index: u32,
+) -> Option<GitBlameHunkRef<'a>> {
+    // SAFETY: the live blame is only read and owns any non-null returned hunk
+    // for the duration of its borrow.
+    let hunk = unsafe { ffi::git_blame_get_hunk_byindex(blame.as_ptr().cast_mut(), index) };
+    // SAFETY: null means out of range; otherwise the pointer addresses a hunk
+    // owned by `blame`, whose lifetime is carried by the returned handle.
+    unsafe { GitBlameHunkRef::from_ptr(hunk.cast_mut()) }
+}
+
+/// Wraps: git_blame_get_hunk_byline
+/// Borrows the hunk containing a one-based line number.
+#[must_use]
+pub fn git_blame_get_hunk_byline<'a>(
+    blame: GitBlameRef<'a>,
+    line: usize,
+) -> Option<GitBlameHunkRef<'a>> {
+    // SAFETY: the live blame is only read and owns any non-null returned hunk
+    // for the duration of its borrow.
+    let hunk = unsafe { ffi::git_blame_get_hunk_byline(blame.as_ptr().cast_mut(), line) };
+    // SAFETY: null means no matching line; a non-null hunk is owned by
+    // `blame`, and the handle retains exactly that borrow lifetime.
+    unsafe { GitBlameHunkRef::from_ptr(hunk.cast_mut()) }
+}
+
+#[cfg(test)]
+mod hunk_lookup_tests {
+    use super::*;
+
+    #[test]
+    fn hunk_results_are_tied_to_the_blame_borrow() {
+        let _: for<'a> fn(GitBlameRef<'a>, u32) -> Option<GitBlameHunkRef<'a>> =
+            git_blame_get_hunk_byindex;
+        let _: for<'a> fn(GitBlameRef<'a>, usize) -> Option<GitBlameHunkRef<'a>> =
+            git_blame_get_hunk_byline;
+    }
 }

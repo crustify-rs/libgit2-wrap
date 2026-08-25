@@ -5,6 +5,7 @@ use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
 
 use ffibox::CBox;
 
+use crate::api::status::{GitStatusOptionsMut, GitStatusOptionsRef};
 use crate::ffi;
 use crate::repository::GitRepositoryMut;
 
@@ -388,5 +389,51 @@ mod tests {
             assert!(GitStatusListMut::from_ptr(ptr::null_mut()).is_none());
             assert!(GitStatusListOwned::from_raw(ptr::null_mut()).is_none());
         }
+    }
+}
+
+/// Wraps: git_status_init_options
+/// Initializes status options through the deprecated compatibility spelling.
+pub fn git_status_init_options(
+    options: &mut GitStatusOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle exposes writable layout-compatible options
+    // storage, and initialization retains no pointer.
+    let status = unsafe { ffi::git_status_init_options(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_status_list_new
+/// Gathers repository status into a newly owned list.
+pub fn git_status_list_new(
+    repository: &mut GitRepositoryMut<'_>,
+    options: Option<GitStatusOptionsRef<'_, '_>>,
+) -> Result<GitStatusListOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    let options = options.map_or(core::ptr::null(), |value| value.as_ptr());
+    // SAFETY: `out` is writable, the repository is exclusively borrowed while
+    // C may refresh its index, and all nested option borrows remain live for
+    // this synchronous call. The result retains owned diffs, not those borrows.
+    let status = unsafe { ffi::git_status_list_new(&mut out, repository.as_mut_ptr(), options) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one fully initialized status-list allocation.
+    unsafe { GitStatusListOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+#[cfg(test)]
+mod options_initializer_tests {
+    use super::*;
+    use crate::api::status::GitStatusOptions;
+
+    #[test]
+    fn deprecated_initializer_writes_published_defaults() {
+        let mut storage = GitStatusOptions::<'static>::new();
+        let mut options = storage.as_mut();
+        git_status_init_options(&mut options, ffi::GIT_STATUS_OPTIONS_VERSION).unwrap();
+        assert_eq!(options.as_ref().version(), ffi::GIT_STATUS_OPTIONS_VERSION);
+        assert_eq!(options.as_ref().show(), Ok(StatusShow::IndexAndWorkdir));
     }
 }

@@ -6,6 +6,7 @@ use core::ptr::NonNull;
 
 use ffibox::{CBox, CDropped};
 
+use crate::api::diff::DiffDeltaRef;
 use crate::diff::{DiffMut, DiffRef};
 use crate::ffi;
 use crate::index::GitIndexRef;
@@ -76,10 +77,9 @@ unsafe impl CDropped for GitPathspecMatchList {
 ///
 /// [`git_pathspec_match_list_entrycount`] counts its entries, but
 /// [`git_pathspec_match_list_entry`] always yields `None`: C gates that
-/// accessor on `datatype == PATHSPEC_DATATYPE_STRINGS`. The matching accessor
-/// is `git_pathspec_match_list_diff_entry`, still unwrapped because it hands
-/// back a `const git_diff_delta *` and `git_diff_delta` has no safe wrapper
-/// yet. Failure entries are pool-owned strings and read back normally.
+/// accessor on `datatype == PATHSPEC_DATATYPE_STRINGS`. Diff-backed entries
+/// are available through [`git_pathspec_match_list_diff_entry`]. Failure
+/// entries are pool-owned strings and read back normally.
 pub struct GitPathspecDiffMatchListOwned<'a> {
     inner: GitPathspecMatchListOwned,
     _diff: PhantomData<DiffRef<'a>>,
@@ -386,4 +386,31 @@ pub fn git_pathspec_match_tree(
     }
     // SAFETY: success transfers one complete match-list allocation.
     unsafe { GitPathspecMatchListOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_pathspec_match_list_diff_entry
+/// Borrows a matched delta from a diff-backed match list.
+#[must_use]
+pub fn git_pathspec_match_list_diff_entry<'a>(
+    matches: GitPathspecMatchListRef<'a>,
+    position: usize,
+) -> Option<DiffDeltaRef<'a>> {
+    // SAFETY: the shared match list remains live and owns its array of borrowed
+    // delta pointers for the duration of this access.
+    let delta = unsafe { ffi::git_pathspec_match_list_diff_entry(matches.as_ptr(), position) };
+    // SAFETY: null denotes the wrong list kind or an out-of-range position.
+    // Otherwise the delta remains valid for the match-list borrow, whose
+    // owning wrapper itself retains the source diff lifetime.
+    unsafe { DiffDeltaRef::from_ptr(delta.cast_mut()) }
+}
+
+#[cfg(test)]
+mod diff_entry_tests {
+    use super::*;
+
+    #[test]
+    fn diff_entry_borrow_is_tied_to_the_match_list() {
+        let _: for<'a> fn(GitPathspecMatchListRef<'a>, usize) -> Option<DiffDeltaRef<'a>> =
+            git_pathspec_match_list_diff_entry;
+    }
 }
