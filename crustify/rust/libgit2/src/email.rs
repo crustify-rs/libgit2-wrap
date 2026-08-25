@@ -3,7 +3,7 @@
 use core::ffi::CStr;
 
 use crate::api::buffer::GitBufMut;
-use crate::api::email::GitEmailCreateOptionsRef;
+use crate::api::email::{GitEmailCreateOptionsMut, GitEmailCreateOptionsRef};
 use crate::api::types::GitSignatureRef;
 use crate::commit::GitCommitMut;
 use crate::diff::DiffMut;
@@ -77,6 +77,18 @@ pub fn git_email_create_from_diff(
             options,
         )
     };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_email_create_options_init
+/// Initializes email-creation options for `version`.
+pub fn git_email_create_options_init(
+    options: &mut GitEmailCreateOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies writable layout-compatible
+    // storage, and the initializer retains no pointer into it.
+    let status = unsafe { ffi::git_email_create_options_init(options.as_mut_ptr(), version) };
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
@@ -169,5 +181,22 @@ mod scheduled_email_tests {
         drop(owner);
         // SAFETY: balances this test's successful initialization call.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+}
+
+#[cfg(test)]
+mod scheduled_initializer_tests {
+    use super::*;
+    use crate::api::email::GitEmailCreateOptions;
+
+    #[test]
+    fn published_initializer_writes_the_current_version() {
+        let mut options = GitEmailCreateOptions::new();
+        git_email_create_options_init(&mut options.as_mut(), ffi::GIT_EMAIL_CREATE_OPTIONS_VERSION)
+            .unwrap();
+        assert_eq!(
+            options.as_ref().version(),
+            ffi::GIT_EMAIL_CREATE_OPTIONS_VERSION
+        );
     }
 }

@@ -574,6 +574,18 @@ pub fn git_rebase_init_options(
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
+/// Wraps: git_rebase_options_init
+/// Initializes rebase options for `version`.
+pub fn git_rebase_options_init(
+    options: &mut GitRebaseOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies writable layout-compatible
+    // storage, and the initializer retains no pointer into it.
+    let status = unsafe { ffi::git_rebase_options_init(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
 /// Wraps: git_rebase_open
 /// Opens an existing rebase and ties it to the repository and options data.
 pub fn git_rebase_open<'repo, 'data>(
@@ -603,9 +615,9 @@ mod scheduled_constructor_tests {
     use crate::api::rebase::GitRebaseOptions;
 
     #[test]
-    fn deprecated_initializer_writes_the_current_version() {
+    fn published_initializer_writes_the_current_version() {
         let mut options = GitRebaseOptions::new();
-        git_rebase_init_options(&mut options.as_mut(), ffi::GIT_REBASE_OPTIONS_VERSION).unwrap();
+        git_rebase_options_init(&mut options.as_mut(), ffi::GIT_REBASE_OPTIONS_VERSION).unwrap();
         assert_eq!(options.as_ref().version(), ffi::GIT_REBASE_OPTIONS_VERSION);
     }
 }

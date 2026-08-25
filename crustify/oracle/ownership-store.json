@@ -11692,6 +11692,29 @@
    ]
   },
   {
+   "name": "git_cherrypick_options_init",
+   "defined_in": "src/libgit2/cherrypick.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Initializes caller-provided options storage in place and retains no pointer."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_clone",
    "defined_in": "src/libgit2/clone.c",
    "ptr_args": [
@@ -14399,6 +14422,78 @@
       "nullable": true,
       "mutable": false,
       "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_backend_foreach_match",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "backend",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:backend"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "The backend is borrowed exclusively for the synchronous traversal because creating and advancing its iterator may mutate backend state; ownership is not transferred."
+     }
+    },
+    {
+     "name": "cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cb"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Callback pointer is invoked synchronously and is not retained."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback state is borrowed for synchronous callback invocations and may be null."
+     }
+    },
+    {
+     "name": "regexp",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:regexp"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional borrowed NUL-terminated regular expression read only during traversal."
      }
     }
    ]
@@ -20590,6 +20685,29 @@
       "nullable": false,
       "mutable": false,
       "note": ""
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_email_create_options_init",
+   "defined_in": "src/libgit2/email.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Initializes caller-provided options storage in place and retains no pointer."
      }
     }
    ]
@@ -33718,6 +33836,29 @@
    ]
   },
   {
+   "name": "git_rebase_options_init",
+   "defined_in": "src/libgit2/rebase.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Initializes caller-provided options storage in place and retains no pointer."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_rebase_orig_head_id",
    "defined_in": "src/libgit2/rebase.c",
    "ptr_args": [
@@ -37335,6 +37476,46 @@
    ]
   },
   {
+   "name": "git_remote_connect_ext",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional options header is read synchronously, but transport normalization stores copies of callback and proxy function pointers and payloads in the remote transport for later requests. Custom headers and proxy URL are deep-copied; callback and proxy payload referents must remain live until the transport is replaced or the remote is freed."
+     }
+    },
+    {
+     "name": "remote",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:remote"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Exclusively borrows the remote: success installs remote->transport and failure may free and clear transport state; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_remote_connect_options_dispose",
    "defined_in": "src/libgit2/remote.c",
    "lifetime": {
@@ -37408,6 +37589,29 @@
       "nullable": false,
       "mutable": false,
       "note": "Source is read transiently while proxy and header fields are deep-copied."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_connect_options_init",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Initializes caller-provided options storage in place and retains no pointer."
      }
     }
    ]
@@ -43207,6 +43411,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Required writable options storage; a deprecated forward to git_stash_apply_options_init. Required writable options storage. GIT_INIT_STRUCTURE_FROM_TEMPLATE checks the requested version against the compiled template first and returns -1 without touching the storage when it is zero or above the supported maximum; otherwise it memcpy's the whole template over the storage, so the written version is the template's, not the requested one. Nothing is retained after the call and ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_stash_apply_options_init",
+   "defined_in": "src/libgit2/stash.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Initializes caller-provided options storage in place and retains no pointer."
      }
     }
    ]

@@ -79,6 +79,18 @@ pub fn git_cherrypick_init_options(
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
+/// Wraps: git_cherrypick_options_init
+/// Initializes cherry-pick options for `version`.
+pub fn git_cherrypick_options_init(
+    options: &mut GitCherrypickOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies writable layout-compatible
+    // storage, and the initializer retains no pointer into it.
+    let status = unsafe { crate::ffi::git_cherrypick_options_init(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
 #[cfg(test)]
 mod scheduled_wrapper_tests {
     use super::*;
@@ -117,9 +129,9 @@ mod scheduled_wrapper_tests {
     }
 
     #[test]
-    fn deprecated_initializer_writes_the_current_version() {
+    fn published_initializer_writes_the_current_version() {
         let mut options = GitCherrypickOptions::new();
-        git_cherrypick_init_options(
+        git_cherrypick_options_init(
             &mut options.as_mut(),
             crate::ffi::GIT_CHERRYPICK_OPTIONS_VERSION,
         )

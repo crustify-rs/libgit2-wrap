@@ -11,6 +11,7 @@
 ^git_commit_graph_writer_free$
 ^git_commit_header$
 ^git_commitbuilder$
+^git_cherrypick_options_init$
 ^git_configmap_t$
 ^git_apply_flags_t$
 ^git_apply_location_t$
@@ -27,6 +28,7 @@
 ^git_config_entry$
 ^git_config_backend_entry$
 ^git_config_iterator$
+^git_config_backend_foreach_match$
 ^git_config_entry_free$
 ^git_credential$
 ^git_credential_free$
@@ -58,6 +60,7 @@
 ^git_diff_parse_options$
 ^git_diff_similarity_metric$
 ^git_diff_find_options$
+^git_email_create_options_init$
 ^GIT_DIFF_FIND_OPTIONS_VERSION$
 ^GIT_DIFF_PARSE_OPTIONS_VERSION$
 ^GIT_DIFF_HUNK_HEADER_SIZE$
@@ -80,6 +83,7 @@
 ^git_patch_free$
 ^git_rebase$
 ^git_rebase_free$
+^git_rebase_options_init$
 ^git_reflog$
 ^git_reflog_entry$
 ^git_reflog_free$
@@ -103,6 +107,7 @@
 ^git_fetch_prune_t$
 ^git_filter_mode_t$
 ^git_filter_options$
+^git_stash_apply_options_init$
 ^GIT_FILTER_OPTIONS_VERSION$
 ^git_fetch_options$
 ^GIT_FETCH_OPTIONS_VERSION$
@@ -118,6 +123,7 @@
 ^GIT_REMOTE_CREATE_OPTIONS_VERSION$
 ^git_remote_update_flags$
 ^git_remote_connect_options_init$
+^git_remote_connect_ext$
 ^GIT_REMOTE_CONNECT_OPTIONS_VERSION$
 ^git_index$
 ^git_index_add_option_t$

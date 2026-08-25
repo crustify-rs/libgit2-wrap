@@ -389,6 +389,18 @@ pub fn git_stash_apply_init_options(
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
+/// Wraps: git_stash_apply_options_init
+/// Initializes stash-application options for `version`.
+pub fn git_stash_apply_options_init(
+    options: &mut GitStashApplyOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies writable layout-compatible
+    // storage, and the initializer retains no pointer into it.
+    let status = unsafe { ffi::git_stash_apply_options_init(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
 /// Wraps: git_stash_pop
 /// Applies and then removes the stash at `index`.
 pub fn git_stash_pop(
@@ -414,9 +426,9 @@ mod scheduled_apply_tests {
     use crate::api::stash::GitStashApplyOptions;
 
     #[test]
-    fn deprecated_initializer_writes_the_current_version() {
+    fn published_initializer_writes_the_current_version() {
         let mut options = GitStashApplyOptions::new();
-        git_stash_apply_init_options(&mut options.as_mut(), ffi::GIT_STASH_APPLY_OPTIONS_VERSION)
+        git_stash_apply_options_init(&mut options.as_mut(), ffi::GIT_STASH_APPLY_OPTIONS_VERSION)
             .unwrap();
         assert_eq!(
             options.as_ref().version(),

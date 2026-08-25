@@ -1580,18 +1580,16 @@ fn callback_result(result: core::ffi::c_int) -> Result<(), GitTransportError> {
 }
 
 fn default_connect_options() -> Result<ffi::git_remote_connect_options, GitTransportError> {
-    let mut options = core::mem::MaybeUninit::uninit();
-    // SAFETY: `options` is a writable correctly aligned output slot and the
-    // published version asks libgit2 to initialize its entire record.
-    let result = unsafe {
-        ffi::git_remote_connect_options_init(
-            options.as_mut_ptr(),
-            ffi::GIT_REMOTE_CONNECT_OPTIONS_VERSION,
-        )
-    };
-    callback_result(result)?;
-    // SAFETY: a successful initializer wrote the complete options record.
-    Ok(unsafe { options.assume_init() })
+    let mut options = crate::api::remote::GitRemoteConnectOptions::new();
+    crate::remote::git_remote_connect_options_init(
+        &mut options.as_mut(),
+        ffi::GIT_REMOTE_CONNECT_OPTIONS_VERSION,
+    )
+    .map_err(GitTransportError::Libgit2)?;
+    // SAFETY: the safe initializer completed this borrowing options record;
+    // its default contains no owned fields, and `CVal` disposal is a no-op, so
+    // copying the record out transfers no resource or live non-static borrow.
+    Ok(unsafe { options.as_ref().as_ptr().read() })
 }
 
 /// Field: git_transport.free

@@ -10,7 +10,8 @@ use crate::api::buffer::GitBufMut;
 use crate::api::proxy::GitProxyOptionsRef;
 use crate::api::remote::{
     GitFetchOptionsRef, GitPushOptionsRef, GitRemoteCallbacksMut, GitRemoteCallbacksRef,
-    GitRemoteCreateOptions, GitRemoteCreateOptionsRef,
+    GitRemoteConnectOptionsMut, GitRemoteConnectOptionsRef, GitRemoteCreateOptions,
+    GitRemoteCreateOptionsRef,
 };
 use crate::ffi;
 use crate::indexer::IndexerProgressRef;
@@ -1228,6 +1229,42 @@ pub fn git_remote_connect(
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
+/// Wraps: git_remote_connect_ext
+/// Connects a remote with a complete connection-options record.
+///
+/// Nested callback and proxy payloads must be `'static` because transport
+/// normalization copies them into transport state used by later requests.
+/// Header strings and the proxy URL are deep-copied by libgit2.
+pub fn git_remote_connect_ext(
+    remote: &mut GitRemoteMut<'_>,
+    direction: Direction,
+    options: Option<GitRemoteConnectOptionsRef<'_, 'static>>,
+) -> Result<(), i32> {
+    // SAFETY: `remote` is exclusive; the options header stays live for the
+    // synchronous call, and all nested referents that the transport may retain
+    // are restricted to `'static` by the safe signature.
+    let status = unsafe {
+        ffi::git_remote_connect_ext(
+            remote.as_mut_ptr(),
+            direction.into(),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_remote_connect_options_init
+/// Initializes remote-connection options for `version`.
+pub fn git_remote_connect_options_init(
+    options: &mut GitRemoteConnectOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies writable layout-compatible
+    // storage, and the initializer retains no pointer into it.
+    let status = unsafe { ffi::git_remote_connect_options_init(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
 /// Wraps: git_remote_init_callbacks
 /// Initializes a remote callback table for `version`.
 pub fn git_remote_init_callbacks(
@@ -1302,6 +1339,29 @@ mod scheduled_connection_tests {
             callbacks.as_ref().version(),
             ffi::GIT_REMOTE_CALLBACKS_VERSION
         );
+    }
+
+    #[test]
+    fn connect_options_initializer_writes_the_current_version() {
+        let mut options = crate::api::remote::GitRemoteConnectOptions::new();
+        git_remote_connect_options_init(
+            &mut options.as_mut(),
+            ffi::GIT_REMOTE_CONNECT_OPTIONS_VERSION,
+        )
+        .unwrap();
+        assert_eq!(
+            options.as_ref().version(),
+            ffi::GIT_REMOTE_CONNECT_OPTIONS_VERSION
+        );
+    }
+
+    #[test]
+    fn extended_connect_requires_static_nested_callback_data() {
+        let _: fn(
+            &mut GitRemoteMut<'_>,
+            Direction,
+            Option<GitRemoteConnectOptionsRef<'_, 'static>>,
+        ) -> Result<(), i32> = git_remote_connect_ext;
     }
 }
 

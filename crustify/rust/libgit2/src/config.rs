@@ -1159,6 +1159,52 @@ where
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
+/// Wraps: git_config_backend_foreach_match
+/// Visits backend entries whose normalized names match `regexp`.
+pub fn git_config_backend_foreach_match<C>(
+    backend: &mut crate::sys::config::GitConfigBackendMut<'_>,
+    regexp: Option<&CStr>,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: crate::api::config::GitConfigForeachCallback,
+{
+    // SAFETY: the backend is exclusively borrowed for iterator creation and
+    // advancement; the optional expression and callback remain live for this
+    // synchronous traversal, and neither callback pointer is retained.
+    let status = unsafe {
+        ffi::git_config_backend_foreach_match(
+            backend.as_mut_ptr(),
+            regexp.map_or(core::ptr::null(), CStr::as_ptr),
+            Some(config_foreach_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod scheduled_backend_foreach_tests {
+    use super::*;
+
+    struct Noop;
+
+    impl crate::api::config::GitConfigForeachCallback for Noop {
+        fn call(&mut self, _entry: GitConfigEntryRef<'_>) -> i32 {
+            0
+        }
+    }
+
+    #[test]
+    fn backend_traversal_requires_an_exclusive_backend_and_typed_callback() {
+        let _: fn(
+            &mut crate::sys::config::GitConfigBackendMut<'_>,
+            Option<&CStr>,
+            &mut Noop,
+        ) -> Result<(), i32> = git_config_backend_foreach_match::<Noop>;
+    }
+}
+
 #[cfg(test)]
 mod foreach_tests {
     use super::*;
