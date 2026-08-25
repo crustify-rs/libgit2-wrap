@@ -94,6 +94,21 @@ pub struct Libssh2PromptBatch<'a> {
 }
 
 impl Libssh2PromptBatch<'_> {
+    pub(crate) unsafe fn from_raw<'a>(
+        ptr: *const crate::ffi::_LIBSSH2_USERAUTH_KBDINT_PROMPT,
+        len: usize,
+    ) -> Option<Libssh2PromptBatch<'a>> {
+        let ptr = if len == 0 {
+            core::ptr::NonNull::dangling()
+        } else {
+            core::ptr::NonNull::new(ptr.cast_mut())?
+        };
+        Some(Libssh2PromptBatch {
+            _ptr: ptr,
+            len,
+            _borrow: core::marker::PhantomData,
+        })
+    }
     /// Returns the number of opaque prompt records.
     #[must_use]
     pub const fn len(&self) -> usize {
@@ -115,6 +130,21 @@ pub struct Libssh2ResponseBatch<'a> {
 }
 
 impl Libssh2ResponseBatch<'_> {
+    pub(crate) unsafe fn from_raw<'a>(
+        ptr: *mut crate::ffi::_LIBSSH2_USERAUTH_KBDINT_RESPONSE,
+        len: usize,
+    ) -> Option<Libssh2ResponseBatch<'a>> {
+        let ptr = if len == 0 {
+            core::ptr::NonNull::dangling()
+        } else {
+            core::ptr::NonNull::new(ptr)?
+        };
+        Some(Libssh2ResponseBatch {
+            _ptr: ptr,
+            len,
+            _borrow: core::marker::PhantomData,
+        })
+    }
     /// Returns the number of opaque response records.
     #[must_use]
     pub const fn len(&self) -> usize {

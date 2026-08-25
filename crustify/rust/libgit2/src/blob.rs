@@ -339,3 +339,43 @@ pub fn git_blob_create_from_workdir(
     };
     if status == 0 { Ok(()) } else { Err(status) }
 }
+
+/// Wraps: git_blob_filter
+/// Applies checkout filters to a blob and returns the owned output buffer.
+pub fn git_blob_filter(
+    blob: &mut GitBlobMut<'_>,
+    path: &core::ffi::CStr,
+    options: crate::api::blob::GitBlobFilterOptionsRef<'_>,
+) -> Result<ffibox::CVal<crate::api::buffer::GitBuf>, i32> {
+    let mut out = crate::api::buffer::GitBuf::new();
+    // SAFETY: output and blob are exclusive, and path and options are live for
+    // the synchronous operation. Libgit2 retains none of these borrows.
+    let status = unsafe {
+        ffi::git_blob_filter(
+            out.as_mut().as_mut_ptr(),
+            blob.as_mut_ptr(),
+            path.as_ptr(),
+            options.as_ptr().cast_mut(),
+        )
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_blob_filter_options_init
+/// Creates blob-filter options initialized for this ABI.
+pub fn git_blob_filter_options_init()
+-> Result<ffibox::CVal<crate::api::blob::GitBlobFilterOptions>, i32> {
+    let mut options = ffibox::CVal::new(crate::api::blob::GitBlobFilterOptions::zeroed());
+    // SAFETY: the inline options storage is exclusively writable.
+    let status = unsafe {
+        ffi::git_blob_filter_options_init(
+            options.as_mut().as_mut_ptr(),
+            ffi::GIT_BLOB_FILTER_OPTIONS_VERSION,
+        )
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}

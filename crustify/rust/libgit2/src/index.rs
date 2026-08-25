@@ -1316,3 +1316,255 @@ pub fn git_index_set_caps(
     let status = unsafe { ffi::git_index_set_caps(index.as_mut_ptr(), capabilities.as_raw()) };
     if status == 0 { Ok(()) } else { Err(status) }
 }
+
+/// Wraps: git_index_add_from_buffer
+/// Adds an entry whose object contents are supplied by `buffer`.
+pub fn git_index_add_from_buffer(
+    index: &mut GitIndexMut<'_>,
+    entry: IndexEntryRef<'_>,
+    buffer: &[u8],
+) -> Result<(), i32> {
+    // SAFETY: index is exclusive and entry/buffer are readable for the call.
+    status_result(unsafe {
+        ffi::git_index_add_from_buffer(
+            index.as_mut_ptr(),
+            entry.as_ptr(),
+            buffer.as_ptr().cast(),
+            buffer.len(),
+        )
+    })
+}
+
+/// Wraps: git_index_caps
+#[must_use]
+pub fn git_index_caps(index: GitIndexRef<'_>) -> i32 {
+    // SAFETY: the live index is only queried.
+    unsafe { ffi::git_index_caps(index.as_ptr()) }
+}
+
+/// Wraps: git_index_checksum
+/// Borrows the current checksum, computing it if necessary.
+pub fn git_index_checksum<'a>(index: &'a mut GitIndexMut<'_>) -> Option<crate::oid::OidRef<'a>> {
+    // SAFETY: exclusive access permits lazy checksum computation.
+    let raw = unsafe { ffi::git_index_checksum(index.as_mut_ptr()) };
+    // SAFETY: a non-null checksum is index-owned and bounded by this reborrow.
+    unsafe { crate::oid::OidRef::from_ptr(raw.cast_mut()) }
+}
+
+/// Wraps: git_index_conflict_add
+pub fn git_index_conflict_add(
+    index: &mut GitIndexMut<'_>,
+    ancestor: Option<IndexEntryRef<'_>>,
+    ours: Option<IndexEntryRef<'_>>,
+    theirs: Option<IndexEntryRef<'_>>,
+) -> Result<(), i32> {
+    // SAFETY: index is exclusive and every optional entry is live and copied.
+    status_result(unsafe {
+        ffi::git_index_conflict_add(
+            index.as_mut_ptr(),
+            ancestor.map_or(core::ptr::null(), |e| e.as_ptr()),
+            ours.map_or(core::ptr::null(), |e| e.as_ptr()),
+            theirs.map_or(core::ptr::null(), |e| e.as_ptr()),
+        )
+    })
+}
+
+/// Wraps: git_index_conflict_cleanup
+pub fn git_index_conflict_cleanup(index: &mut GitIndexMut<'_>) -> Result<(), i32> {
+    // SAFETY: index is exclusively borrowed for mutation.
+    status_result(unsafe { ffi::git_index_conflict_cleanup(index.as_mut_ptr()) })
+}
+
+/// Wraps: git_index_entry_is_conflict
+#[must_use]
+pub fn git_index_entry_is_conflict(entry: IndexEntryRef<'_>) -> bool {
+    // SAFETY: entry is live and only read.
+    unsafe { ffi::git_index_entry_is_conflict(entry.as_ptr()) != 0 }
+}
+
+/// Wraps: git_index_entry_stage
+#[must_use]
+pub fn git_index_entry_stage(entry: IndexEntryRef<'_>) -> GitIndexStage {
+    // SAFETY: entry is live and only read.
+    let raw = unsafe { ffi::git_index_entry_stage(entry.as_ptr()) } as ffi::git_index_stage_t;
+    GitIndexStage::try_from(raw).expect("an index entry stage is always published")
+}
+
+/// Wraps: git_index_extension_add
+pub fn git_index_extension_add(
+    index: &mut GitIndexMut<'_>,
+    signature: &CStr,
+    data: &[u8],
+) -> Result<(), i32> {
+    if signature.to_bytes().len() != 4 {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    // SAFETY: index is exclusive; signature and exact data range are readable.
+    status_result(unsafe {
+        ffi::git_index_extension_add(
+            index.as_mut_ptr(),
+            signature.as_ptr(),
+            data.as_ptr().cast(),
+            data.len(),
+        )
+    })
+}
+
+/// Wraps: git_index_extension_lookup
+pub fn git_index_extension_lookup(
+    index: &mut GitIndexMut<'_>,
+    signature: &CStr,
+) -> Result<ffibox::CVal<crate::api::buffer::GitBuf>, i32> {
+    if signature.to_bytes().len() != 4 {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    let mut out = crate::api::buffer::GitBuf::new();
+    // SAFETY: output/index are exclusive and signature is live.
+    let status = unsafe {
+        ffi::git_index_extension_lookup(
+            out.as_mut().as_mut_ptr(),
+            index.as_mut_ptr(),
+            signature.as_ptr(),
+        )
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_index_extension_remove
+pub fn git_index_extension_remove(
+    index: &mut GitIndexMut<'_>,
+    signature: &CStr,
+) -> Result<(), i32> {
+    if signature.to_bytes().len() != 4 {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    // SAFETY: index is exclusive and signature is live.
+    status_result(unsafe {
+        ffi::git_index_extension_remove(index.as_mut_ptr(), signature.as_ptr())
+    })
+}
+
+/// Wraps: git_index_find
+pub fn git_index_find(index: &mut GitIndexMut<'_>, path: &CStr) -> Result<usize, i32> {
+    let mut position = 0;
+    // SAFETY: output is writable, index is exclusive for possible sorting, and path is live.
+    let status = unsafe { ffi::git_index_find(&mut position, index.as_mut_ptr(), path.as_ptr()) };
+    if status == 0 {
+        Ok(position)
+    } else {
+        Err(status)
+    }
+}
+
+/// An owned index iterator carrying its exclusive source-index borrow.
+pub struct GitIndexEntries<'index> {
+    inner: GitIndexIteratorOwned,
+    _index: core::marker::PhantomData<GitIndexMut<'index>>,
+}
+
+impl GitIndexEntries<'_> {
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitIndexIteratorMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+/// Wraps: git_index_iterator_new
+pub fn git_index_iterator_new<'index>(
+    mut index: GitIndexMut<'index>,
+) -> Result<GitIndexEntries<'index>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output is writable and result carries the index borrow C stores.
+    let status = unsafe { ffi::git_index_iterator_new(&mut out, index.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete iterator.
+    let inner =
+        unsafe { GitIndexIteratorOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(GitIndexEntries {
+        inner,
+        _index: core::marker::PhantomData,
+    })
+}
+
+/// Wraps: git_index_iterator_next
+pub fn git_index_iterator_next<'a>(
+    iterator: &'a mut GitIndexEntries<'_>,
+) -> Result<IndexEntryRef<'a>, i32> {
+    let mut out = core::ptr::null();
+    let mut handle = iterator.as_mut();
+    // SAFETY: output is writable and exclusive iterator borrow prevents advance while result lives.
+    let status = unsafe { ffi::git_index_iterator_next(&mut out, handle.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns an entry borrowed from the carried index snapshot.
+    unsafe { IndexEntryRef::from_ptr(out.cast_mut()) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_index_new_ext
+pub fn git_index_new_ext(
+    options: Option<crate::api::index::GitIndexOptionsRef<'_>>,
+) -> Result<GitIndexOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output is writable and optional options are live and only read.
+    let status = unsafe {
+        ffi::git_index_new_ext(&mut out, options.map_or(core::ptr::null(), |o| o.as_ptr()))
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one index count.
+    unsafe { GitIndexOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_index_open_ext
+pub fn git_index_open_ext(
+    path: &CStr,
+    options: Option<crate::api::index::GitIndexOptionsRef<'_>>,
+) -> Result<GitIndexOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output is writable and path/options are live for the constructor.
+    let status = unsafe {
+        ffi::git_index_open_ext(
+            &mut out,
+            path.as_ptr(),
+            options.map_or(core::ptr::null(), |o| o.as_ptr()),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one index count.
+    unsafe { GitIndexOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+#[cfg(test)]
+mod scheduled_symbol_tests {
+    use super::*;
+
+    #[test]
+    fn stage_and_conflict_wrappers_decode_entry_flags() {
+        // SAFETY: every field of the public entry admits an all-zero value;
+        // the test then initializes the stage bits it reads.
+        let mut raw: ffi::git_index_entry = unsafe { core::mem::zeroed() };
+        raw.flags = (ffi::git_index_stage_t_GIT_INDEX_STAGE_OURS as u16) << 12;
+        // SAFETY: `raw` is initialized and remains live for this shared handle.
+        let entry = unsafe { IndexEntryRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(git_index_entry_stage(entry), GitIndexStage::Ours);
+        assert!(git_index_entry_is_conflict(entry));
+    }
+
+    #[test]
+    fn extension_signatures_must_be_exactly_four_bytes() {
+        let _: fn(&mut GitIndexMut<'_>, &CStr, &[u8]) -> Result<(), i32> = git_index_extension_add;
+        assert_ne!(c"TREE".to_bytes().len(), c"BAD".to_bytes().len());
+    }
+
+    #[test]
+    fn iterator_surface_carries_the_source_borrow() {
+        let _: for<'a> fn(GitIndexMut<'a>) -> Result<GitIndexEntries<'a>, i32> =
+            git_index_iterator_new;
+    }
+}

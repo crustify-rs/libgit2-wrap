@@ -319,3 +319,117 @@ mod scheduled_callback_tests {
         assert!(seen);
     }
 }
+
+/// Wraps: git_attr_foreach_ext
+/// Visits effective attributes using the supplied extended options.
+pub fn git_attr_foreach_ext<C>(
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    options: crate::api::attr::GitAttrOptionsRef<'_>,
+    path: &core::ffi::CStr,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: crate::api::attr::GitAttrForeachCallback,
+{
+    // SAFETY: every typed input is live for this synchronous traversal; the
+    // callback payload has its exact concrete type and the trampoline catches panics.
+    let status = unsafe {
+        ffi::git_attr_foreach_ext(
+            repo.as_mut_ptr(),
+            options.as_ptr().cast_mut(),
+            path.as_ptr(),
+            Some(attr_foreach_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    status_result(status)
+}
+
+/// Wraps: git_attr_get_ext
+/// Looks up one attribute using extended options.
+pub fn git_attr_get_ext<'repo>(
+    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    options: crate::api::attr::GitAttrOptionsRef<'_>,
+    path: &core::ffi::CStr,
+    name: &core::ffi::CStr,
+) -> Result<Attribute<'repo>, i32> {
+    let mut value = core::ptr::null();
+    // SAFETY: the output slot, repository, options and strings are live; any
+    // returned string is cache-owned and tied to the consumed repository borrow.
+    let status = unsafe {
+        ffi::git_attr_get_ext(
+            &mut value,
+            repo.as_mut_ptr(),
+            options.as_ptr().cast_mut(),
+            path.as_ptr(),
+            name.as_ptr(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    classify_attribute(value)
+}
+
+/// Wraps: git_attr_get_many_ext
+/// Looks up several attributes using extended options.
+pub fn git_attr_get_many_ext<'repo>(
+    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    options: crate::api::attr::GitAttrOptionsRef<'_>,
+    path: &core::ffi::CStr,
+    names: &[&core::ffi::CStr],
+) -> Result<Vec<Attribute<'repo>>, i32> {
+    let mut values = vec![core::ptr::null(); names.len()];
+    let mut raw_names: Vec<_> = names.iter().map(|name| name.as_ptr()).collect();
+    // SAFETY: both arrays cover `names.len()` elements and all other inputs
+    // are live for the call; result strings remain repository-cache owned.
+    let status = unsafe {
+        ffi::git_attr_get_many_ext(
+            values.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            options.as_ptr().cast_mut(),
+            path.as_ptr(),
+            names.len(),
+            raw_names.as_mut_ptr(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    values.into_iter().map(classify_attribute).collect()
+}
+
+fn classify_attribute<'a>(value: *const core::ffi::c_char) -> Result<Attribute<'a>, i32> {
+    // SAFETY: classification compares pointer identity and accepts null.
+    match unsafe { ffi::git_attr_value(value) } {
+        ffi::git_attr_value_t_GIT_ATTR_VALUE_UNSPECIFIED => Ok(Attribute::Unspecified),
+        ffi::git_attr_value_t_GIT_ATTR_VALUE_TRUE => Ok(Attribute::True),
+        ffi::git_attr_value_t_GIT_ATTR_VALUE_FALSE => Ok(Attribute::False),
+        ffi::git_attr_value_t_GIT_ATTR_VALUE_STRING if !value.is_null() => {
+            // SAFETY: string-category values are NUL-terminated and cache-owned.
+            Ok(Attribute::String(unsafe {
+                core::ffi::CStr::from_ptr(value)
+            }))
+        }
+        _ => Err(ffi::git_error_code_GIT_ERROR),
+    }
+}
+
+fn status_result(status: i32) -> Result<(), i32> {
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_attr_options_init
+/// Creates extended attribute options initialized for this ABI.
+pub fn git_attr_options_init() -> Result<ffibox::CVal<crate::api::attr::GitAttrOptions>, i32> {
+    let mut options = ffibox::CVal::new(crate::api::attr::GitAttrOptions::zeroed());
+    // SAFETY: the inline options storage is exclusively writable.
+    let status = unsafe {
+        ffi::git_attr_options_init(options.as_mut().as_mut_ptr(), ffi::GIT_ATTR_OPTIONS_VERSION)
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}

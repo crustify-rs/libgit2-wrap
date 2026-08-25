@@ -2,7 +2,7 @@
 
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
-use ffibox::{CDropped, define_ctype};
+use ffibox::{CDropped, CValued, define_ctype};
 
 use crate::api::blame::{GitBlameFlags, GitBlameHunkRef};
 use crate::ffi;
@@ -107,6 +107,12 @@ define_ctype!(
     GitBlameOptionsMut,
     ffi::git_blame_options
 );
+
+// SAFETY: blame options contain only scalars and embedded object IDs and own
+// no resources, so inline disposal is a no-op.
+unsafe impl CValued for GitBlameOptions {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
 
 impl<'a> GitBlameOptionsRef<'a> {
     /// Field: git_blame_options.flags
@@ -372,6 +378,15 @@ pub struct GitRepositoryBlame<'repo> {
     _repository: core::marker::PhantomData<crate::repository::GitRepositoryRef<'repo>>,
 }
 
+impl<'repo> GitRepositoryBlame<'repo> {
+    pub(crate) fn from_owned(inner: ffibox::CBox<GitBlame>) -> Self {
+        Self {
+            inner,
+            _repository: core::marker::PhantomData,
+        }
+    }
+}
+
 impl GitRepositoryBlame<'_> {
     /// Borrows the result.
     #[must_use]
@@ -509,4 +524,22 @@ pub fn git_blame_line_byindex<'a>(
 pub fn git_blame_linecount(blame: GitBlameRef<'_>) -> usize {
     // SAFETY: `blame` is live and the query only reads its line-index length.
     unsafe { ffi::git_blame_linecount(blame.as_ptr().cast_mut()) }
+}
+
+/// Wraps: git_blame_options_init
+/// Creates blame options initialized for this ABI.
+pub fn git_blame_options_init() -> Result<ffibox::CVal<GitBlameOptions>, i32> {
+    let mut options = ffibox::CVal::new(GitBlameOptions::zeroed());
+    // SAFETY: the inline options storage is exclusively writable.
+    let status = unsafe {
+        ffi::git_blame_options_init(
+            options.as_mut().as_mut_ptr(),
+            ffi::GIT_BLAME_OPTIONS_VERSION,
+        )
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
 }

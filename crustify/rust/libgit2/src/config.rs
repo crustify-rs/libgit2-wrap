@@ -1017,3 +1017,60 @@ pub fn git_config_set_writeorder(
     };
     if status == 0 { Ok(()) } else { Err(status) }
 }
+
+fn raw_configmaps(
+    maps: &[crate::api::config::GitConfigmapRef<'_>],
+) -> Result<Vec<ffi::git_configmap>, i32> {
+    maps.iter()
+        .map(|map| {
+            let type_ = map
+                .kind()
+                .map_err(|_| ffi::git_error_code_GIT_EINVALID)?
+                .into();
+            Ok(ffi::git_configmap {
+                type_,
+                str_match: map.str_match().map_or(core::ptr::null(), CStr::as_ptr),
+                map_value: map.map_value(),
+            })
+        })
+        .collect()
+}
+
+/// Wraps: git_config_get_mapped
+/// Reads and maps a named configuration value.
+pub fn git_config_get_mapped(
+    config: GitConfigRef<'_>,
+    name: &CStr,
+    maps: &[crate::api::config::GitConfigmapRef<'_>],
+) -> Result<i32, i32> {
+    let maps = raw_configmaps(maps)?;
+    let mut out = 0;
+    // SAFETY: output, config, name and the contiguous copied mapping array are
+    // live for the call; mapping string pointers remain borrowed from inputs.
+    let status = unsafe {
+        ffi::git_config_get_mapped(
+            &mut out,
+            config.as_ptr(),
+            name.as_ptr(),
+            maps.as_ptr(),
+            maps.len(),
+        )
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_config_lookup_map_value
+/// Maps a supplied textual value through `maps`.
+pub fn git_config_lookup_map_value(
+    maps: &[crate::api::config::GitConfigmapRef<'_>],
+    value: &CStr,
+) -> Result<i32, i32> {
+    let maps = raw_configmaps(maps)?;
+    let mut out = 0;
+    // SAFETY: output, value and the contiguous copied mapping array are live
+    // for this non-retaining lookup.
+    let status = unsafe {
+        ffi::git_config_lookup_map_value(&mut out, maps.as_ptr(), maps.len(), value.as_ptr())
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}

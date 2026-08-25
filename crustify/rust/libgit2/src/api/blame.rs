@@ -494,3 +494,34 @@ mod blame_flag_tests {
         );
     }
 }
+
+/// Wraps: git_blame_file_from_buffer
+/// Computes blame for in-memory contents and ties the result to `repo`.
+pub fn git_blame_file_from_buffer<'repo>(
+    repo: crate::repository::GitRepositoryRef<'repo>,
+    path: &core::ffi::CStr,
+    contents: &[u8],
+    options: Option<crate::blame::GitBlameOptionsRef<'_>>,
+) -> Result<crate::blame::GitRepositoryBlame<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    let options = options.map_or(core::ptr::null_mut(), |value| value.as_ptr().cast_mut());
+    // SAFETY: output is writable and all borrowed inputs are live for this
+    // synchronous call; the returned owner retains only the repository pointer.
+    let status = unsafe {
+        crate::ffi::git_blame_file_from_buffer(
+            &mut out,
+            repo.as_ptr().cast_mut(),
+            path.as_ptr(),
+            contents.as_ptr().cast(),
+            contents.len(),
+            options,
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one fully initialized blame allocation.
+    let inner =
+        unsafe { ffibox::CBox::from_raw(out) }.ok_or(crate::ffi::git_error_code_GIT_ERROR)?;
+    Ok(crate::blame::GitRepositoryBlame::from_owned(inner))
+}

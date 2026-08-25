@@ -7921,6 +7921,97 @@
    ]
   },
   {
+   "name": "git_attr_foreach_ext",
+   "defined_in": "src/libgit2/attr.c",
+   "ptr_args": [
+    {
+     "name": "callback",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "pathname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pathname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_attr_get",
    "defined_in": "src/libgit2/attr.c",
    "ptr_args": [
@@ -8000,6 +8091,102 @@
    ]
   },
   {
+   "name": "git_attr_get_ext",
+   "defined_in": "src/libgit2/attr.c",
+   "ptr_args": [
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "pathname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pathname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "value",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": false,
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
+       }
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:value"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_attr_get_many",
    "defined_in": "src/libgit2/attr.c",
    "ptr_args": [
@@ -8074,6 +8261,130 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrows a num_attr-element output array; each written string pointer is borrowed from the repository attribute cache."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_attr_get_many_ext",
+   "defined_in": "src/libgit2/attr.c",
+   "ptr_args": [
+    {
+     "name": "names",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_ref": {
+        "owned": false,
+        "borrowed": {
+         "lifetime": "arg:names"
+        }
+       }
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:names"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "pathname",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:pathname"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "values",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_ref": {
+        "owned": false,
+        "borrowed": {
+         "lifetime": "arg:repo"
+        }
+       }
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:values"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_attr_options_init",
+   "defined_in": "src/libgit2/attr.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
      }
     }
    ]
@@ -8234,6 +8545,100 @@
       "nullable": false,
       "mutable": false,
       "note": "RETAINED, not call-scoped: git_blame__alloc stores gbr->repository = repo with no refcount, so the repository must outlive the blame returned in out. git_blame_free does not release it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blame_file_from_buffer",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "contents",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:contents"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "options",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:options"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
      }
     }
    ]
@@ -8470,6 +8875,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blame_options_init",
+   "defined_in": "src/libgit2/blame.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
      }
     }
    ]
@@ -9031,6 +9459,103 @@
    ]
   },
   {
+   "name": "git_blob_filter",
+   "defined_in": "src/libgit2/blob.c",
+   "ptr_args": [
+    {
+     "name": "blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blob"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_filter_options_init",
+   "defined_in": "src/libgit2/blob.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_blob_free",
    "defined_in": "src/libgit2/object_api.c",
    "lifetime": {
@@ -9178,6 +9703,105 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_blob_lookup_prefix",
+   "defined_in": "src/libgit2/object_api.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_blob_owner",
+   "defined_in": "src/libgit2/object_api.c",
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:obj"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed from the input owner; not transferred."
+    }
+   }
   },
   {
    "name": "git_blob_rawcontent",
@@ -11643,6 +12267,296 @@
    ]
   },
   {
+   "name": "git_commit_create_ext",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "author",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:author"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:committer"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:message"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:tree"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_create_ext_options_init",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_create_v",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "author",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:author"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:committer"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "message",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:message"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "message_encoding",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:message_encoding"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:tree"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "update_ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:update_ref"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_commit_create_with_signature",
    "defined_in": "src/libgit2/commit.c",
    "ptr_args": [
@@ -12287,6 +13201,88 @@
      "nullable": true,
      "mutable": false,
      "note": "Borrowed commit/blob-owned result tied to the input object; never transferred."
+    }
+   }
+  },
+  {
+   "name": "git_commit_nth_gen_ancestor",
+   "defined_in": "src/libgit2/commit.c",
+   "ptr_args": [
+    {
+     "name": "ancestor",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ancestor"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_owner",
+   "defined_in": "src/libgit2/object_api.c",
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:obj"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Borrowed from the input owner; not transferred."
     }
    }
   },
@@ -12938,6 +13934,46 @@
    ]
   },
   {
+   "name": "git_config_foreach_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_config_free",
    "defined_in": "src/libgit2/config.c",
    "lifetime": {
@@ -13191,6 +14227,80 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_get_mapped",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:config"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "maps",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:maps"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
      }
     }
    ]
@@ -13540,6 +14650,63 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrows a non-null output slot and writes one newly owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_lookup_map_value",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "maps",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:maps"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "value",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:value"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
      }
     }
    ]
@@ -14792,6 +15959,32 @@
    ]
   },
   {
+   "name": "git_credential_default_new",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "cred",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cred"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_credential_free",
    "defined_in": "src/libgit2/transports/credential.c",
    "lifetime": {
@@ -14814,6 +16007,68 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes an optional owned, fully constructed credential and invokes its concrete finalizer callback."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_credential_get_username",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "cred",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cred"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": true,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:cred"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed from the input owner; not transferred."
+    }
+   }
+  },
+  {
+   "name": "git_credential_has_username",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "cred",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cred"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
      }
     }
    ]
@@ -14915,6 +16170,100 @@
    ]
   },
   {
+   "name": "git_credential_ssh_custom_new",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "cred",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cred"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "publickey",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:publickey"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "sign_callback",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:sign_callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:username"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_credential_ssh_interactive_cb",
    "defined_in": null,
    "ptr_args": [
@@ -15006,6 +16355,494 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrows the callback payload pointer slot for this invocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_credential_ssh_interactive_new",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "prompt_callback",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:prompt_callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:username"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_credential_ssh_key_from_agent",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "cred",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cred"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:username"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_credential_ssh_key_memory_new",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "cred",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cred"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "passphrase",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:passphrase"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "privatekey",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:privatekey"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "publickey",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:publickey"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:username"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_credential_ssh_key_new",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "cred",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cred"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "passphrase",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:passphrase"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "privatekey",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:privatekey"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "publickey",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:publickey"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:username"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_credential_username_new",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "cred",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cred"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:username"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_credential_userpass",
+   "defined_in": "src/libgit2/transports/credential_helpers.c",
+   "ptr_args": [
+    {
+     "name": "cred",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cred"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "user_from_url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:user_from_url"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_credential_userpass_plaintext_new",
+   "defined_in": "src/libgit2/transports/credential.c",
+   "ptr_args": [
+    {
+     "name": "cred",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cred"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "password",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:password"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "username",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:username"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
      }
     }
    ]
@@ -15886,6 +17723,66 @@
       "nullable": false,
       "mutable": true,
       "note": "Non-null borrowed output slot receives one fresh owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_from_buffer_ext",
+   "defined_in": "src/libgit2/diff_parse.c",
+   "ptr_args": [
+    {
+     "name": "content",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:content"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
      }
     }
    ]
@@ -17392,6 +19289,63 @@
    ]
   },
   {
+   "name": "git_filter_list_apply_to_blob",
+   "defined_in": "src/libgit2/filter.c",
+   "ptr_args": [
+    {
+     "name": "blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blob"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "filters",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:filters"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_filter_list_apply_to_buffer",
    "defined_in": "src/libgit2/filter.c",
    "ptr_args": [
@@ -17590,6 +19544,234 @@
    ]
   },
   {
+   "name": "git_filter_list_load",
+   "defined_in": "src/libgit2/filter.c",
+   "ptr_args": [
+    {
+     "name": "blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blob"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "filters",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:filters"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_filter_list_load_ext",
+   "defined_in": "src/libgit2/filter.c",
+   "ptr_args": [
+    {
+     "name": "blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blob"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "filters",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:filters"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_filter_list_stream_blob",
+   "defined_in": "src/libgit2/filter.c",
+   "ptr_args": [
+    {
+     "name": "blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:blob"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "filters",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:filters"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "target",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:target"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_filter_list_stream_buffer",
    "defined_in": "src/libgit2/filter.c",
    "ptr_args": [
@@ -17716,6 +19898,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_filter_options_init",
+   "defined_in": "src/libgit2/filter.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
      }
     }
    ]
@@ -18179,6 +20384,63 @@
    ]
   },
   {
+   "name": "git_index_add_from_buffer",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "buffer",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:buffer"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "source_entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:source_entry"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_index_add_frombuffer",
    "defined_in": "src/libgit2/index.c",
    "ptr_args": [
@@ -18236,6 +20498,68 @@
    ]
   },
   {
+   "name": "git_index_caps",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_checksum",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:index"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Borrowed from the input owner; not transferred."
+    }
+   }
+  },
+  {
    "name": "git_index_clear",
    "defined_in": "src/libgit2/index.c",
    "ptr_args": [
@@ -18254,6 +20578,103 @@
       "nullable": false,
       "mutable": true,
       "note": "Synchronous borrowed input; libgit2 retains no pointer."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_conflict_add",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "ancestor_entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ancestor_entry"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "our_entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:our_entry"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "their_entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:their_entry"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_conflict_cleanup",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
      }
     }
    ]
@@ -18564,6 +20985,52 @@
    ]
   },
   {
+   "name": "git_index_entry_is_conflict",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:entry"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_entry_stage",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "entry",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:entry"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_index_entrycount",
    "defined_in": "src/libgit2/index.c",
    "ptr_args": [
@@ -18582,6 +21049,217 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for this synchronous call; the callee retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_extension_add",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "data",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:data"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "signature",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:signature"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_extension_lookup",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "signature",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:signature"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_extension_remove",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "signature",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:signature"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_find",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "at_pos",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:at_pos"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
      }
     }
    ]
@@ -18816,6 +21494,94 @@
    ]
   },
   {
+   "name": "git_index_iterator_new",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "iterator_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:iterator_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_iterator_next",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "it",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:it"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": false,
+        "borrowed": {
+         "lifetime": "arg:it"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_index_matched_path_cb",
    "defined_in": null,
    "ptr_args": [
@@ -18899,6 +21665,49 @@
    ]
   },
   {
+   "name": "git_index_new_ext",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_index_open",
    "defined_in": "src/libgit2/index.c",
    "ptr_args": [
@@ -18937,6 +21746,66 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for this synchronous call; the callee retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_open_ext",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index_out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "index_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index_path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
      }
     }
    ]

@@ -215,3 +215,19 @@ mod configmap_tests {
         assert!(mapping.as_ref().str_match().is_none());
     }
 }
+
+/// Wraps: git_config_foreach_cb
+/// Safe callable surface for one transient configuration entry.
+pub trait GitConfigForeachCallback {
+    /// Visits an entry borrowed only for this invocation.
+    fn call(&mut self, entry: crate::config::GitConfigEntryRef<'_>) -> i32;
+}
+
+impl<F> GitConfigForeachCallback for F
+where
+    F: FnMut(crate::config::GitConfigEntryRef<'_>) -> i32,
+{
+    fn call(&mut self, entry: crate::config::GitConfigEntryRef<'_>) -> i32 {
+        self(entry)
+    }
+}

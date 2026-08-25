@@ -485,3 +485,264 @@ mod constructor_tests {
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
+
+fn credential_from_status(
+    status: i32,
+    out: *mut ffi::git_credential,
+) -> Result<GitCredentialOwned, i32> {
+    // SAFETY: constructors return null or transfer one fully formed credential.
+    credential_result(status, unsafe { GitCredentialOwned::from_raw(out) })
+}
+
+/// Wraps: git_credential_default_new
+pub fn git_credential_default_new() -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output is a writable ownership-transfer slot.
+    let status = unsafe { ffi::git_credential_default_new(&mut out) };
+    credential_from_status(status, out)
+}
+
+/// Wraps: git_credential_get_username
+#[must_use]
+pub fn git_credential_get_username<'a>(
+    credential: GitCredentialRef<'a>,
+) -> Option<&'a core::ffi::CStr> {
+    // SAFETY: the credential is live; any non-null username is credential-owned.
+    let username = unsafe { ffi::git_credential_get_username(credential.as_ptr().cast_mut()) };
+    if username.is_null() {
+        None
+    } else {
+        // SAFETY: the non-null result is NUL-terminated and bounded by the owner borrow.
+        Some(unsafe { core::ffi::CStr::from_ptr(username) })
+    }
+}
+
+/// Wraps: git_credential_has_username
+#[must_use]
+pub fn git_credential_has_username(credential: GitCredentialRef<'_>) -> bool {
+    // SAFETY: the live credential is only queried.
+    unsafe { ffi::git_credential_has_username(credential.as_ptr().cast_mut()) != 0 }
+}
+
+/// Wraps: git_credential_ssh_key_from_agent
+/// Creates an SSH-agent credential.
+pub fn git_credential_ssh_key_from_agent(
+    username: &core::ffi::CStr,
+) -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output is writable and username is live and copied.
+    let status = unsafe { ffi::git_credential_ssh_key_from_agent(&mut out, username.as_ptr()) };
+    credential_from_status(status, out)
+}
+
+/// Wraps: git_credential_username_new
+/// Creates a username-only credential.
+pub fn git_credential_username_new(username: &core::ffi::CStr) -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output is writable and username is live and copied.
+    let status = unsafe { ffi::git_credential_username_new(&mut out, username.as_ptr()) };
+    credential_from_status(status, out)
+}
+
+/// Wraps: git_credential_userpass_plaintext_new
+/// Creates a plaintext username/password credential.
+pub fn git_credential_userpass_plaintext_new(
+    username: &core::ffi::CStr,
+    password: &core::ffi::CStr,
+) -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output is writable and both strings are live and copied.
+    let status = unsafe {
+        ffi::git_credential_userpass_plaintext_new(&mut out, username.as_ptr(), password.as_ptr())
+    };
+    credential_from_status(status, out)
+}
+
+/// Wraps: git_credential_ssh_key_memory_new
+pub fn git_credential_ssh_key_memory_new(
+    username: &core::ffi::CStr,
+    public_key: Option<&core::ffi::CStr>,
+    private_key: &core::ffi::CStr,
+    passphrase: Option<&core::ffi::CStr>,
+) -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output is writable and all non-null strings are live and copied.
+    let status = unsafe {
+        ffi::git_credential_ssh_key_memory_new(
+            &mut out,
+            username.as_ptr(),
+            optional_string(public_key),
+            private_key.as_ptr(),
+            optional_string(passphrase),
+        )
+    };
+    credential_from_status(status, out)
+}
+
+/// Wraps: git_credential_ssh_key_new
+pub fn git_credential_ssh_key_new(
+    username: &core::ffi::CStr,
+    public_key: Option<&core::ffi::CStr>,
+    private_key: &core::ffi::CStr,
+    passphrase: Option<&core::ffi::CStr>,
+) -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output is writable and all non-null strings are live and copied.
+    let status = unsafe {
+        ffi::git_credential_ssh_key_new(
+            &mut out,
+            username.as_ptr(),
+            optional_string(public_key),
+            private_key.as_ptr(),
+            optional_string(passphrase),
+        )
+    };
+    credential_from_status(status, out)
+}
+
+unsafe extern "C" fn sign_trampoline<C: crate::api::credential::GitCredentialSignCallback>(
+    session: *mut ffi::LIBSSH2_SESSION,
+    sig: *mut *mut u8,
+    sig_len: *mut usize,
+    data: *const u8,
+    data_len: usize,
+    payload: *mut *mut core::ffi::c_void,
+) -> i32 {
+    if session.is_null() || sig.is_null() || sig_len.is_null() || payload.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    if data_len != 0 && data.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: the non-null outer payload slot is readable for this callback.
+    if unsafe { *payload }.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: libssh2 supplies live callback-scoped inputs and the constructor stores a `'static` callback payload.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let callback = &mut *(*payload).cast::<C>();
+        let session = crate::api::credential::Libssh2SessionMut::from_ptr(session)
+            .ok_or(ffi::git_error_code_GIT_ERROR)?;
+        let bytes = if data_len == 0 {
+            &[]
+        } else {
+            core::slice::from_raw_parts(data, data_len)
+        };
+        callback.sign(session, bytes)
+    }));
+    let bytes = match result {
+        Ok(Ok(bytes)) => bytes,
+        Ok(Err(code)) => return code,
+        Err(_) => return ffi::git_error_code_GIT_ERROR,
+    };
+    // SAFETY: libgit2's allocator returns storage suitable for the signature bytes.
+    let allocation = unsafe { ffi::crustify_git__malloc(bytes.len()) }.cast::<u8>();
+    if allocation.is_null() && !bytes.is_empty() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: a nonempty allocation covers `bytes.len()` bytes and the output
+    // slots are writable. No pointer operation is performed for an empty result.
+    unsafe {
+        if !bytes.is_empty() {
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), allocation, bytes.len());
+        }
+        *sig = allocation;
+        *sig_len = bytes.len();
+    }
+    0
+}
+
+/// Wraps: git_credential_ssh_custom_new
+pub fn git_credential_ssh_custom_new<
+    C: crate::api::credential::GitCredentialSignCallback + 'static,
+>(
+    username: &core::ffi::CStr,
+    public_key: &[u8],
+    callback: &'static mut C,
+) -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: the callback payload is stable for `'static`; strings/bytes are copied.
+    let status = unsafe {
+        ffi::git_credential_ssh_custom_new(
+            &mut out,
+            username.as_ptr(),
+            public_key.as_ptr().cast(),
+            public_key.len(),
+            Some(sign_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    credential_from_status(status, out)
+}
+
+unsafe extern "C" fn interactive_trampoline<
+    C: crate::api::credential::GitCredentialSshInteractiveCallback,
+>(
+    name: *const core::ffi::c_char,
+    name_len: i32,
+    instruction: *const core::ffi::c_char,
+    instruction_len: i32,
+    count: i32,
+    prompts: *const ffi::LIBSSH2_USERAUTH_KBDINT_PROMPT,
+    responses: *mut ffi::LIBSSH2_USERAUTH_KBDINT_RESPONSE,
+    payload: *mut *mut core::ffi::c_void,
+) {
+    if name_len < 0 || instruction_len < 0 || count < 0 || payload.is_null() {
+        return;
+    }
+    if (name_len != 0 && name.is_null())
+        || (instruction_len != 0 && instruction.is_null())
+        || (count != 0 && (prompts.is_null() || responses.is_null()))
+    {
+        return;
+    }
+    // SAFETY: the non-null outer payload slot is readable for this callback.
+    if unsafe { *payload }.is_null() {
+        return;
+    }
+    // SAFETY: callback arguments cover the published lengths and the payload is `'static`.
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        let callback = &mut *(*payload).cast::<C>();
+        let name = if name_len == 0 {
+            &[]
+        } else {
+            core::slice::from_raw_parts(name.cast(), name_len as usize)
+        };
+        let instruction = if instruction_len == 0 {
+            &[]
+        } else {
+            core::slice::from_raw_parts(instruction.cast(), instruction_len as usize)
+        };
+        let Some(prompts) =
+            crate::api::credential::Libssh2PromptBatch::from_raw(prompts, count as usize)
+        else {
+            return;
+        };
+        let Some(responses) =
+            crate::api::credential::Libssh2ResponseBatch::from_raw(responses, count as usize)
+        else {
+            return;
+        };
+        callback.respond(name, instruction, prompts, responses);
+    }));
+}
+
+/// Wraps: git_credential_ssh_interactive_new
+pub fn git_credential_ssh_interactive_new<
+    C: crate::api::credential::GitCredentialSshInteractiveCallback + 'static,
+>(
+    username: &core::ffi::CStr,
+    callback: &'static mut C,
+) -> Result<GitCredentialOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: the callback payload remains stable for `'static`; username is copied.
+    let status = unsafe {
+        ffi::git_credential_ssh_interactive_new(
+            &mut out,
+            username.as_ptr(),
+            Some(interactive_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    credential_from_status(status, out)
+}

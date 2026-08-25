@@ -133,6 +133,23 @@ pub fn git_filter_list_contains(
 /// An owning filter list released automatically by its registered destructor.
 pub type GitFilterListOwned = ffibox::CBox<GitFilterList>;
 
+/// An owned filter list tied to the repository stored in its filter source.
+pub struct RepositoryFilterList<'repo> {
+    inner: GitFilterListOwned,
+    _repository: core::marker::PhantomData<crate::repository::GitRepositoryRef<'repo>>,
+}
+
+impl RepositoryFilterList<'_> {
+    #[must_use]
+    pub fn as_ref(&self) -> GitFilterListRef<'_> {
+        self.inner.as_ref()
+    }
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitFilterListMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
 /// Wraps: git_filter_list_stream_buffer
 /// Streams filtered bytes into `target`.
 pub fn git_filter_list_stream_buffer(
@@ -181,5 +198,119 @@ mod scheduled_filter_tests {
     #[test]
     fn null_filter_list_contains_nothing() {
         assert!(!git_filter_list_contains(None, c"ident"));
+    }
+}
+
+/// Wraps: git_filter_list_apply_to_blob
+/// Applies an optional filter list to a blob.
+pub fn git_filter_list_apply_to_blob(
+    filters: Option<&mut GitFilterListMut<'_>>,
+    blob: &mut crate::blob::GitBlobMut<'_>,
+) -> Result<ffibox::CVal<crate::api::buffer::GitBuf>, i32> {
+    let mut out = crate::api::buffer::GitBuf::new();
+    let filters = filters.map_or(core::ptr::null_mut(), |value| value.as_mut_ptr());
+    // SAFETY: output and blob are exclusive and optional filters are live.
+    let status = unsafe {
+        ffi::git_filter_list_apply_to_blob(out.as_mut().as_mut_ptr(), filters, blob.as_mut_ptr())
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+fn adopt_filter_list<'repo>(
+    status: i32,
+    out: *mut ffi::git_filter_list,
+) -> Result<Option<RepositoryFilterList<'repo>>, i32> {
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete filter list, or null when no filters apply.
+    let Some(inner) = (unsafe { GitFilterListOwned::from_raw(out) }) else {
+        return Ok(None);
+    };
+    Ok(Some(RepositoryFilterList {
+        inner,
+        _repository: core::marker::PhantomData,
+    }))
+}
+
+/// Wraps: git_filter_list_load
+/// Loads filters and ties their retained source repository to the result.
+pub fn git_filter_list_load<'repo>(
+    repo: crate::repository::GitRepositoryRef<'repo>,
+    blob: Option<crate::blob::GitBlobRef<'_>>,
+    path: &core::ffi::CStr,
+    mode: crate::api::filter::GitFilterMode,
+    flags: crate::api::filter::GitFilterFlags,
+) -> Result<Option<RepositoryFilterList<'repo>>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output and all borrowed inputs are live; result copies blob ID/path and retains repo.
+    let status = unsafe {
+        ffi::git_filter_list_load(
+            &mut out,
+            repo.as_ptr().cast_mut(),
+            blob.map_or(core::ptr::null_mut(), |b| b.as_ptr().cast_mut()),
+            path.as_ptr(),
+            mode.into(),
+            flags.bits(),
+        )
+    };
+    adopt_filter_list(status, out)
+}
+
+/// Wraps: git_filter_list_load_ext
+/// Loads filters with extended options.
+pub fn git_filter_list_load_ext<'repo, 'data>(
+    repo: crate::repository::GitRepositoryRef<'repo>,
+    blob: Option<crate::blob::GitBlobRef<'_>>,
+    path: &core::ffi::CStr,
+    mode: crate::api::filter::GitFilterMode,
+    options: &mut crate::api::filter::GitFilterOptionsMut<'_, 'data>,
+) -> Result<Option<RepositoryFilterList<'repo>>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output and all borrowed inputs are live; options are copied and repo is lifetime-bound.
+    let status = unsafe {
+        ffi::git_filter_list_load_ext(
+            &mut out,
+            repo.as_ptr().cast_mut(),
+            blob.map_or(core::ptr::null_mut(), |b| b.as_ptr().cast_mut()),
+            path.as_ptr(),
+            mode.into(),
+            options.as_mut_ptr(),
+        )
+    };
+    adopt_filter_list(status, out)
+}
+
+/// Wraps: git_filter_list_stream_blob
+/// Streams a blob through an optional filter list.
+pub fn git_filter_list_stream_blob(
+    filters: Option<&mut GitFilterListMut<'_>>,
+    blob: &mut crate::blob::GitBlobMut<'_>,
+    target: &mut crate::api::types::GitWriteStreamMut<'_>,
+) -> Result<(), i32> {
+    let filters = filters.map_or(core::ptr::null_mut(), |value| value.as_mut_ptr());
+    // SAFETY: all handles remain live and blob/target are exclusive for the call.
+    let status = unsafe {
+        ffi::git_filter_list_stream_blob(filters, blob.as_mut_ptr(), target.as_mut_ptr())
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_filter_options_init
+/// Creates filter options initialized for this ABI.
+pub fn git_filter_options_init<'data>()
+-> Result<ffibox::CVal<crate::api::filter::GitFilterOptions<'data>>, i32> {
+    let mut options = crate::api::filter::GitFilterOptions::new();
+    // SAFETY: inline options storage is exclusively writable and starts initialized.
+    let status = unsafe {
+        ffi::git_filter_options_init(
+            options.as_mut().as_mut_ptr(),
+            ffi::GIT_FILTER_OPTIONS_VERSION,
+        )
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
     }
 }

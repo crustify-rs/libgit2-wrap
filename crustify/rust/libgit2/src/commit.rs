@@ -577,3 +577,105 @@ pub fn git_commitbuilder_add_header(
     };
     if status == 0 { Ok(()) } else { Err(status) }
 }
+
+/// Wraps: git_commit_create_ext
+/// Creates a commit with extended creation options.
+#[allow(clippy::too_many_arguments)]
+pub fn git_commit_create_ext(
+    id: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    author: crate::api::types::GitSignatureRef<'_>,
+    committer: crate::api::types::GitSignatureRef<'_>,
+    message: &core::ffi::CStr,
+    tree: crate::tree::GitTreeRef<'_>,
+    parents: &[GitCommitRef<'_>],
+    options: crate::api::commit::GitCommitCreateExtOptionsRef<'_>,
+) -> Result<(), i32> {
+    let parent_pointers: Vec<_> = parents
+        .iter()
+        .map(|parent| parent.as_ptr().cast_mut())
+        .collect();
+    // SAFETY: all typed inputs are live, output and repository are exclusive,
+    // and the parent pointer array has exactly the supplied count.
+    let status = unsafe {
+        ffi::git_commit_create_ext(
+            id.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            author.as_ptr(),
+            committer.as_ptr(),
+            message.as_ptr(),
+            tree.as_ptr(),
+            parent_pointers.len(),
+            parent_pointers.as_ptr(),
+            options.as_ptr(),
+        )
+    };
+    status_result(status)
+}
+
+/// Wraps: git_commit_create_ext_options_init
+/// Creates extended commit options initialized for this ABI.
+pub fn git_commit_create_ext_options_init()
+-> Result<ffibox::CVal<crate::api::commit::GitCommitCreateExtOptions>, i32> {
+    let mut options = ffibox::CVal::new(crate::api::commit::GitCommitCreateExtOptions::zeroed());
+    // SAFETY: the inline options storage is exclusively writable.
+    let status = unsafe {
+        ffi::git_commit_create_ext_options_init(
+            options.as_mut().as_mut_ptr(),
+            ffi::GIT_COMMIT_CREATE_EXT_OPTIONS_VERSION,
+        )
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_commit_create_v
+/// Safe slice-based equivalent of the C variadic commit constructor.
+#[allow(clippy::too_many_arguments)]
+pub fn git_commit_create_v(
+    id: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    update_ref: Option<&core::ffi::CStr>,
+    author: crate::api::types::GitSignatureRef<'_>,
+    committer: crate::api::types::GitSignatureRef<'_>,
+    message_encoding: Option<&core::ffi::CStr>,
+    message: &core::ffi::CStr,
+    tree: crate::tree::GitTreeRef<'_>,
+    parents: &[GitCommitRef<'_>],
+) -> Result<(), i32> {
+    git_commit_create(
+        id,
+        repo,
+        update_ref,
+        author,
+        committer,
+        message_encoding,
+        message,
+        tree,
+        parents,
+    )
+}
+
+/// Wraps: git_commit_nth_gen_ancestor
+/// Loads the `n`th first-parent ancestor, tied to the source repository.
+pub fn git_commit_nth_gen_ancestor<'a>(
+    commit: GitCommitRef<'a>,
+    n: u32,
+) -> Result<CommitParent<'a>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output is writable and the source commit remains live; success
+    // transfers one commit reference backed by the same repository.
+    let status = unsafe { ffi::git_commit_nth_gen_ancestor(&mut out, commit.as_ptr(), n) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one fully initialized commit owner.
+    let inner = unsafe { GitCommitOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(CommitParent {
+        inner,
+        _commit: core::marker::PhantomData,
+    })
+}

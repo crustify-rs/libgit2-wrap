@@ -266,3 +266,50 @@ pub fn git_tree_owner<'a>(tree: GitTreeRef<'a>) -> GitRepositoryRef<'a> {
     // SAFETY: the returned repository remains live for the tree borrow.
     unsafe { GitRepositoryRef::from_ptr(owner) }.expect("a live tree has a repository owner")
 }
+
+/// Wraps: git_blob_lookup_prefix
+/// Looks up a blob by an object-ID prefix and ties it to its repository.
+pub fn git_blob_lookup_prefix<'repo>(
+    repo: GitRepositoryRef<'repo>,
+    id: OidRef<'_>,
+    hex_len: usize,
+) -> Result<RepositoryBlob<'repo>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: output is writable and both handles are live; success transfers
+    // one blob cache reference whose repository is retained by the result lifetime.
+    let status = unsafe {
+        ffi::git_blob_lookup_prefix(&mut out, repo.as_ptr().cast_mut(), id.as_ptr(), hex_len)
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete blob reference.
+    let inner =
+        unsafe { crate::blob::GitBlobOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(RepositoryBlob {
+        inner,
+        _repository: PhantomData,
+    })
+}
+
+/// Wraps: git_blob_owner
+/// Borrows the repository that owns `blob`.
+#[must_use]
+pub fn git_blob_owner<'a>(blob: crate::blob::GitBlobRef<'a>) -> GitRepositoryRef<'a> {
+    // SAFETY: a live cached blob has a non-null repository pointer that remains
+    // live for at least the blob borrow.
+    let raw = unsafe { ffi::git_blob_owner(blob.as_ptr()) };
+    // SAFETY: the repository is the blob's retained owner and is non-null.
+    unsafe { GitRepositoryRef::from_ptr(raw) }.expect("a live blob has an owner")
+}
+
+/// Wraps: git_commit_owner
+/// Borrows the repository that owns `commit`.
+#[must_use]
+pub fn git_commit_owner<'a>(commit: crate::commit::GitCommitRef<'a>) -> GitRepositoryRef<'a> {
+    // SAFETY: a live cached commit has a non-null repository pointer that
+    // remains live for at least the commit borrow.
+    let raw = unsafe { ffi::git_commit_owner(commit.as_ptr()) };
+    // SAFETY: the repository is the commit's retained owner and is non-null.
+    unsafe { GitRepositoryRef::from_ptr(raw) }.expect("a live commit has an owner")
+}
