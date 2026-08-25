@@ -3,15 +3,17 @@
 use core::ffi::{CStr, c_char, c_uint};
 use core::marker::PhantomData;
 use core::ops::{BitOr, BitOrAssign};
-use core::ptr::{addr_of, addr_of_mut};
+use core::ptr::{NonNull, addr_of, addr_of_mut};
 
-use ffibox::CBox;
+use ffibox::{CBox, CVal, CValued};
 
 use crate::annotated_commit::AnnotatedCommitRef;
 use crate::api::buffer::GitBufMut;
 use crate::api::repository::GitRepositoryInitFlags;
 use crate::config::{GitConfigMut, GitConfigOwned, GitConfigRef};
 use crate::ffi;
+use crate::index::{GitIndex, GitIndexOwned, GitIndexRef};
+use crate::odb::{GitOdb, GitOdbOwned, GitOdbRef};
 use crate::oid::{InvalidOidType, OidRef, OidType};
 use crate::refdb::{GitRefdbMut, GitRefdbOwned, GitRefdbRef, GitRefdbType, InvalidGitRefdbType};
 use crate::refs::{GitReferenceTetheredOwned, adopt_reference};
@@ -30,6 +32,15 @@ ffibox::define_ctype!(
     GitRepositoryMut,
     ffi::git_repository
 );
+
+/// A by-value initialized repository-options record.
+pub type GitRepositoryInitOptionsOwned = CVal<GitRepositoryInitOptions>;
+
+// SAFETY: this options header only borrows all pointer fields. Disposing it
+// releases no resource and retaining its inline storage is always valid.
+unsafe impl CValued for GitRepositoryInitOptions {
+    unsafe fn c_dispose(_this: NonNull<Self>) {}
+}
 
 /// Wraps: git_repository_free
 /// An owned libgit2 repository allocation, released on drop.
@@ -1120,5 +1131,145 @@ pub fn git_repository_workdir<'repo>(repository: GitRepositoryRef<'repo>) -> Opt
     } else {
         // SAFETY: justified by the libgit2 getter contract above.
         Some(unsafe { CStr::from_ptr(workdir) })
+    }
+}
+
+/// Wraps: git_repository_index
+/// Acquires an independently owned count on the repository index.
+pub fn git_repository_index(repository: &mut GitRepositoryMut<'_>) -> Result<GitIndexOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output is writable and the exclusive repository handle
+    // permits lazy index initialization. Success increments the index count.
+    let status = unsafe {
+        ffi::git_repository_index(core::ptr::addr_of_mut!(output), repository.as_mut_ptr())
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete owned index count.
+    unsafe { CBox::<GitIndex>::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_repository_init_ext
+/// Initializes a repository using a borrowed options record.
+pub fn git_repository_init_ext(
+    path: &CStr,
+    options: GitRepositoryInitOptionsRef<'_>,
+) -> Result<GitRepositoryOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot is writable, and `path` plus every borrow held
+    // by `options` remain live for this synchronous initialization.
+    let status = unsafe {
+        ffi::git_repository_init_ext(
+            core::ptr::addr_of_mut!(output),
+            path.as_ptr(),
+            options.as_ptr().cast_mut(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete repository allocation.
+    unsafe { GitRepositoryOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_repository_init_init_options
+/// Creates the deprecated-version-compatible initialized options record.
+pub fn git_repository_init_init_options(
+    version: u32,
+) -> Result<GitRepositoryInitOptionsOwned, i32> {
+    if version != 1 {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    let mut options = CVal::new(GitRepositoryInitOptions::zeroed());
+    let status = {
+        let mut output = options.as_mut();
+        // SAFETY: `output` is exclusive writable storage for the complete
+        // options record; the initializer retains no pointer.
+        unsafe { ffi::git_repository_init_init_options(output.as_mut_ptr(), version) }
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_repository_odb
+/// Acquires an independently owned count on the repository object database.
+pub fn git_repository_odb(repository: &mut GitRepositoryMut<'_>) -> Result<GitOdbOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output is writable and the exclusive repository handle
+    // permits lazy ODB initialization. Success increments the ODB count.
+    let status = unsafe {
+        ffi::git_repository_odb(core::ptr::addr_of_mut!(output), repository.as_mut_ptr())
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete owned ODB count.
+    unsafe { CBox::<GitOdb>::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_repository_set_index
+/// Replaces or clears the repository index while retaining its own count.
+pub fn git_repository_set_index(
+    repository: &mut GitRepositoryMut<'_>,
+    index: Option<GitIndexRef<'_>>,
+) -> Result<(), i32> {
+    // SAFETY: the repository is exclusive and `index` is null or live. The C
+    // function acquires its own count before returning and retains no borrow.
+    let status = unsafe {
+        ffi::git_repository_set_index(
+            repository.as_mut_ptr(),
+            index.map_or(core::ptr::null_mut(), |value| value.as_ptr().cast_mut()),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_set_odb
+/// Replaces the repository object database while retaining its own count.
+pub fn git_repository_set_odb(
+    repository: &mut GitRepositoryMut<'_>,
+    odb: GitOdbRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: the repository is exclusive and the ODB is live. Libgit2 takes
+    // its own count before returning, so it retains no Rust borrow.
+    let status =
+        unsafe { ffi::git_repository_set_odb(repository.as_mut_ptr(), odb.as_ptr().cast_mut()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_repository_wrap_odb
+/// Creates an in-memory repository retaining its own count on `odb`.
+pub fn git_repository_wrap_odb(odb: GitOdbRef<'_>) -> Result<GitRepositoryOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output is writable and the live ODB remains available while
+    // libgit2 creates the repository and acquires a count on it.
+    let status = unsafe {
+        ffi::git_repository_wrap_odb(core::ptr::addr_of_mut!(output), odb.as_ptr().cast_mut())
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete repository allocation.
+    unsafe { GitRepositoryOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+#[cfg(test)]
+mod scheduled_symbol_tests {
+    use super::*;
+
+    #[test]
+    fn deprecated_options_initializer_returns_a_safe_by_value_owner() {
+        let options = git_repository_init_init_options(1).expect("the current options version");
+        assert_eq!(options.as_ref().version(), 1);
+        assert!(options.as_ref().flags().is_ok());
+    }
+
+    #[test]
+    fn options_initializer_rejects_an_unknown_version() {
+        assert!(git_repository_init_init_options(u32::MAX).is_err());
     }
 }

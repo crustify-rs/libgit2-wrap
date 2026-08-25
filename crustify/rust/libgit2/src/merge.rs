@@ -1394,3 +1394,42 @@ mod scheduled_wrapper_tests {
         assert_eq!(options.favor(), Ok(MergeFileFavor::Normal));
     }
 }
+
+/// Wraps: git_repository_mergehead_foreach
+/// Visits each transient object ID parsed from `MERGE_HEAD`.
+pub fn git_repository_mergehead_foreach<C>(
+    repository: GitRepositoryRef<'_>,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: crate::repository::GitRepositoryMergeheadForeachCallback,
+{
+    unsafe extern "C" fn trampoline<C>(
+        oid: *const ffi::git_oid,
+        payload: *mut core::ffi::c_void,
+    ) -> i32
+    where
+        C: crate::repository::GitRepositoryMergeheadForeachCallback,
+    {
+        if oid.is_null() || payload.is_null() {
+            return -1;
+        }
+        // SAFETY: the wrapper supplies this exact live callback for the full
+        // synchronous traversal.
+        let callback = unsafe { &mut *payload.cast::<C>() };
+        // SAFETY: libgit2 supplies a live transient non-null OID for this call.
+        let oid = unsafe { OidRef::from_ptr(oid.cast_mut()) }.expect("checked non-null");
+        callback.call(oid)
+    }
+
+    // SAFETY: the repository and exclusive callback remain live until the
+    // traversal returns; neither pointer is retained afterwards.
+    let status = unsafe {
+        ffi::git_repository_mergehead_foreach(
+            repository.as_ptr().cast_mut(),
+            Some(trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}

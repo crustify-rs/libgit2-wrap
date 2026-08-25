@@ -1,6 +1,8 @@
 //! Safe wrappers for libgit2 trace APIs.
 
 use crate::ffi;
+use core::ffi::CStr;
+use std::sync::Mutex;
 
 /// Wraps: git_trace_level_t
 /// A checked tracing threshold understood by libgit2.
@@ -97,5 +99,60 @@ mod tests {
             align_of::<GitTraceLevel>(),
             align_of::<ffi::git_trace_level_t>()
         );
+    }
+}
+
+/// A process-global, thread-safe trace callback.
+pub type GitTraceCallback = fn(GitTraceLevel, &CStr);
+
+static TRACE_CALLBACK: Mutex<Option<GitTraceCallback>> = Mutex::new(None);
+
+unsafe extern "C" fn trace_trampoline(
+    level: ffi::git_trace_level_t,
+    message: *const core::ffi::c_char,
+) {
+    let Ok(level) = GitTraceLevel::try_from(level) else {
+        return;
+    };
+    if message.is_null() {
+        return;
+    }
+    let callback = *TRACE_CALLBACK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Some(callback) = callback else {
+        return;
+    };
+    // SAFETY: libgit2 supplies a non-null NUL-terminated message for the
+    // duration of this callback invocation.
+    let message = unsafe { CStr::from_ptr(message) };
+    // A Rust panic must never unwind through libgit2's C stack.
+    let _ = std::panic::catch_unwind(|| callback(level, message));
+}
+
+/// Wraps: git_trace_set
+/// Replaces the process-global trace threshold and callback.
+pub fn git_trace_set(level: GitTraceLevel, callback: Option<GitTraceCallback>) -> Result<(), i32> {
+    if level != GitTraceLevel::None && callback.is_none() {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    let mut slot = TRACE_CALLBACK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let previous = *slot;
+    *slot = callback;
+    let raw_callback: ffi::git_trace_cb = if callback.is_some() {
+        Some(trace_trampoline)
+    } else {
+        None
+    };
+    // SAFETY: the registered trampoline has C ABI, contains panics, and only
+    // dispatches to a copied `'static` function pointer protected by the mutex.
+    let status = unsafe { ffi::git_trace_set(level.into(), raw_callback) };
+    if status == 0 {
+        Ok(())
+    } else {
+        *slot = previous;
+        Err(status)
     }
 }

@@ -1,14 +1,17 @@
 //! Safe wrappers for libgit2 odb APIs.
 
-use core::ffi::CStr;
+use core::ffi::{CStr, c_void};
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
 use ffibox::{CBox, CCloned};
 
-use crate::api::odb_backend::{GitOdbStreamMut, GitOdbStreamOwned};
+use crate::api::odb_backend::{
+    GitOdbStreamMut, GitOdbStreamOwned, OdbWritepackMut, OdbWritepackOwned, OdbWritepackRef,
+};
 use crate::api::types::GitObjectType;
 use crate::ffi;
+use crate::indexer::{GitIndexerProgressCallback, IndexerProgressRef};
 use crate::oid::{Oid, OidRef};
 
 ffibox::define_ctype!(
@@ -505,4 +508,99 @@ mod object_tests {
             assert!(GitOdbObjectOwned::from_raw(ptr::null_mut()).is_none());
         }
     }
+}
+
+/// Wraps: git_odb_write
+/// Writes one in-memory object and returns its object ID.
+pub fn git_odb_write(odb: GitOdbRef<'_>, data: &[u8], kind: GitObjectType) -> Result<Oid, i32> {
+    let mut out = Oid::zeroed();
+    // SAFETY: `out` is writable, `odb` is live, and `data` describes exactly
+    // the readable byte run passed to libgit2. No argument is retained.
+    let status = unsafe {
+        ffi::git_odb_write(
+            core::ptr::addr_of_mut!(out).cast(),
+            odb.as_ptr().cast_mut(),
+            data.as_ptr().cast(),
+            data.len(),
+            kind.as_raw(),
+        )
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// An owned writepack together with the database and callback it may retain.
+///
+/// The writepack is dropped before the boxed callback, so its destructor can
+/// still use the registered payload.
+pub struct GitOdbWritepack<'db, C: GitIndexerProgressCallback> {
+    inner: OdbWritepackOwned,
+    callback: Box<C>,
+    _database: PhantomData<GitOdbRef<'db>>,
+}
+
+impl<C: GitIndexerProgressCallback> GitOdbWritepack<'_, C> {
+    /// Borrows the writepack.
+    pub fn as_ref(&self) -> OdbWritepackRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the writepack exclusively.
+    pub fn as_mut(&mut self) -> OdbWritepackMut<'_> {
+        self.inner.as_mut()
+    }
+
+    /// Borrows the callback retained for later append and commit operations.
+    pub fn callback(&self) -> &C {
+        &self.callback
+    }
+}
+
+unsafe extern "C" fn writepack_progress<C: GitIndexerProgressCallback>(
+    stats: *const ffi::git_indexer_progress,
+    payload: *mut c_void,
+) -> i32 {
+    if stats.is_null() || payload.is_null() {
+        return -1;
+    }
+    // SAFETY: `git_odb_write_pack` receives this pointer from the stable box
+    // stored in `GitOdbWritepack`, which outlives every callback invocation.
+    let callback = unsafe { &mut *payload.cast::<C>() };
+    // SAFETY: libgit2 supplies a live transient progress record for this call.
+    let stats = unsafe { IndexerProgressRef::from_ptr(stats.cast_mut()) }
+        .expect("the callback rejected null above");
+    callback.call(stats)
+}
+
+/// Wraps: git_odb_write_pack
+/// Opens a writepack whose progress callback remains valid for its lifetime.
+pub fn git_odb_write_pack<'db, C>(
+    odb: GitOdbRef<'db>,
+    callback: C,
+) -> Result<GitOdbWritepack<'db, C>, i32>
+where
+    C: GitIndexerProgressCallback,
+{
+    let mut out = core::ptr::null_mut();
+    let mut callback = Box::new(callback);
+    // SAFETY: the output slot is writable, `odb` remains live through the
+    // returned wrapper, and the payload points into an address-stable box that
+    // is retained on success and dropped only after the writepack on failure.
+    let status = unsafe {
+        ffi::git_odb_write_pack(
+            core::ptr::addr_of_mut!(out),
+            odb.as_ptr().cast_mut(),
+            Some(writepack_progress::<C>),
+            core::ptr::from_mut(callback.as_mut()).cast(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete writepack owner.
+    let inner = unsafe { OdbWritepackOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(GitOdbWritepack {
+        inner,
+        callback,
+        _database: PhantomData,
+    })
 }

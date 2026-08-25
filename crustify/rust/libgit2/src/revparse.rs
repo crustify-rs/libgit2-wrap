@@ -1,6 +1,7 @@
 //! Safe wrappers for libgit2 revparse APIs.
 
 use core::ffi::CStr;
+use core::marker::PhantomData;
 use core::ops::{BitOr, BitOrAssign};
 use core::ptr::{NonNull, addr_of, addr_of_mut};
 
@@ -9,7 +10,7 @@ use ffibox::{CVal, CValued};
 use crate::ffi;
 use crate::object::{GitObjectOwned, GitObjectRef, RepositoryObject, adopt_repository_object};
 use crate::refs::{GitReferenceTetheredOwned, adopt_optional_reference};
-use crate::repository::GitRepositoryMut;
+use crate::repository::{GitRepositoryMut, GitRepositoryRef};
 
 ffibox::define_ctype!(
     /// Wraps: git_revspec
@@ -367,4 +368,45 @@ mod tests {
         // exact allocation originally produced by `Box::into_raw`.
         drop(unsafe { Box::from_raw(object.cast::<MaybeUninit<ffi::git_object>>()) });
     }
+}
+
+/// An owned revspec whose resolved objects cannot outlive their repository.
+pub struct RepositoryRevspec<'repo> {
+    inner: GitRevspecOwned,
+    _repository: PhantomData<GitRepositoryRef<'repo>>,
+}
+
+impl RepositoryRevspec<'_> {
+    /// Borrows the parsed result.
+    pub fn as_ref(&self) -> GitRevspecRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the parsed result exclusively.
+    pub fn as_mut(&mut self) -> GitRevspecMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+/// Wraps: git_revparse
+/// Parses a single revision or range into repository-tethered owned objects.
+pub fn git_revparse<'repo>(
+    mut repository: GitRepositoryMut<'repo>,
+    spec: &CStr,
+) -> Result<RepositoryRevspec<'repo>, i32> {
+    let mut result = GitRevspec::new();
+    let status = {
+        let mut output = result.as_mut();
+        // SAFETY: `output` is exclusive initialized empty storage, the
+        // repository is live and exclusive for cache access, and `spec` is a
+        // live C string. Successful object outputs carry owned counts.
+        unsafe { ffi::git_revparse(output.as_mut_ptr(), repository.as_mut_ptr(), spec.as_ptr()) }
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    Ok(RepositoryRevspec {
+        inner: result,
+        _repository: PhantomData,
+    })
 }

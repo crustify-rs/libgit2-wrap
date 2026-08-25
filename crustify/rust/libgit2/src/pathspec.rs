@@ -8,8 +8,10 @@ use ffibox::{CBox, CDropped};
 
 use crate::diff::{DiffMut, DiffRef};
 use crate::ffi;
+use crate::index::GitIndexRef;
 use crate::repository::GitRepositoryMut;
 use crate::strarray::GitStrArrayRef;
+use crate::tree::GitTreeRef;
 
 ffibox::define_ctype!(
     /// Wraps: git_pathspec
@@ -333,4 +335,55 @@ mod tests {
         // allocations created by this test have been released.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
+}
+
+/// Wraps: git_pathspec_match_index
+/// Matches an index and returns an independently owned list of copied paths.
+pub fn git_pathspec_match_index(
+    index: GitIndexRef<'_>,
+    flags: u32,
+    pathspec: GitPathspecRef<'_>,
+) -> Result<GitPathspecMatchListOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and both shared inputs remain live
+    // for the synchronous traversal. The result owns its pathspec count and
+    // copies matched index pathnames.
+    let status = unsafe {
+        ffi::git_pathspec_match_index(
+            core::ptr::addr_of_mut!(output),
+            index.as_ptr().cast_mut(),
+            flags,
+            pathspec.as_ptr().cast_mut(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete match-list allocation.
+    unsafe { GitPathspecMatchListOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_pathspec_match_tree
+/// Matches a tree and returns an independently owned list of copied paths.
+pub fn git_pathspec_match_tree(
+    tree: GitTreeRef<'_>,
+    flags: u32,
+    pathspec: GitPathspecRef<'_>,
+) -> Result<GitPathspecMatchListOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and both shared inputs remain live
+    // throughout the synchronous traversal; no input pointer is retained.
+    let status = unsafe {
+        ffi::git_pathspec_match_tree(
+            core::ptr::addr_of_mut!(output),
+            tree.as_ptr().cast_mut(),
+            flags,
+            pathspec.as_ptr().cast_mut(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete match-list allocation.
+    unsafe { GitPathspecMatchListOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
 }

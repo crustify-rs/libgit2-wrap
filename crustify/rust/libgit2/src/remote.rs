@@ -13,6 +13,7 @@ use crate::oid::{InvalidOidType, OidRef, OidType};
 use crate::refspec::GitRefspecRef;
 use crate::repository::GitRepositoryMut;
 use crate::strarray::GitStrArray;
+use crate::util::net::RemoteHeadRef;
 
 /// Wraps: git_fetch_prune_t
 /// Controls whether a fetch prunes remote-tracking references.
@@ -1111,4 +1112,69 @@ pub fn git_remote_url<'a>(remote: GitRemoteRef<'a>) -> Option<&'a CStr> {
         // SAFETY: non-null is the live NUL string described above.
         Some(unsafe { CStr::from_ptr(url) })
     }
+}
+
+/// A borrowed array of remote-advertised head pointers.
+#[derive(Clone, Copy)]
+pub struct GitRemoteHeads<'a> {
+    ptr: NonNull<*const ffi::git_remote_head>,
+    len: usize,
+    _remote: PhantomData<GitRemoteRef<'a>>,
+}
+
+impl<'a> GitRemoteHeads<'a> {
+    /// Returns the number of advertised heads.
+    #[must_use]
+    pub const fn len(self) -> usize {
+        self.len
+    }
+
+    /// Returns whether the remote advertised no heads.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.len == 0
+    }
+
+    /// Borrows one advertised head by index.
+    #[must_use]
+    pub fn get(self, index: usize) -> Option<RemoteHeadRef<'a>> {
+        if index >= self.len {
+            return None;
+        }
+        // SAFETY: `git_remote_ls` supplied a readable array of `len` head
+        // pointers and the bounds check selects one initialized slot.
+        let head = unsafe { self.ptr.as_ptr().add(index).read() };
+        // SAFETY: a successful list contains live non-null heads owned by the
+        // remote for the duration of `'a`.
+        unsafe { RemoteHeadRef::from_ptr(head.cast_mut()) }
+    }
+}
+
+/// Wraps: git_remote_ls
+/// Borrows the advertised heads from a connected remote.
+pub fn git_remote_ls<'a>(remote: &'a mut GitRemoteMut<'_>) -> Result<GitRemoteHeads<'a>, i32> {
+    let mut heads: *mut *const ffi::git_remote_head = core::ptr::null_mut();
+    let mut len = 0;
+    // SAFETY: both output slots are writable and the remote is exclusively
+    // borrowed, preventing disconnect while the returned array is observed.
+    let status = unsafe {
+        ffi::git_remote_ls(
+            core::ptr::addr_of_mut!(heads),
+            core::ptr::addr_of_mut!(len),
+            remote.as_mut_ptr(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    let ptr = if len == 0 && heads.is_null() {
+        NonNull::dangling()
+    } else {
+        NonNull::new(heads.cast_mut()).ok_or(ffi::git_error_code_GIT_ERROR)?
+    };
+    Ok(GitRemoteHeads {
+        ptr,
+        len,
+        _remote: PhantomData,
+    })
 }

@@ -1,6 +1,11 @@
 //! Safe wrappers for libgit2 stash APIs.
 
+use core::ffi::{CStr, c_void};
+
+use crate::api::stash::GitStashCallback;
+use crate::api::types::GitSignatureRef;
 use crate::ffi;
+use crate::oid::{Oid, OidRef};
 use crate::repository::GitRepositoryMut;
 
 /// Wraps: git_stash_apply_progress_t
@@ -125,4 +130,68 @@ mod tests {
             align_of::<ffi::git_stash_apply_progress_t>()
         );
     }
+}
+
+/// Wraps: git_stash_foreach
+/// Visits each transient stash entry, newest first.
+pub fn git_stash_foreach<C>(
+    repository: &mut GitRepositoryMut<'_>,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: GitStashCallback,
+{
+    unsafe extern "C" fn trampoline<C: GitStashCallback>(
+        index: usize,
+        message: *const core::ffi::c_char,
+        oid: *const ffi::git_oid,
+        payload: *mut c_void,
+    ) -> i32 {
+        if message.is_null() || oid.is_null() || payload.is_null() {
+            return -1;
+        }
+        // SAFETY: the wrapper supplies this live exclusive callback payload
+        // throughout the synchronous traversal.
+        let callback = unsafe { &mut *payload.cast::<C>() };
+        // SAFETY: both non-null values are transient live inputs documented by
+        // libgit2 for the duration of this callback.
+        let message = unsafe { CStr::from_ptr(message) };
+        // SAFETY: the non-null OID remains live for this invocation.
+        let oid = unsafe { OidRef::from_ptr(oid.cast_mut()) }.expect("checked non-null");
+        callback.call(index, message, oid)
+    }
+
+    // SAFETY: the exclusive repository and callback remain live until this
+    // synchronous traversal returns; no callback pointer is retained.
+    let status = unsafe {
+        ffi::git_stash_foreach(
+            repository.as_mut_ptr(),
+            Some(trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_stash_save
+/// Saves the worktree and returns the created stash commit ID.
+pub fn git_stash_save(
+    repository: &mut GitRepositoryMut<'_>,
+    stasher: GitSignatureRef<'_>,
+    message: Option<&CStr>,
+    flags: u32,
+) -> Result<Oid, i32> {
+    let mut output = Oid::zeroed();
+    // SAFETY: the OID is writable, repository is exclusive, and libgit2 only
+    // borrows the signature and optional message for this synchronous save.
+    let status = unsafe {
+        ffi::git_stash_save(
+            core::ptr::addr_of_mut!(output).cast(),
+            repository.as_mut_ptr(),
+            stasher.as_ptr(),
+            message.map_or(core::ptr::null(), CStr::as_ptr),
+            flags,
+        )
+    };
+    if status == 0 { Ok(output) } else { Err(status) }
 }

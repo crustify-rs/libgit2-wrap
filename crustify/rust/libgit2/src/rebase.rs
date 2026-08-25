@@ -4,8 +4,10 @@ use core::ptr::{NonNull, addr_of};
 
 use ffibox::{CBox, CDropped};
 
+use crate::api::types::GitSignatureRef;
 use crate::ffi;
-use crate::oid::OidRef;
+use crate::index::{GitIndex, GitIndexOwned};
+use crate::oid::{Oid, OidRef};
 
 /// Wraps: git_rebase_operation_t
 /// An instruction in a rebase sequence.
@@ -386,4 +388,95 @@ pub fn git_rebase_orig_head_name<'a>(rebase: GitRebaseRef<'a>) -> Option<&'a cor
         // rebase for the duration of this shared borrow.
         Some(unsafe { core::ffi::CStr::from_ptr(name) })
     }
+}
+
+/// Wraps: git_rebase_commit
+/// Commits the current rebase operation and returns the new commit ID.
+pub fn git_rebase_commit(
+    rebase: &mut GitRebaseMut<'_>,
+    author: Option<GitSignatureRef<'_>>,
+    committer: GitSignatureRef<'_>,
+    message_encoding: Option<&core::ffi::CStr>,
+    message: Option<&core::ffi::CStr>,
+) -> Result<Oid, i32> {
+    let mut id = Oid::zeroed();
+    // SAFETY: `id` is writable, the rebase is exclusively borrowed, and all
+    // optional inputs are null or live borrowed values retained only for the
+    // call. The committer is required and non-null by its typed handle.
+    let status = unsafe {
+        ffi::git_rebase_commit(
+            core::ptr::addr_of_mut!(id).cast(),
+            rebase.as_mut_ptr(),
+            author.map_or(core::ptr::null(), |value| value.as_ptr()),
+            committer.as_ptr(),
+            message_encoding.map_or(core::ptr::null(), core::ffi::CStr::as_ptr),
+            message.map_or(core::ptr::null(), core::ffi::CStr::as_ptr),
+        )
+    };
+    if status == 0 { Ok(id) } else { Err(status) }
+}
+
+/// Wraps: git_rebase_finish
+/// Finishes a rebase and optionally uses `signature` when copying notes.
+pub fn git_rebase_finish(
+    rebase: &mut GitRebaseMut<'_>,
+    signature: Option<GitSignatureRef<'_>>,
+) -> Result<(), i32> {
+    // SAFETY: the rebase is exclusively borrowed and the optional signature
+    // is null or live for this synchronous call; neither pointer is retained.
+    let status = unsafe {
+        ffi::git_rebase_finish(
+            rebase.as_mut_ptr(),
+            signature.map_or(core::ptr::null(), |value| value.as_ptr()),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_rebase_inmemory_index
+/// Acquires an independently owned count on an in-memory rebase index.
+pub fn git_rebase_inmemory_index(rebase: GitRebaseRef<'_>) -> Result<GitIndexOwned, i32> {
+    let mut index = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and the live shared rebase remains
+    // valid while libgit2 reads its index and increments that index's count.
+    let status = unsafe {
+        ffi::git_rebase_inmemory_index(core::ptr::addr_of_mut!(index), rebase.as_ptr().cast_mut())
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete index reference count.
+    unsafe { CBox::<GitIndex>::from_raw(index) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_rebase_next
+/// Advances the rebase and borrows the current operation.
+pub fn git_rebase_next<'a>(
+    rebase: &'a mut GitRebaseMut<'_>,
+) -> Result<GitRebaseOperationRef<'a>, i32> {
+    let mut operation = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and `rebase` is exclusively
+    // borrowed for the state transition. The returned operation is stored in
+    // the rebase and is tied to this exclusive reborrow.
+    let status =
+        unsafe { ffi::git_rebase_next(core::ptr::addr_of_mut!(operation), rebase.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns a live operation owned by `rebase`.
+    unsafe { GitRebaseOperationRef::from_ptr(operation) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_rebase_operation_byindex
+/// Borrows an operation by index, returning `None` when out of range.
+#[must_use]
+pub fn git_rebase_operation_byindex<'a>(
+    rebase: GitRebaseRef<'a>,
+    index: usize,
+) -> Option<GitRebaseOperationRef<'a>> {
+    // SAFETY: the shared rebase stays live for `'a`; the body only reads its
+    // operations array. A non-null result points into that array.
+    let operation = unsafe { ffi::git_rebase_operation_byindex(rebase.as_ptr().cast_mut(), index) };
+    // SAFETY: the result is null or a live rebase-owned operation for `'a`.
+    unsafe { GitRebaseOperationRef::from_ptr(operation) }
 }
