@@ -3,8 +3,8 @@
 use core::ffi::{CStr, c_void};
 
 use crate::api::stash::{
-    GitStashApplyOptionsMut, GitStashApplyOptionsRef, GitStashCallback, GitStashSaveOptionsMut,
-    GitStashSaveOptionsRef,
+    GitStashApplyOptionsMut, GitStashApplyOptionsRef, GitStashCallback, GitStashFlags,
+    GitStashSaveOptionsMut, GitStashSaveOptionsRef,
 };
 use crate::api::types::GitSignatureRef;
 use crate::ffi;
@@ -236,6 +236,39 @@ mod tests {
             "a reflog line without a message part reaches the callback as `None`"
         );
     }
+
+    #[test]
+    fn stash_save_takes_a_checked_flag_set() {
+        let _init = Libgit2Init::acquire();
+        let repo_dir = StashRepo::create("save-flags");
+        let mut repository = crate::repository::git_repository_open(&repo_dir.c_path())
+            .expect("the hand-built bare repository opens");
+        let stasher = crate::signature::git_signature_now(c"A U Thor", c"author@example.com")
+            .expect("a signature stamped from the current time");
+
+        // The fixture is bare, so C rejects the save before it consults the
+        // flags. What this exercises is that a checked flag set reaches the
+        // `uint32_t` parameter, replacing a raw bit set at the safe boundary.
+        let saved = git_stash_save(
+            &mut repository.as_mut(),
+            stasher.as_ref(),
+            Some(c"WIP"),
+            GitStashFlags::KEEP_INDEX | GitStashFlags::INCLUDE_UNTRACKED,
+        );
+        assert_eq!(saved.err(), Some(ffi::git_error_code_GIT_EBAREREPO));
+        assert_eq!(
+            crate::util::errors::git_error_last().message.as_deref(),
+            Some(c"cannot stash save. This operation is not allowed against bare repositories.")
+        );
+
+        let save: fn(
+            &mut GitRepositoryMut<'static>,
+            GitSignatureRef<'static>,
+            Option<&CStr>,
+            GitStashFlags,
+        ) -> Result<Oid, i32> = git_stash_save;
+        let _ = save;
+    }
 }
 
 /// Wraps: git_stash_foreach
@@ -291,7 +324,7 @@ pub fn git_stash_save(
     repository: &mut GitRepositoryMut<'_>,
     stasher: GitSignatureRef<'_>,
     message: Option<&CStr>,
-    flags: u32,
+    flags: GitStashFlags,
 ) -> Result<Oid, i32> {
     let mut output = Oid::zeroed();
     // SAFETY: the OID is writable, repository is exclusive, and libgit2 only
@@ -302,7 +335,7 @@ pub fn git_stash_save(
             repository.as_mut_ptr(),
             stasher.as_ptr(),
             message.map_or(core::ptr::null(), CStr::as_ptr),
-            flags,
+            flags.bits(),
         )
     };
     if status == 0 { Ok(output) } else { Err(status) }

@@ -131,19 +131,24 @@ pub fn git_submodule_set_url(
 }
 
 /// Wraps: git_submodule_status
-/// Computes the public submodule status bit set using `ignore`.
+/// Computes the checked submodule status bit set using `ignore`.
 pub fn git_submodule_status(
     repo: &mut GitRepositoryMut<'_>,
     name: &CStr,
     ignore: GitSubmoduleIgnore,
-) -> Result<u32, i32> {
+) -> Result<GitSubmoduleStatusFlags, i32> {
     let mut output = 0;
     // SAFETY: `output` is writable, the repository is live and exclusive for
     // lookup and lazy cache work, and `name` is a live C string for the call.
     let status = unsafe {
         ffi::git_submodule_status(&mut output, repo.as_mut_ptr(), name.as_ptr(), ignore.into())
     };
-    if status == 0 { Ok(output) } else { Err(status) }
+    if status != 0 {
+        return Err(status);
+    }
+    // C clears its private bits before reporting, so only published status
+    // bits can reach here; anything else is reported as a generic error.
+    GitSubmoduleStatusFlags::try_from(output).map_err(|_| ffi::git_error_code_GIT_ERROR)
 }
 
 /// Wraps: git_submodule_sync
@@ -740,6 +745,45 @@ mod tests {
             error.message.as_deref(),
             Some(c"could not get ID of submodule in index")
         );
+    }
+
+    #[test]
+    fn submodule_status_reports_checked_published_flags() {
+        let _init = Libgit2Init::acquire();
+        let source = Scratch::new("status-source").into_bare_repository();
+        let parent = Scratch::new("status-parent").into_working_repository();
+        let mut repository = crate::repository::git_repository_open(&parent.c_path())
+            .expect("the hand-built parent repository opens");
+        let mut submodule =
+            git_submodule_add_setup(repository.as_mut(), &source.c_path(), c"sub", true)
+                .expect("the submodule structure is created");
+
+        // `git_submodule_location` asks for the same bit set with ignore
+        // `ALL`, which restricts the answer to the four source bits.
+        let location = git_submodule_location(&mut submodule.as_mut())
+            .expect("the registered submodule has a location");
+        let sources = GitSubmoduleStatusFlags::IN_HEAD
+            | GitSubmoduleStatusFlags::IN_INDEX
+            | GitSubmoduleStatusFlags::IN_CONFIG
+            | GitSubmoduleStatusFlags::IN_WORKDIR;
+        assert!(sources.contains(location));
+        drop(submodule);
+
+        let status = git_submodule_status(
+            &mut repository.as_mut(),
+            c"sub",
+            GitSubmoduleIgnore::Unspecified,
+        )
+        .expect("the registered submodule has a status");
+        assert!(
+            status.contains(GitSubmoduleStatusFlags::IN_CONFIG),
+            "`git_submodule_add_setup` records the submodule in .gitmodules"
+        );
+        assert!(
+            GitSubmoduleStatusFlags::ALL.contains(status),
+            "C clears its private bits, so only published bits are reported"
+        );
+        assert_eq!(status & sources, location);
     }
 
     #[test]
