@@ -1,5 +1,6 @@
 //! Safe wrappers for libgit2 reset APIs.
 
+use crate::annotated_commit::AnnotatedCommitRef;
 use crate::api::checkout::GitCheckoutOptionsRef;
 use crate::ffi;
 use crate::object::GitObjectRef;
@@ -94,6 +95,7 @@ pub fn git_reset(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use core::mem::{align_of, size_of};
 
@@ -138,4 +140,38 @@ mod tests {
         // SAFETY: no handle remains and this recovers the exact allocation.
         drop(unsafe { Box::from_raw(raw.cast::<core::mem::MaybeUninit<ffi::git_repository>>()) });
     }
+
+    #[test]
+    fn annotated_reset_exposes_only_typed_borrows() {
+        let _: fn(
+            &mut GitRepositoryMut<'_>,
+            AnnotatedCommitRef<'_>,
+            ResetType,
+            Option<GitCheckoutOptionsRef<'_, '_>>,
+        ) -> Result<(), i32> = git_reset_from_annotated;
+    }
+}
+
+/// Wraps: git_reset_from_annotated
+/// Moves `HEAD` to an annotated commit and updates the selected repository
+/// state.
+pub fn git_reset_from_annotated(
+    repository: &mut GitRepositoryMut<'_>,
+    commit: AnnotatedCommitRef<'_>,
+    reset_type: ResetType,
+    checkout_options: Option<GitCheckoutOptionsRef<'_, '_>>,
+) -> Result<(), i32> {
+    let checkout_options = checkout_options.map_or(core::ptr::null(), |options| options.as_ptr());
+    // SAFETY: the repository is exclusively borrowed; the annotated commit
+    // and optional checkout options remain live for the synchronous reset,
+    // and libgit2 retains none of the pointers.
+    let status = unsafe {
+        ffi::git_reset_from_annotated(
+            repository.as_mut_ptr(),
+            commit.as_ptr(),
+            reset_type.into(),
+            checkout_options,
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

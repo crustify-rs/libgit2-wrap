@@ -1584,4 +1584,27 @@ mod scheduled_merge_symbol_tests {
         git_merge_init_options(&mut options.as_mut(), ffi::GIT_MERGE_OPTIONS_VERSION).unwrap();
         assert_eq!(options.as_ref().version(), ffi::GIT_MERGE_OPTIONS_VERSION);
     }
+
+    #[test]
+    fn public_merge_initializer_returns_owned_options() {
+        let options = git_merge_options_init(ffi::GIT_MERGE_OPTIONS_VERSION)
+            .expect("the published merge-options version initializes");
+        assert_eq!(options.as_ref().version(), ffi::GIT_MERGE_OPTIONS_VERSION);
+    }
+}
+
+/// Wraps: git_merge_options_init
+/// Creates merge options initialized for `version`.
+pub fn git_merge_options_init<'data>(
+    version: core::ffi::c_uint,
+) -> Result<ffibox::CVal<crate::api::merge::GitMergeOptions<'data>>, i32> {
+    let mut options = crate::api::merge::GitMergeOptions::<'data>::new();
+    // SAFETY: the inline options storage is exclusively writable and the C
+    // initializer retains no pointer to it or to any of its cleared fields.
+    let status = unsafe { ffi::git_merge_options_init(options.as_mut().as_mut_ptr(), version) };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
 }

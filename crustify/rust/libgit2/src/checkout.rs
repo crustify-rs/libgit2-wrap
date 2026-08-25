@@ -380,4 +380,30 @@ mod scheduled_symbol_tests {
             ffi::GIT_CHECKOUT_OPTIONS_VERSION
         );
     }
+
+    #[test]
+    fn current_initializer_returns_owned_checkout_options() {
+        let options = git_checkout_options_init(ffi::GIT_CHECKOUT_OPTIONS_VERSION)
+            .expect("the published checkout-options version initializes");
+        assert_eq!(
+            options.as_ref().version(),
+            ffi::GIT_CHECKOUT_OPTIONS_VERSION
+        );
+    }
+}
+
+/// Wraps: git_checkout_options_init
+/// Creates checkout options initialized for `version`.
+pub fn git_checkout_options_init<'data>(
+    version: core::ffi::c_uint,
+) -> Result<ffibox::CVal<crate::api::checkout::GitCheckoutOptions<'data>>, i32> {
+    let mut options = crate::api::checkout::GitCheckoutOptions::<'data>::new();
+    // SAFETY: the inline options storage is exclusively writable and the C
+    // initializer retains no pointer to it or to any of its cleared fields.
+    let status = unsafe { ffi::git_checkout_options_init(options.as_mut().as_mut_ptr(), version) };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
 }

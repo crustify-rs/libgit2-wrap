@@ -1718,6 +1718,17 @@ mod scheduled_symbol_tests {
     }
 
     #[test]
+    fn current_initializers_return_owned_options() {
+        let diff = git_diff_options_init(ffi::GIT_DIFF_OPTIONS_VERSION)
+            .expect("the published diff-options version initializes");
+        assert_eq!(diff.as_ref().version(), ffi::GIT_DIFF_OPTIONS_VERSION);
+
+        let find = git_diff_find_options_init(ffi::GIT_DIFF_FIND_OPTIONS_VERSION)
+            .expect("the published find-options version initializes");
+        assert_eq!(find.as_ref().version(), ffi::GIT_DIFF_FIND_OPTIONS_VERSION);
+    }
+
+    #[test]
     fn file_trampoline_delivers_a_typed_transient_delta() {
         // SAFETY: all-zero is valid for this C record's scalar, pointer, and
         // inline object-ID fields; status is replaced before it is observed.
@@ -1749,4 +1760,36 @@ mod scheduled_symbol_tests {
 pub fn git_diff_num_deltas_of_type(diff: DiffRef<'_>, kind: Delta) -> usize {
     // SAFETY: `diff` is live and the operation only scans its delta vector.
     unsafe { ffi::git_diff_num_deltas_of_type(diff.as_ptr(), kind.into()) }
+}
+
+/// Wraps: git_diff_find_options_init
+/// Creates rename-detection options initialized for `version`.
+pub fn git_diff_find_options_init(
+    version: core::ffi::c_uint,
+) -> Result<ffibox::CVal<crate::api::diff::DiffFindOptions>, i32> {
+    let mut options = crate::api::diff::DiffFindOptions::new();
+    // SAFETY: the inline options storage is exclusively writable and the C
+    // initializer retains no pointer to it or to the cleared metric field.
+    let status = unsafe { ffi::git_diff_find_options_init(options.as_mut().as_mut_ptr(), version) };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_diff_options_init
+/// Creates diff options initialized for `version`.
+pub fn git_diff_options_init<'data>(
+    version: core::ffi::c_uint,
+) -> Result<ffibox::CVal<crate::api::diff::GitDiffOptions<'data>>, i32> {
+    let mut options = crate::api::diff::GitDiffOptions::<'data>::new();
+    // SAFETY: the inline options storage is exclusively writable and the C
+    // initializer retains no pointer to it or to any of its cleared fields.
+    let status = unsafe { ffi::git_diff_options_init(options.as_mut().as_mut_ptr(), version) };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
 }

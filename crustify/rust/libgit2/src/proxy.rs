@@ -49,6 +49,7 @@ impl TryFrom<ffi::git_proxy_t> for ProxyType {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use core::mem::{align_of, size_of};
 
@@ -73,5 +74,29 @@ mod tests {
     fn proxy_type_matches_the_c_abi_scalar() {
         assert_eq!(size_of::<ProxyType>(), size_of::<ffi::git_proxy_t>());
         assert_eq!(align_of::<ProxyType>(), align_of::<ffi::git_proxy_t>());
+    }
+
+    #[test]
+    fn public_initializer_returns_owned_proxy_options() {
+        let options = git_proxy_options_init(ffi::GIT_PROXY_OPTIONS_VERSION)
+            .expect("the published proxy-options version initializes");
+        assert_eq!(options.as_ref().version(), ffi::GIT_PROXY_OPTIONS_VERSION);
+        assert_eq!(options.as_ref().proxy_type(), Ok(ProxyType::None));
+    }
+}
+
+/// Wraps: git_proxy_options_init
+/// Creates proxy options initialized for `version`.
+pub fn git_proxy_options_init<'data>(
+    version: core::ffi::c_uint,
+) -> Result<ffibox::CVal<crate::api::proxy::GitProxyOptions<'data>>, i32> {
+    let mut options = crate::api::proxy::GitProxyOptions::<'data>::new();
+    // SAFETY: the inline options storage is exclusively writable and the C
+    // initializer retains no pointer to it or to any of its cleared fields.
+    let status = unsafe { ffi::git_proxy_options_init(options.as_mut().as_mut_ptr(), version) };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
     }
 }

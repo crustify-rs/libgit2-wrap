@@ -11141,6 +11141,29 @@
    ]
   },
   {
+   "name": "git_checkout_options_init",
+   "defined_in": "src/libgit2/checkout.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Initializes caller-provided options storage in place and retains no pointer."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_checkout_perfdata_cb",
    "defined_in": null,
    "ptr_args": [
@@ -17830,6 +17853,182 @@
    ]
   },
   {
+   "name": "git_diff_blob_to_buffer",
+   "defined_in": "src/libgit2/patch_generate.c",
+   "ptr_args": [
+    {
+     "name": "binary_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:binary_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "buf",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:buf"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "buflen readable bytes; null is valid for an empty side. Borrowed only for the synchronous comparison."
+     }
+    },
+    {
+     "name": "buf_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:buf_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "data_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:data_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "file_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:file_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "hunk_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:hunk_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "old_blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_blob"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "old_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_blobs",
    "defined_in": "src/libgit2/patch_generate.c",
    "ptr_args": [
@@ -18006,6 +18205,182 @@
    ]
   },
   {
+   "name": "git_diff_buffers",
+   "defined_in": "src/libgit2/patch_generate.c",
+   "ptr_args": [
+    {
+     "name": "binary_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:binary_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "data_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:data_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "file_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:file_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "hunk_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:hunk_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "new_buf",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_buf"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "new_len readable bytes; null is valid for an empty side. Borrowed only for the synchronous comparison."
+     }
+    },
+    {
+     "name": "new_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "old_buf",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_buf"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "old_len readable bytes; null is valid for an empty side. Borrowed only for the synchronous comparison."
+     }
+    },
+    {
+     "name": "old_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_file_cb",
    "defined_in": null,
    "ptr_args": [
@@ -18064,6 +18439,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_find_options_init",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Initializes caller-provided options storage in place and retains no pointer."
      }
     }
    ]
@@ -19010,6 +19408,29 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the documented call or result lifetime; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_options_init",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Initializes caller-provided options storage in place and retains no pointer."
      }
     }
    ]
@@ -25015,6 +25436,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_merge_options_init",
+   "defined_in": "src/libgit2/merge.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Initializes caller-provided options storage in place and retains no pointer."
      }
     }
    ]
@@ -40861,6 +41305,63 @@
       "nullable": true,
       "mutable": false,
       "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_reset_from_annotated",
+   "defined_in": "src/libgit2/reset.c",
+   "ptr_args": [
+    {
+     "name": "checkout_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:checkout_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional checkout options borrowed read-only for the synchronous reset; ownership is not transferred."
+     }
+    },
+    {
+     "name": "commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required annotated commit borrowed read-only for the synchronous reset; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required repository borrowed exclusively for the synchronous reset; ownership is not transferred."
      }
     }
    ]

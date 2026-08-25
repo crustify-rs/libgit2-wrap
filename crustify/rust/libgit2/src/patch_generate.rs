@@ -258,4 +258,177 @@ mod tests {
         // SAFETY: balances the successful initialization above.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
+
+    #[test]
+    fn direct_buffer_diffs_deliver_typed_callbacks() {
+        // SAFETY: libgit2 initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        let mut files = 0;
+        let mut file = |_: crate::api::diff::DiffDeltaRef<'_>, _: f32| {
+            files += 1;
+            0
+        };
+        let mut lines = 0;
+        let mut line = |_: crate::api::diff::DiffDeltaRef<'_>,
+                        _: Option<crate::diff::DiffHunkRef<'_>>,
+                        _: crate::diff::DiffLineRef<'_>| {
+            lines += 1;
+            0
+        };
+        git_diff_buffers(
+            b"old\n",
+            Some(c"file"),
+            b"new\n",
+            Some(c"file"),
+            None,
+            Some(&mut file),
+            None,
+            None,
+            Some(&mut line),
+        )
+        .expect("valid buffers compare successfully");
+        assert_eq!(files, 1);
+        assert!(lines >= 2);
+
+        git_diff_blob_to_buffer(
+            None,
+            None,
+            b"new\n",
+            Some(c"file"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect("an empty blob side compares with a buffer");
+
+        // SAFETY: balances the successful initialization above.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+}
+
+/// Wraps: git_diff_blob_to_buffer
+/// Compares an optional blob with a borrowed byte buffer and reports the
+/// differences synchronously.
+#[allow(clippy::too_many_arguments)]
+pub fn git_diff_blob_to_buffer<'callbacks>(
+    old_blob: Option<crate::blob::GitBlobRef<'_>>,
+    old_path: Option<&core::ffi::CStr>,
+    buffer: &[u8],
+    buffer_path: Option<&core::ffi::CStr>,
+    options: Option<crate::api::diff::GitDiffOptionsRef<'_, '_>>,
+    file: Option<&'callbacks mut dyn crate::api::diff::GitDiffFileCallback>,
+    binary: Option<&'callbacks mut dyn crate::api::diff::GitDiffBinaryCallback>,
+    hunk: Option<&'callbacks mut dyn crate::api::diff::GitDiffHunkCallback>,
+    line: Option<&'callbacks mut dyn crate::api::diff::GitDiffLineCallback>,
+) -> Result<(), i32> {
+    let old_blob = old_blob.map_or(core::ptr::null(), |blob| blob.as_ptr());
+    let old_path = old_path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    let buffer_path = buffer_path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
+    let mut callbacks = crate::diff::DiffCallbacks {
+        file,
+        binary,
+        hunk,
+        line,
+    };
+    let file = callbacks
+        .file
+        .as_ref()
+        .map(|_| crate::diff::diff_file_trampoline as _);
+    let binary = callbacks
+        .binary
+        .as_ref()
+        .map(|_| crate::diff::diff_binary_trampoline as _);
+    let hunk = callbacks
+        .hunk
+        .as_ref()
+        .map(|_| crate::diff::diff_hunk_trampoline as _);
+    let line = callbacks
+        .line
+        .as_ref()
+        .map(|_| crate::diff::diff_line_trampoline as _);
+    // SAFETY: all object, string and buffer inputs remain live for the call;
+    // the buffer length bounds every C read, and callback state plus payload
+    // stays exclusively borrowed until this synchronous comparison returns.
+    let status = unsafe {
+        ffi::git_diff_blob_to_buffer(
+            old_blob,
+            old_path,
+            buffer.as_ptr().cast(),
+            buffer.len(),
+            buffer_path,
+            options,
+            file,
+            binary,
+            hunk,
+            line,
+            core::ptr::from_mut(&mut callbacks).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_diff_buffers
+/// Compares two borrowed byte buffers and reports the differences
+/// synchronously.
+#[allow(clippy::too_many_arguments)]
+pub fn git_diff_buffers<'callbacks>(
+    old_buffer: &[u8],
+    old_path: Option<&core::ffi::CStr>,
+    new_buffer: &[u8],
+    new_path: Option<&core::ffi::CStr>,
+    options: Option<crate::api::diff::GitDiffOptionsRef<'_, '_>>,
+    file: Option<&'callbacks mut dyn crate::api::diff::GitDiffFileCallback>,
+    binary: Option<&'callbacks mut dyn crate::api::diff::GitDiffBinaryCallback>,
+    hunk: Option<&'callbacks mut dyn crate::api::diff::GitDiffHunkCallback>,
+    line: Option<&'callbacks mut dyn crate::api::diff::GitDiffLineCallback>,
+) -> Result<(), i32> {
+    let old_path = old_path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    let new_path = new_path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
+    let mut callbacks = crate::diff::DiffCallbacks {
+        file,
+        binary,
+        hunk,
+        line,
+    };
+    let file = callbacks
+        .file
+        .as_ref()
+        .map(|_| crate::diff::diff_file_trampoline as _);
+    let binary = callbacks
+        .binary
+        .as_ref()
+        .map(|_| crate::diff::diff_binary_trampoline as _);
+    let hunk = callbacks
+        .hunk
+        .as_ref()
+        .map(|_| crate::diff::diff_hunk_trampoline as _);
+    let line = callbacks
+        .line
+        .as_ref()
+        .map(|_| crate::diff::diff_line_trampoline as _);
+    // SAFETY: each slice pointer is readable for its paired length, optional
+    // strings and options remain live, and callback state plus payload stays
+    // exclusively borrowed until this synchronous comparison returns.
+    let status = unsafe {
+        ffi::git_diff_buffers(
+            old_buffer.as_ptr().cast(),
+            old_buffer.len(),
+            old_path,
+            new_buffer.as_ptr().cast(),
+            new_buffer.len(),
+            new_path,
+            options,
+            file,
+            binary,
+            hunk,
+            line,
+            core::ptr::from_mut(&mut callbacks).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
 }
