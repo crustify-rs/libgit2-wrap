@@ -211,12 +211,21 @@ pub trait GitRemoteCallbackHandler {
         0
     }
 
-    /// Optionally creates a custom transport. `Ok(None)` selects libgit2's
-    /// registered transport for the URL.
-    fn transport(
+    /// Optionally creates a custom transport for `remote`. `Ok(None)` selects
+    /// libgit2's registered transport for the URL.
+    ///
+    /// A returned transport is transferred to libgit2, which attaches it to
+    /// `remote` and releases it with the remote. Transports built for a remote
+    /// retain it — `git_transport_smart` stores the owner in `transport_smart`
+    /// and dereferences `owner->repo` on every connect — so the result is
+    /// coupled to `'remote` rather than to a free-standing owner. This is the
+    /// same contract as [`GitTransportCallback`](crate::api::transport::GitTransportCallback),
+    /// which wraps the identical `git_transport_cb` slot on the registration
+    /// side.
+    fn transport<'remote>(
         &mut self,
-        _remote: crate::remote::GitRemoteMut<'_>,
-    ) -> Result<Option<crate::sys::transport::GitTransportOwned>, i32> {
+        _remote: crate::remote::GitRemoteMut<'remote>,
+    ) -> Result<Option<crate::sys::transport::GitTransportWithRemote<'remote>>, i32> {
         Ok(None)
     }
 
@@ -808,7 +817,10 @@ unsafe extern "C" fn transport<H: GitRemoteCallbackHandler>(
     };
     match handler.transport(remote) {
         Ok(transport) => {
-            let raw = transport.map_or(core::ptr::null_mut(), ffibox::CBox::into_raw);
+            let raw = transport.map_or(
+                core::ptr::null_mut(),
+                crate::sys::transport::GitTransportWithRemote::into_raw,
+            );
             // SAFETY: the validated output slot accepts null or the transferred owner.
             unsafe { out.as_ptr().write(raw) };
             0
@@ -897,8 +909,13 @@ unsafe extern "C" fn update_refs<H: GitRemoteCallbackHandler>(
 #[cfg(test)]
 mod remote_callbacks_tests {
     use core::mem::{align_of, size_of};
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    use crate::sys::transport::{GitTransportOwned, GitTransportWithRemote};
 
     use super::*;
+
+    static FACTORY_TRANSPORT_FREES: AtomicUsize = AtomicUsize::new(0);
 
     struct Handler {
         bytes: usize,
@@ -956,6 +973,107 @@ mod remote_callbacks_tests {
         assert_eq!(unsafe { callback(b"abc".as_ptr().cast(), 3, payload) }, 3);
         drop(callbacks);
         assert_eq!(handler.bytes, 3);
+    }
+
+    unsafe extern "C" fn free_factory_transport(transport: *mut crate::ffi::git_transport) {
+        FACTORY_TRANSPORT_FREES.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: this destructor is installed only on the unique `Box`
+        // allocation the factory below hands to the C seam.
+        drop(unsafe { Box::from_raw(transport) });
+    }
+
+    /// Builds a transport whose Rust type records the remote it is coupled to,
+    /// exactly as `git_transport_smart` records `t->owner`.
+    struct TransportFactory;
+
+    impl GitRemoteCallbackHandler for TransportFactory {
+        fn transport<'remote>(
+            &mut self,
+            remote: crate::remote::GitRemoteMut<'remote>,
+        ) -> Result<Option<GitTransportWithRemote<'remote>>, i32> {
+            // SAFETY: every field of the bindgen vtable admits the all-zero bit
+            // pattern; each callback slot is a nullable `Option<fn>`.
+            let mut raw: crate::ffi::git_transport = unsafe { core::mem::zeroed() };
+            raw.version = crate::ffi::GIT_TRANSPORT_VERSION;
+            raw.free = Some(free_factory_transport);
+            let raw = Box::into_raw(Box::new(raw));
+            // SAFETY: `raw` is a unique fully initialized transport whose
+            // installed destructor reclaims that exact allocation.
+            let owned = unsafe { GitTransportOwned::from_raw(raw) }.unwrap();
+            Ok(Some(GitTransportWithRemote::from_owned(owned, remote)))
+        }
+    }
+
+    /// Opaque stand-in storage for the remote the trampoline borrows. Nothing
+    /// dereferences it: the factory only records the borrow.
+    fn remote_storage() -> *mut crate::ffi::git_remote {
+        Box::into_raw(Box::new(
+            core::mem::MaybeUninit::<crate::ffi::git_remote>::zeroed(),
+        ))
+        .cast()
+    }
+
+    /// Releases the storage `remote_storage` produced.
+    ///
+    /// # Safety
+    ///
+    /// `raw` must be a pointer `remote_storage` returned and not yet released,
+    /// with no surviving handle over it.
+    unsafe fn drop_remote_storage(raw: *mut crate::ffi::git_remote) {
+        // SAFETY: the caller supplies exactly that allocation, which this
+        // recovers without interpreting its opaque contents.
+        drop(unsafe {
+            Box::from_raw(raw.cast::<core::mem::MaybeUninit<crate::ffi::git_remote>>())
+        });
+    }
+
+    #[test]
+    fn transport_trampoline_transfers_a_remote_coupled_owner() {
+        let before = FACTORY_TRANSPORT_FREES.load(Ordering::SeqCst);
+        let mut handler = TransportFactory;
+        let raw_remote = remote_storage();
+        let mut out: *mut crate::ffi::git_transport = core::ptr::null_mut();
+        // SAFETY: the output slot is writable, the opaque remote storage is
+        // live and exclusively borrowed for the call, and `handler` is the
+        // live typed receiver this trampoline is instantiated for.
+        let status = unsafe {
+            transport::<TransportFactory>(
+                core::ptr::addr_of_mut!(out),
+                raw_remote,
+                core::ptr::addr_of_mut!(handler).cast(),
+            )
+        };
+        assert_eq!(status, 0);
+        assert!(!out.is_null());
+        // SAFETY: the trampoline surrendered exactly one owner through `out`;
+        // libgit2 would take it here, so this test releases it instead.
+        drop(unsafe { GitTransportOwned::from_raw(out) }.unwrap());
+        assert_eq!(FACTORY_TRANSPORT_FREES.load(Ordering::SeqCst), before + 1);
+        // SAFETY: no handle to the remote storage survives.
+        unsafe { drop_remote_storage(raw_remote) };
+    }
+
+    #[test]
+    fn transport_trampoline_defers_to_libgit2_without_a_factory() {
+        let mut handler = Handler { bytes: 0 };
+        let raw_remote = remote_storage();
+        let mut sentinel = 0u8;
+        // A non-null starting value: the trampoline must overwrite the slot,
+        // not merely leave whatever libgit2 had there.
+        let mut out: *mut crate::ffi::git_transport = core::ptr::addr_of_mut!(sentinel).cast();
+        // SAFETY: as above; the default handler builds no transport and the
+        // trampoline must still initialize the output slot.
+        let status = unsafe {
+            transport::<Handler>(
+                core::ptr::addr_of_mut!(out),
+                raw_remote,
+                core::ptr::addr_of_mut!(handler).cast(),
+            )
+        };
+        assert_eq!(status, 0);
+        assert!(out.is_null());
+        // SAFETY: no handle to the remote storage survives.
+        unsafe { drop_remote_storage(raw_remote) };
     }
 }
 

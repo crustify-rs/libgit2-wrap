@@ -1208,6 +1208,24 @@ ffibox::define_ctype!(
 pub type GitTransportOwned = CBox<GitTransport>;
 
 /// An owned transport that cannot outlive the remote pointer it retains.
+///
+/// The coupling is a stored pointer, not a naming convention:
+/// `git_transport_smart` assigns `t->owner = owner` in
+/// `src/libgit2/transports/smart.c`, and `git_smart__connect` and
+/// `git_smart__set_connect_opts` then reach `t->owner->repo` on every call.
+/// Shedding `'remote` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::remote::GitRemoteMut;
+/// use libgit2::sys::transport::{GitTransportOwned, GitTransportWithRemote};
+///
+/// fn escape<'remote>(
+///     transport: GitTransportOwned,
+///     remote: GitRemoteMut<'remote>,
+/// ) -> GitTransportWithRemote<'static> {
+///     GitTransportWithRemote::from_owned(transport, remote)
+/// }
+/// ```
 pub struct GitTransportWithRemote<'remote> {
     inner: GitTransportOwned,
     _remote: core::marker::PhantomData<GitRemoteMut<'remote>>,
@@ -1332,6 +1350,14 @@ impl GitTransportRef<'_> {
 
 impl GitTransportMut<'_> {
     /// Sets the public transport-vtable version during initialization.
+    ///
+    /// Pass [`ffi::GIT_TRANSPORT_VERSION`]. A transport published through the
+    /// scheme registry is validated: `git_transport_new`
+    /// (`src/libgit2/transport.c`) runs `GIT_ERROR_CHECK_VERSION` on whatever
+    /// the factory returned and rejects anything outside
+    /// `1..=GIT_TRANSPORT_VERSION`. The `git_remote_callbacks.transport` path
+    /// bypasses that check, so a transport reaching libgit2 that way must
+    /// still carry a version its own callbacks agree on.
     pub fn set_version(&mut self, version: u32) {
         // SAFETY: this exclusive handle permits a raw-place scalar write.
         unsafe { core::ptr::addr_of_mut!((*self.as_mut_ptr()).version).write(version) }
@@ -1597,7 +1623,7 @@ mod transport_tests {
 
     fn raw_transport() -> ffi::git_transport {
         ffi::git_transport {
-            version: 1,
+            version: ffi::GIT_TRANSPORT_VERSION,
             connect: None,
             set_connect_opts: None,
             capabilities: None,
@@ -1731,9 +1757,9 @@ mod transport_tests {
         // SAFETY: `raw` is initialized, remains live, and is exclusively
         // accessed through this handle for the test's duration.
         let mut transport = unsafe { GitTransportMut::from_ptr(&raw mut raw) }.unwrap();
-        assert_eq!(transport.as_ref().version(), 1);
-        transport.set_version(2);
-        assert_eq!(transport.as_ref().version(), 2);
+        assert_eq!(transport.as_ref().version(), ffi::GIT_TRANSPORT_VERSION);
+        transport.set_version(ffi::GIT_TRANSPORT_VERSION + 1);
+        assert_eq!(transport.as_ref().version(), ffi::GIT_TRANSPORT_VERSION + 1);
         assert_eq!(
             transport.connect(c"file:///tmp/repo", crate::util::net::Direction::Fetch),
             Ok(())
