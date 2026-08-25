@@ -3978,6 +3978,302 @@
    "fields": []
   },
   {
+   "name": "git_remote_callbacks",
+   "defined_in": "include/git2/remote.h",
+   "_comment_agent": "The table is copied by value into connection/push options. Function slots are nullable non-owning code pointers; one caller-owned mutable payload is shared by all callbacks and must outlive every copied table use. Reserved hard-deprecation slots are unused and remain null.",
+   "fields": [
+    {
+     "name": "certificate_check",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "completion",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional currently-unused function pointer in the callback table; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "credentials",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "pack_progress",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "One shared caller-owned callback state pointer is copied with the callback table, passed back to every installed callback, never freed by libgit2, and may be mutated by the callback."
+     }
+    },
+    {
+     "name": "push_negotiation",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "push_transfer_progress",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "push_update_reference",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "remote_ready",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "reserved",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Present only with GIT_DEPRECATE_HARD as an ABI-reserved opaque slot; libgit2 never dereferences, mutates, or frees it, and callers leave it null."
+     }
+    },
+    {
+     "name": "reserved_update_tips",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Present only with GIT_DEPRECATE_HARD as an ABI-reserved opaque slot; libgit2 never dereferences, mutates, or frees it, and callers leave it null."
+     }
+    },
+    {
+     "name": "resolve_url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional deprecated function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "sideband_progress",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "transfer_progress",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "transport",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "update_refs",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    },
+    {
+     "name": "update_tips",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional deprecated function pointer copied with the callback table and invoked synchronously; the code address is not owned or mutated."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_remote_completion_t",
    "defined_in": "include/git2/remote.h",
    "_comment_agent": "Reviewed against include/git2/remote.h. Closed domain of three contiguous values from 0; it is only ever an argument to the completion callback in git_remote_callbacks, never a stored options field, so it has no unspecified state and needs no default.",
@@ -4358,6 +4654,12 @@
    "name": "git_reset_t",
    "defined_in": "include/git2/reset.h",
    "_comment_agent": "Reviewed against include/git2/reset.h and src/libgit2/reset.c. Closed domain of SOFT=1, MIXED=2, HARD=3; git_reset switches on the value and rejects anything else with GIT_ERROR_INVALID, so 0 is not a valid value and the type has no default.",
+   "fields": []
+  },
+  {
+   "name": "git_revert_options",
+   "defined_in": "include/git2/revert.h",
+   "_comment_agent": "All fields are scalars or by-value option aggregates. The outer value borrows transitively through its embedded merge and checkout options and owns no independently disposed storage.",
    "fields": []
   },
   {
