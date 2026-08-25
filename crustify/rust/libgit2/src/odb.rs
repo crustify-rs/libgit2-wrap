@@ -611,6 +611,13 @@ where
 ///
 /// On failure, the backend is returned with the status code because libgit2
 /// has not taken ownership of it.
+///
+/// The transfer consumes the owner, and this crate exposes no safe way to
+/// borrow an installed backend back out of the database. A caller that must
+/// keep operating on a concrete backend after installing it — the mempack
+/// dump-and-reset cycle is the published example — recovers its typed handle
+/// through the documented unsafe seam, such as
+/// [`GitMempackBackendRef::from_odb_backend`](crate::odb_mempack::GitMempackBackendRef::from_odb_backend).
 pub fn git_odb_add_backend(
     odb: &mut GitOdbMut<'_>,
     backend: GitOdbBackendOwned,
@@ -711,7 +718,9 @@ mod scheduled_object_api_tests {
         // balanced after the ODB has destroyed its installed backend.
         assert!(unsafe { ffi::git_libgit2_init() } > 0);
         let mut odb = git_odb_new().unwrap();
-        let backend = crate::odb_mempack::git_mempack_new().unwrap();
+        let backend = crate::odb_mempack::GitMempackBackend::into_odb_backend(
+            crate::odb_mempack::git_mempack_new().unwrap(),
+        );
         git_odb_add_backend(&mut odb.as_mut(), backend, 999)
             .unwrap_or_else(|(status, _)| panic!("backend insertion failed: {status}"));
         drop(odb);
@@ -727,7 +736,9 @@ mod scheduled_object_api_tests {
         // balanced after every owner created here has been dropped.
         assert!(unsafe { ffi::git_libgit2_init() } > 0);
         let mut odb = git_odb_new().unwrap();
-        let backend = crate::odb_mempack::git_mempack_new().unwrap();
+        let backend = crate::odb_mempack::GitMempackBackend::into_odb_backend(
+            crate::odb_mempack::git_mempack_new().unwrap(),
+        );
         git_odb_add_backend(&mut odb.as_mut(), backend, 999)
             .unwrap_or_else(|(status, _)| panic!("backend insertion failed: {status}"));
 

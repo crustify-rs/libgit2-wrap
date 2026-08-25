@@ -427,14 +427,22 @@ pub fn git_blame_get_hunk_byindex<'a>(
 
 /// Wraps: git_blame_get_hunk_byline
 /// Borrows the hunk containing a one-based line number.
+///
+/// The lookup takes the blame exclusively: `git_blame_hunk_byline` searches
+/// with `git_vector_bsearch2`, which sorts the result's hunk vector in place
+/// and records it as sorted before the binary search runs. The hunks
+/// themselves are separate allocations, so an already borrowed
+/// [`GitBlameHunkRef`] stays valid, but the vector this reorders is the same
+/// storage [`git_blame_get_hunk_byindex`] indexes, and a shared handle may not
+/// publish that write.
 #[must_use]
 pub fn git_blame_get_hunk_byline<'a>(
-    blame: GitBlameRef<'a>,
+    blame: &'a mut GitBlameMut<'_>,
     line: usize,
 ) -> Option<GitBlameHunkRef<'a>> {
-    // SAFETY: the live blame is only read and owns any non-null returned hunk
-    // for the duration of its borrow.
-    let hunk = unsafe { ffi::git_blame_get_hunk_byline(blame.as_ptr().cast_mut(), line) };
+    // SAFETY: the exclusive handle permits the in-place vector sort this
+    // lookup performs, and it owns any non-null returned hunk for `'a`.
+    let hunk = unsafe { ffi::git_blame_get_hunk_byline(blame.as_mut_ptr(), line) };
     // SAFETY: null means no matching line; a non-null hunk is owned by
     // `blame`, and the handle retains exactly that borrow lifetime.
     unsafe { GitBlameHunkRef::from_ptr(hunk.cast_mut()) }
@@ -448,7 +456,9 @@ mod hunk_lookup_tests {
     fn hunk_results_are_tied_to_the_blame_borrow() {
         let _: for<'a> fn(GitBlameRef<'a>, u32) -> Option<GitBlameHunkRef<'a>> =
             git_blame_get_hunk_byindex;
-        let _: for<'a> fn(GitBlameRef<'a>, usize) -> Option<GitBlameHunkRef<'a>> =
+        // The by-line lookup sorts the hunk vector, so it borrows exclusively
+        // and the hunk it hands back is bounded by that exclusive borrow.
+        let _: for<'a, 'b> fn(&'a mut GitBlameMut<'b>, usize) -> Option<GitBlameHunkRef<'a>> =
             git_blame_get_hunk_byline;
     }
 }

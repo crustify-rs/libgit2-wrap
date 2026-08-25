@@ -7263,8 +7263,8 @@
        "lifetime": "arg:blame"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Borrowed only for this synchronous call; ownership is not transferred."
+      "mutable": true,
+      "note": "Exclusively borrows the blame: git_blame_hunk_byline searches with git_vector_bsearch2, which sorts the hunk vector in place and marks it sorted before the search. Ownership is not transferred."
      }
     }
    ],
@@ -13798,8 +13798,8 @@
        "lifetime": "arg:diff"
       },
       "nullable": false,
-      "mutable": false,
-      "note": "Reads the diff synchronously and retains no pointer."
+      "mutable": true,
+      "note": "Exclusively borrows the diff: formatting runs git_diff_get_stats and git_patch_from_diff, which up-reference it and let patch generation record binary/load state into its deltas. No pointer is retained."
      }
     },
     {
@@ -17657,7 +17657,7 @@
       },
       "nullable": false,
       "mutable": false,
-      "note": "Reads queued objects from the live mempack backend without taking ownership."
+      "note": "Reads queued commits from the live backend without taking ownership. The pointer is cast unchecked to the private memory_packer_db, so it must be an allocation from git_mempack_new; any other concrete backend is type confusion."
      }
     },
     {
@@ -17740,7 +17740,7 @@
       },
       "nullable": false,
       "mutable": true,
-      "note": "Exclusively borrows the mempack backend while freeing and clearing all queued objects."
+      "note": "Exclusively borrows the backend while freeing and clearing all queued objects. The pointer is cast unchecked to the private memory_packer_db, so it must be an allocation from git_mempack_new; any other concrete backend is type confusion."
      }
     }
    ]
