@@ -476,7 +476,7 @@
 ^GIT_CLONE_OPTIONS_VERSION$
 ^git_submodule_update_options$
 ^GIT_SUBMODULE_UPDATE_OPTIONS_VERSION$
-^(git_clone|git_clone_init_options|git_submodule_clone|git_submodule_update)$
+^(git_clone|git_clone_init_options|git_clone_options_init|git_submodule_clone|git_submodule_update|git_submodule_update_options_init)$
 ^GIT_TRANSPORT_VERSION$
 ^_LIBSSH2_(SESSION|USERAUTH_KBDINT_PROMPT|USERAUTH_KBDINT_RESPONSE)$
 ^git_attr_foreach_cb$

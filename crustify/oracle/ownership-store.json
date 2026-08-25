@@ -11815,6 +11815,29 @@
    ]
   },
   {
+   "name": "git_clone_options_init",
+   "defined_in": "src/libgit2/clone.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Initializes one caller-owned clone-options record by copying the complete default template after version validation; it retains no pointer and takes no ownership. The published contract requires non-null writable storage."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_commit_amend",
    "defined_in": "src/libgit2/commit.c",
    "ptr_args": [
@@ -45777,6 +45800,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Required submodule borrowed exclusively while its repository and cached working-directory status flags may be updated."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_submodule_update_options_init",
+   "defined_in": "src/libgit2/submodule.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Initializes one caller-owned submodule-update-options record by copying the complete default template after version validation; it retains no pointer and takes no ownership. The published contract requires non-null writable storage."
      }
     }
    ]

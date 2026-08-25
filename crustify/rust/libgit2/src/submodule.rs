@@ -8,7 +8,8 @@ use ffibox::{CBox, CCloned};
 
 use crate::api::buffer::GitBuf;
 use crate::api::submodule::{
-    GitSubmoduleCallback, GitSubmoduleStatusFlags, GitSubmoduleUpdateOptionsRef,
+    GitSubmoduleCallback, GitSubmoduleStatusFlags, GitSubmoduleUpdateOptions,
+    GitSubmoduleUpdateOptionsRef,
 };
 use crate::api::types::{
     GitSubmoduleIgnore, GitSubmoduleRecurse, GitSubmoduleUpdate, InvalidGitSubmoduleIgnore,
@@ -841,4 +842,60 @@ pub fn git_submodule_set_fetch_recurse_submodules(
         )
     };
     if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_submodule_update_options_init
+/// Creates submodule-update options initialized for `version`.
+pub fn git_submodule_update_options_init<'data>(
+    version: core::ffi::c_uint,
+) -> Result<ffibox::CVal<GitSubmoduleUpdateOptions<'data>>, i32> {
+    let mut options = GitSubmoduleUpdateOptions::<'data>::new();
+    // SAFETY: the inline options storage is exclusively writable and the C
+    // initializer retains no pointer to it or to any of its cleared fields.
+    let status =
+        unsafe { ffi::git_submodule_update_options_init(options.as_mut().as_mut_ptr(), version) };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
+
+#[cfg(test)]
+mod submodule_update_options_init_tests {
+    use super::*;
+
+    #[test]
+    fn current_initializer_writes_published_update_defaults() {
+        let _initialization = crate::libgit2::git_libgit2_init().unwrap();
+        let options = git_submodule_update_options_init(ffi::GIT_SUBMODULE_UPDATE_OPTIONS_VERSION)
+            .expect("the published submodule-update-options version initializes");
+        let options = options.as_ref();
+        assert_eq!(options.version(), ffi::GIT_SUBMODULE_UPDATE_OPTIONS_VERSION);
+        assert!(options.allow_fetch());
+        assert_eq!(
+            options.checkout_options().version(),
+            ffi::GIT_CHECKOUT_OPTIONS_VERSION
+        );
+        assert_eq!(
+            options.fetch_options().version(),
+            ffi::GIT_FETCH_OPTIONS_VERSION as core::ffi::c_int
+        );
+    }
+
+    #[test]
+    fn initializer_rejects_unknown_versions() {
+        let _initialization = crate::libgit2::git_libgit2_init().unwrap();
+        assert_eq!(
+            git_submodule_update_options_init::<'static>(0).err(),
+            Some(ffi::git_error_code_GIT_ERROR)
+        );
+        assert_eq!(
+            git_submodule_update_options_init::<'static>(
+                ffi::GIT_SUBMODULE_UPDATE_OPTIONS_VERSION + 1,
+            )
+            .err(),
+            Some(ffi::git_error_code_GIT_ERROR)
+        );
+    }
 }

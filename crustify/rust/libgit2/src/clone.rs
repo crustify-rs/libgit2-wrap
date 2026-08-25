@@ -345,3 +345,56 @@ mod scheduled_clone_symbol_tests {
         let _ = wrapper;
     }
 }
+
+/// Wraps: git_clone_options_init
+/// Creates clone options initialized for `version`.
+pub fn git_clone_options_init<'data>(
+    version: core::ffi::c_uint,
+) -> Result<ffibox::CVal<crate::api::clone::GitCloneOptions<'data>>, i32> {
+    let mut options = crate::api::clone::GitCloneOptions::<'data>::new();
+    // SAFETY: the inline options storage is exclusively writable and the C
+    // initializer retains no pointer to it or to any of its cleared fields.
+    let status = unsafe { ffi::git_clone_options_init(options.as_mut().as_mut_ptr(), version) };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
+
+#[cfg(test)]
+mod clone_options_init_tests {
+    use super::*;
+
+    #[test]
+    fn current_initializer_writes_published_clone_defaults() {
+        let _initialization = crate::libgit2::git_libgit2_init().unwrap();
+        let options = git_clone_options_init(ffi::GIT_CLONE_OPTIONS_VERSION)
+            .expect("the published clone-options version initializes");
+        let options = options.as_ref();
+        assert_eq!(options.version(), ffi::GIT_CLONE_OPTIONS_VERSION);
+        assert_eq!(options.local(), Ok(GitCloneLocal::Auto));
+        assert!(!options.bare());
+        assert_eq!(
+            options.checkout_options().version(),
+            ffi::GIT_CHECKOUT_OPTIONS_VERSION
+        );
+        assert_eq!(
+            options.fetch_options().version(),
+            ffi::GIT_FETCH_OPTIONS_VERSION as core::ffi::c_int
+        );
+    }
+
+    #[test]
+    fn initializer_rejects_unknown_versions() {
+        let _initialization = crate::libgit2::git_libgit2_init().unwrap();
+        assert_eq!(
+            git_clone_options_init::<'static>(0).err(),
+            Some(ffi::git_error_code_GIT_ERROR)
+        );
+        assert_eq!(
+            git_clone_options_init::<'static>(ffi::GIT_CLONE_OPTIONS_VERSION + 1).err(),
+            Some(ffi::git_error_code_GIT_ERROR)
+        );
+    }
+}
