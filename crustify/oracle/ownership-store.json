@@ -30947,11 +30947,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:object_out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+      "note": "The looked-up object stores this repository in `object->repo` (object.c) without a reference count, so the repository must outlive the object written to `object_out`. The same constraint binds `reference_out`: a git_reference holds the repository's refdb, which in turn points back at this repository."
      }
     },
     {
@@ -31007,11 +31007,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+      "note": "The looked-up object stores this repository in `object->repo` (object.c) without a reference count, so the repository must outlive the object written to `out`, not merely the call."
      }
     },
     {
@@ -31314,11 +31314,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:revwalk_out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+      "note": "The walker stores this repository in `walk->repo` (revwalk.c) without taking a reference count, so the repository must outlive the walker written to `revwalk_out`, not merely the call."
      }
     },
     {
@@ -32102,9 +32102,9 @@
       "borrowed": {
        "lifetime": "arg:arg1"
       },
-      "nullable": false,
+      "nullable": true,
       "mutable": false,
-      "note": "NUL-terminated string borrowed only for the synchronous call."
+      "note": "NUL-terminated string borrowed only for the synchronous call. NULLABLE: git_stash_foreach passes git_reflog_entry_message(entry), which returns the entry's `msg` field verbatim. That field is left null by both writers -- refdb_fs.c's reflog parser only allocates it when the line carries a '\\t' message separator, and reflog.c's append only when its `msg` argument is non-null -- so a stash reflog line without a message part reaches the callback as NULL."
      }
     },
     {
@@ -32884,11 +32884,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+      "note": "Reaches git_submodule_lookup, and submodule_alloc stores this repository in `sm->repo` (submodule.c) without a reference count, so the repository must outlive the submodule written to `out`. When `out` is null the created submodule is neither returned nor freed (an upstream leak) and the borrow ends with the call."
      }
     },
     {
@@ -33400,11 +33400,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+      "note": "submodule_alloc stores this repository in `sm->repo` (submodule.c) without a reference count, so the repository must outlive the submodule written to `out`. When `out` is null -- the documented existence test -- no submodule survives the call and the borrow ends with it."
      }
     }
    ]
@@ -35265,11 +35265,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrowed for the call; no pointee ownership transfers."
+      "note": "The transaction stores this repository in `tx->repo` (transaction.c:103) without a reference count and reads it back at commit time (transaction.c:165), so the repository must outlive the transaction written to `out`. The refdb it also takes IS reference-counted; the repository pointer is not."
      }
     }
    ]
@@ -36458,11 +36458,11 @@
       "string": false,
       "owned": false,
       "borrowed": {
-       "lifetime": "arg:repo"
+       "lifetime": "arg:object_out"
       },
       "nullable": false,
       "mutable": true,
-      "note": "Borrowed for the call; no pointee ownership transfers."
+      "note": "Delegates to git_object_lookup, whose result stores this repository in `object->repo` (object.c) without a reference count, so the repository must outlive the object written to `object_out`."
      }
     }
    ]

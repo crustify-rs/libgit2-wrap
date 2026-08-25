@@ -133,6 +133,109 @@ mod tests {
             align_of::<ffi::git_stash_apply_progress_t>()
         );
     }
+
+    /// A refcounted hold on the process-global libgit2 initialization.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and refcounted;
+            // `Drop` below balances this successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard; every repository opened under it is dropped first.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// A hand-built bare repository whose stash reflog this test controls.
+    struct StashRepo(std::path::PathBuf);
+
+    impl StashRepo {
+        /// Writes a bare repository holding a `refs/stash` reflog with one
+        /// entry that carries a message and one older entry that does not.
+        fn create(tag: &str) -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("crustify-stash-{}-{tag}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(path.join("objects")).expect("a private temporary directory");
+            std::fs::create_dir_all(path.join("refs")).expect("a refs directory");
+            std::fs::create_dir_all(path.join("logs/refs")).expect("a reflog directory");
+            std::fs::write(path.join("HEAD"), b"ref: refs/heads/main\n").expect("a HEAD file");
+            std::fs::write(
+                path.join("config"),
+                b"[core]\n\trepositoryformatversion = 0\n\tbare = true\n",
+            )
+            .expect("a config file");
+
+            let zero = "0".repeat(40);
+            let one = "1".repeat(40);
+            let two = "2".repeat(40);
+            std::fs::write(path.join("refs/stash"), format!("{two}\n")).expect("a stash ref");
+            // The reflog file is oldest-first, and `git_stash_foreach` reports
+            // entries newest-first. The first line deliberately omits the tab
+            // that introduces a message, which leaves `git_reflog_entry::msg`
+            // null and drives the callback's `None` case.
+            let signature = "A U Thor <author@example.com> 1500000000 +0000";
+            std::fs::write(
+                path.join("logs/refs/stash"),
+                format!(
+                    "{zero} {one} {signature}\n\
+                     {one} {two} {signature}\tWIP on main: 1111111 message\n"
+                ),
+            )
+            .expect("a stash reflog");
+            Self(path)
+        }
+
+        fn c_path(&self) -> std::ffi::CString {
+            std::ffi::CString::new(self.0.to_str().expect("a UTF-8 temporary path"))
+                .expect("a path without interior NUL")
+        }
+    }
+
+    impl Drop for StashRepo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn stash_iteration_reports_an_entry_whose_reflog_line_has_no_message() {
+        let _init = Libgit2Init::acquire();
+        let repo_dir = StashRepo::create("no-message");
+        let mut repository = crate::repository::git_repository_open(&repo_dir.c_path())
+            .expect("the hand-built bare repository opens");
+
+        let mut seen: Vec<(usize, Option<std::ffi::CString>)> = Vec::new();
+        let mut collect = |index: usize, message: Option<&CStr>, _: OidRef<'_>| {
+            seen.push((index, message.map(CStr::to_owned)));
+            0
+        };
+        assert_eq!(
+            git_stash_foreach(&mut repository.as_mut(), &mut collect),
+            Ok(())
+        );
+
+        assert_eq!(seen.len(), 2, "both reflog entries are visited");
+        assert_eq!(seen[0].0, 0);
+        assert_eq!(
+            seen[0].1.as_deref(),
+            Some(c"WIP on main: 1111111 message"),
+            "the newest entry carries its reflog message"
+        );
+        assert_eq!(seen[1].0, 1);
+        assert_eq!(
+            seen[1].1, None,
+            "a reflog line without a message part reaches the callback as `None`"
+        );
+    }
 }
 
 /// Wraps: git_stash_foreach
@@ -150,15 +253,21 @@ where
         oid: *const ffi::git_oid,
         payload: *mut c_void,
     ) -> i32 {
-        if message.is_null() || oid.is_null() || payload.is_null() {
+        if oid.is_null() || payload.is_null() {
             return -1;
         }
         // SAFETY: the wrapper supplies this live exclusive callback payload
         // throughout the synchronous traversal.
         let callback = unsafe { &mut *payload.cast::<C>() };
-        // SAFETY: both non-null values are transient live inputs documented by
-        // libgit2 for the duration of this callback.
-        let message = unsafe { CStr::from_ptr(message) };
+        // A stash reflog entry whose line carries no message part leaves
+        // `git_reflog_entry::msg` null, so libgit2 passes a null message here.
+        let message = if message.is_null() {
+            None
+        } else {
+            // SAFETY: a non-null message is the reflog-owned NUL-terminated
+            // string, live for the duration of this callback invocation.
+            Some(unsafe { CStr::from_ptr(message) })
+        };
         // SAFETY: the non-null OID remains live for this invocation.
         let oid = unsafe { OidRef::from_ptr(oid.cast_mut()) }.expect("checked non-null");
         callback.call(index, message, oid)

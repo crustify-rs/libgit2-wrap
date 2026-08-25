@@ -32,14 +32,18 @@ where
 /// Safe callable surface for one transient stash-list entry.
 pub trait GitStashCallback {
     /// Returns zero to continue iteration or nonzero to stop.
-    fn call(&mut self, index: usize, message: &CStr, stash_id: OidRef<'_>) -> i32;
+    ///
+    /// `message` is the stash reflog entry's message. It is `None` for an
+    /// entry whose reflog line carries no message part, which libgit2 stores
+    /// as a null `git_reflog_entry::msg`.
+    fn call(&mut self, index: usize, message: Option<&CStr>, stash_id: OidRef<'_>) -> i32;
 }
 
 impl<F> GitStashCallback for F
 where
-    F: FnMut(usize, &CStr, OidRef<'_>) -> i32,
+    F: FnMut(usize, Option<&CStr>, OidRef<'_>) -> i32,
 {
-    fn call(&mut self, index: usize, message: &CStr, stash_id: OidRef<'_>) -> i32 {
+    fn call(&mut self, index: usize, message: Option<&CStr>, stash_id: OidRef<'_>) -> i32 {
         self(index, message, stash_id)
     }
 }
@@ -63,13 +67,14 @@ mod tests {
             .cast_mut();
         // SAFETY: the local layout-compatible OID remains live throughout the call.
         let oid = unsafe { OidRef::from_ptr(raw) }.unwrap();
-        let mut entry = |index, message: &CStr, _: OidRef<'_>| {
-            i32::from(index == 2 && message == c"stash message")
+        let mut entry = |index, message: Option<&CStr>, _: OidRef<'_>| {
+            i32::from(index == 2 && message == Some(c"stash message"))
         };
         assert_eq!(
-            GitStashCallback::call(&mut entry, 2, c"stash message", oid),
+            GitStashCallback::call(&mut entry, 2, Some(c"stash message"), oid),
             1
         );
+        assert_eq!(GitStashCallback::call(&mut entry, 2, None, oid), 0);
     }
 }
 
