@@ -515,6 +515,18 @@ mod blame_flag_tests {
 
 /// Wraps: git_blame_file_from_buffer
 /// Computes blame for in-memory contents and ties the result to `repo`.
+///
+/// # libgit2 does not define this symbol
+///
+/// `include/git2/blame.h` declares `git_blame_file_from_buffer`, but no
+/// translation unit in libgit2 defines it and `libgit2.so` does not export it;
+/// the only in-memory blame the library implements is `git_blame_buffer`,
+/// which refines an already-computed blame rather than starting from a
+/// repository and path. This wrapper therefore matches the declared ABI but
+/// cannot be called: linking any binary that reaches it fails with an
+/// undefined reference. It is kept so the declared API keeps its safe surface
+/// once libgit2 supplies the definition, and it is deliberately left without a
+/// unit test, since one would break the link.
 pub fn git_blame_file_from_buffer<'repo>(
     repo: crate::repository::GitRepositoryRef<'repo>,
     path: &core::ffi::CStr,

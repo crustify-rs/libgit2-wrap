@@ -1036,18 +1036,30 @@ pub fn git_config_set_writeorder(
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
+/// Copies borrowed mappings into the contiguous C array both lookups take.
+///
+/// A [`GitConfigmapType::String`] entry must carry a match string: libgit2
+/// reaches that case with a bare `strcasecmp(value, m->str_match)` and never
+/// null-checks `str_match`, so a null one faults inside C instead of failing
+/// the lookup. [`GitConfigmap::new`] leaves that field null, so safe callers
+/// can build exactly such a value; rejecting it here with `GIT_EINVALID` is
+/// what keeps the two mapped lookups safe.
+///
+/// [`GitConfigmapType::String`]: crate::api::config::GitConfigmapType::String
+/// [`GitConfigmap::new`]: crate::api::config::GitConfigmap::new
 fn raw_configmaps(
     maps: &[crate::api::config::GitConfigmapRef<'_>],
 ) -> Result<Vec<ffi::git_configmap>, i32> {
     maps.iter()
         .map(|map| {
-            let type_ = map
-                .kind()
-                .map_err(|_| ffi::git_error_code_GIT_EINVALID)?
-                .into();
+            let kind = map.kind().map_err(|_| ffi::git_error_code_GIT_EINVALID)?;
+            let str_match = map.str_match();
+            if kind == crate::api::config::GitConfigmapType::String && str_match.is_none() {
+                return Err(ffi::git_error_code_GIT_EINVALID);
+            }
             Ok(ffi::git_configmap {
-                type_,
-                str_match: map.str_match().map_or(core::ptr::null(), CStr::as_ptr),
+                type_: kind.into(),
+                str_match: str_match.map_or(core::ptr::null(), CStr::as_ptr),
                 map_value: map.map_value(),
             })
         })
@@ -1056,6 +1068,10 @@ fn raw_configmaps(
 
 /// Wraps: git_config_get_mapped
 /// Reads and maps a named configuration value.
+///
+/// A string mapping carrying no match string is rejected with `GIT_EINVALID`
+/// before the call: libgit2 would hand its null pointer straight to
+/// `strcasecmp`.
 pub fn git_config_get_mapped(
     config: GitConfigRef<'_>,
     name: &CStr,
@@ -1079,6 +1095,10 @@ pub fn git_config_get_mapped(
 
 /// Wraps: git_config_lookup_map_value
 /// Maps a supplied textual value through `maps`.
+///
+/// A string mapping carrying no match string is rejected with `GIT_EINVALID`
+/// before the call: libgit2 would hand its null pointer straight to
+/// `strcasecmp`.
 pub fn git_config_lookup_map_value(
     maps: &[crate::api::config::GitConfigmapRef<'_>],
     value: &CStr,
@@ -1225,5 +1245,94 @@ mod foreach_tests {
         drop(config);
         // SAFETY: balances this test's successful initialization call.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+}
+
+#[cfg(test)]
+mod scheduled_configmap_tests {
+    use super::*;
+    use crate::api::config::{GitConfigmap, GitConfigmapType};
+
+    /// Holds one libgit2 initialization count for the duration of a test.
+    ///
+    /// A failed mapping reaches `git_error_set`, which writes through
+    /// thread-local error state that only initialization creates; without
+    /// this guard the failing lookups below are wild writes rather than
+    /// errors.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and reference
+            // counted; this guard balances the successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the initialization this guard represents,
+            // after every libgit2 owner in the test has been dropped.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// A string mapping with no match string is what libgit2 would hand to
+    /// `strcasecmp` as a null pointer, so both mapped lookups must refuse it
+    /// before the call rather than reproduce the fault.
+    #[test]
+    fn a_string_mapping_without_a_match_string_is_rejected() {
+        let mapping = GitConfigmap::new(GitConfigmapType::String, 7);
+        let maps = [mapping.as_ref()];
+        assert_eq!(
+            git_config_lookup_map_value(&maps, c"anything"),
+            Err(ffi::git_error_code_GIT_EINVALID)
+        );
+    }
+
+    #[test]
+    fn a_string_mapping_with_a_match_string_is_compared_case_insensitively() {
+        let _libgit2 = Libgit2Init::acquire();
+        let mut mapping = GitConfigmap::new(GitConfigmapType::String, 7);
+        // SAFETY: this static string outlives every use of `mapping`.
+        unsafe { mapping.as_mut().set_borrowed_str_match(Some(c"AlWaYs")) };
+        let maps = [mapping.as_ref()];
+        assert_eq!(git_config_lookup_map_value(&maps, c"always"), Ok(7));
+        assert_eq!(
+            git_config_lookup_map_value(&maps, c"never"),
+            Err(ffi::git_error_code_GIT_ERROR)
+        );
+    }
+
+    /// The other kinds never read `str_match`, so leaving it null is fine.
+    #[test]
+    fn non_string_mappings_do_not_need_a_match_string() {
+        let _libgit2 = Libgit2Init::acquire();
+
+        let boolean = GitConfigmap::new(GitConfigmapType::False, 3);
+        let maps = [boolean.as_ref()];
+        assert_eq!(git_config_lookup_map_value(&maps, c"false"), Ok(3));
+
+        // An integer mapping yields the parsed value rather than its own, and
+        // is tried alone here: libgit2 parses any integer as a true boolean,
+        // so a preceding `True` mapping would have claimed this value first.
+        let integer = GitConfigmap::new(GitConfigmapType::Int32, 0);
+        let maps = [integer.as_ref()];
+        assert_eq!(git_config_lookup_map_value(&maps, c"42"), Ok(42));
+    }
+
+    /// The named-value form maps through the same array, so it inherits the
+    /// same rejection without reaching libgit2 at all.
+    #[test]
+    fn the_named_lookup_rejects_the_same_mapping() {
+        let _libgit2 = Libgit2Init::acquire();
+        let config = git_config_new().expect("empty config allocation");
+        let mapping = GitConfigmap::new(GitConfigmapType::String, 7);
+        let maps = [mapping.as_ref()];
+        assert_eq!(
+            git_config_get_mapped(config.as_ref(), c"core.autocrlf", &maps),
+            Err(ffi::git_error_code_GIT_EINVALID)
+        );
     }
 }

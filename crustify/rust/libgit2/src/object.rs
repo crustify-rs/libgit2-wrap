@@ -479,9 +479,15 @@ pub fn git_object_id_from_file(
 
 /// Wraps: git_object_id_options_init
 /// Initializes object-ID options for the requested ABI version.
-pub fn git_object_id_options_init(
+///
+/// `'data` is the borrow a later
+/// [`GitObjectIdOptionsMut::set_filters`](crate::api::object::GitObjectIdOptionsMut::set_filters)
+/// parks in the value. It is invariant in the options type, so it is chosen
+/// by the caller here rather than fixed to `'static`, which no filter list
+/// borrowed from a repository could ever satisfy.
+pub fn git_object_id_options_init<'data>(
     version: core::ffi::c_uint,
-) -> Result<CVal<GitObjectIdOptions<'static>>, i32> {
+) -> Result<CVal<GitObjectIdOptions<'data>>, i32> {
     let mut options = GitObjectIdOptions::new();
     let status = {
         let mut output = options.as_mut();
@@ -493,5 +499,36 @@ pub fn git_object_id_options_init(
         Ok(options)
     } else {
         Err(status)
+    }
+}
+
+#[cfg(test)]
+mod scheduled_object_id_options_tests {
+    use super::*;
+
+    /// The options type is invariant in `'data`, so pinning the constructor to
+    /// `'static` would have made the value unusable with any filter list a
+    /// repository lends out. Compiling this installation is the assertion.
+    #[test]
+    fn initialized_options_accept_a_filter_list_borrowed_for_less_than_static() {
+        fn install(list: &mut crate::filter::RepositoryFilterList<'_>) {
+            let mut options = git_object_id_options_init(ffi::GIT_OBJECT_ID_OPTIONS_VERSION)
+                .expect("the current options version initializes");
+            options.as_mut().set_filters(Some(list.as_mut()));
+            assert!(options.as_mut().filters_mut().is_some());
+        }
+
+        let _: fn(&mut crate::filter::RepositoryFilterList<'_>) = install;
+    }
+
+    #[test]
+    fn initialization_installs_the_requested_version() {
+        let options = git_object_id_options_init(ffi::GIT_OBJECT_ID_OPTIONS_VERSION)
+            .expect("the current options version initializes");
+        assert_eq!(
+            options.as_ref().version(),
+            ffi::GIT_OBJECT_ID_OPTIONS_VERSION
+        );
+        assert!(options.as_ref().filters().is_none());
     }
 }

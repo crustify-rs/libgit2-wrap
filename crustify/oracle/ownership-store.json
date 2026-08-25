@@ -8878,8 +8878,8 @@
        "lifetime": "arg:options"
       },
       "nullable": true,
-      "mutable": true,
-      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+      "mutable": null,
+      "note": "Documented optional options input. libgit2 declares this function in include/git2/blame.h but defines it nowhere, and libgit2.so does not export it, so no body exists to inspect: `mutable` is undeterminable and the rest follows the declaration's documented contract only. A caller reaching this symbol fails to link."
      }
     },
     {
@@ -8898,8 +8898,8 @@
        "lifetime": "arg:out"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+      "mutable": null,
+      "note": "Documented out-slot receiving one owned blame. libgit2 declares this function in include/git2/blame.h but defines it nowhere, and libgit2.so does not export it, so no body exists to inspect: `mutable` is undeterminable and the rest follows the declaration's documented contract only. A caller reaching this symbol fails to link."
      }
     },
     {
@@ -8932,8 +8932,8 @@
        "lifetime": "arg:repo"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+      "mutable": null,
+      "note": "Documented repository input, kept only for the call. libgit2 declares this function in include/git2/blame.h but defines it nowhere, and libgit2.so does not export it, so no body exists to inspect: `mutable` is undeterminable and the rest follows the declaration's documented contract only. A caller reaching this symbol fails to link."
      }
     }
    ]
@@ -22155,8 +22155,8 @@
        "lifetime": "arg:index"
       },
       "nullable": false,
-      "mutable": true,
-      "note": "Borrowed for the call; output and counted-buffer shape verified from the implementation and public contract."
+      "mutable": false,
+      "note": "Read-only despite the non-const signature: the whole body is `return (git_oid *)index->checksum;`, which takes the address of a field and writes nothing. Nothing is computed lazily here, so a shared borrow is sufficient."
      }
     }
    ],
@@ -22171,9 +22171,9 @@
      "borrowed": {
       "lifetime": "arg:index"
      },
-     "nullable": true,
+     "nullable": false,
      "mutable": false,
-     "note": "Borrowed from the input owner; not transferred."
+     "note": "The address of `git_index`'s `unsigned char checksum[GIT_HASH_MAX_SIZE]` field, so never NULL and never transferred; valid for as long as the index is. The declared `const git_oid *` is a type pun and does not describe the pointee: `git_oid` leads with a one-byte algorithm tag before its digest, so reading this as an object ID reports checksum byte 0 as the algorithm and takes the digest from GIT_HASH_MAX_SIZE bytes starting one past the field. The safe wrapper hands the field back as the raw byte run it is."
     }
    }
   },

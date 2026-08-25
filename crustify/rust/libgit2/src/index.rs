@@ -1403,13 +1403,43 @@ pub fn git_index_caps(index: GitIndexRef<'_>) -> crate::api::index::GitIndexCapa
         .expect("git_index_caps returns only published capability bits")
 }
 
+/// The byte width of the checksum `git_index` stores.
+///
+/// C spells it `GIT_HASH_MAX_SIZE`, the widest digest libgit2 supports, which
+/// is the same SHA-256 width as `GIT_OID_MAX_SIZE`. [`RAW_DIGEST_LEN`] already
+/// derives that from the bound `git_oid` layout instead of a literal.
+///
+/// [`RAW_DIGEST_LEN`]: crate::oid::RAW_DIGEST_LEN
+const CHECKSUM_LEN: usize = crate::oid::RAW_DIGEST_LEN;
+
 /// Wraps: git_index_checksum
-/// Borrows the current checksum, computing it if necessary.
-pub fn git_index_checksum<'a>(index: &'a mut GitIndexMut<'_>) -> Option<crate::oid::OidRef<'a>> {
-    // SAFETY: exclusive access permits lazy checksum computation.
-    let raw = unsafe { ffi::git_index_checksum(index.as_mut_ptr()) };
-    // SAFETY: a non-null checksum is index-owned and bounded by this reborrow.
-    unsafe { crate::oid::OidRef::from_ptr(raw.cast_mut()) }
+/// Borrows the checksum stored for the index file, as raw digest bytes.
+///
+/// This deprecated getter is declared as returning a `git_oid *`, but its body
+/// is `return (git_oid *)index->checksum;` over an `unsigned char` array of
+/// `GIT_HASH_MAX_SIZE`. The two layouts do not agree: `git_oid` leads with a
+/// one-byte algorithm tag, so an object-ID handle over that pointer would
+/// report the first checksum byte as the algorithm and read a digest shifted
+/// one byte past the field. The bytes are therefore handed back as the run
+/// they actually are.
+///
+/// The run is the full stored capacity. Only the leading
+/// [`crate::oid::OidType::digest_len`] bytes of the index's own algorithm
+/// carry the digest; libgit2 zero-fills the rest, and zero-fills all of it
+/// while the index has no on-disk content. Nothing here computes a checksum:
+/// the field is only written when an index is read or written, so a shared
+/// index handle is enough.
+#[must_use]
+pub fn git_index_checksum<'a>(index: GitIndexRef<'a>) -> ffibox::CSlice<'a, u8> {
+    // SAFETY: the live index is only queried; the returned pointer addresses
+    // the index's own checksum field and is never null.
+    let raw = unsafe { ffi::git_index_checksum(index.as_ptr().cast_mut()) };
+    let bytes = core::ptr::NonNull::new(raw.cast_mut().cast::<u8>())
+        .expect("a live index has checksum storage");
+    // SAFETY: `bytes` addresses the `unsigned char[GIT_HASH_MAX_SIZE]` field
+    // this getter returns; the whole array is initialized by the index's
+    // zeroing allocation and stays live for the index borrow.
+    unsafe { ffibox::CSlice::from_raw_parts(bytes, CHECKSUM_LEN) }
 }
 
 /// Wraps: git_index_conflict_add
@@ -1627,5 +1657,36 @@ mod scheduled_symbol_tests {
     fn iterator_surface_carries_the_source_borrow() {
         let _: for<'a> fn(GitIndexMut<'a>) -> Result<GitIndexEntries<'a>, i32> =
             git_index_iterator_new;
+    }
+
+    /// `git_index_checksum` returns the index's `unsigned char` array cast to
+    /// `git_oid *`. A fresh index has never been read, so every stored byte is
+    /// zero -- including the byte an object-ID handle would have reported as
+    /// the algorithm tag, which is not a valid `git_oid_t` at all.
+    #[test]
+    fn the_checksum_is_the_stored_digest_run_and_not_an_object_id() {
+        // SAFETY: process-global initialization is reference counted and is
+        // balanced after the index owner is dropped.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let index = git_index_new().expect("an in-memory index");
+
+        let checksum = git_index_checksum(index.as_ref());
+        assert_eq!(checksum.len(), CHECKSUM_LEN);
+        assert!(checksum.elems().all(|byte| byte == 0));
+
+        // An object-ID view over the same pointer does not fit: `git_oid`
+        // spends a leading byte on its algorithm tag, so its digest field
+        // would end one byte past the stored array.
+        assert!(size_of::<ffi::git_oid>() > CHECKSUM_LEN);
+        assert_eq!(crate::oid::RAW_DIGEST_LEN, CHECKSUM_LEN);
+
+        drop(index);
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
+    fn the_checksum_only_needs_a_shared_index_handle() {
+        let _: for<'a> fn(GitIndexRef<'a>) -> ffibox::CSlice<'a, u8> = git_index_checksum;
     }
 }

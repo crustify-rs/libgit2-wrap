@@ -634,6 +634,18 @@ pub fn git_commit_create_ext_options_init()
 
 /// Wraps: git_commit_create_v
 /// Safe slice-based equivalent of the C variadic commit constructor.
+///
+/// Rust can only call a C variadic with a compile-time argument list, so a
+/// runtime-length parent list has to reach libgit2 as an array. This delegates
+/// to [`git_commit_create`], which C's own `git_commit_create_v` matches field
+/// for field: both build `GIT_COMMIT_CREATE_EXT_OPTIONS_INIT` with the same
+/// `update_ref` and `message_encoding` and hand it to
+/// `git_commit__create_internal`; only the parent callback differs.
+///
+/// That callback is the one behavioural difference: the array form also
+/// checks `git_commit_owner(parent) == repo` for every parent, which the
+/// varargs form does not. Parents from another repository are therefore
+/// rejected here where C's variadic would have accepted them.
 #[allow(clippy::too_many_arguments)]
 pub fn git_commit_create_v(
     id: &mut crate::oid::OidMut<'_>,
