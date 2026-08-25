@@ -18942,6 +18942,68 @@
    ]
   },
   {
+   "name": "git_index_options_init",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_owner",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:index"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Returns the repository owner borrowed for the source object lifetime."
+    }
+   }
+  },
+  {
    "name": "git_index_path",
    "defined_in": "src/libgit2/index.c",
    "ptr_args": [
@@ -19233,6 +19295,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for this synchronous call; the callee retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_index_set_caps",
+   "defined_in": "src/libgit2/index.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
      }
     }
    ]
@@ -21804,6 +21889,376 @@
    }
   },
   {
+   "name": "git_note_commit_create",
+   "defined_in": "src/libgit2/notes.c",
+   "ptr_args": [
+    {
+     "name": "author",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:author"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:committer"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "note",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:note"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "notes_blob_out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:notes_blob_out"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "notes_commit_out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:notes_commit_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "parent",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:parent"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_note_commit_iterator_new",
+   "defined_in": "src/libgit2/notes.c",
+   "ptr_args": [
+    {
+     "name": "it",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:it"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "notes_commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:notes_commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_note_commit_read",
+   "defined_in": "src/libgit2/notes.c",
+   "ptr_args": [
+    {
+     "name": "notes_commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:notes_commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_note_commit_remove",
+   "defined_in": "src/libgit2/notes.c",
+   "ptr_args": [
+    {
+     "name": "author",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:author"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "committer",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:committer"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "notes_commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:notes_commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "notes_commit_out",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:notes_commit_out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "oid",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:oid"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_note_committer",
    "defined_in": "src/libgit2/notes.c",
    "ptr_args": [
@@ -22003,6 +22458,80 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the duration described by the safe wrapper; the callee does not take ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_note_foreach",
+   "defined_in": "src/libgit2/notes.c",
+   "ptr_args": [
+    {
+     "name": "note_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:note_cb"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "notes_ref",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:notes_ref"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
      }
     }
    ]
@@ -22600,6 +23129,143 @@
    }
   },
   {
+   "name": "git_object_id_from_buffer",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "data",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:data"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_id_from_file",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:path"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_object_id_options_init",
+   "defined_in": "src/libgit2/object.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_object_lookup",
    "defined_in": "src/libgit2/object.c",
    "ptr_args": [
@@ -23086,6 +23752,52 @@
    ]
   },
   {
+   "name": "git_odb_backend_loose_options_init",
+   "defined_in": "src/libgit2/odb_loose.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_backend_pack_options_init",
+   "defined_in": "src/libgit2/odb_pack.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_odb_exists",
    "defined_in": "src/libgit2/odb.c",
    "ptr_args": [
@@ -23218,6 +23930,46 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for this synchronous call; the callee retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_expand_ids",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "db",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:db"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "ids",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ids"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
      }
     }
    ]
@@ -23453,6 +24205,72 @@
    ]
   },
   {
+   "name": "git_odb_new_ext",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_num_backends",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "odb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:odb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_odb_object_data",
    "defined_in": "src/libgit2/odb.c",
    "ptr_args": [
@@ -23656,6 +24474,109 @@
    ]
   },
   {
+   "name": "git_odb_open",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "objects_dir",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:objects_dir"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_open_ext",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "objects_dir",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:objects_dir"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_odb_open_rstream",
    "defined_in": "src/libgit2/odb.c",
    "ptr_args": [
@@ -23788,6 +24709,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Writable out-slot receiving one newly owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_options_init",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
      }
     }
    ]
@@ -23945,6 +24889,44 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for this synchronous call; the callee retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_set_commit_graph",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "cgraph",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "odb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:odb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
      }
     }
    ]
@@ -24149,6 +25131,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_odb_write_multi_pack_index",
+   "defined_in": "src/libgit2/odb.c",
+   "ptr_args": [
+    {
+     "name": "db",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:db"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
      }
     }
    ]
@@ -28770,6 +29775,63 @@
    ]
   },
   {
+   "name": "git_reference_foreach",
+   "defined_in": "src/libgit2/refs.c",
+   "ptr_args": [
+    {
+     "name": "callback",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:callback"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_reference_foreach_cb",
    "defined_in": null,
    "ptr_args": [
@@ -31985,6 +33047,29 @@
    ]
   },
   {
+   "name": "git_remote_create_options_init",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_remote_create_with_fetchspec",
    "defined_in": "src/libgit2/remote.c",
    "ptr_args": [
@@ -32074,6 +33159,66 @@
       "nullable": false,
       "mutable": false,
       "note": "Required transient NUL-terminated string; the callee does not retain it."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_remote_create_with_opts",
+   "defined_in": "src/libgit2/remote.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "url",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:url"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
      }
     }
    ]
@@ -34464,6 +35609,29 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrowed for the call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_repository_init_options_init",
+   "defined_in": "src/libgit2/repository.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
      }
     }
    ]
@@ -36991,6 +38159,49 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes and releases a complete signature allocation and its two strings; null is accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_signature_from_buffer",
+   "defined_in": "src/libgit2/signature.c",
+   "ptr_args": [
+    {
+     "name": "buf",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:buf"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
      }
     }
    ]
@@ -40437,6 +41648,45 @@
    ]
   },
   {
+   "name": "git_tag_owner",
+   "defined_in": "src/libgit2/object_api.c",
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:obj"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Returns the repository owner borrowed for the source object lifetime."
+    }
+   }
+  },
+  {
    "name": "git_tag_peel",
    "defined_in": "src/libgit2/tag.c",
    "ptr_args": [
@@ -42166,6 +43416,105 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_tree_lookup_prefix",
+   "defined_in": "src/libgit2/object_api.c",
+   "ptr_args": [
+    {
+     "name": "id",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:id"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_tree_owner",
+   "defined_in": "src/libgit2/object_api.c",
+   "ptr_args": [
+    {
+     "name": "obj",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:obj"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Ownership and cardinality follow the public contract and the implementation; no pointer is retained unless ownership is explicitly transferred."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:obj"
+     },
+     "nullable": false,
+     "mutable": false,
+     "note": "Returns the repository owner borrowed for the source object lifetime."
+    }
+   }
   },
   {
    "name": "git_tree_walk",

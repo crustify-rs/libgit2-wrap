@@ -141,3 +141,31 @@ mod tests {
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
+
+/// Wraps: git_signature_from_buffer
+/// Parses a complete signature from its canonical textual representation.
+pub fn git_signature_from_buffer(buffer: &CStr) -> Result<GitSignatureOwned, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output is writable and `buffer` is a live NUL-terminated
+    // string retained only for this call.
+    let status =
+        unsafe { ffi::git_signature_from_buffer(core::ptr::addr_of_mut!(output), buffer.as_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete signature allocation.
+    unsafe { GitSignatureOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+#[cfg(test)]
+mod from_buffer_tests {
+    use super::*;
+
+    #[test]
+    fn parses_the_documented_signature_format() {
+        let signature = git_signature_from_buffer(c"Ada <ada@example.com> 123 +0100")
+            .expect("documented signature text parses");
+        assert_eq!(signature.as_ref().name(), c"Ada");
+        assert_eq!(signature.as_ref().when().time(), 123);
+    }
+}

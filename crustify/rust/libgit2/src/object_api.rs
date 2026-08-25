@@ -225,3 +225,44 @@ pub fn git_tag_lookup_prefix<'repo>(
     let output = unsafe { GitTagOwned::from_raw(output) };
     adopt_repository_tag(status, output)
 }
+
+/// Wraps: git_tag_owner
+/// Borrows the repository that owns an annotated tag.
+#[must_use]
+pub fn git_tag_owner<'a>(tag: GitTagRef<'a>) -> GitRepositoryRef<'a> {
+    // SAFETY: `tag` is live and libgit2 returns its non-null repository owner.
+    let owner = unsafe { ffi::git_tag_owner(tag.as_ptr()) };
+    // SAFETY: the returned repository remains live for the tag borrow.
+    unsafe { GitRepositoryRef::from_ptr(owner) }.expect("a live tag has a repository owner")
+}
+
+/// Wraps: git_tree_lookup_prefix
+/// Looks up a tree by a hexadecimal object-ID prefix.
+pub fn git_tree_lookup_prefix<'repo>(
+    repo: GitRepositoryRef<'repo>,
+    id: OidRef<'_>,
+    hex_len: usize,
+) -> Result<RepositoryTree<'repo>, i32> {
+    let mut output = core::ptr::null_mut();
+    // SAFETY: the output is writable and both borrowed inputs remain live;
+    // success transfers one tree cache reference tied to `repo`.
+    let status = unsafe {
+        ffi::git_tree_lookup_prefix(&mut output, repo.as_ptr().cast_mut(), id.as_ptr(), hex_len)
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one complete owned tree reference.
+    let tree = unsafe { GitTreeOwned::from_raw(output) }.ok_or(ffi::git_error_code_GIT_ERROR)?;
+    Ok(RepositoryTree::from_owned(tree, repo))
+}
+
+/// Wraps: git_tree_owner
+/// Borrows the repository that owns a tree.
+#[must_use]
+pub fn git_tree_owner<'a>(tree: GitTreeRef<'a>) -> GitRepositoryRef<'a> {
+    // SAFETY: `tree` is live and libgit2 returns its non-null repository owner.
+    let owner = unsafe { ffi::git_tree_owner(tree.as_ptr()) };
+    // SAFETY: the returned repository remains live for the tree borrow.
+    unsafe { GitRepositoryRef::from_ptr(owner) }.expect("a live tree has a repository owner")
+}

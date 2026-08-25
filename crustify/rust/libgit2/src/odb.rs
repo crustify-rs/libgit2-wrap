@@ -4,13 +4,15 @@ use core::ffi::{CStr, c_void};
 use core::marker::PhantomData;
 use core::ptr::NonNull;
 
-use ffibox::{CBox, CCloned, CSlice};
+use ffibox::{CBox, CCloned, CSlice, CSliceMut, CVal};
 
 pub use crate::api::odb::GitOdbLookupFlags;
+use crate::api::odb::{GitOdbExpandId, GitOdbOptions, GitOdbOptionsRef};
 use crate::api::odb_backend::{
     GitOdbStreamMut, GitOdbStreamOwned, OdbWritepackMut, OdbWritepackOwned, OdbWritepackRef,
 };
 use crate::api::types::GitObjectType;
+use crate::commit_graph::GitCommitGraphOwned;
 use crate::ffi;
 use crate::indexer::{GitIndexerProgressCallback, IndexerProgressRef};
 use crate::oid::{Oid, OidRef};
@@ -787,4 +789,127 @@ mod scheduled_object_api_tests {
         let _: for<'a> fn(GitOdbObjectRef<'a>) -> Option<CSlice<'a, u8>> = git_odb_object_data;
         let _: for<'a> fn(GitOdbObjectRef<'a>) -> OidRef<'a> = git_odb_object_id;
     }
+}
+
+/// Wraps: git_odb_expand_ids
+/// Expands object-ID prefixes in place.
+pub fn git_odb_expand_ids(
+    odb: &mut GitOdbMut<'_>,
+    mut ids: CSliceMut<'_, GitOdbExpandId>,
+) -> Result<(), i32> {
+    // SAFETY: `odb` is exclusively borrowed and `ids` describes exactly
+    // `len` initialized, exclusively accessible query records.
+    let status = unsafe { ffi::git_odb_expand_ids(odb.as_mut_ptr(), ids.as_mut_ptr(), ids.len()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_odb_new_ext
+/// Creates an empty object database with optional configuration.
+pub fn git_odb_new_ext(options: Option<GitOdbOptionsRef<'_>>) -> Result<GitOdbOwned, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: the output is writable and `options` is null or live for this
+    // call; success transfers one complete ODB owner.
+    let status = unsafe {
+        ffi::git_odb_new_ext(
+            core::ptr::addr_of_mut!(raw),
+            options.map_or(core::ptr::null(), |value| value.as_ptr()),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one fully initialized owned ODB.
+    unsafe { GitOdbOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_odb_num_backends
+/// Returns the number of registered object-database backends.
+#[must_use]
+pub fn git_odb_num_backends(odb: &mut GitOdbMut<'_>) -> usize {
+    // SAFETY: the exclusive handle permits the internal lock-backed query.
+    unsafe { ffi::git_odb_num_backends(odb.as_mut_ptr()) }
+}
+
+/// Wraps: git_odb_open
+/// Opens an object database rooted at `objects_dir`.
+pub fn git_odb_open(objects_dir: &CStr) -> Result<GitOdbOwned, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: the output is writable and the path is a live C string retained
+    // only for this call.
+    let status = unsafe { ffi::git_odb_open(core::ptr::addr_of_mut!(raw), objects_dir.as_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one complete owned ODB.
+    unsafe { GitOdbOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_odb_open_ext
+/// Opens an object database with optional configuration.
+pub fn git_odb_open_ext(
+    objects_dir: &CStr,
+    options: Option<GitOdbOptionsRef<'_>>,
+) -> Result<GitOdbOwned, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: the output is writable, the path is live, and `options` is null
+    // or a live shared value. No input pointer is retained.
+    let status = unsafe {
+        ffi::git_odb_open_ext(
+            core::ptr::addr_of_mut!(raw),
+            objects_dir.as_ptr(),
+            options.map_or(core::ptr::null(), |value| value.as_ptr()),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one complete owned ODB.
+    unsafe { GitOdbOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_odb_options_init
+/// Initializes object-database options for the requested ABI version.
+pub fn git_odb_options_init(version: core::ffi::c_uint) -> Result<CVal<GitOdbOptions>, i32> {
+    let mut options = GitOdbOptions::new();
+    let status = {
+        let mut output = options.as_mut();
+        // SAFETY: `output` is writable layout-compatible storage and C does
+        // not retain its address.
+        unsafe { ffi::git_odb_options_init(output.as_mut_ptr(), version) }
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_odb_set_commit_graph
+/// Transfers an optional commit graph into the object database.
+///
+/// On failure the supplied graph is reclaimed before the error is returned.
+pub fn git_odb_set_commit_graph(
+    odb: &mut GitOdbMut<'_>,
+    graph: Option<GitCommitGraphOwned>,
+) -> Result<(), i32> {
+    let raw = graph.map_or(core::ptr::null_mut(), CBox::into_raw);
+    // SAFETY: `odb` is exclusive and `raw` is null or one fully formed owner.
+    // C takes that owner only when the call succeeds.
+    let status = unsafe { ffi::git_odb_set_commit_graph(odb.as_mut_ptr(), raw) };
+    if status == 0 {
+        Ok(())
+    } else {
+        // SAFETY: on failure libgit2 did not store or consume `raw`; adopting
+        // it back immediately ensures its allocation is released exactly once.
+        drop(unsafe { GitCommitGraphOwned::from_raw(raw) });
+        Err(status)
+    }
+}
+
+/// Wraps: git_odb_write_multi_pack_index
+/// Writes a multi-pack index for the database's non-alternate pack backends.
+pub fn git_odb_write_multi_pack_index(odb: &mut GitOdbMut<'_>) -> Result<(), i32> {
+    // SAFETY: the exclusive ODB handle permits backend traversal and writes.
+    let status = unsafe { ffi::git_odb_write_multi_pack_index(odb.as_mut_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

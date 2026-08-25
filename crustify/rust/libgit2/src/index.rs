@@ -3,7 +3,7 @@
 use core::ffi::CStr;
 use core::ptr::{addr_of, addr_of_mut};
 
-use ffibox::CBox;
+use ffibox::{CBox, CVal};
 
 pub use crate::api::index::{GitIndexAddOptions, GitIndexEntryExtendedFlags, GitIndexStage};
 use crate::ffi;
@@ -1273,4 +1273,46 @@ mod index_iterator_type_tests {
             assert!(GitIndexIteratorOwned::from_raw(ptr::null_mut()).is_none());
         }
     }
+}
+
+/// Wraps: git_index_options_init
+/// Initializes index options for the requested ABI version.
+pub fn git_index_options_init(
+    version: core::ffi::c_uint,
+) -> Result<CVal<crate::api::index::GitIndexOptions>, i32> {
+    let mut options = crate::api::index::GitIndexOptions::new();
+    let status = {
+        let mut output = options.as_mut();
+        // SAFETY: `output` is a writable, layout-compatible options value and
+        // libgit2 retains no pointer to it.
+        unsafe { ffi::git_index_options_init(output.as_mut_ptr(), version) }
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_index_owner
+/// Borrows the repository that owns an index, if the index is attached.
+#[must_use]
+pub fn git_index_owner<'a>(index: GitIndexRef<'a>) -> Option<GitRepositoryRef<'a>> {
+    // SAFETY: `index` is live and the returned repository pointer, when
+    // present, is the owner recorded in the index for the same lifetime.
+    let owner = unsafe { ffi::git_index_owner(index.as_ptr()) };
+    // SAFETY: a non-null owner remains live for the index borrow.
+    unsafe { GitRepositoryRef::from_ptr(owner) }
+}
+
+/// Wraps: git_index_set_caps
+/// Replaces the index's filesystem capabilities.
+pub fn git_index_set_caps(
+    index: &mut GitIndexMut<'_>,
+    capabilities: crate::api::index::GitIndexCapabilities,
+) -> Result<(), i32> {
+    // SAFETY: `index` is exclusively borrowed; the checked capability value
+    // is a published bit set or the documented `FROM_OWNER` sentinel.
+    let status = unsafe { ffi::git_index_set_caps(index.as_mut_ptr(), capabilities.as_raw()) };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

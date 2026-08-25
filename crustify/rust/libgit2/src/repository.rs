@@ -1573,3 +1573,22 @@ mod wrap_batch_tests {
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
+
+/// Wraps: git_repository_init_options_init
+/// Initializes repository options for the requested ABI version.
+pub fn git_repository_init_options_init(
+    version: c_uint,
+) -> Result<GitRepositoryInitOptionsOwned, i32> {
+    let mut options = CVal::new(GitRepositoryInitOptions::zeroed());
+    let status = {
+        let mut output = options.as_mut();
+        // SAFETY: `output` is exclusive writable storage for the complete
+        // options record and the initializer retains no pointer.
+        unsafe { ffi::git_repository_init_options_init(output.as_mut_ptr(), version) }
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}

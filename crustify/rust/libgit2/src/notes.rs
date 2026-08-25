@@ -7,7 +7,9 @@ use core::ptr::addr_of_mut;
 use ffibox::{CBox, CVal};
 
 use crate::api::buffer::GitBuf;
+use crate::api::notes::GitNoteForeachCallback;
 use crate::api::types::GitSignatureRef;
+use crate::commit::GitCommitRef;
 use crate::ffi;
 use crate::iterator::{GitIterator, GitIteratorMut};
 use crate::oid::{Oid, OidRef};
@@ -269,6 +271,159 @@ pub fn git_note_remove(
             author.as_ptr(),
             committer.as_ptr(),
             oid.as_ptr(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_note_commit_create
+/// Creates a notes commit directly from an optional parent commit.
+pub fn git_note_commit_create(
+    repo: GitRepositoryRef<'_>,
+    parent: Option<GitCommitRef<'_>>,
+    author: GitSignatureRef<'_>,
+    committer: GitSignatureRef<'_>,
+    oid: OidRef<'_>,
+    note: &CStr,
+    allow_overwrite: bool,
+) -> Result<(Oid, Oid), i32> {
+    let mut commit_id = Oid::zeroed();
+    let mut blob_id = Oid::zeroed();
+    // SAFETY: both outputs are writable; every handle and string remains live
+    // for the synchronous call, and C copies the note text.
+    let status = unsafe {
+        ffi::git_note_commit_create(
+            addr_of_mut!(commit_id).cast(),
+            addr_of_mut!(blob_id).cast(),
+            repo.as_ptr().cast_mut(),
+            parent.map_or(core::ptr::null_mut(), |value| value.as_ptr().cast_mut()),
+            author.as_ptr(),
+            committer.as_ptr(),
+            oid.as_ptr(),
+            note.as_ptr(),
+            i32::from(allow_overwrite),
+        )
+    };
+    if status == 0 {
+        Ok((commit_id, blob_id))
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_note_commit_iterator_new
+/// Creates a notes iterator whose validity is tied to the source commit.
+pub fn git_note_commit_iterator_new<'commit>(
+    notes_commit: GitCommitRef<'commit>,
+) -> Result<GitNoteIterator<'commit>, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: `raw` is writable and `notes_commit` remains live for the call;
+    // success transfers one complete iterator owner.
+    let status = unsafe {
+        ffi::git_note_commit_iterator_new(addr_of_mut!(raw), notes_commit.as_ptr().cast_mut())
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one complete owned iterator.
+    let inner = unsafe { CBox::<GitIterator>::from_raw(raw) }
+        .expect("successful note iterator construction returns non-null");
+    Ok(GitNoteIterator {
+        inner,
+        _repository: PhantomData,
+    })
+}
+
+/// Wraps: git_note_commit_read
+/// Reads an independently owned note from a notes commit.
+pub fn git_note_commit_read(
+    repo: GitRepositoryRef<'_>,
+    notes_commit: GitCommitRef<'_>,
+    oid: OidRef<'_>,
+) -> Result<GitNoteOwned, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: the output is writable and all input handles remain live for
+    // the call; success transfers one complete note allocation.
+    let status = unsafe {
+        ffi::git_note_commit_read(
+            addr_of_mut!(raw),
+            repo.as_ptr().cast_mut(),
+            notes_commit.as_ptr().cast_mut(),
+            oid.as_ptr(),
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns one complete owned note.
+    unsafe { GitNoteOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_note_commit_remove
+/// Removes a note and returns the newly created notes commit ID.
+pub fn git_note_commit_remove(
+    repo: GitRepositoryRef<'_>,
+    notes_commit: GitCommitRef<'_>,
+    author: GitSignatureRef<'_>,
+    committer: GitSignatureRef<'_>,
+    oid: OidRef<'_>,
+) -> Result<Oid, i32> {
+    let mut commit_id = Oid::zeroed();
+    // SAFETY: the output is writable and every borrowed handle remains live
+    // for the synchronous commit rewrite.
+    let status = unsafe {
+        ffi::git_note_commit_remove(
+            addr_of_mut!(commit_id).cast(),
+            repo.as_ptr().cast_mut(),
+            notes_commit.as_ptr().cast_mut(),
+            author.as_ptr(),
+            committer.as_ptr(),
+            oid.as_ptr(),
+        )
+    };
+    if status == 0 {
+        Ok(commit_id)
+    } else {
+        Err(status)
+    }
+}
+
+unsafe extern "C" fn note_foreach_trampoline<C: GitNoteForeachCallback>(
+    blob_id: *const ffi::git_oid,
+    annotated_id: *const ffi::git_oid,
+    payload: *mut core::ffi::c_void,
+) -> i32 {
+    if blob_id.is_null() || annotated_id.is_null() || payload.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: the wrapper installs the exact callback object for this
+    // synchronous traversal and C does not retain the payload.
+    let callback = unsafe { &mut *payload.cast::<C>() };
+    // SAFETY: libgit2 supplies complete non-null transient IDs.
+    let blob = unsafe { OidRef::from_ptr(blob_id.cast_mut()) }.expect("checked non-null");
+    // SAFETY: as above, for the annotated-object ID.
+    let annotated = unsafe { OidRef::from_ptr(annotated_id.cast_mut()) }.expect("checked non-null");
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        callback.call(blob, annotated)
+    }))
+    .unwrap_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_note_foreach
+/// Visits every note in the selected namespace.
+pub fn git_note_foreach<C: GitNoteForeachCallback>(
+    repo: GitRepositoryRef<'_>,
+    notes_ref: Option<&CStr>,
+    callback: &mut C,
+) -> Result<(), i32> {
+    // SAFETY: all inputs remain live for the synchronous traversal; the
+    // trampoline and payload have matching monomorphized types.
+    let status = unsafe {
+        ffi::git_note_foreach(
+            repo.as_ptr().cast_mut(),
+            notes_ref.map_or(core::ptr::null(), CStr::as_ptr),
+            Some(note_foreach_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
         )
     };
     if status == 0 { Ok(()) } else { Err(status) }

@@ -10,6 +10,7 @@ use crate::api::buffer::GitBufMut;
 use crate::api::proxy::GitProxyOptionsRef;
 use crate::api::remote::{
     GitFetchOptionsRef, GitPushOptionsRef, GitRemoteCallbacksMut, GitRemoteCallbacksRef,
+    GitRemoteCreateOptions, GitRemoteCreateOptionsRef,
 };
 use crate::ffi;
 use crate::indexer::IndexerProgressRef;
@@ -1740,4 +1741,58 @@ pub fn git_remote_set_instance_url(remote: &mut GitRemoteMut<'_>, url: &CStr) ->
     // string before returning and retains no borrowed pointer.
     let status = unsafe { ffi::git_remote_set_instance_url(remote.as_mut_ptr(), url.as_ptr()) };
     if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_remote_create_options_init
+/// Initializes remote-creation options for the requested ABI version.
+pub fn git_remote_create_options_init(
+    version: core::ffi::c_uint,
+) -> Result<CVal<GitRemoteCreateOptions>, i32> {
+    let mut options = GitRemoteCreateOptions::new();
+    let status = {
+        let mut output = options.as_mut();
+        // SAFETY: `output` is writable layout-compatible storage and C does
+        // not retain its address.
+        unsafe { ffi::git_remote_create_options_init(output.as_mut_ptr(), version) }
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_remote_create_with_opts
+/// Creates a remote and ties any repository stored in `options` to the
+/// returned handle's lifetime.
+pub fn git_remote_create_with_opts<'repo>(
+    url: &CStr,
+    options: GitRemoteCreateOptionsRef<'repo>,
+) -> Result<GitRemoteWithRepository<'repo>, i32> {
+    repository_remote_result(remote_create_with_opts_raw(url, Some(options)))
+}
+
+/// Wraps: git_remote_create_with_opts
+/// Creates the detached variant selected by a null options pointer.
+pub fn git_remote_create_with_default_options(url: &CStr) -> Result<GitRemoteOwned, i32> {
+    remote_create_with_opts_raw(url, None)
+}
+
+fn remote_create_with_opts_raw(
+    url: &CStr,
+    options: Option<GitRemoteCreateOptionsRef<'_>>,
+) -> Result<GitRemoteOwned, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: the output is writable, `url` is live, and `options` is null or
+    // live. Its stored borrowed values satisfy their accessor-setter contract.
+    let status = unsafe {
+        ffi::git_remote_create_with_opts(
+            core::ptr::addr_of_mut!(raw),
+            url.as_ptr(),
+            options.map_or(core::ptr::null(), |value| value.as_ptr()),
+        )
+    };
+    // SAFETY: `raw` is null or one complete transferred remote allocation.
+    let remote = unsafe { GitRemoteOwned::from_raw(raw) };
+    remote_result(status, remote)
 }

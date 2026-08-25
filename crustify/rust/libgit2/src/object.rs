@@ -7,9 +7,10 @@ use core::ptr::{NonNull, addr_of_mut};
 use ffibox::{CBox, CCloned, CVal};
 
 use crate::api::buffer::GitBuf;
+use crate::api::object::{GitObjectIdOptions, GitObjectIdOptionsRef};
 use crate::api::types::GitObjectType;
 use crate::ffi;
-use crate::oid::OidRef;
+use crate::oid::{Oid, OidRef};
 use crate::repository::GitRepositoryRef;
 
 ffibox::define_ctype!(
@@ -434,5 +435,63 @@ mod scheduled_object_tests {
             )
             .unwrap()
         );
+    }
+}
+
+/// Wraps: git_object_id_from_buffer
+/// Computes an object ID for raw object content.
+pub fn git_object_id_from_buffer(
+    data: &[u8],
+    options: Option<GitObjectIdOptionsRef<'_, '_>>,
+) -> Result<Oid, i32> {
+    let mut id = Oid::zeroed();
+    // SAFETY: `id` is writable, `data` is a readable run of exactly its
+    // reported length, and `options` remains live for the call.
+    let status = unsafe {
+        ffi::git_object_id_from_buffer(
+            addr_of_mut!(id).cast(),
+            data.as_ptr().cast(),
+            data.len(),
+            options.map_or(core::ptr::null(), |value| value.as_ptr()),
+        )
+    };
+    if status == 0 { Ok(id) } else { Err(status) }
+}
+
+/// Wraps: git_object_id_from_file
+/// Computes an object ID for the raw contents of a file.
+pub fn git_object_id_from_file(
+    path: &CStr,
+    options: Option<GitObjectIdOptionsRef<'_, '_>>,
+) -> Result<Oid, i32> {
+    let mut id = Oid::zeroed();
+    // SAFETY: `id` is writable and both borrowed inputs remain live for the
+    // synchronous operation; C retains neither pointer.
+    let status = unsafe {
+        ffi::git_object_id_from_file(
+            addr_of_mut!(id).cast(),
+            path.as_ptr(),
+            options.map_or(core::ptr::null(), |value| value.as_ptr()),
+        )
+    };
+    if status == 0 { Ok(id) } else { Err(status) }
+}
+
+/// Wraps: git_object_id_options_init
+/// Initializes object-ID options for the requested ABI version.
+pub fn git_object_id_options_init(
+    version: core::ffi::c_uint,
+) -> Result<CVal<GitObjectIdOptions<'static>>, i32> {
+    let mut options = GitObjectIdOptions::new();
+    let status = {
+        let mut output = options.as_mut();
+        // SAFETY: `output` is writable layout-compatible storage and C
+        // retains no pointer to it.
+        unsafe { ffi::git_object_id_options_init(output.as_mut_ptr(), version) }
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
     }
 }

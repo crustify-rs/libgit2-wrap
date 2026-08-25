@@ -7,7 +7,9 @@ use core::ptr::NonNull;
 
 use ffibox::{CBox, CCloned, CDropped, CVal};
 
-use crate::api::refs::{GitReferenceForeachNameCallback, GitReferenceFormatFlags};
+use crate::api::refs::{
+    GitReferenceForeachCallback, GitReferenceForeachNameCallback, GitReferenceFormatFlags,
+};
 use crate::api::types::{GitObjectType, GitReferenceType, InvalidGitReferenceType};
 use crate::ffi;
 use crate::object::{GitObjectOwned, GitObjectRef};
@@ -913,5 +915,46 @@ pub fn git_reference_owner<'a>(reference: GitReferenceRef<'a>) -> GitRepositoryR
 pub fn git_reference_remove(repository: &mut GitRepositoryMut<'_>, name: &CStr) -> Result<(), i32> {
     // SAFETY: both inputs are live for the call and neither is retained.
     let status = unsafe { ffi::git_reference_remove(repository.as_mut_ptr(), name.as_ptr()) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+unsafe extern "C" fn reference_foreach_trampoline<C: GitReferenceForeachCallback>(
+    reference: *mut ffi::git_reference,
+    payload: *mut c_void,
+) -> i32 {
+    if reference.is_null() || payload.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: libgit2 transfers one complete reference owner to the callback,
+    // which this wrapper adopts exactly once.
+    let reference =
+        unsafe { CBox::<GitReference>::from_raw(reference) }.expect("checked non-null reference");
+    let reference = adopt_reference(0, Some(reference)).expect("zero status adopts the owner");
+    // SAFETY: the wrapper installs this exact callback object for the
+    // synchronous traversal and C retains no payload pointer.
+    let callback = unsafe { &mut *payload.cast::<C>() };
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback.call(reference)))
+        .unwrap_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_reference_foreach
+/// Visits every reference, transferring each callback item into a scoped RAII
+/// owner that is released unless the callback consumes it.
+pub fn git_reference_foreach<C>(
+    repository: &mut GitRepositoryMut<'_>,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: GitReferenceForeachCallback,
+{
+    // SAFETY: the repository and callback remain live for the synchronous
+    // traversal; trampoline and payload use the same concrete callback type.
+    let status = unsafe {
+        ffi::git_reference_foreach(
+            repository.as_mut_ptr(),
+            Some(reference_foreach_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
     if status == 0 { Ok(()) } else { Err(status) }
 }
