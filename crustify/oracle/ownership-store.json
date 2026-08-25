@@ -1617,6 +1617,28 @@
    ]
   },
   {
+   "name": "git_email_create_options",
+   "defined_in": "include/git2/email.h",
+   "_comment_agent": "The public options record owns no pointer storage. subject_prefix is an optional immutable C string borrowed from the caller.",
+   "fields": [
+    {
+     "name": "subject_prefix",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated prefix; email formatting only reads it while consuming the options."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_error",
    "defined_in": "include/git2/errors.h",
    "_comment_agent": "git_error itself has no unconditional lifecycle contract: git_error_last returns libgit2-managed TLS/static storage, while internal git_error_save may allocate a separately freed snapshot. The message field therefore has runtime-conditional owned/borrowed string storage.",
@@ -3573,6 +3595,96 @@
       "nullable": true,
       "mutable": false,
       "note": "rebase_operation_alloc stores the const input pointer without copying; it is non-null only for EXEC operations and must remain valid with the operation/rebase. Non-EXEC operations carry NULL."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_rebase_options",
+   "defined_in": "include/git2/rebase.h",
+   "_comment_agent": "The options record borrows strings and callback state. rebase_alloc copies the header, duplicates rewrite_notes_ref, and invokes at most one callback with the shared payload.",
+   "fields": [
+    {
+     "name": "commit_create_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional function pointer copied into the rebase and invoked with payload; executable code has static lifetime."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque caller state is copied into the rebase and passed back to the selected callback, which may mutate it."
+     }
+    },
+    {
+     "name": "reserved",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Hard-deprecation builds reserve this slot and libgit2 never dereferences or owns it."
+     }
+    },
+    {
+     "name": "rewrite_notes_ref",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional caller-owned NUL-terminated ref name; rebase allocation duplicates it before retaining it."
+     }
+    },
+    {
+     "name": "signing_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "static"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional deprecated function pointer copied into the rebase and invoked with payload; executable code has static lifetime."
      }
     }
    ]
