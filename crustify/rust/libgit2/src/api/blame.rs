@@ -158,6 +158,49 @@ impl<'a> GitBlameHunkRef<'a> {
     }
 }
 
+ffibox::define_ctype!(
+    /// Wraps: git_blame_line
+    /// A layout-compatible borrowed view of one line in a blame result.
+    ///
+    /// Libgit2 owns both the line record and the length-delimited bytes. The
+    /// handle lifetime must therefore remain bounded by the enclosing blame
+    /// result that keeps its final blob alive.
+    GitBlameLine,
+    GitBlameLineRef,
+    GitBlameLineMut,
+    ffi::git_blame_line
+);
+
+impl<'a> GitBlameLineRef<'a> {
+    /// Field: git_blame_line.len
+    /// Returns the number of bytes in this line, excluding its newline.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        // SAFETY: this live shared handle permits a raw-place scalar read.
+        unsafe { addr_of!((*self.as_ptr()).len).read() }
+    }
+
+    /// Returns whether this line contains no bytes.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// Field: git_blame_line.ptr
+    /// Borrows the line's length-delimited bytes from the enclosing blame.
+    #[must_use]
+    pub fn bytes(&self) -> ffibox::CSlice<'a, u8> {
+        // SAFETY: this live shared handle permits reading the initialized
+        // pointer field without forming a reference to the line record.
+        let ptr = unsafe { addr_of!((*self.as_ptr()).ptr).read() };
+        let ptr = core::ptr::NonNull::new(ptr.cast_mut().cast::<u8>())
+            .expect("a valid git_blame_line has a non-null byte pointer");
+        // SAFETY: a valid line points to `len` initialized bytes in the final
+        // blob, which the handle's enclosing blame borrow keeps alive for `'a`.
+        unsafe { ffibox::CSlice::from_raw_parts(ptr, self.len()) }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
@@ -254,6 +297,39 @@ mod tests {
         assert!(hunk.orig_signature().is_none());
         assert!(hunk.orig_committer().is_none());
         assert!(!hunk.boundary());
+    }
+
+    #[test]
+    fn line_wrapper_preserves_layout_and_handle_shape() {
+        assert_eq!(size_of::<GitBlameLine>(), size_of::<ffi::git_blame_line>());
+        assert_eq!(
+            align_of::<GitBlameLine>(),
+            align_of::<ffi::git_blame_line>()
+        );
+        assert_eq!(
+            size_of::<GitBlameLineRef<'_>>(),
+            size_of::<*mut ffi::git_blame_line>()
+        );
+        assert_eq!(
+            size_of::<GitBlameLineMut<'_>>(),
+            size_of::<*mut ffi::git_blame_line>()
+        );
+    }
+
+    #[test]
+    fn line_exposes_length_delimited_bytes_without_a_rust_slice() {
+        let bytes = [0x61_u8, 0, 0xff];
+        let mut raw = ffi::git_blame_line {
+            ptr: bytes.as_ptr().cast(),
+            len: bytes.len(),
+        };
+
+        // SAFETY: `raw` and `bytes` remain live and are not mutated while the
+        // shared line handle and its dependent byte view are used.
+        let line = unsafe { GitBlameLineRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(line.len(), 3);
+        assert!(!line.is_empty());
+        assert_eq!(line.bytes().elems().collect::<Vec<_>>(), bytes);
     }
 }
 

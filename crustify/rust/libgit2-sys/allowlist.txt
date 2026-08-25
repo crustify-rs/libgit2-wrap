@@ -126,8 +126,13 @@
 ^git_config_new$
 ^git_blame$
 ^git_blame_hunk$
+^git_blame_line$
 ^git_blame_free$
 ^git_blame_flag_t$
+^git_blob_filter_flag_t$
+^git_buildinfo_t$
+^git_commit_graph$
+^git_commit_graph_free$
 ^git_buf$
 ^git_buf_dispose$
 ^git_cert$

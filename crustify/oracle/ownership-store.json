@@ -419,6 +419,30 @@
    ]
   },
   {
+   "name": "git_blame_line",
+   "defined_in": "include/git2/blame.h",
+   "_comment_agent": "index_blob_lines sets ptr into git_blame.final_buf (backed by final_blob) and len to the line byte count; git_blame_free releases the blob after clearing line records.",
+   "fields": [
+    {
+     "name": "ptr",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "other"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Points to len immutable bytes within the enclosing git_blame's final blob buffer. Each valid line has a non-null start pointer; the parent blame/final_blob, not the line value, keeps the bytes alive. Data is length-delimited and may be binary, not NUL-terminated."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_blame_options",
    "defined_in": "include/git2/blame.h",
    "_comment_agent": "All published fields are by-value scalars or embedded git_oid values; the options struct owns no pointer fields and has no lifecycle primitive.",
@@ -982,6 +1006,28 @@
       "nullable": true,
       "mutable": false,
       "note": "Optional lazily allocated summary string owned by the commit and released by git__free."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_graph",
+   "defined_in": "src/libgit2/commit_graph.h",
+   "_comment_agent": "git_commit_graph_new zero-initializes file, optionally opens it, get_file lazily installs it, refresh may free and clear it, and git_commit_graph_free always disposes the current file.",
+   "fields": [
+    {
+     "name": "file",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Optional lazily opened commit-graph file uniquely owned by the graph. git_commit_graph_refresh and git_commit_graph_free release it with git_commit_graph_file_free; git_commit_graph_get_file installs a newly opened mutable file."
      }
     }
    ]
@@ -10518,6 +10564,33 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes one outstanding commit/object reference; null is accepted, and the final decrement releases the allocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_commit_graph_free",
+   "defined_in": "src/libgit2/commit_graph.c",
+   "lifetime": {
+    "for": "cgraph",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "cgraph",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and releases one fully constructed git_commit_graph and its owned filename/file; NULL is explicitly accepted as a no-op."
      }
     }
    ]
