@@ -60,10 +60,38 @@ where
 /// Wraps: git_clone_options
 /// Layout-compatible clone options borrowing all nested strings, objects and
 /// callback state for `'data`.
+///
+/// `'data` is invariant. [`GitCloneOptionsMut::set_checkout_branch`] stores a
+/// `&'data` branch name in the C struct and
+/// [`GitCloneOptionsRef::checkout_branch`] hands it back out; the callback
+/// setters store a `&'data mut` receiver that every clone invocation
+/// dereferences; and the embedded checkout and fetch options reached through
+/// [`GitCloneOptionsMut::checkout_options_mut`] and
+/// [`GitCloneOptionsMut::fetch_options_mut`] inherit `'data` and store their
+/// own referents the same way. A covariant `'data` would let safe code shrink
+/// the parameter on the exclusive handle, install a shorter-lived branch name,
+/// proxy URL or callback receiver, and then read the released storage back
+/// through a handle still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::clone::GitCloneOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitCloneOptionsMut<'object, 'static>,
+/// ) -> GitCloneOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitCloneOptions<'data> {
     inner: CType<ffi::git_clone_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitCloneOptions`].
@@ -605,5 +633,27 @@ mod tests {
         // SAFETY: callback handles have expired and this recovers the exact
         // allocation returned by `Box::into_raw`.
         drop(unsafe { Box::from_raw(repository.cast::<MaybeUninit<ffi::git_repository>>()) });
+    }
+
+    /// The pinned `'data` still accepts referents that merely outlive the
+    /// options, so invariance does not force `'static` on callers.
+    #[test]
+    fn pinned_options_accept_scoped_referents() {
+        let branch = std::ffi::CString::new("topic").unwrap();
+        let url = std::ffi::CString::new("http://scoped.invalid/").unwrap();
+        let mut options = GitCloneOptions::new();
+        {
+            let mut view = options.as_mut();
+            view.set_checkout_branch(Some(&branch));
+            view.fetch_options_mut()
+                .proxy_options_mut()
+                .set_url(Some(&url));
+        }
+        let view = options.as_ref();
+        assert_eq!(view.checkout_branch(), Some(branch.as_c_str()));
+        assert_eq!(
+            view.fetch_options().proxy_options().url(),
+            Some(url.as_c_str())
+        );
     }
 }
