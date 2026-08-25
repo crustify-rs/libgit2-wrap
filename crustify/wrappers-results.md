@@ -87,8 +87,11 @@ in Notes.
 - **C LoC** — `171,084`
 - **ported types** — `0`
 - **ported symbols** — `0`
-- **wrapped types** — `170`
-- **wrapped symbols** — `638` (`605` functions + `33` callbacks)
+- **wrapped types** — `170` (`64.6`% of libgit2's `260` published API types)
+- **wrapped symbols** — `638` (`605` functions + `33` callbacks; `63.4`% of the
+  `1,057` published API functions and callbacks)
+- **remaining types** — `92` published API types carry no anchor
+- **remaining symbols** — `387` carry none (`359` functions + `28` callbacks)
 
 Implementation `openai/gpt-5.6-sol` via `codex`; review `anthropic/claude-opus-5`
 via `claude`. Each row names the model that produced it.
@@ -408,6 +411,45 @@ Deterministic `crustify-audit unsafe`; no model.
 | `void_ptr_smell` | `0` | `0` | `0` | `*c_void` elsewhere; `void_ptr_sites` names each one |
 
 ## Notes
+
+### What the coverage percentages measure
+
+The Overview's unit counts and its coverage percentages are taken on different
+bases, and they do not reconcile line for line.
+
+`wrapped types` / `wrapped symbols` count SCHEDULED UNITS — what agents were
+given worklists for. The percentages count ANCHORS against
+`query {types,symbols} --api-only`, the surface `include/` publishes. The two
+differ in both directions. Two scheduled types, `git_cached_obj` and
+`git_refcount`, are internal and not published at all, so they raise the unit
+count without touching the denominator. In the other direction `637` published
+functions carry an anchor against `605` scheduled function units, because a
+type batch anchors the lifecycle primitives and accessors that belong to its
+type without those being units of their own.
+
+Macros are excluded from the denominator entirely. `conventions.md` puts their
+whole surface in the `-sys` crate — a generated `pub const` or a
+`crustify_<NAME>` shim — and no `.rs` anchor is ever laid for one, so counting
+libgit2's `157` published macros as unwrapped would measure a decision rather
+than a gap.
+
+### What the remaining `479` are
+
+`477` of them were never scheduled: the campaign's declared coverage was the
+surface reached by the industry safe wrapper crate, not the whole API. Measured
+against that target the campaign is `790` of `792` — and the two it appears to
+miss, `git_oidarray_free` and `git_strarray_free`, are deprecated aliases whose
+types are wrapped through the current spelling, `git_oidarray_dispose` and
+`git_strarray_dispose`, both bound with `ffibox::impl_cvalued!`. Against its own
+scope the campaign is complete.
+
+The unscheduled remainder is not uniform. `149` sit in `include/git2/sys/*`,
+the backend-authoring interfaces a consumer never calls — custom ODB, refdb,
+transport, filter and stream implementations. `42` are deprecated spellings.
+The other `286` are mainstream API that git2-rs simply does not bind, densest in
+`index.h` (`19`), `oid.h` (`17`), and `commit.h`, `filter.h` and `repository.h`
+(`12` each). That `286` is the natural next scope; the `sys/` and deprecated
+sets are deliberate exclusions rather than backlog.
 
 ### Review is a sub-campaign, not a column
 
