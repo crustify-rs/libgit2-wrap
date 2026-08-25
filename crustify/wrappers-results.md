@@ -13,9 +13,9 @@
 - **`--max-types`** — `2`
 - **`--max-syms`** — `50`
 - **`--max-loc`** — `1000`
-- **`--min-fields`** — `10`
-- **`--parallel-max`** — `8` (`4` then `2` for the two remediation waves)
-- **branch** — `crustify/src-gpt-5.6-sol`, tip `c5e2ec28d`
+- **`--min-fields`** — `10` first half, `20` second half (the oracle default moved)
+- **`--parallel-max`** — `8` first half (`4` then `2` for its remediations), `16` second half
+- **branch** — `crustify/src-gpt-5.6-sol`, tip `767afe807`
 - **deps** — crustify-cli `51d44d1` (`docs/results-template-ub`), ffibox `600399f` (`main`)
 
 ## Review pass
@@ -30,8 +30,8 @@
 - **`--max-loc`** — `3000`
 - **`--min-fields`** — `30`
 - **`--parallel-max`** — `16`
-- **branch** — `crustify/src-gpt-5.6-sol`, tip `c5e2ec28d`
-- **agents** — `23`, over `2` session(s)
+- **branch** — `crustify/src-gpt-5.6-sol`, tip `767afe807`
+- **agents** — `25`, over `4` session(s); first half only
 
 `rv`-prefixed columns below carry the review pass; the unprefixed ones remain
 the campaign's.
@@ -83,12 +83,12 @@ in Notes.
 
 ## Overview
 
-- **Rust LoC** — `7,423`
+- **Rust LoC** — `18,452`
 - **C LoC** — `171,084`
 - **ported types** — `0`
 - **ported symbols** — `0`
-- **wrapped types** — `115`
-- **wrapped symbols** — `288` (`276` functions + `12` callbacks)
+- **wrapped types** — `170`
+- **wrapped symbols** — `638` (`605` functions + `33` callbacks)
 
 Implementation `openai/gpt-5.6-sol` via `codex`; review `anthropic/claude-opus-5`
 via `claude`. Each row names the model that produced it.
@@ -97,10 +97,11 @@ via `claude`. Each row names the model that produced it.
 |---|---|---:|---:|---|---:|---:|---:|---|---:|
 | `2-raw-lifetime` | raw lifetime | `0` | `3` | `16m37s` | `$9.85` (`gpt-5.6-sol`) | — | `$3.28` | — | — |
 | `2-raw-lifetime-review` | review | `0` | `3` | `14m32s` | `$7.54` (`gpt-5.6-sol`) | — | `$2.51` | — | — |
-| `6-first-half` | wrap | `115` | `288` | `3h19m28s` | `$365.66` (`gpt-5.6-sol`) | `$2.71` | `$0.19` | — | — |
-| `3-review-first-half` | review | `115` | `288` | `1h15m16s` | `$254.37` (`claude-opus-5`) | `$1.89` | `$0.13` | — | — |
+| `5-first-half` | wrap | `115` | `288` | `3h14m00s` | `$362.45` (`gpt-5.6-sol`) | `$2.68` | `$0.19` | — | — |
+| `4-review-first-half` | review | `115` | `288` | `1h20m44s` | `$257.58` (`claude-opus-5`) | `$1.91` | `$0.13` | — | — |
+| `4-second-half` | wrap | `55` | `350` | `3h16m09s` | `$303.91` (`gpt-5.6-sol`) | `$3.40` | `$0.33` | — | — |
 | orchestrator | orchestration | `—` | `—` | — | `not metered`+ (`claude-opus-5`) | — | — | — | — |
-| **Σ recorded agents** | | **`115`** | **`288`** | **`5h05m53s`** | **`$637.43`** | **`$4.59`** | **`$0.32`** | | **—** |
+| **Σ recorded agents** | | **`170`** | **`638`** | **`8h22m02s`** | **`$941.34`** | **`$4.21`** | **`$0.35`** | | **—** |
 
 ## Raw lifetime discovery
 
@@ -228,8 +229,44 @@ Not run; the raw lifetime tiers were judged in-model only.
 | `1` | `0` | `1` | `$3.89` | `5m02s` | `$3.89` | `—` |
 | `1` | `0` | `1` | `$4.12` | `7m55s` | `$4.12` | `—` |
 | `1` | `0` | `1` | `$3.47` | `7m22s` | `$3.47` | `—` |
-| `1` | `2` | `0` | `$3.21` | `5m28s` | `$3.21` | `$1.61` |
-| **Σ `140`** | **`203`** | **`57`** | **`$311.48`** | — | **`$2.22`** | **`$1.53`** |
+| `2` | `0` | `0` | `$3.95` | `11m46s` | `$1.97` | `—` |
+| `2` | `0` | `0` | `$3.29` | `6m41s` | `$1.64` | `—` |
+| `2` | `0` | `0` | `$3.96` | `7m26s` | `$1.98` | `—` |
+| `2` | `0` | `0` | `$3.58` | `6m01s` | `$1.79` | `—` |
+| `2` | `0` | `0` | `$4.39` | `7m57s` | `$2.19` | `—` |
+| `2` | `0` | `0` | `$2.55` | `4m28s` | `$1.27` | `—` |
+| `2` | `4` | `0` | `$4.84` | `10m12s` | `$2.42` | `$1.21` |
+| `2` | `0` | `0` | `$4.65` | `9m00s` | `$2.33` | `—` |
+| `2` | `4` | `0` | `$3.49` | `6m44s` | `$1.74` | `$0.87` |
+| `2` | `5` | `0` | `$4.75` | `10m06s` | `$2.38` | `$0.95` |
+| `2` | `20` | `0` | `$5.21` | `9m11s` | `$2.60` | `$0.26` |
+| `2` | `5` | `0` | `$3.89` | `7m37s` | `$1.95` | `$0.78` |
+| `2` | `9` | `0` | `$3.11` | `7m35s` | `$1.56` | `$0.35` |
+| `2` | `13` | `0` | `$5.94` | `13m50s` | `$2.97` | `$0.46` |
+| `2` | `12` | `0` | `$5.11` | `11m33s` | `$2.56` | `$0.43` |
+| `2` | `16` | `0` | `$9.38` | `22m00s` | `$4.69` | `$0.59` |
+| `2` | `11` | `0` | `$5.34` | `10m26s` | `$2.67` | `$0.49` |
+| `1` | `20` | `0` | `$6.70` | `14m19s` | `$6.70` | `$0.34` |
+| `2` | `12` | `0` | `$7.10` | `12m02s` | `$3.55` | `$0.59` |
+| `2` | `23` | `0` | `$8.97` | `15m50s` | `$4.48` | `$0.39` |
+| `2` | `9` | `0` | `$9.43` | `13m08s` | `$4.71` | `$1.05` |
+| `1` | `14` | `0` | `$4.61` | `8m58s` | `$4.61` | `$0.33` |
+| `2` | `9` | `0` | `$6.16` | `13m41s` | `$3.08` | `$0.68` |
+| `2` | `17` | `0` | `$6.90` | `11m39s` | `$3.45` | `$0.41` |
+| `2` | `22` | `0` | `$10.12` | `16m00s` | `$5.06` | `$0.46` |
+| `2` | `10` | `0` | `$4.49` | `8m29s` | `$2.25` | `$0.45` |
+| `2` | `16` | `0` | `$5.56` | `9m46s` | `$2.78` | `$0.35` |
+| `1` | `3` | `0` | `$3.71` | `6m53s` | `$3.71` | `$1.24` |
+| `2` | `14` | `0` | `$6.94` | `12m40s` | `$3.47` | `$0.50` |
+| `1` | `3` | `0` | `$2.45` | `4m30s` | `$2.45` | `$0.82` |
+| `2` | `0` | `2` | `$4.56` | `8m10s` | `$2.28` | `—` |
+| `1` | `0` | `1` | `$3.02` | `5m49s` | `$3.02` | `—` |
+| `2` | `5` | `2` | `$4.13` | `6m22s` | `$2.07` | `$0.83` |
+| `2` | `21` | `0` | `$5.90` | `8m47s` | `$2.95` | `$0.28` |
+| `1` | `4` | `0` | `$2.28` | `4m56s` | `$2.28` | `$0.57` |
+| `1` | `0` | `2` | `$2.87` | `4m22s` | `$2.87` | `—` |
+| `1` | `14` | `0` | `$3.48` | `5m33s` | `$3.48` | `$0.25` |
+| **Σ `205`** | **`516`** | **`64`** | **`$495.08`** | — | **`$2.42`** | **`$0.96`** |
 
 ### Batches — types, port
 
@@ -266,14 +303,17 @@ No port wave ran; this is a `wrap` campaign.
 | `5` | `+169/-20` | `$10.43` | `16m22s` | `$2.09` |
 | `4` | `+103/-19` | `$8.14` | `12m23s` | `$2.04` |
 | `2` | `+195/-9` | `$7.04` | `12m44s` | `$3.52` |
-| **Σ `119`** | **`+2382/-363`** | **`$216.91`** | — | **`$1.82`** |
+| `1` | `+5/-4` | `$3.21` | `5m28s` | `$3.21` |
+| **Σ `120`** | **`+2387/-367`** | **`$220.12`** | — | **`$1.83`** |
 
 ### Batches — symbols
 
-`openai/gpt-5.6-sol` via `codex` for `wrap`. One row per batch, in execution order.
+`openai/gpt-5.6-sol` via `codex`. One row per batch, in execution order.
 
 | objective | symbols | loc | $ | wall | $/symbol | $/loc |
 |---|---|---|---|---|---|---|
+| raw lifetime | `1` | `100` | `$5.56` | `9m30s` | `$5.56` | `$0.06` |
+| raw lifetime | `1` | `59` | `$4.29` | `7m07s` | `$4.29` | `$0.07` |
 | wrap | `20` | `811` | `$7.58` | `16m07s` | `$0.38` | `$0.01` |
 | wrap | `50` | `938` | `$7.52` | `16m49s` | `$0.15` | `$0.01` |
 | wrap | `41` | `807` | `$12.63` | `24m47s` | `$0.31` | `$0.02` |
@@ -281,7 +321,20 @@ No port wave ran; this is a `wrap` campaign.
 | wrap | `50` | `915` | `$7.06` | `14m54s` | `$0.14` | `$0.01` |
 | wrap | `50` | `497` | `$6.84` | `14m36s` | `$0.14` | `$0.01` |
 | wrap | `22` | `715` | `$6.14` | `11m04s` | `$0.28` | `$0.01` |
-| **Σ** | **`283`** | **`5,564`** | **`$54.18`** | | **`$0.19`** | **`$0.01`** |
+| wrap | `1` | `392` | `$5.38` | `13m02s` | `$5.38` | `$0.01` |
+| wrap | `50` | `787` | `$9.72` | `22m12s` | `$0.19` | `$0.01` |
+| wrap | `46` | `936` | `$9.05` | `16m57s` | `$0.20` | `$0.01` |
+| wrap | `50` | `687` | `$8.11` | `16m29s` | `$0.16` | `$0.01` |
+| wrap | `46` | `894` | `$10.94` | `20m04s` | `$0.24` | `$0.01` |
+| wrap | `50` | `1476` | `$12.88` | `31m52s` | `$0.26` | `$0.01` |
+| wrap | `14` | `1202` | `$8.18` | `15m10s` | `$0.58` | `$0.01` |
+| wrap | `28` | `670` | `$11.51` | `25m37s` | `$0.41` | `$0.02` |
+| wrap | `25` | `655` | `$10.39` | `22m21s` | `$0.42` | `$0.02` |
+| wrap | `11` | `819` | `$11.58` | `19m30s` | `$1.05` | `$0.01` |
+| wrap | `22` | `723` | `$7.25` | `13m02s` | `$0.33` | `$0.01` |
+| wrap | `3` | `125` | `$5.49` | `9m07s` | `$1.83` | `$0.04` |
+| wrap | `4` | `184` | `$6.63` | `12m22s` | `$1.66` | `$0.04` |
+| **Σ** | **`636`** | **`15,273`** | **`$181.14`** | | **`$0.28`** | **`$0.01`** |
 
 ### Batches — review symbols
 
@@ -289,11 +342,13 @@ No port wave ran; this is a `wrap` campaign.
 
 | symbols | rv loc | rv $ | rv wall | rv $/symbol |
 |---|---|---|---|---|
+| `1` | `+11/-5` | `$3.69` | `7m01s` | `$3.69` |
+| `1` | `+7/-1` | `$3.85` | `7m31s` | `$3.85` |
 | `20` | `+83/-27` | `$7.02` | `11m03s` | `$0.35` |
 | `150` | — | — | `3m35s` | — |
 | `90` | `+39/-1` | `$10.63` | `13m35s` | `$0.12` |
 | `150` | `+170/-25` | `$19.81` | `19m43s` | `$0.13` |
-| **Σ `410`** | **`+292/-53`** | **`$37.46`** | — | **`$0.09`** |
+| **Σ `413`** | **`+310/-59`** | **`$45.00`** | — | **`$0.11`** |
 
 ## Safety audit
 
@@ -358,94 +413,137 @@ Deterministic `crustify-audit unsafe`; no model.
 
 The oracle re-batches whatever it judges under the review pass's own budgets, so
 review rows never line up with the wave underneath them. The first half was
-emitted by `97` implementation agents under `--max-types 2`; the same units were
-judged by `24` review agents under `--max-types 15 --max-syms 150`. That is why
-`Batches — review types` and `Batches — review symbols` are their own tables
-rather than `rv` columns on the wrap tables, and why no row-for-row mapping
-between them exists.
+emitted by `96` implementation agents under `--max-types 2`; the same units were
+judged by `25` review agents under `--max-types 15 --max-syms 150`. That is why
+the review batches are their own tables rather than `rv` columns on the wrap
+tables, and why no row-for-row mapping between them exists.
 
-### What the review schedule dropped
+### The second half was never reviewed
 
-The review wave was seeded with the exact `403` landed first-half units. `28` of
-them are lifecycle primitives — `git_annotated_commit_free`, `git_buf_dispose`,
-`git_config_free` and the like — which the oracle drops from a schedule because
-it emits them through their owning type rather than as standalone units. Their
-Rust is still judged, inside the owning type's batch, but they carry no row of
-their own. A further `2`, `git_cached_obj` and `git_refcount`, are internal types
-that `--api-headers-only` does not publish, so they had no match in the API view
-and were judged by a separate implementation-anchored wave. Total judged: `373`
-in the main pass, `2` in the internal pass, `28` folded into their owners.
+The review pass covers the first half only. `Batches — review types` and
+`Batches — review symbols` therefore describe `403` of the campaign's `808`
+units, and the `Safety audit` snapshots below bracket the review, not the
+campaign. The second half's own review needs separate approval and has not run.
 
-### The 529 retry
+### Campaign-end audit
 
-Two of the main review pass's `21` batches died on `API Error: 529 Overloaded`
-on their first turn, having done no work: the `4`-type `git_credential` batch and
-a `150`-symbol batch. They were rerun verbatim as `review-first-half-retry` and
-both landed clean. Because the rerun re-judged units the main pass had already
-counted, the review batch tables sum to more units than the campaign contains —
-`119` type-batch units and `410` symbol-batch units over `115` distinct types and
-`288` distinct symbols. The Overview divides by the distinct counts.
+The `Safety audit` table brackets the review pass, so its "after" column is the
+tree at `d71102b84` — before the second half existed. The campaign's final tree
+at `767afe807` measures:
 
-### Reruns inflate the wrap batch tables too
+| metric | after review (`d71102b84`) | campaign end (`767afe807`) |
+|---|---|---|
+| `code_lines` | `7,423` | `18,452` |
+| unsafe loc | `2,164` | `4,938` |
+| % of loc | `29.15`% | `26.76`% |
+| `unsafe_blocks` | `1,303` | `2,758` |
+| `unsafe_fns` / seam | `498` / `398` | `799` / `633` |
+| `ffi_calls` | `366` | `705` |
+| `wrapper_newtypes` / declared | `79` / `79` | `119` / `119` |
+| raw-ptr positions / seam | `565` / `557` | `945` / `930` |
+| **non-seam remainder** | **`8`** | **`15`** |
 
-`first-half-retry-1` rescheduled `377` of the original `403` units after the
-first parallel session hit a shared-session ref race at `11` landed batches. No
-forward work was discarded, but the same unit appears in two batches, so
-`Batches — types, wrap` sums to `140` type-batch units against `115` distinct
-types. Per-batch rows are what the agents were actually paid for; the Overview is
-what the campaign actually contains.
+The tree grew `2.5x` while unsafe density FELL, from
+`29.15`% to `26.76`%.
+
+### Seven of eight categorical targets end at zero
+
+`wrapper_declared_nonconformant`, `wrapper_newtypes_undeclared`,
+`raw_ptr_wrapped`, `ref_to_type_wrapper`, `field_ref_wrapped`,
+`field_proj_outside_impl` and `void_ptr_smell` all read `0` at `767afe807`.
+`raw_ptr_in_wrapper` reads `1`.
+
+The second half's first merged scan was much worse — `raw_ptr_wrapped` `8`,
+`raw_ptr_in_wrapper` `4`, `void_ptr_smell` `4`, non-seam remainder `27`. Every
+site was one of two shapes. The inbound `*_result` helpers took a raw pointer C
+had just returned and built an owned wrapper from it; the outbound helpers took
+`Option<Wrapper>` and produced the raw pointer an FFI argument needed. Two
+translator remediation waves (`7` batches, `38m`) confined both: the first
+cleared the inbound helpers and the two void-pointer cases, the second moved the
+outbound marshalling to the call site.
+
+The residual `raw_ptr_in_wrapper: 1` was left deliberately. `raw_ptr_wrapped` is
+`0`, so its pointee is not a wrapped C type — the README calls the wrapped-pointee
+count "the actionable defect". More practically, `crustify-audit` publishes no
+site list for `raw_ptr_in_wrapper`: `raw_ptr_sites` carries only the
+wrapped-pointee subset and is empty, so the tool reports the count without
+saying where. A third speculative wave against an unlocatable position was not
+worth its cost.
+
+### One second-half unit landed unanchored
+
+`git_diff_binary` was scheduled, and its agent emitted a `297`-line wrapper and
+reported landing `c2b1f77e3`. Two step-2 agents wrote to `api/diff.rs`, and
+forward-only landing kept the one that wrapped `git_diff_delta`; the other's
+commit never reached the branch. Cherry-picking it conflicted in exactly that
+region, so it was rerun as its own one-unit wave and landed clean.
+
+The TODO-anchor count did not catch this. It read `0` both before and after,
+because the scheduler's TODO was consumed even though no filled anchor replaced
+it. What caught it was verifying every unit name in the wave document against
+the anchors in the tree, which is now the completion check rather than the TODO
+count.
+
+### Five first-half units carry no anchor of their own
+
+`git_annotated_commit_free`, `git_blame_free`, `git_branch_iterator_free`,
+`git_buf_dispose` and `git_config_free` are lifecycle primitives realized as
+`ffibox` bindings — `impl_cvalued!` or a `CDropped` impl on the owning type,
+each with its own SAFETY justification — rather than as standalone `Wraps:`
+anchors. Verified individually. Campaign coverage is `808` of `808`.
+
+### Reruns inflate the batch tables
+
+Per-batch rows count what agents were paid for, which exceeds the campaign's
+distinct units. `first-half-retry-1` rescheduled `377` of the original `403`
+after a shared-session ref race at `11` landed batches, and the review retry
+re-judged `154` units after two `529` failures. The Overview divides by distinct
+units; the batch tables do not.
 
 ### Where `loc` is missing
 
 `loc` is the `.rs` insertion count of a batch's landing commit, recovered by
 matching each commit to the agent whose run window contains its author
-timestamp. `105` of `125` agents resolved that way. The rest read `—`: their
-commits could not be attributed unambiguously, mostly in the two sessions where
-per-agent branches were pruned after their commits chained onto the shared
-session ref. No number was inferred for them, and the Σ rows sum only what
-resolved, so a Σ `loc` understates the true total.
+timestamp — agent branches are unreliable, since they are pruned once their
+commits chain onto the session ref and same-stem batches collide on name.
+`154` of `175` agents resolved. The rest read `—`; no number was inferred, so
+Σ `loc` understates.
 
-### The review moved the tree, then the audit moved it back
+### Gates the agents broke, twice
 
-The review pass grew the tree — `code_lines` `7304` → `7422`, `unsafe_blocks`
-`1286` → `1303`, and `43` new tests — while holding unsafe density flat at
-`29.2`%. It also broke three gates that the first-half checkpoint had passed:
-`cargo fmt --check` on three files, and `18` clippy errors under `-D warnings`
-(`15` × `items_after_test_module` where agents appended items below `mod tests`,
-`3` × `drop_non_drop`). Those were mechanical and fixed at landing.
-
-More consequential: the final internal-types batch pushed two categorical targets
-off zero — `raw_ptr_in_wrapper` `0` → `1` and `void_ptr_smell` `0` → `1`, both
-the same private helper `GitRefcountRef::owner_ptr` returning `*mut c_void` from
-inside a wrapper impl. `git_refcount` was rescheduled as a one-unit `wrap`
-remediation wave under the implementation model, which contained the pointer
-behind the seam. All eight categorical targets read `0` in the after column.
+Both the review pass and the second half landed code that failed the gates the
+previous checkpoint had passed, in the same two ways: `items_after_test_module`
+(`15` after the review, `13` after the second half) where agents appended items
+below `mod tests`, and a SAFETY comment attached to an `assert_eq!` whose
+argument held the `unsafe` block, which clippy cannot see. The second half also
+shipped a `revwalk` test opening `"../.."`, which resolves to `crustify/` rather
+than the repository root and returned `GIT_ENOTFOUND` outside an agent worktree.
+All were fixed at landing. Agents validate inside their own worktree, where the
+relative path and the pre-move file layout both happen to work.
 
 ### The internal review changed C
 
 Judging `git_refcount` required callable entry points for `GIT_REFCOUNT_VAL`,
 `GIT_REFCOUNT_OWNER` and `GIT_REFCOUNT_OWN`, which are macros with no symbol to
-bind. The agent added three `crustify_`-prefixed shims to `src/util/util.c` and
-its header. This is the only C change in the campaign, and it is why the C
-sanitizer suite was rerun for a review wave: it holds at `3` of `3` retained
-CTest targets, matching `build.json`'s recorded baseline.
+bind, so the agent added three `crustify_`-prefixed shims to `src/util/util.c`
+and its header. This is the campaign's only C change. The retained sanitizer
+suite holds at `3` of `3`, matching `build.json`'s baseline.
 
-It also exposed a build-tree split worth recording. `libgit2-sys/build.rs`
-link-searches `build-crustify`, the ASan/UBSan build, while the Rust test
-binaries must *run* against `build-rust`, the unsanitized one — running them
-against `build-crustify` fails with `ASan runtime does not come first`. A C
-change is therefore only visible to the Rust suite once *both* trees are
-rebuilt.
+It also exposed a build-tree split: `libgit2-sys/build.rs` link-searches
+`build-crustify`, the ASan/UBSan build, while the Rust test binaries must RUN
+against `build-rust`, the unsanitized one — running them against
+`build-crustify` fails with `ASan runtime does not come first`. A C change is
+visible to the Rust suite only once both trees are rebuilt.
 
 ### Cost is not comparable across the two models
 
-The implementation waves ran `openai/gpt-5.6-sol` on `api` billing; the review
-pass ran `anthropic/claude-opus-5` on `subscription`. Every figure here is
-computed from per-request token counts against public rates, never from
-provider-reported dollars, so the review's `$254.37` is an API-equivalent
-comparison value rather than an amount anyone was charged. The orchestrator's own
-supervision is unmetered — it does not write `usage.json` — so the Σ row covers
-recorded agents only and understates the campaign's true total.
+Implementation waves ran `openai/gpt-5.6-sol` on `api` billing; the review pass
+ran `anthropic/claude-opus-5` on `subscription`. Every figure is computed from
+per-request token counts against public rates, never from provider-reported
+dollars, so the review's `$257.58` is an API-equivalent comparison value rather
+than an amount anyone was charged. The orchestrator's own supervision is
+unmetered — it writes no `usage.json` — so the Σ row covers recorded agents only
+and understates the campaign total.
 
 ### `crustify-log-cost` could not read this campaign
 
@@ -454,15 +552,18 @@ cost reader globbed `crustify/targets/<target>/logs/`, so it matched nothing and
 exited on every campaign. Every figure in this report depends on that reader.
 Fixed on crustify-cli branch `fix/log-cost-campaigns-dir` at `0b85e55`.
 
-### Second half not started
+### A placement key that never matched its file
 
-The campaign covers the first `403` units of the industry-surface closure. The
-held remainder is scheduled at `crustify/campaigns/src/second-half.json` — `405`
-units in `42` batches across `8` DAG layers — and has not been homed,
-translated, reviewed or audited. Nothing in this report anticipates it.
+`crates.json` keyed the packbuilder home as `src/pack-objects.rs`, mirroring the
+C translation unit, while the Rust file has always been `pack_objects.rs`.
+`crates validate` accepted it, because it checks placement consistency rather
+than the filesystem. The inconsistency only surfaced when second-half scaffolding
+turned that key into `pub mod pack-objects;` — not a legal Rust module name.
+Corrected while homing the second half.
 
 ### The UB pass has not run
 
 `crustify-audit ub` requires its own explicit approval, which has not been given.
 `crustify/audit/advisories/` does not exist, and every `ub` column reads `—` for
 that reason rather than because a run found nothing.
+
