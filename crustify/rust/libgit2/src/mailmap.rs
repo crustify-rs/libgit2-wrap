@@ -7,6 +7,7 @@ use core::ffi::CStr;
 
 use ffibox::CBox;
 
+use crate::api::types::{GitSignatureOwned, GitSignatureRef};
 use crate::ffi;
 use crate::repository::GitRepositoryRef;
 
@@ -243,4 +244,23 @@ mod wrapper_tests {
             );
         });
     }
+}
+
+/// Wraps: git_mailmap_resolve_signature
+/// Resolves a signature into a new independently owned signature.
+pub fn git_mailmap_resolve_signature(
+    mailmap: GitMailmapRef<'_>,
+    signature: GitSignatureRef<'_>,
+) -> Result<GitSignatureOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and both shared handles remain live while C
+    // reads them and allocates an independent signature copy.
+    let status = unsafe {
+        ffi::git_mailmap_resolve_signature(&mut out, mailmap.as_ptr(), signature.as_ptr())
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one complete signature allocation.
+    unsafe { GitSignatureOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
 }

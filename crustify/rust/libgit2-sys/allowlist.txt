@@ -324,6 +324,14 @@
 ^git_revwalk_(hide|hide_glob|hide_head|hide_ref|new|next|push|push_glob|push_head|push_range|push_ref|reset|simplify_first_parent|sorting)$
 ^git_stash_drop$
 ^git_status_(file|list_entrycount|should_ignore)$
+^git_index_(conflict_next|conflict_remove|entrycount|find_prefix|get_byindex|get_bypath|has_conflicts|new|open|path|read|read_tree|remove|remove_all|remove_bypath|remove_directory|set_version|update_all|version|write|write_tree|write_tree_to)$
+^git_mailmap_resolve_signature$
+^git_merge_(bases|bases_many|file|file_from_index|file_options_init)$
+^GIT_MERGE_FILE_OPTIONS_VERSION$
+^git_message_trailers$
+^git_note_(author|committer|create|remove)$
+^git_odb_(add_disk_alternate|exists|exists_ext|exists_prefix|foreach|new|open_rstream|open_wstream|read_header|refresh|stream_finalize_write|stream_read|stream_write)$
+^git_odb_lookup_flags_t$
 ^git_submodule_(add_finalize|add_setup|add_to_index|branch|head_id|ignore|index_id|init|lookup|name|open|path|reload|repo_init|set_branch|set_ignore)$
 ^git_stash_save_options$
 ^GIT_STASH_SAVE_OPTIONS_VERSION$

@@ -7,6 +7,7 @@ use core::ptr::addr_of_mut;
 use ffibox::{CBox, CVal};
 
 use crate::api::buffer::GitBuf;
+use crate::api::types::GitSignatureRef;
 use crate::ffi;
 use crate::iterator::{GitIterator, GitIteratorMut};
 use crate::oid::{Oid, OidRef};
@@ -163,6 +164,7 @@ pub fn git_note_read(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use core::mem::{align_of, size_of};
     use core::ptr;
@@ -198,4 +200,76 @@ mod tests {
             assert!(GitNoteOwned::from_raw(ptr::null_mut()).is_none());
         }
     }
+}
+
+/// Wraps: git_note_author
+/// Borrows the note author's signature.
+pub fn git_note_author<'a>(note: GitNoteRef<'a>) -> GitSignatureRef<'a> {
+    // SAFETY: a live note owns a complete non-null author signature for its
+    // lifetime.
+    let signature = unsafe { ffi::git_note_author(note.as_ptr()) };
+    // SAFETY: the returned signature is note-owned and bounded by `'a`.
+    unsafe { GitSignatureRef::from_ptr(signature.cast_mut()) }.expect("a live note has an author")
+}
+
+/// Wraps: git_note_committer
+/// Borrows the note committer's signature.
+pub fn git_note_committer<'a>(note: GitNoteRef<'a>) -> GitSignatureRef<'a> {
+    // SAFETY: a live note owns a complete non-null committer signature for its
+    // lifetime.
+    let signature = unsafe { ffi::git_note_committer(note.as_ptr()) };
+    // SAFETY: the returned signature is note-owned and bounded by `'a`.
+    unsafe { GitSignatureRef::from_ptr(signature.cast_mut()) }.expect("a live note has a committer")
+}
+
+/// Wraps: git_note_create
+/// Creates or replaces a note and returns the new notes commit ID.
+pub fn git_note_create(
+    repo: GitRepositoryRef<'_>,
+    notes_ref: Option<&CStr>,
+    author: GitSignatureRef<'_>,
+    committer: GitSignatureRef<'_>,
+    oid: OidRef<'_>,
+    note: &CStr,
+    force: bool,
+) -> Result<Oid, i32> {
+    let mut out = Oid::zeroed();
+    // SAFETY: `out` is writable and all optional/non-null borrowed arguments
+    // remain live for this synchronous operation; C copies the note text.
+    let status = unsafe {
+        ffi::git_note_create(
+            addr_of_mut!(out).cast(),
+            repo.as_ptr().cast_mut(),
+            notes_ref.map_or(core::ptr::null(), CStr::as_ptr),
+            author.as_ptr(),
+            committer.as_ptr(),
+            oid.as_ptr(),
+            note.as_ptr(),
+            i32::from(force),
+        )
+    };
+    if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_note_remove
+/// Removes the note attached to an object.
+pub fn git_note_remove(
+    repo: GitRepositoryRef<'_>,
+    notes_ref: Option<&CStr>,
+    author: GitSignatureRef<'_>,
+    committer: GitSignatureRef<'_>,
+    oid: OidRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: all handles and the optional C string stay live throughout the
+    // synchronous commit update and C retains none of their pointers.
+    let status = unsafe {
+        ffi::git_note_remove(
+            repo.as_ptr().cast_mut(),
+            notes_ref.map_or(core::ptr::null(), CStr::as_ptr),
+            author.as_ptr(),
+            committer.as_ptr(),
+            oid.as_ptr(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

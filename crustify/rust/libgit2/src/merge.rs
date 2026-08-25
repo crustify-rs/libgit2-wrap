@@ -1301,3 +1301,96 @@ pub fn git_merge_base_many(
     };
     oid_output(status, output)
 }
+
+/// Wraps: git_merge_bases
+/// Finds all best common ancestors of two commits.
+pub fn git_merge_bases(
+    repository: GitRepositoryRef<'_>,
+    one: OidRef<'_>,
+    two: OidRef<'_>,
+) -> Result<CVal<crate::oidarray::OidArray>, i32> {
+    let mut output = crate::oidarray::OidArray::new();
+    let status = {
+        let mut out = output.as_mut();
+        // SAFETY: the output header is empty and exclusively borrowed; all
+        // inputs remain live and C retains none of their pointers.
+        unsafe {
+            ffi::git_merge_bases(
+                out.as_mut_ptr(),
+                repository.as_ptr().cast_mut(),
+                one.as_ptr(),
+                two.as_ptr(),
+            )
+        }
+    };
+    if status == 0 { Ok(output) } else { Err(status) }
+}
+
+/// Wraps: git_merge_bases_many
+/// Finds all best common ancestors for at least two commits.
+pub fn git_merge_bases_many(
+    repository: GitRepositoryRef<'_>,
+    commits: &[OidRef<'_>],
+) -> Result<CVal<crate::oidarray::OidArray>, i32> {
+    if commits.len() < 2 {
+        return Err(-1);
+    }
+    let raw: Vec<ffi::git_oid> = commits
+        .iter()
+        .map(|oid| {
+            // SAFETY: a live OID handle addresses one initialized plain C
+            // value; copying it forms no reference to C-visible memory.
+            unsafe { oid.as_ptr().read() }
+        })
+        .collect();
+    let mut output = crate::oidarray::OidArray::new();
+    let status = {
+        let mut out = output.as_mut();
+        // SAFETY: the output is empty and writable; `raw` is a contiguous run
+        // of complete OIDs live for this non-retaining graph walk.
+        unsafe {
+            ffi::git_merge_bases_many(
+                out.as_mut_ptr(),
+                repository.as_ptr().cast_mut(),
+                raw.len(),
+                raw.as_ptr(),
+            )
+        }
+    };
+    if status == 0 { Ok(output) } else { Err(status) }
+}
+
+/// Wraps: git_merge_file_options_init
+/// Creates file-merge options initialized for `version`.
+pub fn git_merge_file_options_init(version: u32) -> Result<MergeFileOptions, i32> {
+    let mut options = MergeFileOptions::zeroed();
+    // SAFETY: `options` is writable layout-compatible storage and the
+    // initializer stores only scalars and static/null labels.
+    let status = unsafe {
+        ffi::git_merge_file_options_init(core::ptr::addr_of_mut!(options).cast(), version)
+    };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
+
+#[cfg(test)]
+mod scheduled_wrapper_tests {
+    use super::*;
+
+    #[test]
+    fn file_options_initializer_returns_validated_defaults() {
+        let options = git_merge_file_options_init(ffi::GIT_MERGE_FILE_OPTIONS_VERSION).unwrap();
+        // SAFETY: `options` is initialized local layout-compatible storage and
+        // this shared handle stays within its lifetime.
+        let options = unsafe {
+            MergeFileOptionsRef::from_ptr(core::ptr::addr_of!(options).cast_mut().cast())
+        }
+        .unwrap();
+        assert_eq!(options.version(), ffi::GIT_MERGE_FILE_OPTIONS_VERSION);
+        assert_eq!(options.flags(), Ok(MergeFileFlags::DEFAULT));
+        assert_eq!(options.favor(), Ok(MergeFileFavor::Normal));
+    }
+}

@@ -6,6 +6,10 @@ use core::ptr::{addr_of, addr_of_mut};
 use ffibox::CBox;
 
 use crate::ffi;
+use crate::oid::Oid;
+use crate::repository::GitRepositoryRef;
+use crate::strarray::GitStrArrayRef;
+use crate::tree::GitTreeRef;
 
 ffibox::define_ctype!(
     /// Wraps: git_index_time
@@ -888,5 +892,324 @@ mod new_wrapper_tests {
         assert_eq!(GitIndexAddOptions::from_bits(options.bits()), Some(options));
         assert_eq!(GitIndexAddOptions::from_bits(1 << 31), None);
         assert_eq!(GitIndexAddOptions::DEFAULT.bits(), 0);
+    }
+}
+
+/// Wraps: git_index_conflict_next
+/// Advances a scoped conflict iterator and borrows its current three stages.
+pub fn git_index_conflict_next<'a>(
+    iterator: &'a mut GitIndexConflicts<'_>,
+) -> Result<GitIndexConflict<'a>, i32> {
+    let mut ancestor = core::ptr::null();
+    let mut ours = core::ptr::null();
+    let mut theirs = core::ptr::null();
+    let mut handle = iterator.as_mut();
+    // SAFETY: all result slots are writable and the exclusive iterator borrow
+    // remains live for the call and for every returned entry handle.
+    let status = unsafe {
+        ffi::git_index_conflict_next(&mut ancestor, &mut ours, &mut theirs, handle.as_mut_ptr())
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: successful iteration returns null or entries borrowed from the
+    // source index carried by the scoped iterator. Tying them to the exclusive
+    // iterator reborrow prevents advancing it while they remain live.
+    Ok(unsafe {
+        GitIndexConflict {
+            ancestor: IndexEntryRef::from_ptr(ancestor.cast_mut()),
+            ours: IndexEntryRef::from_ptr(ours.cast_mut()),
+            theirs: IndexEntryRef::from_ptr(theirs.cast_mut()),
+        }
+    })
+}
+
+fn status_result(status: i32) -> Result<(), i32> {
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_index_conflict_remove
+pub fn git_index_conflict_remove(index: &mut GitIndexMut<'_>, path: &CStr) -> Result<(), i32> {
+    // SAFETY: the index is exclusively borrowed and the path is a live C
+    // string retained only for this call.
+    status_result(unsafe { ffi::git_index_conflict_remove(index.as_mut_ptr(), path.as_ptr()) })
+}
+
+/// Wraps: git_index_entrycount
+#[must_use]
+pub fn git_index_entrycount(index: GitIndexRef<'_>) -> usize {
+    // SAFETY: the shared handle supplies a live index for this read-only call.
+    unsafe { ffi::git_index_entrycount(index.as_ptr()) }
+}
+
+/// Wraps: git_index_find_prefix
+pub fn git_index_find_prefix(index: &mut GitIndexMut<'_>, prefix: &CStr) -> Result<usize, i32> {
+    let mut position = 0;
+    // SAFETY: `position` is writable, the index is exclusively borrowed (the
+    // lookup may sort it), and `prefix` remains live for the call.
+    let status =
+        unsafe { ffi::git_index_find_prefix(&mut position, index.as_mut_ptr(), prefix.as_ptr()) };
+    if status == 0 {
+        Ok(position)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_index_get_byindex
+pub fn git_index_get_byindex<'a>(
+    index: &'a mut GitIndexMut<'_>,
+    position: usize,
+) -> Option<IndexEntryRef<'a>> {
+    // SAFETY: the index is exclusively borrowed because the lookup may sort
+    // it; the returned pointer remains owned by that index.
+    let entry = unsafe { ffi::git_index_get_byindex(index.as_mut_ptr(), position) };
+    // SAFETY: null means no entry; otherwise the pointer stays live for the
+    // index reborrow and is exposed only through a shared handle.
+    unsafe { IndexEntryRef::from_ptr(entry.cast_mut()) }
+}
+
+/// Wraps: git_index_get_bypath
+pub fn git_index_get_bypath<'a>(
+    index: &'a mut GitIndexMut<'_>,
+    path: &CStr,
+    stage: i32,
+) -> Option<IndexEntryRef<'a>> {
+    // SAFETY: the index is exclusively borrowed, `path` is live for this
+    // lookup, and the returned pointer remains index-owned.
+    let entry = unsafe { ffi::git_index_get_bypath(index.as_mut_ptr(), path.as_ptr(), stage) };
+    // SAFETY: null means no entry; a non-null entry is bounded by the index
+    // reborrow and is exposed only through a shared handle.
+    unsafe { IndexEntryRef::from_ptr(entry.cast_mut()) }
+}
+
+/// Wraps: git_index_has_conflicts
+#[must_use]
+pub fn git_index_has_conflicts(index: GitIndexRef<'_>) -> bool {
+    // SAFETY: the shared handle supplies a live index for this read-only scan.
+    unsafe { ffi::git_index_has_conflicts(index.as_ptr()) != 0 }
+}
+
+/// Wraps: git_index_new
+pub fn git_index_new() -> Result<GitIndexOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is a writable slot for one fresh owned index count.
+    let status = unsafe { ffi::git_index_new(&mut out) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one fully initialized index count.
+    unsafe { GitIndexOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_index_open
+pub fn git_index_open(path: &CStr) -> Result<GitIndexOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: `out` is writable and `path` remains live while libgit2 copies
+    // it into the newly allocated index.
+    let status = unsafe { ffi::git_index_open(&mut out, path.as_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one fully initialized index count.
+    unsafe { GitIndexOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_index_path
+pub fn git_index_path<'a>(index: GitIndexRef<'a>) -> Option<&'a CStr> {
+    // SAFETY: the shared index remains live for `'a`; C returns null for an
+    // in-memory index or its owned NUL-terminated path.
+    let path = unsafe { ffi::git_index_path(index.as_ptr()) };
+    if path.is_null() {
+        None
+    } else {
+        // SAFETY: the non-null path is index-owned and NUL-terminated.
+        Some(unsafe { CStr::from_ptr(path) })
+    }
+}
+
+/// Wraps: git_index_read
+pub fn git_index_read(index: &mut GitIndexMut<'_>, force: bool) -> Result<(), i32> {
+    // SAFETY: the index is exclusively borrowed for the reload.
+    status_result(unsafe { ffi::git_index_read(index.as_mut_ptr(), i32::from(force)) })
+}
+
+/// Wraps: git_index_read_tree
+pub fn git_index_read_tree(index: &mut GitIndexMut<'_>, tree: GitTreeRef<'_>) -> Result<(), i32> {
+    // SAFETY: the index is exclusively borrowed; the live tree is read and
+    // copied into it without being retained.
+    status_result(unsafe { ffi::git_index_read_tree(index.as_mut_ptr(), tree.as_ptr()) })
+}
+
+/// Wraps: git_index_remove
+pub fn git_index_remove(index: &mut GitIndexMut<'_>, path: &CStr, stage: i32) -> Result<(), i32> {
+    // SAFETY: the index is exclusively borrowed and `path` is retained only
+    // for this call.
+    status_result(unsafe { ffi::git_index_remove(index.as_mut_ptr(), path.as_ptr(), stage) })
+}
+
+/// Wraps: git_index_remove_all
+pub fn git_index_remove_all(
+    index: &mut GitIndexMut<'_>,
+    pathspec: GitStrArrayRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: the index is exclusively borrowed and the pathspec remains live
+    // for this synchronous operation; no callback or payload is supplied.
+    status_result(unsafe {
+        ffi::git_index_remove_all(
+            index.as_mut_ptr(),
+            pathspec.as_ptr(),
+            None,
+            core::ptr::null_mut(),
+        )
+    })
+}
+
+/// Wraps: git_index_remove_all
+pub fn git_index_remove_all_with_callback<C: GitIndexMatchedPathCallback>(
+    index: &mut GitIndexMut<'_>,
+    pathspec: GitStrArrayRef<'_>,
+    callback: &mut C,
+) -> Result<(), i32> {
+    let mut erased: &mut dyn GitIndexMatchedPathCallback = callback;
+    // SAFETY: index, pathspec and callback all remain live for this synchronous
+    // traversal; the trampoline reconstructs the exact callback type.
+    status_result(unsafe {
+        ffi::git_index_remove_all(
+            index.as_mut_ptr(),
+            pathspec.as_ptr(),
+            Some(matched_path_trampoline),
+            core::ptr::from_mut(&mut erased).cast(),
+        )
+    })
+}
+
+/// Wraps: git_index_remove_bypath
+pub fn git_index_remove_bypath(index: &mut GitIndexMut<'_>, path: &CStr) -> Result<(), i32> {
+    // SAFETY: the index is exclusively borrowed and `path` is live for the
+    // non-retaining call.
+    status_result(unsafe { ffi::git_index_remove_bypath(index.as_mut_ptr(), path.as_ptr()) })
+}
+
+/// Wraps: git_index_remove_directory
+pub fn git_index_remove_directory(
+    index: &mut GitIndexMut<'_>,
+    directory: &CStr,
+    stage: i32,
+) -> Result<(), i32> {
+    // SAFETY: the index is exclusively borrowed and `directory` is live for
+    // the non-retaining call.
+    status_result(unsafe {
+        ffi::git_index_remove_directory(index.as_mut_ptr(), directory.as_ptr(), stage)
+    })
+}
+
+/// Wraps: git_index_set_version
+pub fn git_index_set_version(index: &mut GitIndexMut<'_>, version: u32) -> Result<(), i32> {
+    // SAFETY: the index is exclusively borrowed; C validates the requested
+    // on-disk format version.
+    status_result(unsafe { ffi::git_index_set_version(index.as_mut_ptr(), version) })
+}
+
+/// Wraps: git_index_update_all
+pub fn git_index_update_all(
+    index: &mut GitIndexMut<'_>,
+    pathspec: GitStrArrayRef<'_>,
+) -> Result<(), i32> {
+    // SAFETY: the index is exclusively borrowed and the pathspec remains live
+    // for this synchronous operation; no callback is supplied.
+    status_result(unsafe {
+        ffi::git_index_update_all(
+            index.as_mut_ptr(),
+            pathspec.as_ptr(),
+            None,
+            core::ptr::null_mut(),
+        )
+    })
+}
+
+/// Wraps: git_index_update_all
+pub fn git_index_update_all_with_callback<C: GitIndexMatchedPathCallback>(
+    index: &mut GitIndexMut<'_>,
+    pathspec: GitStrArrayRef<'_>,
+    callback: &mut C,
+) -> Result<(), i32> {
+    let mut erased: &mut dyn GitIndexMatchedPathCallback = callback;
+    // SAFETY: index, pathspec and callback remain live for the synchronous
+    // traversal; the trampoline reconstructs the exact callback type.
+    status_result(unsafe {
+        ffi::git_index_update_all(
+            index.as_mut_ptr(),
+            pathspec.as_ptr(),
+            Some(matched_path_trampoline),
+            core::ptr::from_mut(&mut erased).cast(),
+        )
+    })
+}
+
+/// Wraps: git_index_version
+#[must_use]
+pub fn git_index_version(index: &mut GitIndexMut<'_>) -> u32 {
+    // SAFETY: the handle exclusively borrows the live index for this scalar
+    // query (the C API unnecessarily omits `const`).
+    unsafe { ffi::git_index_version(index.as_mut_ptr()) }
+}
+
+/// Wraps: git_index_write
+pub fn git_index_write(index: &mut GitIndexMut<'_>) -> Result<(), i32> {
+    // SAFETY: the index is exclusively borrowed while C writes and updates its
+    // internal checksum and dirty state.
+    status_result(unsafe { ffi::git_index_write(index.as_mut_ptr()) })
+}
+
+/// Wraps: git_index_write_tree
+pub fn git_index_write_tree(index: &mut GitIndexMut<'_>) -> Result<Oid, i32> {
+    let mut oid = Oid::zeroed();
+    // SAFETY: `oid` is writable layout-compatible storage and the index is
+    // exclusively borrowed while C materializes its tree.
+    let status = unsafe {
+        ffi::git_index_write_tree(core::ptr::addr_of_mut!(oid).cast(), index.as_mut_ptr())
+    };
+    if status == 0 { Ok(oid) } else { Err(status) }
+}
+
+/// Wraps: git_index_write_tree_to
+pub fn git_index_write_tree_to(
+    index: &mut GitIndexMut<'_>,
+    repository: GitRepositoryRef<'_>,
+) -> Result<Oid, i32> {
+    let mut oid = Oid::zeroed();
+    // SAFETY: `oid` is writable, the index is exclusively borrowed, and the
+    // live repository remains available for the synchronous object writes.
+    let status = unsafe {
+        ffi::git_index_write_tree_to(
+            core::ptr::addr_of_mut!(oid).cast(),
+            index.as_mut_ptr(),
+            repository.as_ptr().cast_mut(),
+        )
+    };
+    if status == 0 { Ok(oid) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod scheduled_wrapper_tests {
+    use super::*;
+
+    #[test]
+    fn new_index_queries_preserve_owned_and_borrowed_state() {
+        // SAFETY: process-global initialization is refcounted and balanced
+        // after the index owner is dropped.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let mut index = git_index_new().expect("an in-memory index");
+        assert_eq!(git_index_entrycount(index.as_ref()), 0);
+        assert!(!git_index_has_conflicts(index.as_ref()));
+        assert_eq!(git_index_path(index.as_ref()), None);
+        assert_eq!(git_index_version(&mut index.as_mut()), 2);
+        git_index_set_version(&mut index.as_mut(), 3).unwrap();
+        assert_eq!(git_index_version(&mut index.as_mut()), 3);
+        assert!(git_index_get_byindex(&mut index.as_mut(), 0).is_none());
+        drop(index);
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
