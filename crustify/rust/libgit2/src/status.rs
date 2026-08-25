@@ -490,3 +490,56 @@ where
     };
     if status == 0 { Ok(()) } else { Err(status) }
 }
+
+/// Wraps: git_status_foreach_ext
+/// Visits each selected path according to `options`.
+pub fn git_status_foreach_ext<C>(
+    repository: &mut GitRepositoryMut<'_>,
+    options: Option<GitStatusOptionsRef<'_, '_>>,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: GitStatusCallback,
+{
+    // SAFETY: the repository and callback are exclusively borrowed for the
+    // synchronous traversal; all nested option borrows remain live and no
+    // callback or payload pointer is retained.
+    let status = unsafe {
+        ffi::git_status_foreach_ext(
+            repository.as_mut_ptr(),
+            options.map_or(core::ptr::null(), |value| value.as_ptr()),
+            Some(status_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_status_options_init
+/// Creates status options initialized for `version`.
+pub fn git_status_options_init<'data>(
+    version: core::ffi::c_uint,
+) -> Result<ffibox::CVal<crate::api::status::GitStatusOptions<'data>>, i32> {
+    let mut options = crate::api::status::GitStatusOptions::<'data>::new();
+    // SAFETY: the inline options storage is exclusively writable and C
+    // retains no pointer to it.
+    let status = unsafe { ffi::git_status_options_init(options.as_mut().as_mut_ptr(), version) };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
+
+#[cfg(test)]
+mod current_options_initializer_tests {
+    use super::*;
+
+    #[test]
+    fn current_initializer_writes_published_defaults() {
+        let options = git_status_options_init(ffi::GIT_STATUS_OPTIONS_VERSION)
+            .expect("the published status options version initializes");
+        assert_eq!(options.as_ref().version(), ffi::GIT_STATUS_OPTIONS_VERSION);
+        assert_eq!(options.as_ref().show(), Ok(StatusShow::IndexAndWorkdir));
+    }
+}

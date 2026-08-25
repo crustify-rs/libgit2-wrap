@@ -2558,3 +2558,44 @@ where
         self(diff, old, new)
     }
 }
+
+/// Wraps: git_diff_notify_cb
+/// Safe callable surface for candidate-delta notifications.
+pub trait GitDiffNotifyCallback {
+    /// Observes a candidate delta and may accept, skip, or reject it.
+    fn call(
+        &mut self,
+        diff_so_far: crate::diff::DiffRef<'_>,
+        delta_to_add: DiffDeltaRef<'_>,
+        matched_pathspec: Option<&core::ffi::CStr>,
+    ) -> i32;
+}
+
+impl<F> GitDiffNotifyCallback for F
+where
+    F: FnMut(crate::diff::DiffRef<'_>, DiffDeltaRef<'_>, Option<&core::ffi::CStr>) -> i32,
+{
+    fn call(
+        &mut self,
+        diff: crate::diff::DiffRef<'_>,
+        delta: DiffDeltaRef<'_>,
+        pathspec: Option<&core::ffi::CStr>,
+    ) -> i32 {
+        self(diff, delta, pathspec)
+    }
+}
+
+#[cfg(test)]
+mod notify_callback_tests {
+    use super::*;
+
+    #[test]
+    fn closure_implements_notify_callback() {
+        fn assert_callback<C: GitDiffNotifyCallback>(_callback: &mut C) {}
+
+        let mut callback = |_diff: crate::diff::DiffRef<'_>,
+                            _delta: DiffDeltaRef<'_>,
+                            _path: Option<&core::ffi::CStr>| { 0 };
+        assert_callback(&mut callback);
+    }
+}

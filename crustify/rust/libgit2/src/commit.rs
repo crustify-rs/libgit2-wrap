@@ -679,3 +679,128 @@ pub fn git_commit_nth_gen_ancestor<'a>(
         _commit: core::marker::PhantomData,
     })
 }
+
+/// Wraps: git_commit_amend_from_stage
+/// Amends `HEAD` using the repository's staged tree.
+pub fn git_commit_amend_from_stage(
+    id: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    message: Option<&core::ffi::CStr>,
+    options: Option<crate::api::commit::GitCommitCreateOptionsRef<'_>>,
+) -> Result<(), i32> {
+    // SAFETY: the output and repository are exclusively borrowed, and every
+    // optional input remains live for this synchronous, non-retaining call.
+    status_result(unsafe {
+        ffi::git_commit_amend_from_stage(
+            id.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            optional_string(message),
+            options.map_or(core::ptr::null(), |value| value.as_ptr()),
+        )
+    })
+}
+
+/// Wraps: git_commit_amend_from_tree
+/// Amends `HEAD` using `tree`, retaining the old message when omitted.
+pub fn git_commit_amend_from_tree(
+    id: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    tree: crate::tree::GitTreeRef<'_>,
+    message: Option<&core::ffi::CStr>,
+    options: Option<crate::api::commit::GitCommitCreateOptionsRef<'_>>,
+) -> Result<(), i32> {
+    // SAFETY: the output and repository are exclusively borrowed, and the
+    // tree and optional inputs remain live for this non-retaining call.
+    status_result(unsafe {
+        ffi::git_commit_amend_from_tree(
+            id.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            tree.as_ptr(),
+            optional_string(message),
+            options.map_or(core::ptr::null(), |value| value.as_ptr()),
+        )
+    })
+}
+
+/// Wraps: git_commit_create_from_stage
+/// Creates a commit from the repository's staged changes.
+pub fn git_commit_create_from_stage(
+    id: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    message: &core::ffi::CStr,
+    options: Option<crate::api::commit::GitCommitCreateOptionsRef<'_>>,
+) -> Result<(), i32> {
+    // SAFETY: the output and repository are exclusively borrowed; the
+    // message and optional options are live and are not retained.
+    status_result(unsafe {
+        ffi::git_commit_create_from_stage(
+            id.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            message.as_ptr(),
+            options.map_or(core::ptr::null(), |value| value.as_ptr()),
+        )
+    })
+}
+
+/// Wraps: git_commit_create_from_tree
+/// Creates a commit from an existing tree.
+pub fn git_commit_create_from_tree(
+    id: &mut crate::oid::OidMut<'_>,
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    tree: crate::tree::GitTreeRef<'_>,
+    message: &core::ffi::CStr,
+    options: Option<crate::api::commit::GitCommitCreateOptionsRef<'_>>,
+) -> Result<(), i32> {
+    // SAFETY: the output and repository are exclusively borrowed; the tree,
+    // message and optional options are live and are not retained.
+    status_result(unsafe {
+        ffi::git_commit_create_from_tree(
+            id.as_mut_ptr(),
+            repo.as_mut_ptr(),
+            tree.as_ptr(),
+            message.as_ptr(),
+            options.map_or(core::ptr::null(), |value| value.as_ptr()),
+        )
+    })
+}
+
+/// Wraps: git_commit_create_options_init
+/// Creates simple commit options initialized for `version`.
+pub fn git_commit_create_options_init(
+    version: core::ffi::c_uint,
+) -> Result<ffibox::CVal<crate::api::commit::GitCommitCreateOptions>, i32> {
+    let mut options = crate::api::commit::GitCommitCreateOptions::new();
+    // SAFETY: the inline options storage is exclusively writable and C
+    // retains no pointer to it.
+    let status =
+        unsafe { ffi::git_commit_create_options_init(options.as_mut().as_mut_ptr(), version) };
+    if status == 0 {
+        Ok(options)
+    } else {
+        Err(status)
+    }
+}
+
+/// Wraps: git_commitarray_dispose
+/// Releases every commit and the pointer array owned by `array`.
+pub fn git_commitarray_dispose(array: ffibox::CVal<crate::api::commit::GitCommitArray>) {
+    drop(array);
+}
+
+#[cfg(test)]
+mod simple_commit_api_tests {
+    use super::*;
+
+    #[test]
+    fn simple_options_initializer_and_empty_array_disposer_are_safe() {
+        let options = git_commit_create_options_init(ffi::GIT_COMMIT_CREATE_OPTIONS_VERSION)
+            .expect("the published options version initializes");
+        assert_eq!(
+            options.as_ref().version(),
+            ffi::GIT_COMMIT_CREATE_OPTIONS_VERSION
+        );
+        assert!(!options.as_ref().allow_empty_commit());
+
+        git_commitarray_dispose(crate::api::commit::GitCommitArray::new());
+    }
+}

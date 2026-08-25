@@ -450,12 +450,7 @@ pub fn git_blame_get_hunk_byindex<'a>(
     blame: GitBlameRef<'a>,
     index: u32,
 ) -> Option<GitBlameHunkRef<'a>> {
-    // SAFETY: the live blame is only read and owns any non-null returned hunk
-    // for the duration of its borrow.
-    let hunk = unsafe { ffi::git_blame_get_hunk_byindex(blame.as_ptr().cast_mut(), index) };
-    // SAFETY: null means out of range; otherwise the pointer addresses a hunk
-    // owned by `blame`, whose lifetime is carried by the returned handle.
-    unsafe { GitBlameHunkRef::from_ptr(hunk.cast_mut()) }
+    git_blame_hunk_byindex(blame, index as usize)
 }
 
 /// Wraps: git_blame_get_hunk_byline
@@ -473,12 +468,7 @@ pub fn git_blame_get_hunk_byline<'a>(
     blame: &'a mut GitBlameMut<'_>,
     line: usize,
 ) -> Option<GitBlameHunkRef<'a>> {
-    // SAFETY: the exclusive handle permits the in-place vector sort this
-    // lookup performs, and it owns any non-null returned hunk for `'a`.
-    let hunk = unsafe { ffi::git_blame_get_hunk_byline(blame.as_mut_ptr(), line) };
-    // SAFETY: null means no matching line; a non-null hunk is owned by
-    // `blame`, and the handle retains exactly that borrow lifetime.
-    unsafe { GitBlameHunkRef::from_ptr(hunk.cast_mut()) }
+    git_blame_hunk_byline(blame, line)
 }
 
 #[cfg(test)]
@@ -541,5 +531,48 @@ pub fn git_blame_options_init() -> Result<ffibox::CVal<GitBlameOptions>, i32> {
         Ok(options)
     } else {
         Err(status)
+    }
+}
+
+/// Wraps: git_blame_hunk_byindex
+/// Borrows the hunk at `index`, returning `None` when it is out of range.
+#[must_use]
+pub fn git_blame_hunk_byindex<'a>(
+    blame: GitBlameRef<'a>,
+    index: usize,
+) -> Option<GitBlameHunkRef<'a>> {
+    // SAFETY: the live blame is only queried; every returned hunk remains
+    // owned by it for the complete source borrow.
+    let hunk = unsafe { ffi::git_blame_hunk_byindex(blame.as_ptr().cast_mut(), index) };
+    // SAFETY: null denotes an invalid index; otherwise `blame` keeps the hunk
+    // and every pointer it contains live for `'a`.
+    unsafe { GitBlameHunkRef::from_ptr(hunk.cast_mut()) }
+}
+
+/// Wraps: git_blame_hunk_byline
+/// Borrows the hunk containing the one-based final line `line`.
+#[must_use]
+pub fn git_blame_hunk_byline<'a>(
+    blame: &'a mut GitBlameMut<'_>,
+    line: usize,
+) -> Option<GitBlameHunkRef<'a>> {
+    // SAFETY: the exclusive handle permits `git_vector_bsearch2` to sort the
+    // hunk vector in place; every returned hunk remains owned by the blame.
+    let hunk = unsafe { ffi::git_blame_hunk_byline(blame.as_mut_ptr(), line) };
+    // SAFETY: null means no hunk contains the line; otherwise `blame` keeps
+    // the hunk and every pointer it contains live for `'a`.
+    unsafe { GitBlameHunkRef::from_ptr(hunk.cast_mut()) }
+}
+
+#[cfg(test)]
+mod current_hunk_lookup_tests {
+    use super::*;
+
+    #[test]
+    fn hunk_results_carry_the_source_blame_lifetime() {
+        let _: for<'a> fn(GitBlameRef<'a>, usize) -> Option<GitBlameHunkRef<'a>> =
+            git_blame_hunk_byindex;
+        let _: for<'a, 'b> fn(&'a mut GitBlameMut<'b>, usize) -> Option<GitBlameHunkRef<'a>> =
+            git_blame_hunk_byline;
     }
 }

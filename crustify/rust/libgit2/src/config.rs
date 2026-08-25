@@ -1,10 +1,28 @@
 //! Safe wrappers for libgit2 config APIs.
 
-use core::ffi::CStr;
+use core::ffi::{CStr, c_void};
 use core::ptr::addr_of;
 use ffibox::CBox;
 
 use crate::ffi;
+
+unsafe extern "C" fn config_foreach_trampoline<C: crate::api::config::GitConfigForeachCallback>(
+    entry: *const ffi::git_config_entry,
+    payload: *mut c_void,
+) -> i32 {
+    if entry.is_null() || payload.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: each wrapper pairs this monomorphized trampoline with the
+    // address of its exclusively borrowed callback for a synchronous walk.
+    let callback = unsafe { &mut *payload.cast::<C>() };
+    // SAFETY: libgit2 supplies a live transient entry for this callback
+    // invocation and the null case was rejected above.
+    let entry = unsafe { GitConfigEntryRef::from_ptr(entry.cast_mut()) }
+        .expect("the callback rejected null");
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback.call(entry)))
+        .unwrap_or(ffi::git_error_code_GIT_ERROR)
+}
 
 /// Wraps: git_config_iterator_free
 /// An owned configuration iterator that keeps its source configuration borrowed.
@@ -1073,4 +1091,93 @@ pub fn git_config_lookup_map_value(
         ffi::git_config_lookup_map_value(&mut out, maps.as_ptr(), maps.len(), value.as_ptr())
     };
     if status == 0 { Ok(out) } else { Err(status) }
+}
+
+/// Wraps: git_config_foreach
+/// Visits every configuration entry.
+pub fn git_config_foreach<C>(config: GitConfigRef<'_>, callback: &mut C) -> Result<(), i32>
+where
+    C: crate::api::config::GitConfigForeachCallback,
+{
+    // SAFETY: the config and callback remain live for this synchronous walk;
+    // the callback/payload types match and neither pointer is retained.
+    let status = unsafe {
+        ffi::git_config_foreach(
+            config.as_ptr(),
+            Some(config_foreach_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_foreach_match
+/// Visits configuration entries whose normalized names match `regexp`.
+pub fn git_config_foreach_match<C>(
+    config: GitConfigRef<'_>,
+    regexp: Option<&CStr>,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: crate::api::config::GitConfigForeachCallback,
+{
+    // SAFETY: all inputs remain live for the synchronous traversal; a null
+    // regexp selects every entry, and no pointer is retained.
+    let status = unsafe {
+        ffi::git_config_foreach_match(
+            config.as_ptr(),
+            regexp.map_or(core::ptr::null(), CStr::as_ptr),
+            Some(config_foreach_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_config_get_multivar_foreach
+/// Visits every value for `name` that matches the optional value expression.
+pub fn git_config_get_multivar_foreach<C>(
+    config: GitConfigRef<'_>,
+    name: &CStr,
+    regexp: Option<&CStr>,
+    callback: &mut C,
+) -> Result<(), i32>
+where
+    C: crate::api::config::GitConfigForeachCallback,
+{
+    // SAFETY: all borrowed inputs remain live for the synchronous traversal;
+    // the callback/payload types match and no pointer is retained.
+    let status = unsafe {
+        ffi::git_config_get_multivar_foreach(
+            config.as_ptr(),
+            name.as_ptr(),
+            regexp.map_or(core::ptr::null(), CStr::as_ptr),
+            Some(config_foreach_trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod foreach_tests {
+    use super::*;
+
+    #[test]
+    fn foreach_on_an_empty_config_invokes_no_callback() {
+        // SAFETY: process-global initialization is reference counted and is
+        // balanced after all owners created by the test are dropped.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let config = git_config_new().expect("empty config allocation");
+        let mut calls = 0;
+        git_config_foreach(config.as_ref(), &mut |_entry: GitConfigEntryRef<'_>| {
+            calls += 1;
+            0
+        })
+        .expect("empty traversal succeeds");
+        assert_eq!(calls, 0);
+        drop(config);
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
 }

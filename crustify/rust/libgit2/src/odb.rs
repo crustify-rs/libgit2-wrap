@@ -16,7 +16,7 @@ use crate::commit_graph::GitCommitGraphOwned;
 use crate::ffi;
 use crate::indexer::{GitIndexerProgressCallback, IndexerProgressRef};
 use crate::oid::{Oid, OidRef};
-use crate::sys::odb_backend::GitOdbBackendOwned;
+use crate::sys::odb_backend::{GitOdbBackendOwned, GitOdbBackendRef};
 
 ffibox::define_ctype!(
     /// Wraps: git_odb
@@ -912,4 +912,65 @@ pub fn git_odb_write_multi_pack_index(odb: &mut GitOdbMut<'_>) -> Result<(), i32
     // SAFETY: the exclusive ODB handle permits backend traversal and writes.
     let status = unsafe { ffi::git_odb_write_multi_pack_index(odb.as_mut_ptr()) };
     if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_odb_add_alternate
+/// Transfers an alternate backend into the object database.
+///
+/// On failure, libgit2 has not installed the backend, so its owner is returned.
+pub fn git_odb_add_alternate(
+    odb: &mut GitOdbMut<'_>,
+    backend: GitOdbBackendOwned,
+    priority: i32,
+) -> Result<(), (i32, GitOdbBackendOwned)> {
+    let raw = backend.into_raw();
+    // SAFETY: the ODB is exclusively borrowed and `raw` transfers one complete
+    // backend. Success stores it; failure leaves the allocation untouched.
+    let status = unsafe { ffi::git_odb_add_alternate(odb.as_mut_ptr(), raw, priority) };
+    if status == 0 {
+        Ok(())
+    } else {
+        // SAFETY: every failure happens before insertion, so the transferred
+        // complete backend remains uniquely owned by the caller.
+        let backend = unsafe { GitOdbBackendOwned::from_raw(raw) }
+            .expect("the transferred backend pointer was non-null");
+        Err((status, backend))
+    }
+}
+
+/// Wraps: git_odb_get_backend
+/// Borrows the installed backend at `position` for the ODB reborrow.
+pub fn git_odb_get_backend<'a>(
+    odb: &'a mut GitOdbMut<'_>,
+    position: usize,
+) -> Result<GitOdbBackendRef<'a>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and the ODB is exclusively
+    // reborrowed while C locks and reads its backend vector.
+    let status = unsafe { ffi::git_odb_get_backend(&mut out, odb.as_mut_ptr(), position) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success returns a non-owning backend kept alive by the ODB; the
+    // returned handle cannot outlive this ODB reborrow.
+    unsafe { GitOdbBackendRef::from_ptr(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_odb_read_prefix
+/// Reads the unique object matching the first `hex_len` digits of `short_id`.
+pub fn git_odb_read_prefix(
+    odb: &mut GitOdbMut<'_>,
+    short_id: OidRef<'_>,
+    hex_len: usize,
+) -> Result<GitOdbObjectOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: the output is writable, the ODB is exclusively borrowed because
+    // a miss may refresh it, and the object ID remains live for the call.
+    let status =
+        unsafe { ffi::git_odb_read_prefix(&mut out, odb.as_mut_ptr(), short_id.as_ptr(), hex_len) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success transfers one independently releasable cache reference.
+    unsafe { GitOdbObjectOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
 }
