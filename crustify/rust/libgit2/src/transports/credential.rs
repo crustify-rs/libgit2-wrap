@@ -272,13 +272,13 @@ mod credential_tests {
 
         // SAFETY: `raw` remains live for the complete handle use and this is
         // the only handle accessing the local credential header.
-        let credential = unsafe { GitCredentialRef::from_ptr(&raw mut raw) }
+        let credential = unsafe { GitCredentialMut::from_ptr(&raw mut raw) }
             .expect("the address of a local credential is non-null");
         assert_eq!(
-            credential.credential_type(),
+            credential.as_ref().credential_type(),
             Some(GitCredentialType::USERNAME)
         );
-        assert!(credential.has_deallocator());
+        assert!(credential.as_ref().has_deallocator());
 
         // A header carrying several kinds at once is malformed: libgit2's
         // consumers switch on the exact value.
