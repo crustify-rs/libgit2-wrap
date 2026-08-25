@@ -1305,19 +1305,54 @@ mod scheduled_connection_tests {
 }
 
 /// Wraps: git_remote_download
-/// Downloads and indexes objects selected by `refspecs`.
+/// Downloads and indexes the objects selected by `refspecs`, leaving the
+/// remote connected.
 ///
-/// Fetch-option callback and proxy state must be static because libgit2 can
-/// leave the remote connected after this call and retain copies of those
-/// nested pointers until a later disconnect.
+/// The remote must be repository-backed; a detached one is rejected with
+/// `GIT_ERROR_INVALID` before anything else runs. Refspec strings are parsed
+/// into the remote's own refspec vectors during the call and never retained.
+///
+/// The options' nested data is `'static` because this call installs it in a
+/// connection it does not close. `git_remote_connect_options_dup` deep-copies
+/// the custom headers with `git_strarray_copy` and the proxy URL with
+/// `git__strdup`, but plain-copies the callback and proxy payload slots along
+/// with their function pointers, and those copies live in the transport's own
+/// connect options, which every later request reads back through
+/// `git_smart__credentials`, `git_smart__certificate_check` and
+/// `handle_proxy_auth`. The bound is load-bearing rather than a restatement of
+/// the unsafe [`GitRemoteCallbacksMut::set_handler`] contract, because
+/// [`GitProxyOptionsMut::set_credentials`] installs the proxy payload from
+/// safe code. Nothing on the way out clears the copies either:
+/// `git_smart__close` disposes the stream and not the options, so they outlive
+/// a later [`git_remote_disconnect`] and are replaced only by the next
+/// connect or reconfigure, or released when the remote is freed.
+///
+/// [`GitProxyOptionsMut::set_credentials`]: crate::api::proxy::GitProxyOptionsMut::set_credentials
+///
+/// Nested data that does not live for `'static` is therefore rejected:
+///
+/// ```compile_fail
+/// use core::ffi::CStr;
+///
+/// use libgit2::api::remote::GitFetchOptions;
+/// use libgit2::remote::{GitRemoteMut, git_remote_download};
+///
+/// fn download(remote: &mut GitRemoteMut<'_>, proxy: &CStr) {
+///     let proxy = proxy.to_owned();
+///     let mut options = GitFetchOptions::new();
+///     options.as_mut().proxy_options_mut().set_url(Some(&proxy));
+///     let _ = git_remote_download(remote, None, Some(options.as_ref()));
+/// }
+/// ```
 pub fn git_remote_download(
     remote: &mut GitRemoteMut<'_>,
     refspecs: Option<GitStrArrayRef<'_>>,
     options: Option<GitFetchOptionsRef<'_, 'static>>,
 ) -> Result<(), i32> {
-    // SAFETY: the remote is live and exclusive, each optional header remains
-    // live for the call, and the options' nested data is static if libgit2
-    // retains it in a connection that survives the call.
+    // SAFETY: the remote is live and exclusive, the refspec header and its
+    // strings stay live for the call, and the options' nested payload slots
+    // are static because the connection this call leaves open keeps copies of
+    // them.
     let status = unsafe {
         ffi::git_remote_download(
             remote.as_mut_ptr(),
@@ -1332,8 +1367,17 @@ pub fn git_remote_download(
 /// Downloads objects, disconnects, updates remote-tracking tips and prunes as
 /// requested.
 ///
-/// Fetch-option callback and proxy state must be static because some errors
-/// after connecting return early without disconnecting the remote.
+/// The options carry the `'static` nested data that [`git_remote_download`]
+/// documents, and the closing disconnect does not relax it.
+/// `connect_or_reset_options` installs the copies first, and the
+/// `git_remote_capabilities` and `git_remote_oid_type` queries that follow
+/// return early on failure without reaching `git_remote_disconnect`, leaving
+/// the remote connected over the copies.
+/// Even the ordinary path only closes the stream, so the copied payload slots
+/// stay in the transport exactly as they do after a download.
+///
+/// `reflog_message` is copied into a `git_str` for the tip updates; `None`
+/// selects libgit2's `fetch <name-or-url>` default.
 pub fn git_remote_fetch(
     remote: &mut GitRemoteMut<'_>,
     refspecs: Option<GitStrArrayRef<'_>>,
@@ -1341,8 +1385,9 @@ pub fn git_remote_fetch(
     reflog_message: Option<&CStr>,
 ) -> Result<(), i32> {
     // SAFETY: the remote is live and exclusive, the refspec header and reflog
-    // string are transient live borrows, and the options' nested data is
-    // static if an early error leaves its copied connection state installed.
+    // string are transient live borrows, and the options' nested payload slots
+    // are static because an early error can leave the copied connection state
+    // installed.
     let status = unsafe {
         ffi::git_remote_fetch(
             remote.as_mut_ptr(),
@@ -1356,13 +1401,28 @@ pub fn git_remote_fetch(
 
 /// Wraps: git_remote_push
 /// Uploads the selected refspecs, updates remote-tracking tips and disconnects.
+///
+/// Unlike [`git_remote_download`], the options' nested data need only outlive
+/// the call, and the unconditional `git_remote_disconnect` on the way out is
+/// what makes the difference: every path that reached `git_remote_upload`, and
+/// so every path that could have installed a copy in the transport, runs it.
+/// The copies libgit2 does keep past the call are unreachable rather than
+/// refreshed. The transport's connect options survive the close, but each of
+/// their readers is behind a `git_remote_connect_options_normalize` that
+/// replaces them first; and `git_push_new` copies the callback table into
+/// `remote->push`, where only `do_push` reads it, inside this call's
+/// `git_push_finish`. A later [`git_remote_update_tips`] does reach that same
+/// `git_push`, but hands `git_push_update_tips` its own callbacks.
+///
+/// The remote is disconnected even when the caller connected it beforehand.
 pub fn git_remote_push(
     remote: &mut GitRemoteMut<'_>,
     refspecs: Option<GitStrArrayRef<'_>>,
     options: Option<GitPushOptionsRef<'_, '_>>,
 ) -> Result<(), i32> {
     // SAFETY: the remote is live and exclusive and all optional inputs remain
-    // live for the synchronous push, which disconnects before returning.
+    // live for the synchronous push, which disconnects before returning and
+    // leaves no copy of them that another wrapped operation can reach.
     let status = unsafe {
         ffi::git_remote_push(
             remote.as_mut_ptr(),
@@ -1376,7 +1436,9 @@ pub fn git_remote_push(
 #[cfg(test)]
 mod scheduled_transfer_tests {
     use super::*;
+    use crate::api::errors::GitErrorClass;
     use crate::api::remote::{GitFetchOptions, GitPushOptions};
+    use crate::util::errors::git_error_last;
 
     #[test]
     fn typed_transfer_inputs_reach_detached_remote_validation() {
@@ -1390,31 +1452,34 @@ mod scheduled_transfer_tests {
         let fetch_options = GitFetchOptions::new();
         let push_options = GitPushOptions::new();
 
-        assert_eq!(
-            git_remote_download(
-                &mut remote.as_mut(),
-                Some(refspecs.as_ref()),
-                Some(fetch_options.as_ref()),
-            ),
-            Err(-1)
-        );
-        assert_eq!(
-            git_remote_fetch(
-                &mut remote.as_mut(),
-                Some(refspecs.as_ref()),
-                Some(fetch_options.as_ref()),
-                Some(c"fetch test"),
-            ),
-            Err(-1)
-        );
-        assert_eq!(
-            git_remote_push(
-                &mut remote.as_mut(),
-                Some(refspecs.as_ref()),
-                Some(push_options.as_ref()),
-            ),
-            Err(-1)
-        );
+        // All three reject a repository-less remote before reading the
+        // options, so each records the same `GIT_ERROR_INVALID` refusal.
+        fn assert_detached_refusal(status: Result<(), i32>) {
+            assert_eq!(status, Err(-1));
+            let error = git_error_last();
+            assert_eq!(error.klass, Ok(GitErrorClass::Invalid));
+            assert_eq!(
+                error.message.as_deref(),
+                Some(c"cannot download detached remote")
+            );
+        }
+
+        assert_detached_refusal(git_remote_download(
+            &mut remote.as_mut(),
+            Some(refspecs.as_ref()),
+            Some(fetch_options.as_ref()),
+        ));
+        assert_detached_refusal(git_remote_fetch(
+            &mut remote.as_mut(),
+            Some(refspecs.as_ref()),
+            Some(fetch_options.as_ref()),
+            Some(c"fetch test"),
+        ));
+        assert_detached_refusal(git_remote_push(
+            &mut remote.as_mut(),
+            Some(refspecs.as_ref()),
+            Some(push_options.as_ref()),
+        ));
 
         drop(push_options);
         drop(fetch_options);
@@ -1423,5 +1488,193 @@ mod scheduled_transfer_tests {
         // SAFETY: balances this test's successful initialization after every
         // libgit2-backed owner has been released.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+}
+
+#[cfg(test)]
+mod scheduled_transfer_repository_tests {
+    use super::*;
+    use crate::api::errors::GitErrorClass;
+    use crate::api::remote::{GitFetchOptions, GitPushOptions};
+    use crate::repository::git_repository_open;
+    use crate::util::errors::git_error_last;
+
+    /// A refcounted hold on the process-global libgit2 initialization.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and refcounted;
+            // `Drop` below balances this successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the successful initialization represented by
+            // this guard; every owner opened under it is dropped first.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// A hand-built bare repository, plus a sibling path that holds no
+    /// repository at all for the transports to fail against.
+    struct BareRepo(std::path::PathBuf);
+
+    impl BareRepo {
+        fn create(tag: &str) -> Self {
+            let path =
+                std::env::temp_dir().join(format!("crustify-remote-{}-{tag}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(path.join("objects/info")).expect("a loose-object directory");
+            std::fs::create_dir_all(path.join("objects/pack")).expect("a pack directory");
+            std::fs::create_dir_all(path.join("refs/heads")).expect("a refs directory");
+            std::fs::write(path.join("HEAD"), b"ref: refs/heads/main\n").expect("a HEAD file");
+            std::fs::write(
+                path.join("config"),
+                b"[core]\n\trepositoryformatversion = 0\n\tbare = true\n",
+            )
+            .expect("a config file");
+            Self(path)
+        }
+
+        fn c_path(&self) -> std::ffi::CString {
+            Self::to_c(self.0.to_str().expect("a UTF-8 temporary path"))
+        }
+
+        /// A `file://` URL naming a directory this fixture never creates, so
+        /// the local transport fails in `git_repository_open`.
+        fn absent_url(&self) -> std::ffi::CString {
+            let path = self.0.to_str().expect("a UTF-8 temporary path");
+            Self::to_c(&format!("file://{path}-absent"))
+        }
+
+        fn to_c(value: &str) -> std::ffi::CString {
+            std::ffi::CString::new(value).expect("a path without interior NUL")
+        }
+    }
+
+    impl Drop for BareRepo {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn transfers_leave_a_repository_backed_remote_unconnected_when_the_url_is_absent() {
+        let _init = Libgit2Init::acquire();
+        let directory = BareRepo::create("absent-url");
+        let mut repository =
+            git_repository_open(&directory.c_path()).expect("the bare repository opens");
+        let mut owner = repository.as_mut();
+        let mut remote = git_remote_create_anonymous(&mut owner, &directory.absent_url())
+            .expect("an anonymous remote for a local URL");
+
+        // Past the detached-remote guard, each transfer reaches the transport
+        // and fails opening the missing repository, leaving nothing connected.
+        let fetch_options = GitFetchOptions::new();
+        let push_options = GitPushOptions::new();
+
+        assert_eq!(
+            git_remote_download(&mut remote.as_mut(), None, Some(fetch_options.as_ref())),
+            Err(-1)
+        );
+        assert!(!git_remote_connected(remote.as_ref()));
+
+        assert_eq!(
+            git_remote_fetch(
+                &mut remote.as_mut(),
+                None,
+                Some(fetch_options.as_ref()),
+                Some(c"fetch test"),
+            ),
+            Err(-1)
+        );
+        assert!(!git_remote_connected(remote.as_ref()));
+
+        assert_eq!(
+            git_remote_push(&mut remote.as_mut(), None, Some(push_options.as_ref())),
+            Err(-1)
+        );
+        assert!(!git_remote_connected(remote.as_ref()));
+    }
+
+    #[test]
+    fn push_options_may_borrow_data_released_before_the_remote() {
+        let _init = Libgit2Init::acquire();
+        let directory = BareRepo::create("borrowed-push-data");
+        let mut repository =
+            git_repository_open(&directory.c_path()).expect("the bare repository opens");
+        let mut owner = repository.as_mut();
+        // An unroutable scheme stops the push in `git_transport_new`, after
+        // the options have been read but before any transport exists to copy
+        // them into.
+        let mut remote =
+            git_remote_create_anonymous(&mut owner, c"crustify://example.invalid/repo")
+                .expect("an anonymous remote for an unsupported URL");
+
+        {
+            // Every borrowed input below is created after the remote and
+            // released before it, which type-checks only because
+            // `git_remote_push` does not require `'static` nested data.
+            let header = std::ffi::CString::new("X-Crustify: review").expect("a valid header");
+            let mut entries = [header.as_ptr().cast_mut()];
+            let mut headers = ffi::git_strarray {
+                strings: entries.as_mut_ptr(),
+                count: entries.len(),
+            };
+            // SAFETY: `headers` is an initialized header over a live pointer
+            // run whose single entry is a live NUL-terminated string, and both
+            // outlive the handle borrowed here.
+            let headers = unsafe { GitStrArrayRef::from_ptr(&raw mut headers) }
+                .expect("the address of a stack value is non-null");
+            let proxy = std::ffi::CString::new("http://proxy.invalid/").expect("a valid URL");
+
+            let mut push_options = GitPushOptions::new();
+            {
+                let mut view = push_options.as_mut();
+                view.set_custom_headers(headers);
+                view.proxy_options_mut().set_url(Some(&proxy));
+            }
+
+            // `git_remote_connect_options_normalize` validates and deep-copies
+            // both borrowed inputs during the call; the push then stops at the
+            // unsupported scheme.
+            assert_eq!(
+                git_remote_push(&mut remote.as_mut(), None, Some(push_options.as_ref())),
+                Err(-1)
+            );
+            let error = git_error_last();
+            assert_eq!(error.klass, Ok(GitErrorClass::Net));
+            assert_eq!(error.message.as_deref(), Some(c"unsupported URL protocol"));
+        }
+
+        // A malformed header is rejected by that same normalization, before
+        // any transport work, proving the borrowed strings are read rather
+        // than merely stored.
+        let malformed = std::ffi::CString::new("malformed").expect("a valid string");
+        let mut entries = [malformed.as_ptr().cast_mut()];
+        let mut headers = ffi::git_strarray {
+            strings: entries.as_mut_ptr(),
+            count: entries.len(),
+        };
+        // SAFETY: as above, the header and its single entry outlive the handle.
+        let headers = unsafe { GitStrArrayRef::from_ptr(&raw mut headers) }
+            .expect("the address of a stack value is non-null");
+        let mut push_options = GitPushOptions::new();
+        push_options.as_mut().set_custom_headers(headers);
+        assert_eq!(
+            git_remote_push(&mut remote.as_mut(), None, Some(push_options.as_ref())),
+            Err(-1)
+        );
+        let error = git_error_last();
+        assert_eq!(error.klass, Ok(GitErrorClass::Invalid));
+        assert_eq!(
+            error.message.as_deref(),
+            Some(c"custom HTTP header 'malformed' is malformed")
+        );
+        assert!(!git_remote_connected(remote.as_ref()));
     }
 }

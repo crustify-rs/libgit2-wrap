@@ -27831,7 +27831,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "NULL selects defaults. The options header is read and copied; nested callback and proxy state may be copied into the connection and remain reachable after download returns while the remote stays connected."
+      "note": "NULL selects defaults. The header is read and copied during the call, and git_remote_connect_options_dup deep-copies custom_headers (git_strarray_copy) and proxy_opts.url (git__strdup) but plain-copies callbacks.payload, proxy_opts.payload and every function pointer into the transport's connect options. Download never disconnects, so those copies stay installed and reachable by later requests (git_smart__credentials, git_smart__certificate_check, handle_proxy_auth); git_smart__close does not dispose them, so they outlive a later git_remote_disconnect and are cleared only by the next normalize or by freeing the transport. The two payload slots therefore need a lifetime longer than the call."
      }
     },
     {
@@ -27940,7 +27940,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "NULL selects defaults. The header is borrowed and copied; early errors after connecting can leave copied nested callback/proxy pointers reachable from the remote connection."
+      "note": "NULL selects defaults. The header is borrowed and copied exactly as for git_remote_download: headers and the proxy URL are deep-copied, while callbacks.payload, proxy_opts.payload and the function pointers are plain-copied into the transport's connect options. The closing git_remote_disconnect does not undo that - git_smart__close leaves connect_opts intact - and the git_remote_capabilities and git_remote_oid_type queries that follow connect_or_reset_options return early on failure without disconnecting at all, leaving the remote connected over the copied payload slots. Those slots therefore need a lifetime longer than the call."
      }
     },
     {
@@ -28502,7 +28502,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "NULL selects defaults. The options and nested data are borrowed for the synchronous operation, which disconnects before returning and retains no input ownership."
+      "note": "NULL selects defaults. The options and their nested data are borrowed for the synchronous push and no ownership is taken, but two copies do outlive the call and are unreachable rather than absent: git_remote_connect_options_dup plain-copies callbacks.payload, proxy_opts.payload and the function pointers into the transport's connect options, and git_push_new memcpys the whole callback table into remote->push. Neither is read again - git_remote_push runs git_remote_disconnect on every path that reached git_remote_upload, every later reader of the transport copy normalizes over it first, only do_push reads remote->push->callbacks and it runs inside this call's git_push_finish, and a later git_remote_update_tips passes git_push_update_tips its own callbacks. The nested data therefore need only outlive the call."
      }
     },
     {
