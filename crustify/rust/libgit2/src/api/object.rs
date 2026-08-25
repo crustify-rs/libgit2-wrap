@@ -216,12 +216,10 @@ impl<'object, 'data> GitObjectIdOptionsMut<'object, 'data> {
 mod tests {
     use core::mem::{align_of, size_of};
 
-    use crate::filter::GitFilterList;
-
     use super::*;
 
     #[test]
-    fn options_preserve_layout_defaults_and_borrowed_filters() {
+    fn options_preserve_layout_and_defaults() {
         assert_eq!(
             size_of::<GitObjectIdOptions<'static>>(),
             size_of::<ffi::git_object_id_options>()
@@ -235,12 +233,6 @@ mod tests {
             size_of::<*const ffi::git_object_id_options>()
         );
 
-        let mut filters = GitFilterList::zeroed();
-        let filters_ptr = addr_of_mut!(filters).cast::<ffi::git_filter_list>();
-        // SAFETY: the opaque layout-compatible stack value stays live and is
-        // not mutated while the options borrow it.
-        let filters = unsafe { GitFilterListRef::from_ptr(filters_ptr) }.unwrap();
-
         let mut options = GitObjectIdOptions::new();
         {
             let mut view = options.as_mut();
@@ -251,11 +243,11 @@ mod tests {
 
             view.set_oid_type(Some(OidType::Sha256));
             view.set_object_type(Some(GitObjectType::BLOB));
-            view.set_filters(Some(filters));
+            view.set_filters(None);
 
             assert_eq!(view.as_ref().oid_type(), Ok(Some(OidType::Sha256)));
             assert_eq!(view.as_ref().object_type(), Ok(Some(GitObjectType::BLOB)));
-            assert!(view.as_ref().filters().is_some());
+            assert!(view.as_ref().filters().is_none());
         }
     }
 }

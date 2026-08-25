@@ -1,21 +1,101 @@
 //! Safe wrappers for libgit2 filter APIs.
 
-use ffibox::{define_ctype, impl_dropped};
+use core::ptr::NonNull;
+
+use ffibox::{CCell, CPtr, CType, impl_dropped};
 
 use crate::ffi;
 
-define_ctype!(
-    /// Wraps: git_filter_list
-    /// An ordered list of filters prepared by libgit2.
+/// Wraps: git_filter_list
+/// An opaque ordered list of filters prepared by libgit2.
+///
+/// The public C API does not publish storage for this type, so it cannot be
+/// constructed by value. An owning [`ffibox::CBox<GitFilterList>`] releases
+/// the list, its entry buffer and every filter payload with
+/// `git_filter_list_free`.
+#[repr(transparent)]
+pub struct GitFilterList(CType<ffi::git_filter_list>);
+
+/// Shared borrow of a [`GitFilterList`].
+#[repr(transparent)]
+pub struct GitFilterListRef<'a>(CPtr<'a, GitFilterList>);
+
+impl Clone for GitFilterListRef<'_> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl Copy for GitFilterListRef<'_> {}
+
+/// Exclusive borrow of a [`GitFilterList`].
+#[repr(transparent)]
+pub struct GitFilterListMut<'a>(GitFilterListRef<'a>);
+
+// SAFETY: `GitFilterList` is transparent over the matching opaque bindgen
+// type. Both handles are transparent over a lifetime-carrying pointer, never
+// form a reference to the C object, and the shared handle exposes no writes.
+unsafe impl CCell for GitFilterList {
+    type C = ffi::git_filter_list;
+    type Ref<'a> = GitFilterListRef<'a>;
+    type Mut<'a> = GitFilterListMut<'a>;
+
+    unsafe fn ref_from_raw<'a>(ptr: NonNull<Self>) -> Self::Ref<'a> {
+        // SAFETY: the caller guarantees that `ptr` is a live shared object.
+        GitFilterListRef(unsafe { CPtr::new(ptr) })
+    }
+
+    unsafe fn mut_from_raw<'a>(ptr: NonNull<Self>) -> Self::Mut<'a> {
+        // SAFETY: the caller additionally guarantees exclusive access.
+        GitFilterListMut(GitFilterListRef(unsafe { CPtr::new(ptr) }))
+    }
+}
+
+impl GitFilterListRef<'_> {
+    /// Borrows a raw list pointer, returning `None` for null.
     ///
-    /// The public C API keeps the layout opaque. An owning
-    /// [`ffibox::CBox<GitFilterList>`] releases the list, its entry buffer and
-    /// every filter payload with `git_filter_list_free`.
-    GitFilterList,
-    GitFilterListRef,
-    GitFilterListMut,
-    ffi::git_filter_list
-);
+    /// # Safety
+    ///
+    /// `ptr` must identify an initialized list that remains live and is not
+    /// mutated for the returned handle's lifetime.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_filter_list) -> Option<Self> {
+        NonNull::new(ptr.cast::<GitFilterList>()).map(|ptr| {
+            // SAFETY: the caller supplies the required live shared object.
+            Self(unsafe { CPtr::new(ptr) })
+        })
+    }
+
+    /// Returns the C pointer for read-only FFI calls.
+    #[must_use]
+    pub fn as_ptr(&self) -> *const ffi::git_filter_list {
+        self.0.as_non_null().as_ptr().cast()
+    }
+}
+
+impl GitFilterListMut<'_> {
+    /// Exclusively borrows a raw list pointer, returning `None` for null.
+    ///
+    /// # Safety
+    ///
+    /// The shared-handle requirements apply, and no other handle to the list
+    /// may be used for the returned handle's lifetime.
+    pub unsafe fn from_ptr(ptr: *mut ffi::git_filter_list) -> Option<Self> {
+        // SAFETY: the caller supplies a live exclusively accessible object.
+        unsafe { GitFilterListRef::from_ptr(ptr) }.map(Self)
+    }
+
+    /// Returns the writable C pointer for FFI calls.
+    #[must_use]
+    pub fn as_mut_ptr(&mut self) -> *mut ffi::git_filter_list {
+        self.0.0.as_non_null().as_ptr().cast()
+    }
+
+    /// Reborrows this exclusive handle as shared.
+    #[must_use]
+    pub fn as_ref(&self) -> GitFilterListRef<'_> {
+        GitFilterListRef(self.0.0)
+    }
+}
 
 // SAFETY: `git_filter_list_free` is the public destructor for a complete list
 // allocation. It accepts null, while `CDropped` supplies a live non-null value,
@@ -31,7 +111,7 @@ impl_dropped!(
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod tests {
-    use core::mem::{align_of, size_of};
+    use core::mem::size_of;
     use core::ptr;
 
     use ffibox::{CBox, CCell, CDropped};
@@ -39,20 +119,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn opaque_filter_list_has_c_layout_and_lifecycle_contracts() {
+    fn opaque_filter_list_has_pointer_sized_handles_and_lifecycle_contracts() {
         fn assert_cell<T: CCell>() {}
         fn assert_dropped<T: CDropped>() {}
 
         assert_cell::<GitFilterList>();
         assert_dropped::<GitFilterList>();
-        assert_eq!(
-            size_of::<GitFilterList>(),
-            size_of::<ffi::git_filter_list>()
-        );
-        assert_eq!(
-            align_of::<GitFilterList>(),
-            align_of::<ffi::git_filter_list>()
-        );
         assert_eq!(
             size_of::<GitFilterListRef<'_>>(),
             size_of::<*mut ffi::git_filter_list>()
