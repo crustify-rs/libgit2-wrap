@@ -8459,6 +8459,126 @@
    ]
   },
   {
+   "name": "git_checkout_head",
+   "defined_in": "src/libgit2/checkout.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_checkout_index",
+   "defined_in": "src/libgit2/checkout.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_checkout_init_options",
+   "defined_in": "src/libgit2/checkout.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_checkout_notify_cb",
    "defined_in": null,
    "ptr_args": [
@@ -8625,6 +8745,157 @@
       "nullable": true,
       "mutable": true,
       "note": "Opaque caller payload borrowed for the callback invocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_checkout_tree",
+   "defined_in": "src/libgit2/checkout.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "treeish",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:treeish"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_cherrypick_commit",
+   "defined_in": "src/libgit2/cherrypick.c",
+   "ptr_args": [
+    {
+     "name": "cherrypick_commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:cherrypick_commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "merge_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:merge_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "our_commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:our_commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
      }
     }
    ]
@@ -11012,6 +11283,213 @@
    ]
   },
   {
+   "name": "git_config_iterator_free",
+   "defined_in": "src/libgit2/config.c",
+   "lifetime": {
+    "for": "iter",
+    "is_dropper": true,
+    "is_disposer": false,
+    "is_cloner": null
+   },
+   "ptr_args": [
+    {
+     "name": "iter",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": true,
+      "borrowed": null,
+      "nullable": true,
+      "mutable": true,
+      "note": "Consumes and releases the complete iterator allocation; null is accepted as a no-op."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_iterator_glob_new",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:config"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "regexp",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:regexp"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_iterator_new",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:config"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_multivar_iterator_new",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "config",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:config"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "name",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:name"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "regexp",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:regexp"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_config_new",
    "defined_in": "src/libgit2/config.c",
    "ptr_args": [
@@ -11033,6 +11511,51 @@
       "nullable": false,
       "mutable": true,
       "note": "Borrows a non-null output slot and writes one newly owned allocation on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_next",
+   "defined_in": "src/libgit2/config.c",
+   "ptr_args": [
+    {
+     "name": "entry",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": false,
+        "borrowed": {
+         "lifetime": "arg:iter"
+        }
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:entry"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success borrows the iterator-managed current entry until the next advance or iterator destruction."
+     }
+    },
+    {
+     "name": "iter",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:iter"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
      }
     }
    ]
@@ -12381,6 +12904,182 @@
    ]
   },
   {
+   "name": "git_diff_blobs",
+   "defined_in": "src/libgit2/patch_generate.c",
+   "ptr_args": [
+    {
+     "name": "binary_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:binary_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "data_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:data_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "file_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:file_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "hunk_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:hunk_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "new_blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_blob"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "new_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "old_blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_blob"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "old_path",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_file_cb",
    "defined_in": null,
    "ptr_args": [
@@ -12416,6 +13115,177 @@
       "nullable": true,
       "mutable": true,
       "note": "User payload is borrowed unchanged for this transient callback invocation and may be null."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_find_init_options",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_find_similar",
+   "defined_in": "src/libgit2/diff_tform.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "given_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_foreach",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "binary_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:binary_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "data_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:data_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "file_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:file_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "hunk_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:hunk_cb"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
      }
     }
    ]
@@ -12710,6 +13580,200 @@
    ]
   },
   {
+   "name": "git_diff_index_to_index",
+   "defined_in": "src/libgit2/diff_generate.c",
+   "ptr_args": [
+    {
+     "name": "new_index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_index"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "old_index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_index"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_index_to_workdir",
+   "defined_in": "src/libgit2/diff_generate.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_init_options",
+   "defined_in": "src/libgit2/diff.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_is_sorted_icase",
    "defined_in": "src/libgit2/diff.c",
    "ptr_args": [
@@ -12950,6 +14014,63 @@
    ]
   },
   {
+   "name": "git_diff_print",
+   "defined_in": "src/libgit2/diff_print.c",
+   "ptr_args": [
+    {
+     "name": "diff",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:diff"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "print_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:print_cb"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_diff_stats_deletions",
    "defined_in": "src/libgit2/diff_stats.c",
    "ptr_args": [
@@ -13081,6 +14202,348 @@
       "nullable": false,
       "mutable": false,
       "note": "Borrowed for the call; libgit2 retains no ownership."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_tree_to_index",
+   "defined_in": "src/libgit2/diff_generate.c",
+   "ptr_args": [
+    {
+     "name": "index",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:index"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "old_tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_tree"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_tree_to_tree",
+   "defined_in": "src/libgit2/diff_generate.c",
+   "ptr_args": [
+    {
+     "name": "new_tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_tree"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "old_tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_tree"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_tree_to_workdir",
+   "defined_in": "src/libgit2/diff_generate.c",
+   "ptr_args": [
+    {
+     "name": "old_tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_tree"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_diff_tree_to_workdir_with_index",
+   "defined_in": "src/libgit2/diff_generate.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:tree"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
      }
     }
    ]
@@ -15610,6 +17073,85 @@
    ]
   },
   {
+   "name": "git_merge",
+   "defined_in": "src/libgit2/merge.c",
+   "ptr_args": [
+    {
+     "name": "given_checkout_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:given_checkout_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "merge_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:merge_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "their_heads",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_ref": {
+        "owned": false,
+        "borrowed": {
+         "lifetime": "arg:their_heads"
+        }
+       }
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:their_heads"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed nonempty array of borrowed annotated-commit pointers; neither container nor elements transfer ownership."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_merge_analysis",
    "defined_in": "src/libgit2/merge.c",
    "ptr_args": [
@@ -16053,6 +17595,100 @@
    ]
   },
   {
+   "name": "git_merge_commits",
+   "defined_in": "src/libgit2/merge.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "our_commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:our_commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required writable out-slot; success transfers one newly owned pointee."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    },
+    {
+     "name": "their_commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:their_commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_merge_file",
    "defined_in": "src/libgit2/merge_file.c",
    "ptr_args": [
@@ -16322,6 +17958,29 @@
       "nullable": true,
       "mutable": false,
       "note": "The routine accepts a nullable borrowed result header, reads its fields, and frees the path and content allocations while retaining the header storage."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_merge_init_options",
+   "defined_in": "src/libgit2/merge.c",
+   "ptr_args": [
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed for the synchronous call; ownership is not transferred."
      }
     }
    ]

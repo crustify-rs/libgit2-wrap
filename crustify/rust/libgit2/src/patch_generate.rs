@@ -168,3 +168,63 @@ mod tests {
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
+
+/// Wraps: git_diff_blobs
+/// Compares two optional blobs and reports differences synchronously.
+#[allow(clippy::too_many_arguments)]
+pub fn git_diff_blobs<'callbacks>(
+    old_blob: Option<crate::blob::GitBlobRef<'_>>,
+    old_path: Option<&core::ffi::CStr>,
+    new_blob: Option<crate::blob::GitBlobRef<'_>>,
+    new_path: Option<&core::ffi::CStr>,
+    options: Option<crate::api::diff::GitDiffOptionsRef<'_, '_>>,
+    file: Option<&'callbacks mut dyn crate::api::diff::GitDiffFileCallback>,
+    binary: Option<&'callbacks mut dyn crate::api::diff::GitDiffBinaryCallback>,
+    hunk: Option<&'callbacks mut dyn crate::api::diff::GitDiffHunkCallback>,
+    line: Option<&'callbacks mut dyn crate::api::diff::GitDiffLineCallback>,
+) -> Result<(), i32> {
+    let old_blob = old_blob.map_or(core::ptr::null(), |blob| blob.as_ptr());
+    let old_path = old_path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    let new_blob = new_blob.map_or(core::ptr::null(), |blob| blob.as_ptr());
+    let new_path = new_path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
+    let mut callbacks = crate::diff::DiffCallbacks {
+        file,
+        binary,
+        hunk,
+        line,
+    };
+    let file = callbacks
+        .file
+        .as_ref()
+        .map(|_| crate::diff::diff_file_trampoline as _);
+    let binary = callbacks
+        .binary
+        .as_ref()
+        .map(|_| crate::diff::diff_binary_trampoline as _);
+    let hunk = callbacks
+        .hunk
+        .as_ref()
+        .map(|_| crate::diff::diff_hunk_trampoline as _);
+    let line = callbacks
+        .line
+        .as_ref()
+        .map(|_| crate::diff::diff_line_trampoline as _);
+    // SAFETY: every optional input is null or live, and callback state plus
+    // payload remains exclusively borrowed for this synchronous comparison.
+    let status = unsafe {
+        crate::ffi::git_diff_blobs(
+            old_blob,
+            old_path,
+            new_blob,
+            new_path,
+            options,
+            file,
+            binary,
+            hunk,
+            line,
+            core::ptr::from_mut(&mut callbacks).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}

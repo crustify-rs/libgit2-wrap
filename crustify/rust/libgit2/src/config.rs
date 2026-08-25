@@ -6,6 +6,45 @@ use ffibox::CBox;
 
 use crate::ffi;
 
+/// Wraps: git_config_iterator_free
+/// An owned configuration iterator that keeps its source configuration borrowed.
+pub struct GitConfigIteratorOwned<'config> {
+    inner: crate::sys::config::GitConfigIteratorOwned,
+    _config: core::marker::PhantomData<GitConfigRef<'config>>,
+}
+
+impl GitConfigIteratorOwned<'_> {
+    /// Borrows the iterator without permitting it to advance.
+    #[must_use]
+    pub fn as_ref(&self) -> crate::sys::config::GitConfigIteratorRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the iterator exclusively for advancing.
+    #[must_use]
+    pub fn as_mut(&mut self) -> crate::sys::config::GitConfigIteratorMut<'_> {
+        self.inner.as_mut()
+    }
+}
+
+fn iterator_result<'config>(
+    status: i32,
+    out: *mut ffi::git_config_iterator,
+) -> Result<GitConfigIteratorOwned<'config>, i32> {
+    // SAFETY: a non-null constructor output is a complete iterator allocation
+    // whose installed finalizer is represented by the raw owner.
+    let inner = unsafe { crate::sys::config::GitConfigIteratorOwned::from_raw(out) };
+    if status == 0 {
+        Ok(GitConfigIteratorOwned {
+            inner: inner.ok_or(ffi::git_error_code_GIT_ERROR)?,
+            _config: core::marker::PhantomData,
+        })
+    } else {
+        drop(inner);
+        Err(status)
+    }
+}
+
 /// Wraps: git_config_level_t
 /// Priority level of a libgit2 configuration source.
 ///
@@ -762,4 +801,99 @@ pub fn git_config_get_entry(
     }
     // SAFETY: success returns a fully formed caller-owned config entry.
     unsafe { GitConfigEntryOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_config_iterator_glob_new
+/// Creates an iterator over entries whose normalized names match `regexp`.
+pub fn git_config_iterator_glob_new<'config>(
+    config: GitConfigRef<'config>,
+    regexp: Option<&CStr>,
+) -> Result<GitConfigIteratorOwned<'config>, i32> {
+    let mut out = core::ptr::null_mut();
+    let regexp = regexp.map_or(core::ptr::null(), CStr::as_ptr);
+    // SAFETY: the output is writable, the config and optional expression are
+    // live, and the returned owner retains the config borrow that C stores.
+    let status = unsafe { ffi::git_config_iterator_glob_new(&mut out, config.as_ptr(), regexp) };
+    iterator_result(status, out)
+}
+
+/// Wraps: git_config_iterator_new
+/// Creates an iterator over every entry in `config`.
+pub fn git_config_iterator_new<'config>(
+    config: GitConfigRef<'config>,
+) -> Result<GitConfigIteratorOwned<'config>, i32> {
+    let mut out = core::ptr::null_mut();
+    // SAFETY: the output is writable and `config` remains borrowed for the
+    // lifetime carried by the returned iterator owner.
+    let status = unsafe { ffi::git_config_iterator_new(&mut out, config.as_ptr()) };
+    iterator_result(status, out)
+}
+
+/// Wraps: git_config_multivar_iterator_new
+/// Creates an iterator over values of `name`, optionally filtered by `regexp`.
+pub fn git_config_multivar_iterator_new<'config>(
+    config: GitConfigRef<'config>,
+    name: &CStr,
+    regexp: Option<&CStr>,
+) -> Result<GitConfigIteratorOwned<'config>, i32> {
+    let mut out = core::ptr::null_mut();
+    let regexp = regexp.map_or(core::ptr::null(), CStr::as_ptr);
+    // SAFETY: the output is writable; all strings are live for the call, and
+    // the returned iterator's stored config pointer is lifetime-bound here.
+    let status = unsafe {
+        ffi::git_config_multivar_iterator_new(&mut out, config.as_ptr(), name.as_ptr(), regexp)
+    };
+    iterator_result(status, out)
+}
+
+/// Wraps: git_config_next
+/// Advances an iterator and borrows its current public entry.
+pub fn git_config_next<'iter>(
+    iterator: &'iter mut crate::sys::config::GitConfigIteratorMut<'_>,
+) -> Result<GitConfigEntryRef<'iter>, i32> {
+    let mut entry = core::ptr::null_mut();
+    // SAFETY: the output is writable and the iterator is exclusively borrowed
+    // for the duration of the call and of the returned transient entry.
+    let status = unsafe { ffi::git_config_next(&mut entry, iterator.as_mut_ptr()) };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success publishes the iterator-managed current entry. Its handle
+    // is tied to the exclusive iterator reborrow, preventing invalidation.
+    unsafe { GitConfigEntryRef::from_ptr(entry) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+#[cfg(test)]
+mod scheduled_iterator_tests {
+    use super::*;
+
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: initialization is process-global and refcounted.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances this guard's successful initialization count.
+            unsafe { ffi::git_libgit2_shutdown() };
+        }
+    }
+
+    #[test]
+    fn empty_config_iterator_is_owned_and_reports_completion() {
+        let _init = Libgit2Init::acquire();
+        let config = crate::config::git_config_new().unwrap();
+        let mut iterator = git_config_iterator_new(config.as_ref()).unwrap();
+        assert_eq!(
+            git_config_next(&mut iterator.as_mut()).err(),
+            Some(ffi::git_error_code_GIT_ITEROVER)
+        );
+        drop(iterator);
+        drop(config);
+    }
 }

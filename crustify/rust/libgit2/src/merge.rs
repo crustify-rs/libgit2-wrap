@@ -1467,3 +1467,87 @@ pub fn git_merge_trees(
     // SAFETY: success publishes one complete owned index.
     unsafe { crate::index::GitIndexOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
 }
+
+/// Wraps: git_merge
+/// Merges one or more annotated heads into the repository and worktree.
+pub fn git_merge(
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    their_heads: &[AnnotatedCommitRef<'_>],
+    merge_options: Option<crate::api::merge::GitMergeOptionsRef<'_, '_>>,
+    checkout_options: Option<crate::api::checkout::GitCheckoutOptionsRef<'_, '_>>,
+) -> Result<(), i32> {
+    if their_heads.is_empty() {
+        return Err(ffi::git_error_code_GIT_EINVALID);
+    }
+    let mut heads: Vec<*const ffi::git_annotated_commit> =
+        their_heads.iter().map(AnnotatedCommitRef::as_ptr).collect();
+    let merge_options = merge_options.map_or(core::ptr::null(), |options| options.as_ptr());
+    let checkout_options = checkout_options.map_or(core::ptr::null(), |options| options.as_ptr());
+    // SAFETY: the repository is exclusive, `heads` is a contiguous nonempty
+    // run of live borrowed pointers, and both options remain live for the call.
+    let status = unsafe {
+        ffi::git_merge(
+            repo.as_mut_ptr(),
+            heads.as_mut_ptr(),
+            heads.len(),
+            merge_options,
+            checkout_options,
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_merge_commits
+/// Computes the in-memory index produced by merging two commits.
+pub fn git_merge_commits(
+    repo: GitRepositoryRef<'_>,
+    our_commit: crate::commit::GitCommitRef<'_>,
+    their_commit: crate::commit::GitCommitRef<'_>,
+    options: Option<crate::api::merge::GitMergeOptionsRef<'_, '_>>,
+) -> Result<crate::index::GitIndexOwned, i32> {
+    let mut out = core::ptr::null_mut();
+    let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
+    // SAFETY: the output is writable and every borrowed input remains live for
+    // the synchronous merge; the result is an independent index allocation.
+    let status = unsafe {
+        ffi::git_merge_commits(
+            &mut out,
+            repo.as_ptr().cast_mut(),
+            our_commit.as_ptr(),
+            their_commit.as_ptr(),
+            options,
+        )
+    };
+    // SAFETY: a non-null output transfers one complete owned index count.
+    let out = unsafe { crate::index::GitIndexOwned::from_raw(out) };
+    if status == 0 {
+        out.ok_or(ffi::git_error_code_GIT_ERROR)
+    } else {
+        drop(out);
+        Err(status)
+    }
+}
+
+/// Wraps: git_merge_init_options
+/// Initializes deprecated merge-options storage for `version`.
+pub fn git_merge_init_options(
+    options: &mut crate::api::merge::GitMergeOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies writable layout-compatible
+    // storage and the initializer retains no pointer to the options header.
+    let status = unsafe { ffi::git_merge_init_options(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod scheduled_merge_symbol_tests {
+    use super::*;
+
+    #[test]
+    fn deprecated_initializer_writes_current_merge_defaults() {
+        let mut options = crate::api::merge::GitMergeOptions::new();
+        git_merge_init_options(&mut options.as_mut(), ffi::GIT_MERGE_OPTIONS_VERSION).unwrap();
+        assert_eq!(options.as_ref().version(), ffi::GIT_MERGE_OPTIONS_VERSION);
+    }
+}

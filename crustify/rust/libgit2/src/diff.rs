@@ -10,6 +10,114 @@ use crate::api::deprecated::{DiffFormatEmailOptionsMut, DiffFormatEmailOptionsRe
 use crate::api::diff::{DiffDeltaRef, DiffLineOrigin, InvalidDiffLineOrigin};
 use crate::ffi;
 
+pub(crate) struct DiffCallbacks<'a> {
+    pub(crate) file: Option<&'a mut dyn crate::api::diff::GitDiffFileCallback>,
+    pub(crate) binary: Option<&'a mut dyn crate::api::diff::GitDiffBinaryCallback>,
+    pub(crate) hunk: Option<&'a mut dyn crate::api::diff::GitDiffHunkCallback>,
+    pub(crate) line: Option<&'a mut dyn crate::api::diff::GitDiffLineCallback>,
+}
+
+pub(crate) unsafe extern "C" fn diff_file_trampoline(
+    delta: *const ffi::git_diff_delta,
+    progress: f32,
+    payload: *mut core::ffi::c_void,
+) -> i32 {
+    if delta.is_null() || payload.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: wrappers pass a live stack `DiffCallbacks` as payload and C
+    // invokes this trampoline only before the synchronous call returns.
+    let callbacks = unsafe { &mut *payload.cast::<DiffCallbacks<'_>>() };
+    let Some(callback) = callbacks.file.as_deref_mut() else {
+        return 0;
+    };
+    // SAFETY: libgit2 supplies a live initialized delta for this invocation.
+    let delta = unsafe { DiffDeltaRef::from_ptr(delta.cast_mut()) }.expect("checked non-null");
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        callback.call(delta, progress)
+    }))
+    .unwrap_or(ffi::git_error_code_GIT_ERROR)
+}
+
+pub(crate) unsafe extern "C" fn diff_binary_trampoline(
+    delta: *const ffi::git_diff_delta,
+    binary: *const ffi::git_diff_binary,
+    payload: *mut core::ffi::c_void,
+) -> i32 {
+    if delta.is_null() || binary.is_null() || payload.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: the synchronous wrapper supplies this exact live payload.
+    let callbacks = unsafe { &mut *payload.cast::<DiffCallbacks<'_>>() };
+    let Some(callback) = callbacks.binary.as_deref_mut() else {
+        return 0;
+    };
+    // SAFETY: both records are live initialized callback inputs.
+    let delta = unsafe { DiffDeltaRef::from_ptr(delta.cast_mut()) }.expect("checked non-null");
+    // SAFETY: raw-place projection copies the initialized flag.
+    let contains_data = unsafe { core::ptr::addr_of!((*binary).contains_data).read() } != 0;
+    // SAFETY: raw-place projections address live inline binary-file members.
+    let old_file =
+        unsafe { DiffBinaryFileRef::from_ptr(core::ptr::addr_of!((*binary).old_file).cast_mut()) }
+            .expect("an inline field is non-null");
+    // SAFETY: as above, for the new-file member.
+    let new_file =
+        unsafe { DiffBinaryFileRef::from_ptr(core::ptr::addr_of!((*binary).new_file).cast_mut()) }
+            .expect("an inline field is non-null");
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        callback.call(delta, contains_data, old_file, new_file)
+    }))
+    .unwrap_or(ffi::git_error_code_GIT_ERROR)
+}
+
+pub(crate) unsafe extern "C" fn diff_hunk_trampoline(
+    delta: *const ffi::git_diff_delta,
+    hunk: *const ffi::git_diff_hunk,
+    payload: *mut core::ffi::c_void,
+) -> i32 {
+    if delta.is_null() || hunk.is_null() || payload.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: the synchronous wrapper supplies this exact live payload.
+    let callbacks = unsafe { &mut *payload.cast::<DiffCallbacks<'_>>() };
+    let Some(callback) = callbacks.hunk.as_deref_mut() else {
+        return 0;
+    };
+    // SAFETY: libgit2 supplies live initialized callback records.
+    let delta = unsafe { DiffDeltaRef::from_ptr(delta.cast_mut()) }.expect("checked non-null");
+    // SAFETY: as above, for the hunk record.
+    let hunk = unsafe { DiffHunkRef::from_ptr(hunk.cast_mut()) }.expect("checked non-null");
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| callback.call(delta, hunk)))
+        .unwrap_or(ffi::git_error_code_GIT_ERROR)
+}
+
+pub(crate) unsafe extern "C" fn diff_line_trampoline(
+    delta: *const ffi::git_diff_delta,
+    hunk: *const ffi::git_diff_hunk,
+    line: *const ffi::git_diff_line,
+    payload: *mut core::ffi::c_void,
+) -> i32 {
+    if delta.is_null() || line.is_null() || payload.is_null() {
+        return ffi::git_error_code_GIT_ERROR;
+    }
+    // SAFETY: the synchronous wrapper supplies this exact live payload.
+    let callbacks = unsafe { &mut *payload.cast::<DiffCallbacks<'_>>() };
+    let Some(callback) = callbacks.line.as_deref_mut() else {
+        return 0;
+    };
+    // SAFETY: libgit2 supplies live initialized callback records.
+    let delta = unsafe { DiffDeltaRef::from_ptr(delta.cast_mut()) }.expect("checked non-null");
+    // SAFETY: a null hunk is documented for formatted header lines; otherwise
+    // it is a live initialized transient hunk.
+    let hunk = unsafe { DiffHunkRef::from_ptr(hunk.cast_mut()) };
+    // SAFETY: the line was checked non-null and is live for this invocation.
+    let line = unsafe { DiffLineRef::from_ptr(line.cast_mut()) }.expect("checked non-null");
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        callback.call(delta, hunk, line)
+    }))
+    .unwrap_or(ffi::git_error_code_GIT_ERROR)
+}
+
 /// The kind of change represented by a diff delta.
 ///
 /// Wraps: git_delta_t
@@ -1516,5 +1624,107 @@ mod scheduled_accessor_tests {
     #[test]
     fn delta_lookup_carries_the_diff_lifetime() {
         let _: for<'a> fn(DiffRef<'a>, usize) -> Option<DiffDeltaRef<'a>> = git_diff_get_delta;
+    }
+}
+
+/// Wraps: git_diff_find_init_options
+/// Initializes deprecated rename-detection options for `version`.
+pub fn git_diff_find_init_options(
+    options: &mut crate::api::diff::DiffFindOptionsMut<'_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies writable layout-compatible
+    // options storage and the initializer retains no pointer to it.
+    let status = unsafe { ffi::git_diff_find_init_options(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_diff_foreach
+/// Traverses a diff synchronously through optional typed callbacks.
+pub fn git_diff_foreach<'callbacks>(
+    diff: &mut DiffMut<'_>,
+    file: Option<&'callbacks mut dyn crate::api::diff::GitDiffFileCallback>,
+    binary: Option<&'callbacks mut dyn crate::api::diff::GitDiffBinaryCallback>,
+    hunk: Option<&'callbacks mut dyn crate::api::diff::GitDiffHunkCallback>,
+    line: Option<&'callbacks mut dyn crate::api::diff::GitDiffLineCallback>,
+) -> Result<(), i32> {
+    let mut callbacks = DiffCallbacks {
+        file,
+        binary,
+        hunk,
+        line,
+    };
+    let file = callbacks.file.as_ref().map(|_| diff_file_trampoline as _);
+    let binary = callbacks
+        .binary
+        .as_ref()
+        .map(|_| diff_binary_trampoline as _);
+    let hunk = callbacks.hunk.as_ref().map(|_| diff_hunk_trampoline as _);
+    let line = callbacks.line.as_ref().map(|_| diff_line_trampoline as _);
+    // SAFETY: the diff is exclusive and every callback plus the stack payload
+    // remains live for the complete synchronous traversal.
+    let status = unsafe {
+        ffi::git_diff_foreach(
+            diff.as_mut_ptr(),
+            file,
+            binary,
+            hunk,
+            line,
+            core::ptr::from_mut(&mut callbacks).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_diff_init_options
+/// Initializes deprecated diff-options storage for `version`.
+pub fn git_diff_init_options(
+    options: &mut crate::api::diff::GitDiffOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies writable layout-compatible
+    // options storage and the initializer retains no pointer to it.
+    let status = unsafe { ffi::git_diff_init_options(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod scheduled_symbol_tests {
+    use super::*;
+
+    #[test]
+    fn deprecated_initializers_write_current_defaults() {
+        let mut diff = crate::api::diff::GitDiffOptions::new();
+        git_diff_init_options(&mut diff.as_mut(), ffi::GIT_DIFF_OPTIONS_VERSION).unwrap();
+        assert_eq!(diff.as_ref().version(), ffi::GIT_DIFF_OPTIONS_VERSION);
+
+        let mut find = crate::api::diff::DiffFindOptions::new();
+        git_diff_find_init_options(&mut find.as_mut(), ffi::GIT_DIFF_FIND_OPTIONS_VERSION).unwrap();
+        assert_eq!(find.as_ref().version(), ffi::GIT_DIFF_FIND_OPTIONS_VERSION);
+    }
+
+    #[test]
+    fn file_trampoline_delivers_a_typed_transient_delta() {
+        // SAFETY: all-zero is valid for this C record's scalar, pointer, and
+        // inline object-ID fields; status is replaced before it is observed.
+        let mut raw: ffi::git_diff_delta = unsafe { core::mem::zeroed() };
+        raw.status = ffi::git_delta_t_GIT_DELTA_ADDED;
+        let mut seen = false;
+        let mut file = |delta: DiffDeltaRef<'_>, progress: f32| {
+            seen = delta.status() == Ok(Delta::Added) && progress == 0.5;
+            0
+        };
+        let mut callbacks = DiffCallbacks {
+            file: Some(&mut file),
+            binary: None,
+            hunk: None,
+            line: None,
+        };
+        // SAFETY: both raw records remain live and the payload has the exact
+        // stack type expected by the trampoline for this synchronous call.
+        let status =
+            unsafe { diff_file_trampoline(&raw, 0.5, core::ptr::from_mut(&mut callbacks).cast()) };
+        assert_eq!(status, 0);
+        assert!(seen);
     }
 }

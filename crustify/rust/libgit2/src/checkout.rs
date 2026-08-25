@@ -298,3 +298,76 @@ mod tests {
         );
     }
 }
+
+/// Wraps: git_checkout_head
+/// Updates the index and working tree to match the repository's HEAD.
+pub fn git_checkout_head(
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    options: Option<crate::api::checkout::GitCheckoutOptionsRef<'_, '_>>,
+) -> Result<(), i32> {
+    let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
+    // SAFETY: the repository is exclusively borrowed and the optional options
+    // record, including every caller-maintained pointee, is live for the call.
+    let status = unsafe { ffi::git_checkout_head(repo.as_mut_ptr(), options) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_checkout_index
+/// Updates the working tree from `index`, or from the repository index when absent.
+pub fn git_checkout_index(
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    mut index: Option<&mut crate::index::GitIndexMut<'_>>,
+    options: Option<crate::api::checkout::GitCheckoutOptionsRef<'_, '_>>,
+) -> Result<(), i32> {
+    let index = index
+        .as_mut()
+        .map_or(core::ptr::null_mut(), |index| index.as_mut_ptr());
+    let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
+    // SAFETY: the repository and optional index are exclusively borrowed; C
+    // retains neither pointer, and all option pointees remain live for the call.
+    let status = unsafe { ffi::git_checkout_index(repo.as_mut_ptr(), index, options) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_checkout_init_options
+/// Initializes deprecated checkout-options storage for `version`.
+pub fn git_checkout_init_options(
+    options: &mut crate::api::checkout::GitCheckoutOptionsMut<'_, '_>,
+    version: core::ffi::c_uint,
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle exposes writable layout-compatible storage;
+    // initialization stores no pointer to the options header.
+    let status = unsafe { ffi::git_checkout_init_options(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_checkout_tree
+/// Updates the index and worktree from `treeish`, or from HEAD when absent.
+pub fn git_checkout_tree(
+    repo: &mut crate::repository::GitRepositoryMut<'_>,
+    treeish: Option<crate::object::GitObjectRef<'_>>,
+    options: Option<crate::api::checkout::GitCheckoutOptionsRef<'_, '_>>,
+) -> Result<(), i32> {
+    let treeish = treeish.map_or(core::ptr::null(), |treeish| treeish.as_ptr());
+    let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
+    // SAFETY: the repository is exclusive, the optional object and options
+    // are live for this synchronous call, and libgit2 retains none of them.
+    let status = unsafe { ffi::git_checkout_tree(repo.as_mut_ptr(), treeish, options) };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod scheduled_symbol_tests {
+    use super::*;
+
+    #[test]
+    fn deprecated_initializer_writes_current_checkout_defaults() {
+        let mut options = crate::api::checkout::GitCheckoutOptions::new();
+        git_checkout_init_options(&mut options.as_mut(), ffi::GIT_CHECKOUT_OPTIONS_VERSION)
+            .unwrap();
+        assert_eq!(
+            options.as_ref().version(),
+            ffi::GIT_CHECKOUT_OPTIONS_VERSION
+        );
+    }
+}
