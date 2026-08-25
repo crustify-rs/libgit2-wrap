@@ -1189,10 +1189,36 @@ mod remote_callbacks_tests {
 /// Wraps: git_fetch_options
 /// Layout-compatible fetch options borrowing their nested callback, proxy and
 /// string-array data for `'data`.
+///
+/// `'data` is invariant. [`GitFetchOptionsMut::set_custom_headers`] stores a
+/// `&'data` string run in the C struct, and the embedded callback and proxy
+/// headers reached through [`GitFetchOptionsMut::callbacks_mut`] and
+/// [`GitFetchOptionsMut::proxy_options_mut`] inherit `'data` and store their
+/// own referents the same way. Every one of those is read back out through a
+/// shared handle, so a covariant `'data` would let safe code shrink the
+/// parameter on the exclusive handle, install a shorter-lived proxy URL,
+/// header array or callback receiver, and then read the released storage back
+/// through a handle still typed at the longer lifetime.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::remote::GitFetchOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitFetchOptionsMut<'object, 'static>,
+/// ) -> GitFetchOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitFetchOptions<'data> {
     inner: ffibox::CType<crate::ffi::git_fetch_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitFetchOptions`].
@@ -1521,10 +1547,32 @@ impl<'object, 'data> GitFetchOptionsMut<'object, 'data> {
 /// Wraps: git_push_options
 /// Layout-compatible push options borrowing their nested callback, proxy and
 /// string-array data for `'data`.
+///
+/// `'data` is invariant, for the reason given on [`GitFetchOptions`].
+/// [`GitPushOptionsMut::set_custom_headers`] and
+/// [`GitPushOptionsMut::set_remote_push_options`] each store a `&'data` string
+/// run, the embedded callback and proxy headers inherit `'data`, and the
+/// shared handle hands all of them back out.
+///
+/// Shrinking `'data` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::api::remote::GitPushOptionsMut;
+///
+/// fn shrink<'object, 'short>(
+///     options: GitPushOptionsMut<'object, 'static>,
+/// ) -> GitPushOptionsMut<'object, 'short> {
+///     options
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitPushOptions<'data> {
     inner: ffibox::CType<crate::ffi::git_push_options>,
-    _data: PhantomData<&'data mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'data` in both
+    // positions pins it. `&'data ()` and `&'data mut ()` are both covariant
+    // and would not. The `fn` pointer keeps the auto traits unchanged.
+    _data: PhantomData<fn(&'data ()) -> &'data ()>,
 }
 
 /// Shared borrow of [`GitPushOptions`].
@@ -1953,5 +2001,69 @@ mod fetch_and_push_options_tests {
         );
         assert_eq!(view.custom_headers().count(), 0);
         assert_eq!(view.remote_push_options().count(), 0);
+    }
+
+    #[test]
+    fn borrowed_data_survives_for_the_pinned_options_lifetime() {
+        let header = c"X-Crustify: 1";
+        let url = c"http://proxy.invalid/";
+        let mut strings = [header.as_ptr().cast_mut()];
+        let mut raw = crate::ffi::git_strarray {
+            strings: strings.as_mut_ptr(),
+            count: strings.len(),
+        };
+        // SAFETY: `raw` is an initialized header whose single entry addresses a
+        // `'static` NUL-terminated string, and nothing else borrows it here.
+        let borrowed =
+            unsafe { crate::strarray::GitStrArrayRef::from_ptr(core::ptr::addr_of_mut!(raw)) }
+                .expect("a stack header is non-null");
+
+        let mut fetch = GitFetchOptions::new();
+        {
+            let mut view = fetch.as_mut();
+            view.set_custom_headers(borrowed);
+            view.proxy_options_mut().set_url(Some(url));
+        }
+        let view = fetch.as_ref();
+        assert_eq!(view.custom_headers().count(), 1);
+        assert_eq!(
+            view.custom_headers().strings().and_then(|run| run.get(0)),
+            Some(header)
+        );
+        assert_eq!(view.proxy_options().url(), Some(url));
+
+        let mut push = GitPushOptions::new();
+        {
+            let mut view = push.as_mut();
+            view.set_custom_headers(borrowed);
+            view.set_remote_push_options(borrowed);
+            view.proxy_options_mut().set_url(Some(url));
+        }
+        let view = push.as_ref();
+        assert_eq!(
+            view.custom_headers().strings().and_then(|run| run.get(0)),
+            Some(header)
+        );
+        assert_eq!(
+            view.remote_push_options()
+                .strings()
+                .and_then(|run| run.get(0)),
+            Some(header)
+        );
+        assert_eq!(view.proxy_options().url(), Some(url));
+    }
+
+    /// The pinned `'data` still accepts a referent that merely outlives the
+    /// options, so the invariance fix does not force `'static` on callers.
+    #[test]
+    fn pinned_options_accept_a_scoped_referent() {
+        let url = std::ffi::CString::new("http://scoped.invalid/").unwrap();
+        let mut fetch = GitFetchOptions::new();
+        fetch.as_mut().proxy_options_mut().set_url(Some(&url));
+        assert_eq!(fetch.as_ref().proxy_options().url(), Some(url.as_c_str()));
+
+        let mut push = GitPushOptions::new();
+        push.as_mut().proxy_options_mut().set_url(Some(&url));
+        assert_eq!(push.as_ref().proxy_options().url(), Some(url.as_c_str()));
     }
 }

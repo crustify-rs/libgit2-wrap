@@ -1825,10 +1825,37 @@ mod transport_tests {
 /// Wraps: git_smart_subtransport_definition
 /// Layout-compatible smart-subtransport factory configuration borrowing its
 /// typed callback state for `'callback`.
+///
+/// `'callback` is invariant. [`GitSmartSubtransportDefinition::new`] stores
+/// `&'callback mut C` in the erased `param` slot, and the factory the
+/// definition installs may hand that referent to the subtransport it builds,
+/// so the borrow outlives the synchronous `git_transport_smart` call. Today
+/// the only `'callback`-storing operation is that constructor, which fixes the
+/// parameter at the borrow it was handed, so covariance is not reachable; the
+/// marker is pinned so that a later `param` or `callback` setter cannot make
+/// it reachable, since such a setter plus a covariant `'callback` is exactly
+/// the shrink-then-read-back use-after-free the sibling option wrappers had.
+///
+/// Shrinking `'callback` is therefore rejected:
+///
+/// ```compile_fail
+/// use libgit2::sys::transport::GitSmartSubtransportDefinitionMut;
+///
+/// fn shrink<'object, 'short>(
+///     definition: GitSmartSubtransportDefinitionMut<'object, 'static>,
+/// ) -> GitSmartSubtransportDefinitionMut<'object, 'short> {
+///     definition
+/// }
+/// ```
 #[repr(transparent)]
 pub struct GitSmartSubtransportDefinition<'callback> {
     inner: CType<ffi::git_smart_subtransport_definition>,
-    _callback: PhantomData<&'callback mut ()>,
+    // The canonical invariance marker: a function type is contravariant in
+    // its argument and covariant in its result, so naming `'callback` in both
+    // positions pins it. `&'callback ()` and `&'callback mut ()` are both
+    // covariant and would not. The `fn` pointer keeps the auto traits
+    // unchanged.
+    _callback: PhantomData<fn(&'callback ()) -> &'callback ()>,
 }
 
 /// Shared borrow of [`GitSmartSubtransportDefinition`].
@@ -2063,5 +2090,20 @@ mod smart_subtransport_definition_tests {
         assert!(!definition.as_ref().is_rpc());
         definition.as_mut().set_rpc(true);
         assert!(definition.as_ref().is_rpc());
+    }
+
+    /// The pinned `'callback` still accepts a scoped receiver, so invariance
+    /// does not force `'static` callback state on callers.
+    #[test]
+    fn pinned_definition_accepts_a_scoped_callback() {
+        let mut callback = fail_factory;
+        {
+            let definition = GitSmartSubtransportDefinition::new(true, &mut callback);
+            assert!(definition.as_ref().is_rpc());
+            assert!(definition.as_ref().has_callback_state());
+        }
+        // The borrow ends with the definition, so the receiver is usable again.
+        let definition = GitSmartSubtransportDefinition::new(false, &mut callback);
+        assert!(!definition.as_ref().is_rpc());
     }
 }

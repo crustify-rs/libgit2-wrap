@@ -1859,6 +1859,12 @@
    ]
   },
   {
+   "name": "git_fetch_options",
+   "defined_in": "include/git2/remote.h",
+   "_comment_agent": "Borrowed by-value configuration struct with no lifecycle operation: no destructor, disposer or cloner acts on it, and every member is by value. The callbacks, proxy_opts and custom_headers members carry all of the borrowed state; git_remote_connect_options__from_fetch_opts memcpy-shallow-copies them into connect options, and git_remote_connect_options_normalize deep-copies (git_proxy_options_dup, git_strarray_copy) only at connect time, so the caller's proxy URL, header strings and callback payload must stay live for the whole fetch call, not merely for the shallow copy. update_fetchhead is a git_remote_update_flags bit set, not a boolean.",
+   "fields": []
+  },
+  {
    "name": "git_index",
    "defined_in": "src/libgit2/index.h",
    "_comment_agent": "git_index is publicly opaque but internally refcounted. tree points into the sibling tree_pool arena; comparator slots always borrow static functions; index_file_path owns an optional strdup allocation.",
@@ -3589,6 +3595,12 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_push_options",
+   "defined_in": "include/git2/remote.h",
+   "_comment_agent": "Borrowed by-value configuration struct with no lifecycle operation: no destructor, disposer or cloner acts on it, and every member is by value. The callbacks, proxy_opts, custom_headers and remote_push_options members carry all of the borrowed state, reaching the transport through the same shallow-copy-then-deep-copy path as git_fetch_options, so the caller's strings and callback payload must stay live for the whole push call.",
+   "fields": []
   },
   {
    "name": "git_push_update",
