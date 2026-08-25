@@ -99,6 +99,7 @@
                   "git_annotated_commit_free",
                   "git_annotated_commit_from_fetchhead",
                   "git_annotated_commit_from_ref",
+                  "git_annotated_commit_from_revspec",
                   "git_annotated_commit_id",
                   "git_annotated_commit_lookup",
                   "git_annotated_commit_ref"
@@ -138,7 +139,14 @@
               ],
               "members": {
                 "functions": [
+                  "git_attr_add_macro",
+                  "git_attr_foreach",
+                  "git_attr_foreach_ext",
                   "git_attr_get",
+                  "git_attr_get_ext",
+                  "git_attr_get_many",
+                  "git_attr_get_many_ext",
+                  "git_attr_options_init",
                   "git_attr_value"
                 ],
                 "types": [
@@ -163,7 +171,13 @@
                   "git_blame_get_hunk_byindex",
                   "git_blame_get_hunk_byline",
                   "git_blame_get_hunk_count",
-                  "git_blame_init_options"
+                  "git_blame_hunk_byindex",
+                  "git_blame_hunk_byline",
+                  "git_blame_hunkcount",
+                  "git_blame_init_options",
+                  "git_blame_line_byindex",
+                  "git_blame_linecount",
+                  "git_blame_options_init"
                 ],
                 "types": [
                   "git_blame",
@@ -185,6 +199,7 @@
                   "git_branch_create",
                   "git_branch_create_from_annotated",
                   "git_branch_delete",
+                  "git_branch_is_checked_out",
                   "git_branch_is_head",
                   "git_branch_iterator_free",
                   "git_branch_iterator_new",
@@ -219,6 +234,7 @@
                   "git_checkout_head",
                   "git_checkout_index",
                   "git_checkout_init_options",
+                  "git_checkout_options_init",
                   "git_checkout_tree"
                 ],
                 "types": [
@@ -242,7 +258,8 @@
               "members": {
                 "functions": [
                   "git_clone",
-                  "git_clone_init_options"
+                  "git_clone_init_options",
+                  "git_clone_options_init"
                 ],
                 "types": [
                   "git_clone_local_t"
@@ -262,22 +279,29 @@
               "members": {
                 "functions": [
                   "git_config_add_file_ondisk",
+                  "git_config_backend_foreach_match",
                   "git_config_delete_entry",
                   "git_config_delete_multivar",
                   "git_config_find_global",
                   "git_config_find_system",
                   "git_config_find_xdg",
+                  "git_config_foreach",
+                  "git_config_foreach_match",
                   "git_config_free",
                   "git_config_get_bool",
                   "git_config_get_entry",
                   "git_config_get_int32",
                   "git_config_get_int64",
+                  "git_config_get_mapped",
+                  "git_config_get_multivar_foreach",
                   "git_config_get_path",
                   "git_config_get_string",
                   "git_config_get_string_buf",
                   "git_config_iterator_free",
                   "git_config_iterator_glob_new",
                   "git_config_iterator_new",
+                  "git_config_lock",
+                  "git_config_lookup_map_value",
                   "git_config_multivar_iterator_new",
                   "git_config_new",
                   "git_config_next",
@@ -288,11 +312,13 @@
                   "git_config_parse_bool",
                   "git_config_parse_int32",
                   "git_config_parse_int64",
+                  "git_config_parse_path",
                   "git_config_set_bool",
                   "git_config_set_int32",
                   "git_config_set_int64",
                   "git_config_set_multivar",
                   "git_config_set_string",
+                  "git_config_set_writeorder",
                   "git_config_snapshot"
                 ],
                 "types": [
@@ -315,6 +341,7 @@
               "members": {
                 "functions": [
                   "git_diff_find_init_options",
+                  "git_diff_find_options_init",
                   "git_diff_foreach",
                   "git_diff_format_email",
                   "git_diff_format_email_options_init",
@@ -323,6 +350,8 @@
                   "git_diff_init_options",
                   "git_diff_is_sorted_icase",
                   "git_diff_num_deltas",
+                  "git_diff_num_deltas_of_type",
+                  "git_diff_options_init",
                   "git_diff_patchid",
                   "git_diff_patchid_options_init"
                 ],
@@ -352,6 +381,8 @@
                 "functions": [
                   "git_describe_commit",
                   "git_describe_format",
+                  "git_describe_format_options_init",
+                  "git_describe_options_init",
                   "git_describe_result_free",
                   "git_describe_workdir"
                 ],
@@ -398,12 +429,17 @@
                 "functions": [
                   "git_remote_add_fetch",
                   "git_remote_add_push",
+                  "git_remote_autotag",
                   "git_remote_connect",
+                  "git_remote_connect_ext",
+                  "git_remote_connect_options_init",
                   "git_remote_connected",
                   "git_remote_create",
                   "git_remote_create_anonymous",
                   "git_remote_create_detached",
+                  "git_remote_create_options_init",
                   "git_remote_create_with_fetchspec",
+                  "git_remote_create_with_opts",
                   "git_remote_default_branch",
                   "git_remote_delete",
                   "git_remote_disconnect",
@@ -421,16 +457,22 @@
                   "git_remote_name",
                   "git_remote_name_is_valid",
                   "git_remote_oid_type",
+                  "git_remote_owner",
                   "git_remote_prune",
+                  "git_remote_prune_refs",
                   "git_remote_push",
                   "git_remote_pushurl",
                   "git_remote_refspec_count",
                   "git_remote_rename",
+                  "git_remote_set_autotag",
+                  "git_remote_set_instance_pushurl",
+                  "git_remote_set_instance_url",
                   "git_remote_set_pushurl",
                   "git_remote_set_url",
                   "git_remote_stats",
                   "git_remote_stop",
                   "git_remote_update_tips",
+                  "git_remote_upload",
                   "git_remote_url"
                 ],
                 "types": [
@@ -461,20 +503,38 @@
                   "git_index_add",
                   "git_index_add_all",
                   "git_index_add_bypath",
+                  "git_index_add_from_buffer",
                   "git_index_add_frombuffer",
+                  "git_index_caps",
+                  "git_index_checksum",
                   "git_index_clear",
+                  "git_index_conflict_add",
+                  "git_index_conflict_cleanup",
                   "git_index_conflict_get",
                   "git_index_conflict_iterator_free",
                   "git_index_conflict_iterator_new",
                   "git_index_conflict_next",
                   "git_index_conflict_remove",
+                  "git_index_entry_is_conflict",
+                  "git_index_entry_stage",
                   "git_index_entrycount",
+                  "git_index_extension_add",
+                  "git_index_extension_lookup",
+                  "git_index_extension_remove",
+                  "git_index_find",
                   "git_index_find_prefix",
                   "git_index_get_byindex",
                   "git_index_get_bypath",
                   "git_index_has_conflicts",
+                  "git_index_iterator_free",
+                  "git_index_iterator_new",
+                  "git_index_iterator_next",
                   "git_index_new",
+                  "git_index_new_ext",
                   "git_index_open",
+                  "git_index_open_ext",
+                  "git_index_options_init",
+                  "git_index_owner",
                   "git_index_path",
                   "git_index_read",
                   "git_index_read_tree",
@@ -482,6 +542,7 @@
                   "git_index_remove_all",
                   "git_index_remove_bypath",
                   "git_index_remove_directory",
+                  "git_index_set_caps",
                   "git_index_set_version",
                   "git_index_update_all",
                   "git_index_version",
@@ -493,6 +554,7 @@
                   "git_index",
                   "git_index_conflict_iterator",
                   "git_index_entry",
+                  "git_index_iterator",
                   "git_index_time"
                 ],
                 "callbacks": [
@@ -513,6 +575,7 @@
                   "git_indexer_append",
                   "git_indexer_commit",
                   "git_indexer_free",
+                  "git_indexer_hash",
                   "git_indexer_name",
                   "git_indexer_new",
                   "git_indexer_options_init"
@@ -556,6 +619,7 @@
                   "git_mailmap_from_buffer",
                   "git_mailmap_from_repository",
                   "git_mailmap_new",
+                  "git_mailmap_resolve",
                   "git_mailmap_resolve_signature"
                 ],
                 "types": [
@@ -587,6 +651,7 @@
                   "git_merge_file_input_init",
                   "git_merge_file_options_init",
                   "git_merge_init_options",
+                  "git_merge_options_init",
                   "git_merge_trees",
                   "git_repository_mergehead_foreach"
                 ],
@@ -630,9 +695,14 @@
               "members": {
                 "functions": [
                   "git_note_author",
+                  "git_note_commit_create",
+                  "git_note_commit_iterator_new",
+                  "git_note_commit_read",
+                  "git_note_commit_remove",
                   "git_note_committer",
                   "git_note_create",
                   "git_note_default_ref",
+                  "git_note_foreach",
                   "git_note_free",
                   "git_note_id",
                   "git_note_iterator_free",
@@ -661,13 +731,20 @@
                   "git_object_dup",
                   "git_object_free",
                   "git_object_id",
+                  "git_object_id_from_buffer",
+                  "git_object_id_from_file",
+                  "git_object_id_options_init",
                   "git_object_lookup",
+                  "git_object_lookup_bypath",
                   "git_object_lookup_prefix",
+                  "git_object_owner",
                   "git_object_peel",
+                  "git_object_rawcontent_is_valid",
                   "git_object_short_id",
                   "git_object_string2type",
                   "git_object_type",
                   "git_object_type2string",
+                  "git_object_type_is_valid",
                   "git_object_typeisloose"
                 ],
                 "types": [
@@ -687,14 +764,31 @@
               "members": {
                 "functions": [
                   "git_oid_cmp",
+                  "git_oid_cpy",
                   "git_oid_equal",
+                  "git_oid_fmt",
+                  "git_oid_from_prefix",
+                  "git_oid_from_raw",
+                  "git_oid_from_string",
                   "git_oid_fromraw",
+                  "git_oid_fromstr",
                   "git_oid_fromstrn",
+                  "git_oid_fromstrp",
                   "git_oid_is_zero",
-                  "git_oid_tostr"
+                  "git_oid_ncmp",
+                  "git_oid_nfmt",
+                  "git_oid_pathfmt",
+                  "git_oid_shorten_add",
+                  "git_oid_shorten_free",
+                  "git_oid_shorten_new",
+                  "git_oid_strcmp",
+                  "git_oid_streq",
+                  "git_oid_tostr",
+                  "git_oid_tostr_s"
                 ],
                 "types": [
                   "git_oid",
+                  "git_oid_shorten",
                   "git_oid_t"
                 ],
                 "callbacks": [],
@@ -718,6 +812,7 @@
                   "git_patch_line_stats",
                   "git_patch_num_hunks",
                   "git_patch_num_lines_in_hunk",
+                  "git_patch_owner",
                   "git_patch_size"
                 ],
                 "types": [
@@ -766,7 +861,9 @@
                 "src/libgit2/proxy.h"
               ],
               "members": {
-                "functions": [],
+                "functions": [
+                  "git_proxy_options_init"
+                ],
                 "types": [
                   "git_proxy_t"
                 ],
@@ -781,7 +878,9 @@
                 "src/libgit2/push.h"
               ],
               "members": {
-                "functions": [],
+                "functions": [
+                  "git_push_options_init"
+                ],
                 "types": [
                   "git_push"
                 ],
@@ -805,10 +904,13 @@
                   "git_rebase_init_options",
                   "git_rebase_inmemory_index",
                   "git_rebase_next",
+                  "git_rebase_onto_id",
+                  "git_rebase_onto_name",
                   "git_rebase_open",
                   "git_rebase_operation_byindex",
                   "git_rebase_operation_current",
                   "git_rebase_operation_entrycount",
+                  "git_rebase_options_init",
                   "git_rebase_orig_head_id",
                   "git_rebase_orig_head_name"
                 ],
@@ -831,7 +933,9 @@
               "members": {
                 "functions": [
                   "git_refdb_compress",
-                  "git_refdb_free"
+                  "git_refdb_free",
+                  "git_refdb_new",
+                  "git_refdb_open"
                 ],
                 "types": [
                   "git_refdb",
@@ -858,6 +962,9 @@
                   "git_reference_dup",
                   "git_reference_dwim",
                   "git_reference_ensure_log",
+                  "git_reference_foreach",
+                  "git_reference_foreach_glob",
+                  "git_reference_foreach_name",
                   "git_reference_free",
                   "git_reference_has_log",
                   "git_reference_is_branch",
@@ -866,6 +973,7 @@
                   "git_reference_is_tag",
                   "git_reference_iterator_glob_new",
                   "git_reference_iterator_new",
+                  "git_reference_list",
                   "git_reference_lookup",
                   "git_reference_name",
                   "git_reference_name_is_valid",
@@ -873,7 +981,9 @@
                   "git_reference_next",
                   "git_reference_next_name",
                   "git_reference_normalize_name",
+                  "git_reference_owner",
                   "git_reference_peel",
+                  "git_reference_remove",
                   "git_reference_rename",
                   "git_reference_resolve",
                   "git_reference_set_target",
@@ -940,6 +1050,7 @@
                   "git_refspec_rtransform",
                   "git_refspec_src",
                   "git_refspec_src_matches",
+                  "git_refspec_src_matches_negative",
                   "git_refspec_string",
                   "git_refspec_transform"
                 ],
@@ -960,20 +1071,31 @@
               ],
               "members": {
                 "functions": [
+                  "git_repository_commit_parents",
                   "git_repository_commondir",
                   "git_repository_config",
+                  "git_repository_config_snapshot",
+                  "git_repository_detach_head",
                   "git_repository_discover",
                   "git_repository_free",
                   "git_repository_get_namespace",
+                  "git_repository_hashfile",
                   "git_repository_head",
                   "git_repository_head_detached",
+                  "git_repository_head_detached_for_worktree",
+                  "git_repository_head_for_worktree",
+                  "git_repository_head_unborn",
+                  "git_repository_ident",
                   "git_repository_index",
+                  "git_repository_init",
                   "git_repository_init_ext",
                   "git_repository_init_init_options",
+                  "git_repository_init_options_init",
                   "git_repository_is_bare",
                   "git_repository_is_empty",
                   "git_repository_is_shallow",
                   "git_repository_is_worktree",
+                  "git_repository_item_path",
                   "git_repository_message",
                   "git_repository_message_remove",
                   "git_repository_odb",
@@ -988,6 +1110,7 @@
                   "git_repository_set_head",
                   "git_repository_set_head_detached",
                   "git_repository_set_head_detached_from_annotated",
+                  "git_repository_set_ident",
                   "git_repository_set_index",
                   "git_repository_set_namespace",
                   "git_repository_set_odb",
@@ -1018,7 +1141,8 @@
               "members": {
                 "functions": [
                   "git_reset",
-                  "git_reset_default"
+                  "git_reset_default",
+                  "git_reset_from_annotated"
                 ],
                 "types": [
                   "git_reset_t"
@@ -1043,11 +1167,13 @@
                   "git_revwalk_hide_ref",
                   "git_revwalk_new",
                   "git_revwalk_next",
+                  "git_revwalk_pathspec",
                   "git_revwalk_push",
                   "git_revwalk_push_glob",
                   "git_revwalk_push_head",
                   "git_revwalk_push_range",
                   "git_revwalk_push_ref",
+                  "git_revwalk_repository",
                   "git_revwalk_reset",
                   "git_revwalk_simplify_first_parent",
                   "git_revwalk_sorting"
@@ -1069,6 +1195,7 @@
                 "functions": [
                   "git_stash_apply",
                   "git_stash_apply_init_options",
+                  "git_stash_apply_options_init",
                   "git_stash_drop",
                   "git_stash_foreach",
                   "git_stash_pop",
@@ -1094,9 +1221,12 @@
                 "functions": [
                   "git_status_byindex",
                   "git_status_file",
+                  "git_status_foreach",
+                  "git_status_foreach_ext",
                   "git_status_init_options",
                   "git_status_list_entrycount",
                   "git_status_list_new",
+                  "git_status_options_init",
                   "git_status_should_ignore"
                 ],
                 "types": [
@@ -1138,24 +1268,30 @@
                   "git_submodule_add_to_index",
                   "git_submodule_branch",
                   "git_submodule_clone",
+                  "git_submodule_fetch_recurse_submodules",
                   "git_submodule_foreach",
                   "git_submodule_head_id",
                   "git_submodule_ignore",
                   "git_submodule_index_id",
                   "git_submodule_init",
+                  "git_submodule_location",
                   "git_submodule_lookup",
                   "git_submodule_name",
                   "git_submodule_open",
+                  "git_submodule_owner",
                   "git_submodule_path",
                   "git_submodule_reload",
                   "git_submodule_repo_init",
+                  "git_submodule_resolve_url",
                   "git_submodule_set_branch",
+                  "git_submodule_set_fetch_recurse_submodules",
                   "git_submodule_set_ignore",
                   "git_submodule_set_update",
                   "git_submodule_set_url",
                   "git_submodule_status",
                   "git_submodule_sync",
                   "git_submodule_update",
+                  "git_submodule_update_options_init",
                   "git_submodule_update_strategy",
                   "git_submodule_url",
                   "git_submodule_wd_id"
@@ -1291,7 +1427,11 @@
               "headers": [],
               "members": {
                 "functions": [
+                  "git_libgit2_feature_backend",
                   "git_libgit2_features",
+                  "git_libgit2_init",
+                  "git_libgit2_prerelease",
+                  "git_libgit2_shutdown",
                   "git_libgit2_version"
                 ],
                 "types": [],
@@ -1307,6 +1447,7 @@
               ],
               "members": {
                 "functions": [
+                  "git_libgit2_buildinfo",
                   "git_libgit2_opts"
                 ],
                 "types": [],
@@ -1342,6 +1483,7 @@
                 "functions": [
                   "git_tag_annotation_create",
                   "git_tag_create",
+                  "git_tag_create_from_buffer",
                   "git_tag_create_lightweight",
                   "git_tag_delete",
                   "git_tag_foreach",
@@ -1390,10 +1532,18 @@
               ],
               "members": {
                 "functions": [
+                  "git_blob_create_from_buffer",
+                  "git_blob_create_from_disk",
+                  "git_blob_create_from_stream",
+                  "git_blob_create_from_stream_commit",
+                  "git_blob_create_from_workdir",
                   "git_blob_create_frombuffer",
                   "git_blob_create_fromdisk",
                   "git_blob_create_fromstream",
                   "git_blob_create_fromstream_commit",
+                  "git_blob_data_is_binary",
+                  "git_blob_filter",
+                  "git_blob_filter_options_init",
                   "git_blob_is_binary",
                   "git_blob_rawcontent",
                   "git_blob_rawsize"
@@ -1431,6 +1581,8 @@
               "members": {
                 "functions": [
                   "git_commit_amend",
+                  "git_commit_amend_from_stage",
+                  "git_commit_amend_from_tree",
                   "git_commit_author",
                   "git_commit_author_with_mailmap",
                   "git_commit_body",
@@ -1438,12 +1590,19 @@
                   "git_commit_committer_with_mailmap",
                   "git_commit_create",
                   "git_commit_create_buffer",
+                  "git_commit_create_ext",
+                  "git_commit_create_ext_options_init",
+                  "git_commit_create_from_stage",
+                  "git_commit_create_from_tree",
+                  "git_commit_create_options_init",
+                  "git_commit_create_v",
                   "git_commit_create_with_signature",
                   "git_commit_extract_signature",
                   "git_commit_header_field",
                   "git_commit_message",
                   "git_commit_message_encoding",
                   "git_commit_message_raw",
+                  "git_commit_nth_gen_ancestor",
                   "git_commit_parent",
                   "git_commit_parent_id",
                   "git_commit_parentcount",
@@ -1452,10 +1611,13 @@
                   "git_commit_time",
                   "git_commit_time_offset",
                   "git_commit_tree",
-                  "git_commit_tree_id"
+                  "git_commit_tree_id",
+                  "git_commitarray_dispose",
+                  "git_commitbuilder_add_header"
                 ],
                 "types": [
-                  "git_commit"
+                  "git_commit",
+                  "git_commitbuilder"
                 ],
                 "callbacks": [],
                 "macros": [],
@@ -1470,29 +1632,40 @@
               ],
               "members": {
                 "functions": [
+                  "git_odb_add_alternate",
                   "git_odb_add_backend",
                   "git_odb_add_disk_alternate",
                   "git_odb_exists",
                   "git_odb_exists_ext",
                   "git_odb_exists_prefix",
+                  "git_odb_expand_ids",
                   "git_odb_foreach",
+                  "git_odb_get_backend",
                   "git_odb_hash",
                   "git_odb_hashfile",
                   "git_odb_new",
+                  "git_odb_new_ext",
+                  "git_odb_num_backends",
                   "git_odb_object_data",
                   "git_odb_object_free",
                   "git_odb_object_id",
                   "git_odb_object_size",
                   "git_odb_object_type",
+                  "git_odb_open",
+                  "git_odb_open_ext",
                   "git_odb_open_rstream",
                   "git_odb_open_wstream",
+                  "git_odb_options_init",
                   "git_odb_read",
                   "git_odb_read_header",
+                  "git_odb_read_prefix",
                   "git_odb_refresh",
+                  "git_odb_set_commit_graph",
                   "git_odb_stream_finalize_write",
                   "git_odb_stream_read",
                   "git_odb_stream_write",
                   "git_odb_write",
+                  "git_odb_write_multi_pack_index",
                   "git_odb_write_pack"
                 ],
                 "types": [
@@ -1563,7 +1736,8 @@
               ],
               "members": {
                 "functions": [
-                  "git_diff_from_buffer"
+                  "git_diff_from_buffer",
+                  "git_diff_from_buffer_ext"
                 ],
                 "types": [],
                 "callbacks": [],
@@ -1595,7 +1769,8 @@
               "members": {
                 "functions": [
                   "git_graph_ahead_behind",
-                  "git_graph_descendant_of"
+                  "git_graph_descendant_of",
+                  "git_graph_reachable_from_any"
                 ],
                 "types": [],
                 "callbacks": [],
@@ -1642,6 +1817,8 @@
               "members": {
                 "functions": [
                   "git_diff_print",
+                  "git_diff_status_char",
+                  "git_diff_to_buf",
                   "git_patch_print",
                   "git_patch_to_buf"
                 ],
@@ -1658,14 +1835,20 @@
                 "functions": [
                   "git_blob_id",
                   "git_blob_lookup",
+                  "git_blob_lookup_prefix",
+                  "git_blob_owner",
                   "git_commit_id",
                   "git_commit_lookup",
                   "git_commit_lookup_prefix",
+                  "git_commit_owner",
                   "git_tag_id",
                   "git_tag_lookup",
                   "git_tag_lookup_prefix",
+                  "git_tag_owner",
                   "git_tree_id",
-                  "git_tree_lookup"
+                  "git_tree_lookup",
+                  "git_tree_lookup_prefix",
+                  "git_tree_owner"
                 ],
                 "types": [],
                 "callbacks": [],
@@ -1682,7 +1865,8 @@
                 "functions": [
                   "git_cherrypick",
                   "git_cherrypick_commit",
-                  "git_cherrypick_init_options"
+                  "git_cherrypick_init_options",
+                  "git_cherrypick_options_init"
                 ],
                 "types": [],
                 "callbacks": [],
@@ -1697,7 +1881,9 @@
               ],
               "members": {
                 "functions": [
+                  "git_diff_blob_to_buffer",
                   "git_diff_blobs",
+                  "git_diff_buffers",
                   "git_patch_from_blob_and_buffer",
                   "git_patch_from_blobs",
                   "git_patch_from_buffers"
@@ -1738,7 +1924,8 @@
               "members": {
                 "functions": [
                   "git_email_create_from_commit",
-                  "git_email_create_from_diff"
+                  "git_email_create_from_diff",
+                  "git_email_create_options_init"
                 ],
                 "types": [],
                 "callbacks": [],
@@ -1816,6 +2003,7 @@
                 "functions": [
                   "git_signature_default",
                   "git_signature_default_from_env",
+                  "git_signature_from_buffer",
                   "git_signature_new",
                   "git_signature_now"
                 ],
@@ -1856,6 +2044,127 @@
                 "macros": [],
                 "globals": []
               }
+            },
+            "src/attrcache.rs": {
+              "tu": "src/libgit2/attrcache.c",
+              "headers": [
+                "src/libgit2/attrcache.h"
+              ],
+              "members": {
+                "functions": [
+                  "git_attr_cache_flush"
+                ],
+                "types": [],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/commit_graph.rs": {
+              "tu": "src/libgit2/commit_graph.c",
+              "headers": [
+                "include/git2/sys/commit_graph.h",
+                "src/libgit2/commit_graph.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_commit_graph",
+                  "git_commit_graph_writer"
+                ],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/fetch.rs": {
+              "tu": "src/libgit2/fetch.c",
+              "headers": [
+                "src/libgit2/fetch.h"
+              ],
+              "members": {
+                "functions": [
+                  "git_fetch_options_init"
+                ],
+                "types": [],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/filter.rs": {
+              "tu": "src/libgit2/filter.c",
+              "headers": [
+                "include/git2/filter.h",
+                "include/git2/sys/filter.h",
+                "src/libgit2/filter.h"
+              ],
+              "members": {
+                "functions": [
+                  "git_filter_list_apply_to_blob",
+                  "git_filter_list_apply_to_buffer",
+                  "git_filter_list_apply_to_file",
+                  "git_filter_list_contains",
+                  "git_filter_list_free",
+                  "git_filter_list_load",
+                  "git_filter_list_load_ext",
+                  "git_filter_list_stream_blob",
+                  "git_filter_list_stream_buffer",
+                  "git_filter_list_stream_file",
+                  "git_filter_options_init"
+                ],
+                "types": [
+                  "git_filter_list"
+                ],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/midx.rs": {
+              "tu": "src/libgit2/midx.c",
+              "headers": [
+                "include/git2/sys/midx.h",
+                "src/libgit2/midx.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_midx_writer"
+                ],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/odb_loose.rs": {
+              "tu": "src/libgit2/odb_loose.c",
+              "headers": [],
+              "members": {
+                "functions": [
+                  "git_odb_backend_loose",
+                  "git_odb_backend_loose_options_init"
+                ],
+                "types": [],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/odb_pack.rs": {
+              "tu": "src/libgit2/odb_pack.c",
+              "headers": [],
+              "members": {
+                "functions": [
+                  "git_odb_backend_one_pack",
+                  "git_odb_backend_pack",
+                  "git_odb_backend_pack_options_init"
+                ],
+                "types": [],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
             }
           }
         },
@@ -1876,6 +2185,7 @@
                   "git_reference_t",
                   "git_signature",
                   "git_submodule_ignore_t",
+                  "git_submodule_recurse_t",
                   "git_submodule_update_t",
                   "git_time",
                   "git_writestream"
@@ -1930,7 +2240,11 @@
               "members": {
                 "functions": [],
                 "types": [
+                  "git_odb_backend_loose_flag_t",
+                  "git_odb_backend_loose_options",
+                  "git_odb_backend_pack_options",
                   "git_odb_stream",
+                  "git_odb_stream_t",
                   "git_odb_writepack"
                 ],
                 "callbacks": [],
@@ -1964,9 +2278,13 @@
                 "src/libgit2/blame.h"
               ],
               "members": {
-                "functions": [],
+                "functions": [
+                  "git_blame_file_from_buffer"
+                ],
                 "types": [
-                  "git_blame_hunk"
+                  "git_blame_flag_t",
+                  "git_blame_hunk",
+                  "git_blame_line"
                 ],
                 "callbacks": [],
                 "macros": [],
@@ -2018,7 +2336,10 @@
                 "types": [
                   "git_clone_options"
                 ],
-                "callbacks": [],
+                "callbacks": [
+                  "git_remote_create_cb",
+                  "git_repository_create_cb"
+                ],
                 "macros": [],
                 "globals": []
               }
@@ -2032,7 +2353,12 @@
               ],
               "members": {
                 "functions": [],
-                "types": [],
+                "types": [
+                  "git_commit_create_ext_options",
+                  "git_commit_create_options",
+                  "git_commit_header",
+                  "git_commitarray"
+                ],
                 "callbacks": [
                   "git_commit_create_cb"
                 ],
@@ -2048,9 +2374,15 @@
               ],
               "members": {
                 "functions": [],
-                "types": [],
+                "types": [
+                  "_LIBSSH2_SESSION",
+                  "_LIBSSH2_USERAUTH_KBDINT_PROMPT",
+                  "_LIBSSH2_USERAUTH_KBDINT_RESPONSE"
+                ],
                 "callbacks": [
-                  "git_credential_acquire_cb"
+                  "git_credential_acquire_cb",
+                  "git_credential_sign_cb",
+                  "git_credential_ssh_interactive_cb"
                 ],
                 "macros": [],
                 "globals": []
@@ -2069,6 +2401,8 @@
                   "git_diff_binary",
                   "git_diff_delta",
                   "git_diff_find_options",
+                  "git_diff_find_t",
+                  "git_diff_flag_t",
                   "git_diff_line_t",
                   "git_diff_option_t",
                   "git_diff_options",
@@ -2079,7 +2413,9 @@
                   "git_diff_binary_cb",
                   "git_diff_file_cb",
                   "git_diff_hunk_cb",
-                  "git_diff_line_cb"
+                  "git_diff_line_cb",
+                  "git_diff_notify_cb",
+                  "git_diff_progress_cb"
                 ],
                 "macros": [],
                 "globals": []
@@ -2146,9 +2482,14 @@
               "members": {
                 "functions": [],
                 "types": [
+                  "git_fetch_depth_t",
                   "git_fetch_options",
                   "git_push_options",
-                  "git_remote_callbacks"
+                  "git_remote_callbacks",
+                  "git_remote_connect_options",
+                  "git_remote_create_flags",
+                  "git_remote_create_options",
+                  "git_remote_update_flags"
                 ],
                 "callbacks": [
                   "git_push_negotiation",
@@ -2168,7 +2509,12 @@
               "members": {
                 "functions": [],
                 "types": [
-                  "git_index_options"
+                  "git_index_add_option_t",
+                  "git_index_capability_t",
+                  "git_index_entry_extended_flag_t",
+                  "git_index_entry_flag_t",
+                  "git_index_options",
+                  "git_index_stage_t"
                 ],
                 "callbacks": [],
                 "macros": [],
@@ -2202,6 +2548,7 @@
                 "functions": [],
                 "types": [
                   "git_merge_file_flag_t",
+                  "git_merge_flag_t",
                   "git_merge_options"
                 ],
                 "callbacks": [],
@@ -2218,6 +2565,8 @@
               "members": {
                 "functions": [],
                 "types": [
+                  "git_odb_expand_id",
+                  "git_odb_lookup_flags_t",
                   "git_odb_options"
                 ],
                 "callbacks": [],
@@ -2282,7 +2631,11 @@
               "members": {
                 "functions": [],
                 "types": [
-                  "git_repository_init_flag_t"
+                  "git_repository_init_flag_t",
+                  "git_repository_init_mode_t",
+                  "git_repository_item_t",
+                  "git_repository_open_flag_t",
+                  "git_repository_state_t"
                 ],
                 "callbacks": [],
                 "macros": [],
@@ -2312,7 +2665,9 @@
               ],
               "members": {
                 "functions": [],
-                "types": [],
+                "types": [
+                  "git_sort_t"
+                ],
                 "callbacks": [
                   "git_revwalk_hide_cb"
                 ],
@@ -2328,7 +2683,9 @@
               "members": {
                 "functions": [],
                 "types": [
+                  "git_stash_apply_flags",
                   "git_stash_apply_options",
+                  "git_stash_flags",
                   "git_stash_save_options"
                 ],
                 "callbacks": [
@@ -2352,7 +2709,9 @@
                   "git_status_opt_t",
                   "git_status_options"
                 ],
-                "callbacks": [],
+                "callbacks": [
+                  "git_status_cb"
+                ],
                 "macros": [],
                 "globals": []
               }
@@ -2366,6 +2725,7 @@
               "members": {
                 "functions": [],
                 "types": [
+                  "git_submodule_status_t",
                   "git_submodule_update_options"
                 ],
                 "callbacks": [
@@ -2456,6 +2816,211 @@
                 "macros": [],
                 "globals": []
               }
+            },
+            "src/api/attr.rs": {
+              "tu": "src/libgit2/attr.c",
+              "headers": [
+                "include/git2/attr.h",
+                "src/libgit2/attr.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_attr_options"
+                ],
+                "callbacks": [
+                  "git_attr_foreach_cb"
+                ],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/api/blob.rs": {
+              "tu": "src/libgit2/blob.c",
+              "headers": [
+                "include/git2/blob.h",
+                "src/libgit2/blob.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_blob_filter_flag_t",
+                  "git_blob_filter_options"
+                ],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/api/common.rs": {
+              "tu": null,
+              "headers": [
+                "include/git2/common.h",
+                "src/libgit2/common.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_buildinfo_t",
+                  "git_feature_t",
+                  "git_libgit2_opt_t"
+                ],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/api/config.rs": {
+              "tu": "src/libgit2/config.c",
+              "headers": [
+                "include/git2/config.h",
+                "include/git2/sys/config.h",
+                "src/libgit2/config.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_configmap",
+                  "git_configmap_t"
+                ],
+                "callbacks": [
+                  "git_config_foreach_cb"
+                ],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/api/credential_helpers.rs": {
+              "tu": "src/libgit2/transports/credential_helpers.c",
+              "headers": [
+                "include/git2/credential_helpers.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_credential_userpass_payload"
+                ],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/api/describe.rs": {
+              "tu": "src/libgit2/describe.c",
+              "headers": [
+                "include/git2/describe.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_describe_strategy_t"
+                ],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/api/filter.rs": {
+              "tu": "src/libgit2/filter.c",
+              "headers": [
+                "include/git2/filter.h",
+                "include/git2/sys/filter.h",
+                "src/libgit2/filter.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_filter_flag_t",
+                  "git_filter_mode_t",
+                  "git_filter_options"
+                ],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/api/notes.rs": {
+              "tu": "src/libgit2/notes.c",
+              "headers": [
+                "include/git2/notes.h",
+                "src/libgit2/notes.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [],
+                "callbacks": [
+                  "git_note_foreach_cb"
+                ],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/api/object.rs": {
+              "tu": "src/libgit2/object.c",
+              "headers": [
+                "include/git2/object.h",
+                "src/libgit2/object.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_object_id_options"
+                ],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/api/pathspec.rs": {
+              "tu": "src/libgit2/pathspec.c",
+              "headers": [
+                "include/git2/pathspec.h",
+                "src/libgit2/pathspec.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_pathspec_flag_t"
+                ],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/api/refs.rs": {
+              "tu": "src/libgit2/refs.c",
+              "headers": [
+                "include/git2/refs.h",
+                "include/git2/sys/refs.h",
+                "src/libgit2/refs.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_reference_format_t"
+                ],
+                "callbacks": [
+                  "git_reference_foreach_cb",
+                  "git_reference_foreach_name_cb"
+                ],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/api/revparse.rs": {
+              "tu": "src/libgit2/revparse.c",
+              "headers": [
+                "include/git2/revparse.h"
+              ],
+              "members": {
+                "functions": [],
+                "types": [
+                  "git_revspec_t"
+                ],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
             }
           }
         },
@@ -2476,7 +3041,17 @@
                   "git_cred_ssh_key_memory_new",
                   "git_cred_ssh_key_new",
                   "git_cred_username_new",
-                  "git_cred_userpass_plaintext_new"
+                  "git_cred_userpass_plaintext_new",
+                  "git_credential_default_new",
+                  "git_credential_get_username",
+                  "git_credential_has_username",
+                  "git_credential_ssh_custom_new",
+                  "git_credential_ssh_interactive_new",
+                  "git_credential_ssh_key_from_agent",
+                  "git_credential_ssh_key_memory_new",
+                  "git_credential_ssh_key_new",
+                  "git_credential_username_new",
+                  "git_credential_userpass_plaintext_new"
                 ],
                 "types": [
                   "git_credential",
@@ -2495,6 +3070,21 @@
               "members": {
                 "functions": [
                   "git_transport_smart"
+                ],
+                "types": [],
+                "callbacks": [],
+                "macros": [],
+                "globals": []
+              }
+            },
+            "src/transports/credential_helpers.rs": {
+              "tu": "src/libgit2/transports/credential_helpers.c",
+              "headers": [
+                "include/git2/credential_helpers.h"
+              ],
+              "members": {
+                "functions": [
+                  "git_credential_userpass"
                 ],
                 "types": [],
                 "callbacks": [],
@@ -2532,6 +3122,7 @@
               "members": {
                 "functions": [],
                 "types": [
+                  "git_config_backend",
                   "git_config_backend_entry",
                   "git_config_iterator"
                 ],
