@@ -49,7 +49,6 @@ define_ctype!(
 /// An owned commit-graph writer allocation.
 pub type GitCommitGraphWriterOwned = CBox<GitCommitGraphWriter>;
 
-/// Wraps: git_commit_graph_writer_free
 // SAFETY: `git_commit_graph_writer_free` is the public destructor for a
 // complete writer allocation. It accepts null, although `CBox` supplies one
 // live non-null allocation exactly once, and disposes every owned field before
@@ -127,5 +126,16 @@ mod tests {
     fn writer_registers_its_public_destructor() {
         fn requires_drop<T: CDropped>() {}
         requires_drop::<GitCommitGraphWriter>();
+    }
+
+    #[test]
+    fn null_commit_graph_writer_seams_create_no_handle() {
+        // SAFETY: these conversions explicitly accept null and return `None`
+        // without borrowing or adopting a writer allocation.
+        unsafe {
+            assert!(GitCommitGraphWriterRef::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitCommitGraphWriterMut::from_ptr(ptr::null_mut()).is_none());
+            assert!(GitCommitGraphWriterOwned::from_raw(ptr::null_mut()).is_none());
+        }
     }
 }

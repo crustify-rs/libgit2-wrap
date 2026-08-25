@@ -1312,7 +1312,7 @@
   {
    "name": "git_commit_header",
    "defined_in": "include/git2/commit.h",
-   "_comment_agent": "git_commit_header is a by-value descriptor that borrows two required NUL-terminated strings. git_commit__create_buffer_internal reads both synchronously while formatting the extra-header array; neither pointer is retained or freed.",
+   "_comment_agent": "git_commit_header is a by-value descriptor that borrows two required NUL-terminated strings from CALLER storage, not from the descriptor itself: git_commit__create_buffer_internal reads both synchronously through format_header_field while formatting git_commit_create_options.extra_headers, and neither pointer is retained, copied into the header, or freed. The borrow source is therefore `other` (the caller's string storage), matching the identically shaped git_credential_userpass_payload; `self` would claim the strings live and die with the descriptor, which no code path establishes.",
    "fields": [
     {
      "name": "field",
@@ -1322,11 +1322,11 @@
       "string": true,
       "owned": false,
       "borrowed": {
-       "lifetime": "self"
+       "lifetime": "other"
       },
       "nullable": false,
       "mutable": false,
-      "note": "Required borrowed NUL-terminated field name; callers keep the storage alive while the header descriptor is used. Formatting only reads it."
+      "note": "Required borrowed NUL-terminated field name held in caller storage that is independent of the descriptor; format_header_field only reads it and rejects NULL through GIT_ASSERT_ARG. Never retained or freed by libgit2."
      }
     },
     {
@@ -1337,11 +1337,11 @@
       "string": true,
       "owned": false,
       "borrowed": {
-       "lifetime": "self"
+       "lifetime": "other"
       },
       "nullable": false,
       "mutable": false,
-      "note": "Required borrowed NUL-terminated header value; callers keep the storage alive while the header descriptor is used. Formatting only reads it."
+      "note": "Required borrowed NUL-terminated header value held in caller storage that is independent of the descriptor; format_header_field only reads it and rejects NULL through GIT_ASSERT_ARG. Never retained or freed by libgit2."
      }
     }
    ]

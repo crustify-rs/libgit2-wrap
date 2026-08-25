@@ -265,6 +265,21 @@ mod commit_header_tests {
     }
 
     #[test]
+    fn commit_header_accessors_report_an_incomplete_c_value_as_absent() {
+        // Both C fields are required, so libgit2 never publishes a null one.
+        // The getters still report absence rather than fabricating a `CStr`,
+        // because zero-initialized layout storage is reachable in Rust.
+        let mut raw = crate::ffi::git_commit_header {
+            field: core::ptr::null(),
+            value: core::ptr::null(),
+        };
+        // SAFETY: `raw` is initialized storage that outlives this handle.
+        let header = unsafe { GitCommitHeaderRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(header.field(), None);
+        assert_eq!(header.value(), None);
+    }
+
+    #[test]
     fn commit_header_wrapper_matches_the_c_layout() {
         assert_eq!(
             size_of::<GitCommitHeader>(),

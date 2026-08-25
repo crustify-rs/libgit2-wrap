@@ -331,6 +331,24 @@ mod tests {
         assert!(!line.is_empty());
         assert_eq!(line.bytes().elems().collect::<Vec<_>>(), bytes);
     }
+
+    #[test]
+    fn an_empty_line_keeps_its_start_pointer_and_yields_no_bytes() {
+        // `index_blob_lines` records a zero-length line for a bare newline: it
+        // stores the newline's own address as `ptr` and never a null one.
+        let buffer = *b"\n";
+        let mut raw = ffi::git_blame_line {
+            ptr: buffer.as_ptr().cast(),
+            len: 0,
+        };
+
+        // SAFETY: `raw` and `buffer` remain live and unmodified while the
+        // shared line handle and its dependent byte view are used.
+        let line = unsafe { GitBlameLineRef::from_ptr(&raw mut raw) }.unwrap();
+        assert_eq!(line.len(), 0);
+        assert!(line.is_empty());
+        assert_eq!(line.bytes().elems().count(), 0);
+    }
 }
 
 /// Wraps: git_blame_flag_t

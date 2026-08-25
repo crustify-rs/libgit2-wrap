@@ -210,6 +210,57 @@ mod libssh2_type_tests {
     }
 
     #[test]
+    fn opaque_prompt_and_response_batches_report_only_their_cardinality() {
+        // The libgit2 header leaves both record types incomplete, so a test
+        // can only stand in for libssh2's run with an opaque backing address.
+        let mut backing = [0_u8; 3];
+        let prompts_ptr = backing
+            .as_ptr()
+            .cast::<crate::ffi::_LIBSSH2_USERAUTH_KBDINT_PROMPT>();
+        let responses_ptr = backing
+            .as_mut_ptr()
+            .cast::<crate::ffi::_LIBSSH2_USERAUTH_KBDINT_RESPONSE>();
+
+        // SAFETY: `backing` stays live for both batches, which record their
+        // cardinality and never project or dereference a record.
+        unsafe {
+            let prompts = Libssh2PromptBatch::from_raw(prompts_ptr, 3).unwrap();
+            assert_eq!(prompts.len(), 3);
+            assert!(!prompts.is_empty());
+
+            let responses = Libssh2ResponseBatch::from_raw(responses_ptr, 3).unwrap();
+            assert_eq!(responses.len(), 3);
+            assert!(!responses.is_empty());
+        }
+    }
+
+    #[test]
+    fn empty_libssh2_batches_need_no_record_pointer() {
+        // libssh2 may pass a null run alongside a zero count; the batch seam
+        // must then report emptiness instead of rejecting the invocation.
+        // SAFETY: a zero-length batch dereferences no record.
+        unsafe {
+            let prompts = Libssh2PromptBatch::from_raw(ptr::null(), 0).unwrap();
+            assert_eq!(prompts.len(), 0);
+            assert!(prompts.is_empty());
+
+            let responses = Libssh2ResponseBatch::from_raw(ptr::null_mut(), 0).unwrap();
+            assert_eq!(responses.len(), 0);
+            assert!(responses.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_nonempty_libssh2_batch_rejects_a_null_record_run() {
+        // SAFETY: these seams inspect the pointer only and construct nothing
+        // when it is null.
+        unsafe {
+            assert!(Libssh2PromptBatch::from_raw(ptr::null(), 1).is_none());
+            assert!(Libssh2ResponseBatch::from_raw(ptr::null_mut(), 1).is_none());
+        }
+    }
+
+    #[test]
     fn null_libssh2_pointers_create_no_borrowed_handle() {
         // SAFETY: the borrowed-handle seam accepts null and returns `None`
         // without constructing a borrow.
