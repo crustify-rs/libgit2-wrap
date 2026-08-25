@@ -1,5 +1,6 @@
 //! Safe wrappers for libgit2 reset APIs.
 
+use crate::api::checkout::GitCheckoutOptionsRef;
 use crate::ffi;
 use crate::object::GitObjectRef;
 use crate::repository::GitRepositoryMut;
@@ -113,4 +114,28 @@ mod tests {
         // SAFETY: no handle remains and this recovers the exact allocation.
         drop(unsafe { Box::from_raw(raw.cast::<core::mem::MaybeUninit<ffi::git_repository>>()) });
     }
+}
+
+/// Wraps: git_reset
+/// Moves `HEAD` to `target` and updates repository state selected by
+/// `reset_type`.
+pub fn git_reset(
+    repository: &mut GitRepositoryMut<'_>,
+    target: GitObjectRef<'_>,
+    reset_type: ResetType,
+    checkout_options: Option<GitCheckoutOptionsRef<'_, '_>>,
+) -> Result<(), i32> {
+    let checkout_options = checkout_options.map_or(core::ptr::null(), |options| options.as_ptr());
+    // SAFETY: the repository is exclusively borrowed; `target` and the
+    // optional checkout options remain live for the synchronous operation.
+    // Libgit2 retains none of these pointers.
+    let status = unsafe {
+        ffi::git_reset(
+            repository.as_mut_ptr(),
+            target.as_ptr(),
+            reset_type.into(),
+            checkout_options,
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
 }

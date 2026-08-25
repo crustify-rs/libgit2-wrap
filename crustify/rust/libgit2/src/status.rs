@@ -437,3 +437,18 @@ mod options_initializer_tests {
         assert_eq!(options.as_ref().show(), Ok(StatusShow::IndexAndWorkdir));
     }
 }
+
+/// Wraps: git_status_byindex
+/// Borrows the entry at `index`, returning `None` when it is out of bounds.
+#[must_use]
+pub fn git_status_byindex<'a>(
+    status: GitStatusListRef<'a>,
+    index: usize,
+) -> Option<crate::api::status::GitStatusEntryRef<'a>> {
+    // SAFETY: the live list is only indexed; the returned entry is owned by
+    // that list and this wrapper carries the list borrow into the result.
+    let entry = unsafe { ffi::git_status_byindex(status.as_ptr().cast_mut(), index) };
+    // SAFETY: null means out of range; otherwise the entry remains live for
+    // the source list borrow.
+    unsafe { crate::api::status::GitStatusEntryRef::from_ptr(entry.cast_mut()) }
+}

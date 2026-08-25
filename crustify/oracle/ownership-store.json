@@ -16327,6 +16327,117 @@
    ]
   },
   {
+   "name": "git_merge_trees",
+   "defined_in": "src/libgit2/merge.c",
+   "ptr_args": [
+    {
+     "name": "ancestor_tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:ancestor_tree"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional common ancestor, read only for this call."
+     }
+    },
+    {
+     "name": "merge_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:merge_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional read-only options used only during the call."
+     }
+    },
+    {
+     "name": "our_tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:our_tree"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Read-only destination tree; implementation supports a null empty tree."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required output slot receives one independently owned index on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository is retained by neither the result nor the call; merge internals may update repository caches."
+     }
+    },
+    {
+     "name": "their_tree",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:their_tree"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Read-only incoming tree; implementation supports a null empty tree."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_message_prettify",
    "defined_in": "src/libgit2/message.c",
    "ptr_args": [
@@ -19772,6 +19883,327 @@
    ]
   },
   {
+   "name": "git_patch_from_blob_and_buffer",
+   "defined_in": "src/libgit2/patch_generate.c",
+   "ptr_args": [
+    {
+     "name": "buf",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:buf"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "buffer_len readable bytes; null is valid for an empty side. The produced patch retains this content."
+     }
+    },
+    {
+     "name": "buf_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:buf_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional NUL path copied into the patch allocation."
+     }
+    },
+    {
+     "name": "old_blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_blob"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional read-only blob; the patch duplicates its blob reference."
+     }
+    },
+    {
+     "name": "old_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional NUL path copied into the patch allocation."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional options read during generation; retained prefixes are duplicated."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required output receives one patch owner on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_patch_from_blobs",
+   "defined_in": "src/libgit2/patch_generate.c",
+   "ptr_args": [
+    {
+     "name": "new_blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_blob"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional read-only new blob; the patch duplicates its blob reference."
+     }
+    },
+    {
+     "name": "new_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional NUL path copied into the patch allocation."
+     }
+    },
+    {
+     "name": "old_blob",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_blob"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional read-only old blob; the patch duplicates its blob reference."
+     }
+    },
+    {
+     "name": "old_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional NUL path copied into the patch allocation."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional options read during generation; retained prefixes are duplicated."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required output receives one patch owner on success."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_patch_from_buffers",
+   "defined_in": "src/libgit2/patch_generate.c",
+   "ptr_args": [
+    {
+     "name": "new_buf",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_buf"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "new_len readable bytes; null is valid for empty. The produced patch retains this content."
+     }
+    },
+    {
+     "name": "new_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:new_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional NUL path copied into the patch allocation."
+     }
+    },
+    {
+     "name": "old_buf",
+     "ptr": {
+      "scalar": null,
+      "array": {
+       "by_val": true
+      },
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_buf"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "old_len readable bytes; null is valid for empty. The produced patch retains this content."
+     }
+    },
+    {
+     "name": "old_path",
+     "ptr": {
+      "scalar": null,
+      "array": null,
+      "string": true,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:old_path"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional NUL path copied into the patch allocation."
+     }
+    },
+    {
+     "name": "opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional options read during generation; retained prefixes are duplicated."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required output receives one patch owner on success."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_patch_from_diff",
    "defined_in": "src/libgit2/patch.c",
    "ptr_args": [
@@ -20076,6 +20508,63 @@
       "nullable": false,
       "mutable": false,
       "note": "Required transient borrowed input; ownership remains with the caller and the pointer is not retained."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_patch_print",
+   "defined_in": "src/libgit2/diff_print.c",
+   "ptr_args": [
+    {
+     "name": "patch",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:patch"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Live patch used synchronously; generation and formatting may update internal caches."
+     }
+    },
+    {
+     "name": "payload",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:payload"
+      },
+      "nullable": true,
+      "mutable": true,
+      "note": "Opaque callback payload forwarded synchronously; may be null and callback-defined."
+     }
+    },
+    {
+     "name": "print_cb",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:print_cb"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required function pointer invoked synchronously and never retained."
      }
     }
    ]
@@ -27154,6 +27643,63 @@
    ]
   },
   {
+   "name": "git_reset",
+   "defined_in": "src/libgit2/reset.c",
+   "ptr_args": [
+    {
+     "name": "checkout_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:checkout_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional read-only checkout options used synchronously."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository, index and possibly worktree are mutated synchronously."
+     }
+    },
+    {
+     "name": "target",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:target"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required read-only target object, retained nowhere."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_reset_default",
    "defined_in": "src/libgit2/reset.c",
    "ptr_args": [
@@ -27206,6 +27752,100 @@
       "nullable": true,
       "mutable": false,
       "note": "Single live pointee borrowed for the synchronous call; ownership is not transferred."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_revert_commit",
+   "defined_in": "src/libgit2/revert.c",
+   "ptr_args": [
+    {
+     "name": "merge_opts",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:merge_opts"
+      },
+      "nullable": true,
+      "mutable": false,
+      "note": "Optional read-only merge options used synchronously."
+     }
+    },
+    {
+     "name": "our_commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:our_commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required commit read synchronously; no ownership transfer."
+     }
+    },
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required output receives one independently owned index on success."
+     }
+    },
+    {
+     "name": "repo",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:repo"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Repository is used synchronously by merge machinery and retained nowhere."
+     }
+    },
+    {
+     "name": "revert_commit",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:revert_commit"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required commit read synchronously; no ownership transfer."
      }
     }
    ]
@@ -28315,6 +28955,66 @@
    ]
   },
   {
+   "name": "git_smart_subtransport_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required output receives a subtransport owner on success; that object may retain the owner transport."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": null,
+      "note": "Callback-specific code receives the owning smart transport; produced subtransport may borrow it."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": null,
+      "note": "Opaque callback-specific parameter; nullability and writes depend on the implementation."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_stash_apply_progress_cb",
    "defined_in": null,
    "ptr_args": [
@@ -28627,6 +29327,45 @@
      }
     }
    ]
+  },
+  {
+   "name": "git_status_byindex",
+   "defined_in": "src/libgit2/status.c",
+   "ptr_args": [
+    {
+     "name": "status",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:status"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "List is only indexed and is retained nowhere."
+     }
+    }
+   ],
+   "ptr_ret": {
+    "ptr": {
+     "scalar": {
+      "by_val": true
+     },
+     "array": null,
+     "string": false,
+     "owned": false,
+     "borrowed": {
+      "lifetime": "arg:status"
+     },
+     "nullable": true,
+     "mutable": false,
+     "note": "Optional immutable entry stored inside and owned by status."
+    }
+   }
   },
   {
    "name": "git_status_file",
@@ -31626,6 +32365,66 @@
    ]
   },
   {
+   "name": "git_transport_cb",
+   "defined_in": null,
+   "ptr_args": [
+    {
+     "name": "arg0",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg0"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required output receives a transport owner on success; that object may retain the remote."
+     }
+    },
+    {
+     "name": "arg1",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg1"
+      },
+      "nullable": false,
+      "mutable": null,
+      "note": "Callback-specific factory receives the owner remote; returned transport may borrow it."
+     }
+    },
+    {
+     "name": "arg2",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:arg2"
+      },
+      "nullable": true,
+      "mutable": null,
+      "note": "Opaque factory parameter; nullability and writes depend on the registered callback."
+     }
+    }
+   ]
+  },
+  {
    "name": "git_transport_certificate_check_cb",
    "defined_in": null,
    "ptr_args": [
@@ -31718,6 +32517,66 @@
       "nullable": true,
       "mutable": true,
       "note": "Opaque caller payload borrowed for the callback invocation."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_transport_smart",
+   "defined_in": "src/libgit2/transports/smart.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required output receives a transport owner on success; it retains the owner remote."
+     }
+    },
+    {
+     "name": "owner",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:owner"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Required remote retained by the returned smart transport."
+     }
+    },
+    {
+     "name": "param",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:param"
+      },
+      "nullable": false,
+      "mutable": false,
+      "note": "Required read-only git_smart_subtransport_definition consumed synchronously; its callback is invoked once."
      }
     }
    ]

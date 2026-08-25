@@ -390,3 +390,15 @@
 ^GIT_APPLY_OPTIONS_VERSION$
 ^git_cherrypick_options$
 ^GIT_CHERRYPICK_OPTIONS_VERSION$
+^git_merge_trees$
+^git_patch_from_blob_and_buffer$
+^git_patch_from_blobs$
+^git_patch_from_buffers$
+^git_patch_print$
+^git_reset$
+^git_revert_commit$
+^git_smart_subtransport_cb$
+^git_status_byindex$
+^git_transport_cb$
+^git_transport_smart$
+^git_smart_subtransport_definition$

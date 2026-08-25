@@ -10,7 +10,7 @@ use crate::annotated_commit::AnnotatedCommitRef;
 use crate::ffi;
 use crate::oid::{Oid, OidRef};
 use crate::refs::GitReferenceRef;
-use crate::repository::GitRepositoryRef;
+use crate::repository::{GitRepositoryMut, GitRepositoryRef};
 use crate::util::alloc::GitStrdupFree;
 
 /// Wraps: git_merge_analysis_t
@@ -1432,4 +1432,38 @@ where
         )
     };
     if status == 0 { Ok(()) } else { Err(status) }
+}
+
+/// Wraps: git_merge_trees
+/// Merges three optional trees into a newly owned in-memory index.
+pub fn git_merge_trees(
+    repository: &mut GitRepositoryMut<'_>,
+    ancestor: Option<crate::tree::GitTreeRef<'_>>,
+    ours: Option<crate::tree::GitTreeRef<'_>>,
+    theirs: Option<crate::tree::GitTreeRef<'_>>,
+    options: Option<crate::api::merge::GitMergeOptionsRef<'_, '_>>,
+) -> Result<crate::index::GitIndexOwned, i32> {
+    let mut raw = core::ptr::null_mut();
+    let tree_ptr = |tree: Option<crate::tree::GitTreeRef<'_>>| {
+        tree.map_or(core::ptr::null(), |tree| tree.as_ptr())
+    };
+    let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
+    // SAFETY: `raw` is a writable owner slot; the repository is exclusively
+    // borrowed, and every optional tree and options pointer remains live for
+    // the call. Libgit2 retains none of the inputs.
+    let status = unsafe {
+        ffi::git_merge_trees(
+            core::ptr::addr_of_mut!(raw),
+            repository.as_mut_ptr(),
+            tree_ptr(ancestor),
+            tree_ptr(ours),
+            tree_ptr(theirs),
+            options,
+        )
+    };
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: success publishes one complete owned index.
+    unsafe { crate::index::GitIndexOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
 }

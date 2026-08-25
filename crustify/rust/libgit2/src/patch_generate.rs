@@ -1,1 +1,170 @@
 //! Safe wrappers for libgit2 patch_generate APIs.
+
+use core::ffi::CStr;
+use core::marker::PhantomData;
+
+use crate::api::diff::GitDiffOptionsRef;
+use crate::blob::GitBlobRef;
+use crate::ffi;
+use crate::patch::{GitPatchMut, GitPatchOwned, GitPatchRef};
+
+/// An owned generated patch coupled to its source lifetime.
+///
+/// Buffer-backed patches retain spans into the source bytes. Blob-backed
+/// patches acquire their own blob references, but those references retain the
+/// same repository dependency as the source blobs. One conservative lifetime
+/// keeps both forms from escaping their required inputs.
+pub struct GitGeneratedPatch<'input> {
+    patch: GitPatchOwned,
+    _inputs: PhantomData<&'input ()>,
+}
+
+impl GitGeneratedPatch<'_> {
+    /// Borrows the generated patch.
+    #[must_use]
+    pub fn as_ref(&self) -> GitPatchRef<'_> {
+        self.patch.as_ref()
+    }
+
+    /// Borrows the generated patch exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitPatchMut<'_> {
+        self.patch.as_mut()
+    }
+}
+
+fn patch_result(status: i32, raw: *mut ffi::git_patch) -> Result<GitPatchOwned, i32> {
+    if status != 0 {
+        return Err(status);
+    }
+    // SAFETY: a successful patch constructor publishes one complete owned
+    // patch reference in its required output slot.
+    unsafe { GitPatchOwned::from_raw(raw) }.ok_or(ffi::git_error_code_GIT_ERROR)
+}
+
+/// Wraps: git_patch_from_blob_and_buffer
+/// Generates a patch from an optional blob and a borrowed byte buffer.
+pub fn git_patch_from_blob_and_buffer<'input>(
+    old_blob: Option<GitBlobRef<'input>>,
+    old_path: Option<&CStr>,
+    buffer: &'input [u8],
+    buffer_path: Option<&CStr>,
+    options: Option<GitDiffOptionsRef<'_, '_>>,
+) -> Result<GitGeneratedPatch<'input>, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: the output slot is writable; every optional object, string and
+    // options value is live for the call. `buffer` stays borrowed by the
+    // returned wrapper because the generated patch retains spans into it.
+    let status = unsafe {
+        ffi::git_patch_from_blob_and_buffer(
+            core::ptr::addr_of_mut!(raw),
+            old_blob.map_or(core::ptr::null(), |blob| blob.as_ptr()),
+            old_path.map_or(core::ptr::null(), |path| path.as_ptr()),
+            buffer.as_ptr().cast(),
+            buffer.len(),
+            buffer_path.map_or(core::ptr::null(), |path| path.as_ptr()),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+        )
+    };
+    Ok(GitGeneratedPatch {
+        patch: patch_result(status, raw)?,
+        _inputs: PhantomData,
+    })
+}
+
+/// Wraps: git_patch_from_blobs
+/// Generates a patch from two optional blobs, retaining their repository dependency.
+pub fn git_patch_from_blobs<'input>(
+    old_blob: Option<GitBlobRef<'input>>,
+    old_path: Option<&CStr>,
+    new_blob: Option<GitBlobRef<'input>>,
+    new_path: Option<&CStr>,
+    options: Option<GitDiffOptionsRef<'_, '_>>,
+) -> Result<GitGeneratedPatch<'input>, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: the output slot is writable and all optional borrowed inputs
+    // remain live for the call. Libgit2 duplicates blob references and copies
+    // the paths needed by the returned patch.
+    let status = unsafe {
+        ffi::git_patch_from_blobs(
+            core::ptr::addr_of_mut!(raw),
+            old_blob.map_or(core::ptr::null(), |blob| blob.as_ptr()),
+            old_path.map_or(core::ptr::null(), |path| path.as_ptr()),
+            new_blob.map_or(core::ptr::null(), |blob| blob.as_ptr()),
+            new_path.map_or(core::ptr::null(), |path| path.as_ptr()),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+        )
+    };
+    Ok(GitGeneratedPatch {
+        patch: patch_result(status, raw)?,
+        _inputs: PhantomData,
+    })
+}
+
+/// Wraps: git_patch_from_buffers
+/// Generates a patch that borrows both source byte buffers.
+pub fn git_patch_from_buffers<'input>(
+    old_buffer: &'input [u8],
+    old_path: Option<&CStr>,
+    new_buffer: &'input [u8],
+    new_path: Option<&CStr>,
+    options: Option<GitDiffOptionsRef<'_, '_>>,
+) -> Result<GitGeneratedPatch<'input>, i32> {
+    let mut raw = core::ptr::null_mut();
+    // SAFETY: the output slot is writable; strings and options are live for
+    // the call, and both buffers stay borrowed for the returned patch's life.
+    let status = unsafe {
+        ffi::git_patch_from_buffers(
+            core::ptr::addr_of_mut!(raw),
+            old_buffer.as_ptr().cast(),
+            old_buffer.len(),
+            old_path.map_or(core::ptr::null(), |path| path.as_ptr()),
+            new_buffer.as_ptr().cast(),
+            new_buffer.len(),
+            new_path.map_or(core::ptr::null(), |path| path.as_ptr()),
+            options.map_or(core::ptr::null(), |options| options.as_ptr()),
+        )
+    };
+    Ok(GitGeneratedPatch {
+        patch: patch_result(status, raw)?,
+        _inputs: PhantomData,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_buffer_patch_exposes_owned_patch_access() {
+        // SAFETY: libgit2 initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let old = b"old\n";
+        let new = b"new\n";
+        let blob_patch = git_patch_from_blobs(None, None, None, None, None)
+            .expect("two empty blob sides still produce a patch");
+        assert_eq!(crate::patch::git_patch_num_hunks(blob_patch.as_ref()), 0);
+        drop(blob_patch);
+        let one_sided = git_patch_from_blob_and_buffer(None, None, new, None, None)
+            .expect("an empty blob and one buffer produce a patch");
+        assert_eq!(crate::patch::git_patch_num_hunks(one_sided.as_ref()), 1);
+        drop(one_sided);
+        let mut patch = git_patch_from_buffers(old, Some(c"a"), new, Some(c"a"), None)
+            .expect("valid buffers produce a patch");
+        assert_eq!(crate::patch::git_patch_num_hunks(patch.as_ref()), 1);
+        assert_eq!(
+            crate::patch::git_patch_num_lines_in_hunk(patch.as_ref(), 0).unwrap(),
+            2
+        );
+        assert_eq!(
+            crate::patch::git_patch_line_stats(patch.as_ref())
+                .unwrap()
+                .additions,
+            1
+        );
+        let _ = patch.as_mut();
+        drop(patch);
+        // SAFETY: balances the successful initialization above.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+}

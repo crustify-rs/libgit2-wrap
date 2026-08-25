@@ -3,6 +3,8 @@
 use ffibox::CVal;
 
 use crate::api::buffer::GitBuf;
+use crate::api::diff::{DiffDeltaRef, GitDiffLineCallback};
+use crate::diff::{DiffHunkRef, DiffLineRef};
 use crate::ffi;
 use crate::patch::GitPatchMut;
 
@@ -19,4 +21,108 @@ pub fn git_patch_to_buf(patch: &mut GitPatchMut<'_>) -> Result<CVal<GitBuf>, i32
         unsafe { ffi::git_patch_to_buf(output.as_mut_ptr(), patch.as_mut_ptr()) }
     };
     if status == 0 { Ok(output) } else { Err(status) }
+}
+
+/// Wraps: git_patch_print
+/// Visits every formatted line of `patch` with a typed callback.
+pub fn git_patch_print<C>(patch: &mut GitPatchMut<'_>, callback: &mut C) -> Result<(), i32>
+where
+    C: GitDiffLineCallback,
+{
+    unsafe extern "C" fn trampoline<C>(
+        delta: *const ffi::git_diff_delta,
+        hunk: *const ffi::git_diff_hunk,
+        line: *const ffi::git_diff_line,
+        payload: *mut core::ffi::c_void,
+    ) -> i32
+    where
+        C: GitDiffLineCallback,
+    {
+        if delta.is_null() || line.is_null() || payload.is_null() {
+            return ffi::git_error_code_GIT_ERROR;
+        }
+        // SAFETY: the wrapper supplies this exact live callback as the
+        // synchronous payload and grants exclusive access for the traversal.
+        let callback = unsafe { &mut *payload.cast::<C>() };
+        // SAFETY: libgit2 supplies live transient records for this callback;
+        // `hunk` is explicitly optional for formatted header lines.
+        let delta =
+            unsafe { DiffDeltaRef::from_ptr(delta.cast_mut()) }.expect("checked non-null delta");
+        // SAFETY: null is an allowed absent hunk; otherwise it is transiently
+        // live for this callback invocation.
+        let hunk = unsafe { DiffHunkRef::from_ptr(hunk.cast_mut()) };
+        // SAFETY: `line` was checked and remains live for this invocation.
+        let line =
+            unsafe { DiffLineRef::from_ptr(line.cast_mut()) }.expect("checked non-null line");
+        callback.call(delta, hunk, line)
+    }
+
+    // SAFETY: the patch and exclusive callback remain live for this fully
+    // synchronous traversal, and neither pointer is retained afterwards.
+    let status = unsafe {
+        ffi::git_patch_print(
+            patch.as_mut_ptr(),
+            Some(trampoline::<C>),
+            core::ptr::from_mut(callback).cast(),
+        )
+    };
+    if status == 0 { Ok(()) } else { Err(status) }
+}
+
+#[cfg(test)]
+mod print_tests {
+    use super::*;
+
+    struct Counter<'a>(&'a mut usize);
+
+    impl GitDiffLineCallback for Counter<'_> {
+        fn call(
+            &mut self,
+            _delta: DiffDeltaRef<'_>,
+            _hunk: Option<DiffHunkRef<'_>>,
+            _line: DiffLineRef<'_>,
+        ) -> i32 {
+            *self.0 += 1;
+            0
+        }
+    }
+
+    struct Stop(i32);
+
+    impl GitDiffLineCallback for Stop {
+        fn call(
+            &mut self,
+            _delta: DiffDeltaRef<'_>,
+            _hunk: Option<DiffHunkRef<'_>>,
+            _line: DiffLineRef<'_>,
+        ) -> i32 {
+            self.0
+        }
+    }
+
+    #[test]
+    fn patch_print_forwards_lines_and_callback_stop_codes() {
+        // SAFETY: libgit2 initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let mut patch = crate::patch_generate::git_patch_from_buffers(
+            b"old\n",
+            Some(c"file"),
+            b"new\n",
+            Some(c"file"),
+            None,
+        )
+        .unwrap();
+        let mut lines = 0usize;
+        git_patch_print(&mut patch.as_mut(), &mut Counter(&mut lines)).unwrap();
+        assert!(lines >= 4);
+
+        let stop = 7;
+        assert_eq!(
+            git_patch_print(&mut patch.as_mut(), &mut Stop(stop)),
+            Err(stop)
+        );
+        drop(patch);
+        // SAFETY: balances the successful initialization above.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
 }

@@ -5,6 +5,7 @@ use core::ptr::NonNull;
 use ffibox::{CBox, CDropped};
 
 use crate::ffi;
+use crate::remote::GitRemoteMut;
 
 /// Wraps: git_smart_service_t
 /// An operation requested from a smart subtransport.
@@ -64,6 +65,68 @@ ffibox::define_ctype!(
 
 /// An exclusively owned smart subtransport.
 pub type GitSmartSubtransportOwned = CBox<GitSmartSubtransport>;
+
+/// An owned subtransport that cannot outlive the smart transport it stores.
+pub struct GitSmartSubtransportWithTransport<'transport> {
+    inner: GitSmartSubtransportOwned,
+    _transport: core::marker::PhantomData<GitTransportMut<'transport>>,
+}
+
+impl<'transport> GitSmartSubtransportWithTransport<'transport> {
+    /// Couples a newly owned subtransport to its owner transport.
+    #[must_use]
+    pub fn from_owned(
+        inner: GitSmartSubtransportOwned,
+        owner: GitTransportMut<'transport>,
+    ) -> Self {
+        let _ = owner;
+        Self {
+            inner,
+            _transport: core::marker::PhantomData,
+        }
+    }
+
+    /// Borrows the subtransport shared.
+    #[must_use]
+    pub fn as_ref(&self) -> GitSmartSubtransportRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the subtransport exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitSmartSubtransportMut<'_> {
+        self.inner.as_mut()
+    }
+
+    pub(crate) fn into_raw(self) -> *mut ffi::git_smart_subtransport {
+        self.inner.into_raw()
+    }
+}
+
+/// Wraps: git_smart_subtransport_cb
+/// Safe callable surface for a factory that transfers one new subtransport
+/// to its owner transport.
+pub trait GitSmartSubtransportCallback {
+    /// Creates a subtransport whose lifetime remains coupled to `owner`.
+    fn call<'transport>(
+        &mut self,
+        owner: GitTransportMut<'transport>,
+    ) -> Result<GitSmartSubtransportWithTransport<'transport>, i32>;
+}
+
+impl<F> GitSmartSubtransportCallback for F
+where
+    F: for<'transport> FnMut(
+        GitTransportMut<'transport>,
+    ) -> Result<GitSmartSubtransportWithTransport<'transport>, i32>,
+{
+    fn call<'transport>(
+        &mut self,
+        owner: GitTransportMut<'transport>,
+    ) -> Result<GitSmartSubtransportWithTransport<'transport>, i32> {
+        self(owner)
+    }
+}
 
 /// Failure returned while dispatching a smart-subtransport callback.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -946,6 +1009,36 @@ ffibox::define_ctype!(
 
 /// An exclusively owned transport allocation.
 pub type GitTransportOwned = CBox<GitTransport>;
+
+/// An owned transport that cannot outlive the remote pointer it retains.
+pub struct GitTransportWithRemote<'remote> {
+    inner: GitTransportOwned,
+    _remote: core::marker::PhantomData<GitRemoteMut<'remote>>,
+}
+
+impl<'remote> GitTransportWithRemote<'remote> {
+    /// Couples a newly owned transport to the remote it stores.
+    #[must_use]
+    pub fn from_owned(inner: GitTransportOwned, remote: GitRemoteMut<'remote>) -> Self {
+        let _ = remote;
+        Self {
+            inner,
+            _remote: core::marker::PhantomData,
+        }
+    }
+
+    /// Borrows the transport shared.
+    #[must_use]
+    pub fn as_ref(&self) -> GitTransportRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the transport exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitTransportMut<'_> {
+        self.inner.as_mut()
+    }
+}
 
 /// A transport callback that may be absent from a custom implementation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
