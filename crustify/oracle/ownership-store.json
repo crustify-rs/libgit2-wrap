@@ -1409,7 +1409,7 @@
   {
    "name": "git_config_backend",
    "defined_in": "include/git2/sys/config.h",
-   "_comment_agent": "All callback slots are non-owning static code pointers. cfg is the nullable non-owning parent-config back-reference installed on transfer into git_config.",
+   "_comment_agent": "Reviewed against src/libgit2/config.c. All callback slots stay non-owning static code pointers. Correction to cfg: git_config_add_backend writes it once and nothing ever clears or rewrites it, so it does not track the backend's actual owner. git_config_open_level republishes the same reference-counted backend_instance through a second git_config without touching backend->cfg, so freeing the configuration named by cfg leaves a live backend pointing at destroyed storage. No in-tree code dereferences the field; it exists for custom backend implementors, who must establish the parent's liveness themselves.",
    "fields": [
     {
      "name": "cfg",
@@ -1425,7 +1425,7 @@
       },
       "nullable": true,
       "mutable": false,
-      "note": "Non-owning back-reference assigned by git_config_add_backend; null until attached, and the owning config destroys the backend before itself."
+      "note": "Non-owning back-reference to the configuration that adopted this backend; null until git_config_add_backend installs it. NOT guaranteed to outlive the backend: the assignment is never updated, and git_config_open_level shares the refcounted backend_instance with a second git_config, so the backend survives the configuration cfg names and the pointer dangles."
      }
     },
     {
@@ -14622,6 +14622,49 @@
       "nullable": true,
       "mutable": true,
       "note": "Consumes a backend by invoking its concrete free callback; null is accepted."
+     }
+    }
+   ]
+  },
+  {
+   "name": "git_config_backend_snapshot",
+   "defined_in": "src/libgit2/config_snapshot.c",
+   "ptr_args": [
+    {
+     "name": "out",
+     "ptr": {
+      "scalar": {
+       "by_ref": {
+        "owned": true,
+        "borrowed": null
+       }
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Out-parameter. The caller's slot is written once and not retained; the config_snapshot_backend allocation it receives is owned by the caller and released through its parent.free (config_snapshot_free)."
+     }
+    },
+    {
+     "name": "source",
+     "ptr": {
+      "scalar": {
+       "by_val": true
+      },
+      "array": null,
+      "string": false,
+      "owned": false,
+      "borrowed": {
+       "lifetime": "arg:out"
+      },
+      "nullable": false,
+      "mutable": true,
+      "note": "Borrowed and RETAINED: stored as config_snapshot_backend.source without a reference count, and config_snapshot_free never clears or releases it. config_snapshot_open later calls b->source->iterator(&it, b->source), so the source backend must stay live until the snapshot has been opened; a file backend's iterator can refresh the source, hence mutable. Only `open` reads the slot, so an already-opened snapshot no longer depends on its source -- which is why git_config_snapshot, whose git_config_add_backend opens each snapshot inside the call, returns an independent configuration."
      }
     }
    ]

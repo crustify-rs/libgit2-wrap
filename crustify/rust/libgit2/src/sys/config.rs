@@ -427,6 +427,53 @@ impl GitConfigBackendIteratorOwned<'_> {
     }
 }
 
+/// An owned snapshot backend tethered to the source backend it reads.
+///
+/// `git_config_backend_snapshot` stores the source backend pointer in the
+/// snapshot without taking ownership of it, and `config_snapshot_open`
+/// dereferences that pointer to copy every entry across. The snapshot is
+/// therefore a borrower of its source until it has been opened, and outliving
+/// that source is rejected:
+///
+/// ```compile_fail
+/// use libgit2::sys::config::{GitConfigBackendOwned, GitConfigBackendSnapshotOwned};
+///
+/// fn escape(mut backend: GitConfigBackendOwned) -> GitConfigBackendSnapshotOwned<'static> {
+///     backend.as_mut().snapshot().unwrap()
+/// }
+/// ```
+pub struct GitConfigBackendSnapshotOwned<'source> {
+    inner: GitConfigBackendOwned,
+    _source: core::marker::PhantomData<GitConfigBackendRef<'source>>,
+}
+
+impl GitConfigBackendSnapshotOwned<'_> {
+    /// Borrows the snapshot backend.
+    #[must_use]
+    pub fn as_ref(&self) -> GitConfigBackendRef<'_> {
+        self.inner.as_ref()
+    }
+
+    /// Borrows the snapshot backend exclusively.
+    #[must_use]
+    pub fn as_mut(&mut self) -> GitConfigBackendMut<'_> {
+        self.inner.as_mut()
+    }
+
+    /// Releases the tether to the source backend.
+    ///
+    /// # Safety
+    /// Only the snapshot's `open` callback reads the stored source pointer,
+    /// and it copies out every entry there, so a snapshot that has already
+    /// been opened is independent of its source. The caller must guarantee
+    /// that `open` has completed and that no path opens this backend again --
+    /// including the `open` that `git_config_add_backend` performs when the
+    /// snapshot is handed to a configuration.
+    pub unsafe fn into_owned(self) -> GitConfigBackendOwned {
+        self.inner
+    }
+}
+
 /// Field: git_config_backend.free
 // SAFETY: every fully constructed backend installs a concrete finalizer that
 // accepts the embedded base pointer and releases the complete allocation once.
@@ -453,13 +500,23 @@ impl<'a> GitConfigBackendRef<'a> {
     }
 
     /// Field: git_config_backend.cfg
-    /// Borrows the owning configuration after this backend is attached.
+    /// Borrows the configuration this backend was last attached to.
+    ///
+    /// # Safety
+    /// libgit2 writes this back-reference exactly once, in
+    /// `git_config_add_backend`, and never clears or rewrites it. It does not
+    /// track the backend: `git_config_open_level` publishes the same
+    /// reference-counted backend instance through a second `git_config`
+    /// without updating `cfg`, so freeing the original configuration leaves a
+    /// live backend naming destroyed storage. The caller must therefore
+    /// establish out of band that the recorded configuration is still live and
+    /// stays live for `'a`.
     #[must_use]
-    pub fn config(&self) -> Option<crate::config::GitConfigRef<'a>> {
+    pub unsafe fn config(&self) -> Option<crate::config::GitConfigRef<'a>> {
         // SAFETY: raw-place projection copies the nullable back-reference.
         let config = unsafe { addr_of!((*self.as_ptr()).cfg).read() };
-        // SAFETY: an attached configuration owns and destroys the backend
-        // before releasing its own storage, so it outlives this backend borrow.
+        // SAFETY: the caller of this unsafe getter guarantees that a recorded
+        // configuration is live for `'a`.
         unsafe { crate::config::GitConfigRef::from_ptr(config) }
     }
 
@@ -503,6 +560,10 @@ impl GitConfigBackendMut<'_> {
     /// built-in file backend does). When present, it must therefore remain
     /// live until this backend is destroyed or opened again with another
     /// repository.
+    ///
+    /// Opening is also the one callback that reads a snapshot backend's stored
+    /// source pointer, so a backend produced by [`Self::snapshot`] may only be
+    /// opened while its source is still live.
     pub unsafe fn open(
         &mut self,
         level: crate::config::GitConfigLevel,
@@ -632,8 +693,17 @@ impl GitConfigBackendMut<'_> {
     }
 
     /// Field: git_config_backend.snapshot
-    /// Creates an independently owned read-only backend snapshot.
-    pub fn snapshot(&mut self) -> Result<GitConfigBackendOwned, GitConfigBackendError> {
+    /// Creates a read-only backend snapshot that borrows this backend.
+    ///
+    /// The snapshot is not yet independent: `git_config_backend_snapshot`
+    /// records this backend's address in it and its `open` callback calls back
+    /// into `self` to copy the entries out. The result therefore keeps this
+    /// backend exclusively borrowed until
+    /// [`GitConfigBackendSnapshotOwned::into_owned`] discharges that
+    /// obligation.
+    pub fn snapshot(
+        &mut self,
+    ) -> Result<GitConfigBackendSnapshotOwned<'_>, GitConfigBackendError> {
         let backend = self.as_mut_ptr();
         let callback = self.callback(
             // SAFETY: the raw-place projection is derived from this handle.
@@ -648,9 +718,13 @@ impl GitConfigBackendMut<'_> {
             return Err(GitConfigBackendError::Libgit2(status));
         }
         // SAFETY: success transfers one fully constructed backend allocation.
-        unsafe { GitConfigBackendOwned::from_raw(snapshot) }.ok_or(
+        let inner = unsafe { GitConfigBackendOwned::from_raw(snapshot) }.ok_or(
             GitConfigBackendError::MissingOutput(GitConfigBackendOperation::Snapshot),
-        )
+        )?;
+        Ok(GitConfigBackendSnapshotOwned {
+            inner,
+            _source: core::marker::PhantomData,
+        })
     }
 
     /// Field: git_config_backend.lock
@@ -692,13 +766,47 @@ impl GitConfigBackendMut<'_> {
 #[cfg(test)]
 mod backend_tests {
     use core::mem::{align_of, size_of};
-    use core::sync::atomic::{AtomicUsize, Ordering};
+    use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 
     use ffibox::{CCell, CDropped};
 
     use super::*;
 
     static BACKEND_FREES: AtomicUsize = AtomicUsize::new(0);
+    static SNAPSHOT_FREES: AtomicUsize = AtomicUsize::new(0);
+    static SNAPSHOT_SOURCE: AtomicPtr<ffi::git_config_backend> =
+        AtomicPtr::new(core::ptr::null_mut());
+
+    /// Mirrors `config_snapshot_backend`: the snapshot's own header followed
+    /// by the borrowed source pointer that `git_config_backend_snapshot`
+    /// records.
+    #[repr(C)]
+    struct TestSnapshot {
+        parent: ffi::git_config_backend,
+        source: *mut ffi::git_config_backend,
+    }
+
+    unsafe extern "C" fn free_snapshot(backend: *mut ffi::git_config_backend) {
+        SNAPSHOT_FREES.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: `snapshot_backend` is the only producer of this callback's
+        // backends, and the parent header is its allocation's first member.
+        drop(unsafe { Box::from_raw(backend.cast::<TestSnapshot>()) });
+    }
+
+    unsafe extern "C" fn snapshot_backend(
+        out: *mut *mut ffi::git_config_backend,
+        source: *mut ffi::git_config_backend,
+    ) -> i32 {
+        let mut parent = raw_backend();
+        parent.readonly = 1;
+        parent.free = Some(free_snapshot);
+        let snapshot = Box::into_raw(Box::new(TestSnapshot { parent, source }));
+        SNAPSHOT_SOURCE.store(source, Ordering::SeqCst);
+        // SAFETY: the callback contract supplies a writable output slot, and
+        // the parent header is the first member of the fresh allocation.
+        unsafe { out.write(addr_of_mut!((*snapshot).parent)) };
+        0
+    }
 
     unsafe extern "C" fn free_backend(backend: *mut ffi::git_config_backend) {
         BACKEND_FREES.fetch_add(1, Ordering::SeqCst);
@@ -773,7 +881,9 @@ mod backend_tests {
         let mut backend = unsafe { GitConfigBackendMut::from_ptr(&raw mut raw) }.unwrap();
         assert_eq!(backend.as_ref().version(), ffi::GIT_CONFIG_BACKEND_VERSION);
         assert!(!backend.as_ref().is_readonly());
-        assert!(backend.as_ref().config().is_none());
+        // SAFETY: this backend was never attached, so its back-reference is
+        // null and no configuration liveness is claimed.
+        assert!(unsafe { backend.as_ref().config() }.is_none());
         backend.set_readonly(true);
         assert!(backend.as_ref().is_readonly());
         backend.lock().unwrap();
@@ -786,6 +896,36 @@ mod backend_tests {
                 GitConfigBackendOperation::Delete
             ))
         );
+    }
+
+    #[test]
+    fn a_snapshot_borrows_the_source_it_records_until_it_is_detached() {
+        SNAPSHOT_FREES.store(0, Ordering::SeqCst);
+        SNAPSHOT_SOURCE.store(core::ptr::null_mut(), Ordering::SeqCst);
+
+        let mut raw = raw_backend();
+        raw.snapshot = Some(snapshot_backend);
+        let source = &raw mut raw;
+        // SAFETY: `raw` remains live and is exclusively accessed by this handle.
+        let mut backend = unsafe { GitConfigBackendMut::from_ptr(source) }.unwrap();
+
+        let mut snapshot = backend.snapshot().unwrap();
+        assert_eq!(SNAPSHOT_SOURCE.load(Ordering::SeqCst), source);
+        assert!(snapshot.as_ref().is_readonly());
+        snapshot.as_mut().set_version(ffi::GIT_CONFIG_BACKEND_VERSION);
+        drop(snapshot);
+        assert_eq!(SNAPSHOT_FREES.load(Ordering::SeqCst), 1);
+
+        // The tether ended with the snapshot, so the source is usable again.
+        backend.lock().unwrap();
+        backend.unlock(true).unwrap();
+
+        let snapshot = backend.snapshot().unwrap();
+        // SAFETY: this test snapshot installs no `open` callback, so nothing
+        // ever reads the source pointer it recorded.
+        let detached = unsafe { snapshot.into_owned() };
+        drop(detached);
+        assert_eq!(SNAPSHOT_FREES.load(Ordering::SeqCst), 2);
     }
 
     #[test]
