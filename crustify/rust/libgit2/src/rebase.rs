@@ -615,10 +615,60 @@ mod scheduled_constructor_tests {
     use crate::api::rebase::GitRebaseOptions;
 
     #[test]
-    fn published_initializer_writes_the_current_version() {
+    fn the_published_initializer_restores_every_constructed_default() {
+        // The C initializer copies `GIT_REBASE_OPTIONS_INIT` over the whole
+        // record, including the nested merge and checkout headers and the
+        // borrowed notes reference, so reinitializing deliberately dirtied
+        // options pins `GitRebaseOptions::new` to that template.
         let mut options = GitRebaseOptions::new();
+        {
+            let mut view = options.as_mut();
+            view.set_version(0);
+            view.set_quiet(true);
+            view.set_inmemory(true);
+            view.set_rewrite_notes_ref(Some(c"refs/notes/rewritten"));
+            view.merge_options_mut().set_version(0);
+            view.merge_options_mut()
+                .set_flags(crate::api::merge::GitMergeFlags::NO_RECURSIVE);
+            view.checkout_options_mut().set_version(0);
+        }
+
         git_rebase_options_init(&mut options.as_mut(), ffi::GIT_REBASE_OPTIONS_VERSION).unwrap();
-        assert_eq!(options.as_ref().version(), ffi::GIT_REBASE_OPTIONS_VERSION);
+
+        let view = options.as_ref();
+        assert_eq!(view.version(), ffi::GIT_REBASE_OPTIONS_VERSION);
+        assert!(!view.quiet());
+        assert!(!view.inmemory());
+        assert_eq!(view.rewrite_notes_ref(), None);
+        assert!(!view.has_commit_create_callback());
+        assert!(!view.has_signing_callback());
+        assert!(!view.has_callback_payload());
+        assert_eq!(
+            view.merge_options().version(),
+            ffi::GIT_MERGE_OPTIONS_VERSION
+        );
+        assert_eq!(
+            view.merge_options().flags(),
+            Ok(crate::api::merge::GitMergeFlags::FIND_RENAMES)
+        );
+        assert_eq!(
+            view.checkout_options().version(),
+            ffi::GIT_CHECKOUT_OPTIONS_VERSION
+        );
+    }
+
+    #[test]
+    fn an_unsupported_version_is_rejected_without_writing() {
+        // SAFETY: process-global initialization is reference counted and is
+        // balanced below; the rejected version reaches `git_error_set`, which
+        // allocates through the allocator only initialization installs.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let mut options = GitRebaseOptions::new();
+        options.as_mut().set_quiet(true);
+        assert!(git_rebase_options_init(&mut options.as_mut(), 0).is_err());
+        assert!(options.as_ref().quiet());
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
 

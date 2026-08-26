@@ -459,13 +459,51 @@ mod scheduled_apply_tests {
     use crate::api::stash::GitStashApplyOptions;
 
     #[test]
-    fn published_initializer_writes_the_current_version() {
+    fn the_published_initializer_restores_every_constructed_default() {
+        // The C initializer copies `GIT_STASH_APPLY_OPTIONS_INIT` over the
+        // whole record, so reinitializing deliberately dirtied options pins
+        // `GitStashApplyOptions::new` to that template.
         let mut options = GitStashApplyOptions::new();
+        {
+            let mut view = options.as_mut();
+            view.set_version(0);
+            view.set_flags(crate::api::stash::GitStashApplyFlags::REINSTATE_INDEX);
+            view.checkout_options_mut().set_version(0);
+        }
+
         git_stash_apply_options_init(&mut options.as_mut(), ffi::GIT_STASH_APPLY_OPTIONS_VERSION)
             .unwrap();
+
+        let view = options.as_ref();
+        assert_eq!(view.version(), ffi::GIT_STASH_APPLY_OPTIONS_VERSION);
         assert_eq!(
-            options.as_ref().version(),
-            ffi::GIT_STASH_APPLY_OPTIONS_VERSION
+            view.flags(),
+            Ok(crate::api::stash::GitStashApplyFlags::NONE)
         );
+        assert!(!view.has_progress_callback());
+        assert!(!view.has_progress_payload());
+        assert_eq!(
+            view.checkout_options().version(),
+            ffi::GIT_CHECKOUT_OPTIONS_VERSION
+        );
+    }
+
+    #[test]
+    fn an_unsupported_version_is_rejected_without_writing() {
+        // SAFETY: process-global initialization is reference counted and is
+        // balanced below; the rejected version reaches `git_error_set`, which
+        // allocates through the allocator only initialization installs.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let mut options = GitStashApplyOptions::new();
+        options
+            .as_mut()
+            .set_flags(crate::api::stash::GitStashApplyFlags::REINSTATE_INDEX);
+        assert!(git_stash_apply_options_init(&mut options.as_mut(), 0).is_err());
+        assert_eq!(
+            options.as_ref().flags(),
+            Ok(crate::api::stash::GitStashApplyFlags::REINSTATE_INDEX)
+        );
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }

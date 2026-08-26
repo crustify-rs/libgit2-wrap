@@ -1233,8 +1233,32 @@ pub fn git_remote_connect(
 /// Connects a remote with a complete connection-options record.
 ///
 /// Nested callback and proxy payloads must be `'static` because transport
-/// normalization copies them into transport state used by later requests.
+/// normalization copies them into transport state used by later requests, and
+/// the connection this call opens outlives the exclusive remote borrow.
 /// Header strings and the proxy URL are deep-copied by libgit2.
+///
+/// The bound is load-bearing rather than a restatement of an unsafe setter's
+/// contract, exactly as it is on [`git_remote_download`]:
+/// [`GitProxyOptionsMut::set_url`](crate::api::proxy::GitProxyOptionsMut::set_url)
+/// and
+/// [`GitProxyOptionsMut::set_credentials`](crate::api::proxy::GitProxyOptionsMut::set_credentials)
+/// install nested data from safe code, so nested data that does not live for
+/// `'static` is rejected:
+///
+/// ```compile_fail,E0597
+/// use core::ffi::CStr;
+///
+/// use libgit2::api::remote::GitRemoteConnectOptions;
+/// use libgit2::remote::{GitRemoteMut, git_remote_connect_ext};
+/// use libgit2::util::net::Direction;
+///
+/// fn connect(remote: &mut GitRemoteMut<'_>, proxy: &CStr) {
+///     let proxy = proxy.to_owned();
+///     let mut options = GitRemoteConnectOptions::new();
+///     options.as_mut().proxy_options_mut().set_url(Some(&proxy));
+///     let _ = git_remote_connect_ext(remote, Direction::Fetch, Some(options.as_ref()));
+/// }
+/// ```
 pub fn git_remote_connect_ext(
     remote: &mut GitRemoteMut<'_>,
     direction: Direction,
@@ -1342,17 +1366,62 @@ mod scheduled_connection_tests {
     }
 
     #[test]
-    fn connect_options_initializer_writes_the_current_version() {
+    fn the_connect_options_initializer_restores_every_constructed_default() {
+        // The C initializer copies `GIT_REMOTE_CONNECT_OPTIONS_INIT` over the
+        // whole record, so reinitializing deliberately dirtied options pins
+        // `GitRemoteConnectOptions::new` to that template. Only the two
+        // nested headers carry a nonzero default; the redirect policy stays
+        // unspecified so that configuration is consulted.
         let mut options = crate::api::remote::GitRemoteConnectOptions::new();
+        {
+            let mut view = options.as_mut();
+            view.set_version(0);
+            view.set_follow_redirects(Some(GitRemoteRedirect::All));
+            view.callbacks_mut().set_version(0);
+            view.proxy_options_mut().set_version(0);
+            view.proxy_options_mut()
+                .set_proxy_type(crate::proxy::ProxyType::Auto);
+        }
+
         git_remote_connect_options_init(
             &mut options.as_mut(),
             ffi::GIT_REMOTE_CONNECT_OPTIONS_VERSION,
         )
         .unwrap();
+
+        let view = options.as_ref();
+        assert_eq!(view.version(), ffi::GIT_REMOTE_CONNECT_OPTIONS_VERSION);
+        assert_eq!(view.callbacks().version(), ffi::GIT_REMOTE_CALLBACKS_VERSION);
         assert_eq!(
-            options.as_ref().version(),
-            ffi::GIT_REMOTE_CONNECT_OPTIONS_VERSION
+            view.proxy_options().version(),
+            ffi::GIT_PROXY_OPTIONS_VERSION
         );
+        assert_eq!(
+            view.proxy_options().proxy_type(),
+            Ok(crate::proxy::ProxyType::None)
+        );
+        assert_eq!(view.proxy_options().url(), None);
+        assert_eq!(view.follow_redirects(), Ok(None));
+        assert_eq!(view.custom_headers().count(), 0);
+    }
+
+    #[test]
+    fn an_unsupported_connect_options_version_is_rejected_without_writing() {
+        // SAFETY: process-global initialization is reference counted and is
+        // balanced below; the rejected version reaches `git_error_set`, which
+        // allocates through the allocator only initialization installs.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let mut options = crate::api::remote::GitRemoteConnectOptions::new();
+        options
+            .as_mut()
+            .set_follow_redirects(Some(GitRemoteRedirect::All));
+        assert!(git_remote_connect_options_init(&mut options.as_mut(), 0).is_err());
+        assert_eq!(
+            options.as_ref().follow_redirects(),
+            Ok(Some(GitRemoteRedirect::All))
+        );
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 
     #[test]

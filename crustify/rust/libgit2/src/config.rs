@@ -5,6 +5,7 @@ use core::ptr::addr_of;
 use ffibox::CBox;
 
 use crate::ffi;
+use crate::sys::config::{GitConfigBackendError, GitConfigBackendOperation};
 
 unsafe extern "C" fn config_foreach_trampoline<C: crate::api::config::GitConfigForeachCallback>(
     entry: *const ffi::git_config_entry,
@@ -1181,16 +1182,40 @@ where
 
 /// Wraps: git_config_backend_foreach_match
 /// Visits backend entries whose normalized names match `regexp`.
+///
+/// Every backend callback slot is nullable, and `sys::config` reaches each one
+/// through a dispatcher that reports [`GitConfigBackendError::Unsupported`]
+/// rather than calling through a null pointer. This C entry point does not:
+/// `git_config_backend_foreach_match` asserts only that `backend` and `cb` are
+/// non-null and then evaluates `backend->iterator(&iter, backend)`
+/// unconditionally, so handing it a backend that installs no iterator would be
+/// a call through a null function pointer from safe Rust. The wrapper
+/// therefore tests the slot with
+/// [`GitConfigBackendRef::supports_iteration`](crate::sys::config::GitConfigBackendRef::supports_iteration)
+/// first and reports the omission exactly as
+/// [`GitConfigBackendMut::iterator`](crate::sys::config::GitConfigBackendMut::iterator)
+/// does. The iterator that a present callback publishes is a complete one, so
+/// the `iter->next` and `iter->free` dispatches C performs afterwards need no
+/// separate guard.
+///
+/// A non-zero result is [`GitConfigBackendError::Libgit2`], which carries
+/// either a libgit2 status or the value `callback` returned to stop the walk.
 pub fn git_config_backend_foreach_match<C>(
     backend: &mut crate::sys::config::GitConfigBackendMut<'_>,
     regexp: Option<&CStr>,
     callback: &mut C,
-) -> Result<(), i32>
+) -> Result<(), GitConfigBackendError>
 where
     C: crate::api::config::GitConfigForeachCallback,
 {
+    if !backend.as_ref().supports_iteration() {
+        return Err(GitConfigBackendError::Unsupported(
+            GitConfigBackendOperation::Iterator,
+        ));
+    }
     // SAFETY: the backend is exclusively borrowed for iterator creation and
-    // advancement; the optional expression and callback remain live for this
+    // advancement and was just shown to install the iterator callback C
+    // dispatches; the optional expression and callback remain live for this
     // synchronous traversal, and neither callback pointer is retained.
     let status = unsafe {
         ffi::git_config_backend_foreach_match(
@@ -1200,28 +1225,206 @@ where
             core::ptr::from_mut(callback).cast(),
         )
     };
-    if status == 0 { Ok(()) } else { Err(status) }
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(GitConfigBackendError::Libgit2(status))
+    }
 }
 
 #[cfg(test)]
 mod scheduled_backend_foreach_tests {
+    use core::ptr::addr_of_mut;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    use crate::sys::config::GitConfigBackendMut;
+
     use super::*;
 
-    struct Noop;
+    static ITERATOR_FREES: AtomicUsize = AtomicUsize::new(0);
 
-    impl crate::api::config::GitConfigForeachCallback for Noop {
-        fn call(&mut self, _entry: GitConfigEntryRef<'_>) -> i32 {
+    /// The fixed table one `TestIterator` walks.
+    const ENTRIES: [(&CStr, &CStr); 3] = [
+        (c"core.bare", c"false"),
+        (c"core.filemode", c"true"),
+        (c"remote.origin.url", c"/tmp/origin"),
+    ];
+
+    /// Mirrors the documented custom-iterator shape: the public header first,
+    /// then the concrete iteration state.
+    #[repr(C)]
+    struct TestIterator {
+        parent: ffi::git_config_iterator,
+        entries: [ffi::git_config_backend_entry; ENTRIES.len()],
+        next_index: usize,
+    }
+
+    fn backend_entry(name: &'static CStr, value: &'static CStr) -> ffi::git_config_backend_entry {
+        ffi::git_config_backend_entry {
+            entry: ffi::git_config_entry {
+                name: name.as_ptr(),
+                value: value.as_ptr(),
+                backend_type: c"test".as_ptr(),
+                origin_path: core::ptr::null(),
+                include_depth: 0,
+                level: ffi::git_config_level_t_GIT_CONFIG_LEVEL_LOCAL,
+            },
+            free: None,
+        }
+    }
+
+    unsafe extern "C" fn iterator_next(
+        out: *mut *mut ffi::git_config_backend_entry,
+        iterator: *mut ffi::git_config_iterator,
+    ) -> i32 {
+        let iterator = iterator.cast::<TestIterator>();
+        // SAFETY: `backend_iterator` is this callback's only producer, and it
+        // publishes the parent header of a live `TestIterator` allocation.
+        let index = unsafe { addr_of!((*iterator).next_index).read() };
+        if index >= ENTRIES.len() {
+            return ffi::git_error_code_GIT_ITEROVER;
+        }
+        // SAFETY: the allocation is exclusively reachable through the pointer
+        // C hands back, so the cursor write races with nothing.
+        unsafe { addr_of_mut!((*iterator).next_index).write(index + 1) };
+        // SAFETY: the bounds check above selects one initialized table slot.
+        let entry = unsafe { addr_of_mut!((*iterator).entries)
+            .cast::<ffi::git_config_backend_entry>()
+            .add(index) };
+        // SAFETY: the callback contract supplies a writable output slot.
+        unsafe { out.write(entry) };
+        0
+    }
+
+    unsafe extern "C" fn iterator_free(iterator: *mut ffi::git_config_iterator) {
+        ITERATOR_FREES.fetch_add(1, Ordering::SeqCst);
+        // SAFETY: the parent header is the first member of the single `Box`
+        // allocation `backend_iterator` transferred to libgit2.
+        drop(unsafe { std::boxed::Box::from_raw(iterator.cast::<TestIterator>()) });
+    }
+
+    unsafe extern "C" fn backend_iterator(
+        out: *mut *mut ffi::git_config_iterator,
+        backend: *mut ffi::git_config_backend,
+    ) -> i32 {
+        let iterator = std::boxed::Box::into_raw(std::boxed::Box::new(TestIterator {
+            parent: ffi::git_config_iterator {
+                backend,
+                flags: 0,
+                next: Some(iterator_next),
+                free: Some(iterator_free),
+            },
+            entries: [
+                backend_entry(ENTRIES[0].0, ENTRIES[0].1),
+                backend_entry(ENTRIES[1].0, ENTRIES[1].1),
+                backend_entry(ENTRIES[2].0, ENTRIES[2].1),
+            ],
+            next_index: 0,
+        }));
+        // SAFETY: the contract supplies a writable output slot, and the parent
+        // header is the first member of the fresh allocation.
+        unsafe { out.write(addr_of_mut!((*iterator).parent)) };
+        0
+    }
+
+    fn raw_backend() -> ffi::git_config_backend {
+        ffi::git_config_backend {
+            version: ffi::GIT_CONFIG_BACKEND_VERSION,
+            readonly: 1,
+            cfg: core::ptr::null_mut(),
+            open: None,
+            get: None,
+            set: None,
+            set_multivar: None,
+            del: None,
+            del_multivar: None,
+            iterator: None,
+            snapshot: None,
+            lock: None,
+            unlock: None,
+            free: None,
+        }
+    }
+
+    /// Records the entries a traversal published.
+    #[derive(Default)]
+    struct Visited {
+        names: std::vec::Vec<std::string::String>,
+        stop_after: Option<usize>,
+    }
+
+    impl crate::api::config::GitConfigForeachCallback for Visited {
+        fn call(&mut self, entry: GitConfigEntryRef<'_>) -> i32 {
+            self.names
+                .push(entry.name().to_str().expect("ASCII test names").to_owned());
+            assert_eq!(entry.backend_type(), c"test");
+            assert!(entry.value().is_some());
+            if self.stop_after == Some(self.names.len()) {
+                return -7;
+            }
             0
         }
     }
 
     #[test]
-    fn backend_traversal_requires_an_exclusive_backend_and_typed_callback() {
-        let _: fn(
-            &mut crate::sys::config::GitConfigBackendMut<'_>,
-            Option<&CStr>,
-            &mut Noop,
-        ) -> Result<(), i32> = git_config_backend_foreach_match::<Noop>;
+    fn a_backend_without_an_iterator_is_refused_before_the_call() {
+        // The C entry point evaluates `backend->iterator(&iter, backend)` with
+        // no null check, so this handle -- exactly the one
+        // `scalar_fields_and_missing_callbacks_are_safe` builds in
+        // `sys::config` -- would otherwise call through a null pointer.
+        let mut raw = raw_backend();
+        // SAFETY: `raw` stays live and is exclusively accessed by this handle.
+        let mut backend = unsafe { GitConfigBackendMut::from_ptr(&raw mut raw) }.unwrap();
+        let mut visited = Visited::default();
+        assert_eq!(
+            git_config_backend_foreach_match(&mut backend, None, &mut visited),
+            Err(GitConfigBackendError::Unsupported(
+                GitConfigBackendOperation::Iterator
+            ))
+        );
+        assert!(visited.names.is_empty());
+    }
+
+    #[test]
+    fn an_installed_iterator_is_walked_filtered_and_released() {
+        // SAFETY: process-global initialization is reference counted and is
+        // balanced below; the regular-expression path allocates through the
+        // libgit2 allocator that only initialization installs.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        ITERATOR_FREES.store(0, Ordering::SeqCst);
+
+        let mut raw = raw_backend();
+        raw.iterator = Some(backend_iterator);
+        // SAFETY: `raw` stays live and is exclusively accessed by this handle.
+        let mut backend = unsafe { GitConfigBackendMut::from_ptr(&raw mut raw) }.unwrap();
+
+        let mut all = Visited::default();
+        git_config_backend_foreach_match(&mut backend, None, &mut all)
+            .expect("a null expression selects every entry");
+        assert_eq!(all.names, ["core.bare", "core.filemode", "remote.origin.url"]);
+        assert_eq!(ITERATOR_FREES.load(Ordering::SeqCst), 1);
+
+        let mut matching = Visited::default();
+        git_config_backend_foreach_match(&mut backend, Some(c"^core\\."), &mut matching)
+            .expect("the expression selects the core entries");
+        assert_eq!(matching.names, ["core.bare", "core.filemode"]);
+        assert_eq!(ITERATOR_FREES.load(Ordering::SeqCst), 2);
+
+        // A non-zero callback result stops the walk and is reported verbatim,
+        // and the iterator is still released on the way out.
+        let mut stopped = Visited {
+            names: std::vec::Vec::new(),
+            stop_after: Some(2),
+        };
+        assert_eq!(
+            git_config_backend_foreach_match(&mut backend, None, &mut stopped),
+            Err(GitConfigBackendError::Libgit2(-7))
+        );
+        assert_eq!(stopped.names, ["core.bare", "core.filemode"]);
+        assert_eq!(ITERATOR_FREES.load(Ordering::SeqCst), 3);
+
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
 

@@ -129,16 +129,56 @@ mod scheduled_wrapper_tests {
     }
 
     #[test]
-    fn published_initializer_writes_the_current_version() {
+    fn the_published_initializer_restores_every_constructed_default() {
+        // `GIT_INIT_STRUCTURE_FROM_TEMPLATE` copies the whole template over
+        // the caller's storage rather than only stamping the version, so
+        // reinitializing deliberately dirtied options both proves that and
+        // pins `GitCherrypickOptions::new` to `GIT_CHERRYPICK_OPTIONS_INIT`.
         let mut options = GitCherrypickOptions::new();
+        {
+            let mut view = options.as_mut();
+            view.set_version(0);
+            view.set_mainline(2);
+            view.merge_options_mut().set_version(0);
+            view.merge_options_mut()
+                .set_flags(crate::api::merge::GitMergeFlags::NO_RECURSIVE);
+            view.checkout_options_mut().set_version(0);
+        }
+
         git_cherrypick_options_init(
             &mut options.as_mut(),
             crate::ffi::GIT_CHERRYPICK_OPTIONS_VERSION,
         )
         .unwrap();
+
+        let view = options.as_ref();
+        assert_eq!(view.version(), crate::ffi::GIT_CHERRYPICK_OPTIONS_VERSION);
+        assert_eq!(view.mainline(), 0);
         assert_eq!(
-            options.as_ref().version(),
-            crate::ffi::GIT_CHERRYPICK_OPTIONS_VERSION
+            view.merge_options().version(),
+            crate::ffi::GIT_MERGE_OPTIONS_VERSION
         );
+        assert_eq!(
+            view.merge_options().flags(),
+            Ok(crate::api::merge::GitMergeFlags::FIND_RENAMES)
+        );
+        assert_eq!(
+            view.checkout_options().version(),
+            crate::ffi::GIT_CHECKOUT_OPTIONS_VERSION
+        );
+    }
+
+    #[test]
+    fn an_unsupported_version_is_rejected_without_writing() {
+        // SAFETY: process-global initialization is reference counted and is
+        // balanced below; the rejected version reaches `git_error_set`, which
+        // allocates through the allocator only initialization installs.
+        assert!(unsafe { crate::ffi::git_libgit2_init() } > 0);
+        let mut options = GitCherrypickOptions::new();
+        options.as_mut().set_mainline(2);
+        assert!(git_cherrypick_options_init(&mut options.as_mut(), 0).is_err());
+        assert_eq!(options.as_ref().mainline(), 2);
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { crate::ffi::git_libgit2_shutdown() } >= 0);
     }
 }

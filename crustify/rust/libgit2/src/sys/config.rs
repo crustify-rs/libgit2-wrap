@@ -520,6 +520,25 @@ impl<'a> GitConfigBackendRef<'a> {
         unsafe { crate::config::GitConfigRef::from_ptr(config) }
     }
 
+    /// Field: git_config_backend.iterator
+    /// Reports whether the concrete backend installs an iterator callback.
+    ///
+    /// This deliberately shares the field anchor with
+    /// [`GitConfigBackendMut::iterator`], which dispatches the same slot. The
+    /// two wrappers exist for different callers: a Rust caller that needs the
+    /// iterator uses the dispatcher, while a wrapper over a C entry point
+    /// that dereferences `backend->iterator` itself -- as
+    /// [`git_config_backend_foreach_match`] does, without any null check --
+    /// needs to test the slot before handing the backend over.
+    ///
+    /// [`git_config_backend_foreach_match`]: crate::config::git_config_backend_foreach_match
+    #[must_use]
+    pub fn supports_iteration(&self) -> bool {
+        // SAFETY: this live shared handle permits the nullable raw-place
+        // callback read.
+        unsafe { addr_of!((*self.as_ptr()).iterator).read() }.is_some()
+    }
+
     /// Field: git_config_backend.readonly
     /// Returns whether the backend rejects writes as a snapshot.
     #[must_use]

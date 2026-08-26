@@ -190,13 +190,73 @@ mod scheduled_initializer_tests {
     use crate::api::email::GitEmailCreateOptions;
 
     #[test]
-    fn published_initializer_writes_the_current_version() {
+    fn the_published_initializer_restores_every_constructed_default() {
+        // `GIT_EMAIL_CREATE_OPTIONS_INIT` spells its nested diff header out
+        // by hand -- binary hunks shown, submodules unspecified and three
+        // lines of context -- and the C initializer copies all of it over the
+        // caller's storage, so reinitializing deliberately dirtied options
+        // pins `GitEmailCreateOptions::new` to that template.
         let mut options = GitEmailCreateOptions::new();
+        {
+            let mut view = options.as_mut();
+            view.set_version(0);
+            view.set_flags(crate::api::email::GitEmailCreateFlags::OMIT_NUMBERS);
+            view.set_reroll_number(4);
+            view.set_start_number(2);
+            view.set_subject_prefix(Some(c"RFC"));
+            view.diff_options_mut().set_version(0);
+            view.diff_options_mut().set_context_lines(9);
+            view.diff_options_mut()
+                .set_flags(crate::api::diff::DiffOptions::IGNORE_WHITESPACE);
+            view.diff_find_options_mut().set_version(0);
+            view.diff_find_options_mut()
+                .set_flags(crate::api::diff::GitDiffFindFlags::COPIES);
+        }
+
         git_email_create_options_init(&mut options.as_mut(), ffi::GIT_EMAIL_CREATE_OPTIONS_VERSION)
             .unwrap();
+
+        let view = options.as_ref();
+        assert_eq!(view.version(), ffi::GIT_EMAIL_CREATE_OPTIONS_VERSION);
         assert_eq!(
-            options.as_ref().version(),
-            ffi::GIT_EMAIL_CREATE_OPTIONS_VERSION
+            view.flags(),
+            Ok(crate::api::email::GitEmailCreateFlags::DEFAULT)
         );
+        assert_eq!(view.reroll_number(), 0);
+        assert_eq!(view.start_number(), 0);
+        assert_eq!(view.subject_prefix(), None);
+        assert_eq!(
+            view.diff_options().version(),
+            ffi::GIT_DIFF_OPTIONS_VERSION
+        );
+        assert_eq!(
+            view.diff_options().flags(),
+            Ok(crate::api::diff::DiffOptions::SHOW_BINARY)
+        );
+        assert_eq!(view.diff_options().context_lines(), 3);
+        assert_eq!(
+            view.diff_find_options().version(),
+            ffi::GIT_DIFF_FIND_OPTIONS_VERSION
+        );
+        assert!(
+            view.diff_find_options()
+                .flags()
+                .expect("a published rename-detection bit set")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn an_unsupported_version_is_rejected_without_writing() {
+        // SAFETY: process-global initialization is reference counted and is
+        // balanced below; the rejected version reaches `git_error_set`, which
+        // allocates through the allocator only initialization installs.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        let mut options = GitEmailCreateOptions::new();
+        options.as_mut().set_reroll_number(4);
+        assert!(git_email_create_options_init(&mut options.as_mut(), 0).is_err());
+        assert_eq!(options.as_ref().reroll_number(), 4);
+        // SAFETY: balances this test's successful initialization call.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
