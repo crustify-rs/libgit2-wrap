@@ -1391,7 +1391,10 @@ mod scheduled_connection_tests {
 
         let view = options.as_ref();
         assert_eq!(view.version(), ffi::GIT_REMOTE_CONNECT_OPTIONS_VERSION);
-        assert_eq!(view.callbacks().version(), ffi::GIT_REMOTE_CALLBACKS_VERSION);
+        assert_eq!(
+            view.callbacks().version(),
+            ffi::GIT_REMOTE_CALLBACKS_VERSION
+        );
         assert_eq!(
             view.proxy_options().version(),
             ffi::GIT_PROXY_OPTIONS_VERSION

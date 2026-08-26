@@ -720,9 +720,7 @@ impl GitConfigBackendMut<'_> {
     /// backend exclusively borrowed until
     /// [`GitConfigBackendSnapshotOwned::into_owned`] discharges that
     /// obligation.
-    pub fn snapshot(
-        &mut self,
-    ) -> Result<GitConfigBackendSnapshotOwned<'_>, GitConfigBackendError> {
+    pub fn snapshot(&mut self) -> Result<GitConfigBackendSnapshotOwned<'_>, GitConfigBackendError> {
         let backend = self.as_mut_ptr();
         let callback = self.callback(
             // SAFETY: the raw-place projection is derived from this handle.
@@ -931,7 +929,9 @@ mod backend_tests {
         let mut snapshot = backend.snapshot().unwrap();
         assert_eq!(SNAPSHOT_SOURCE.load(Ordering::SeqCst), source);
         assert!(snapshot.as_ref().is_readonly());
-        snapshot.as_mut().set_version(ffi::GIT_CONFIG_BACKEND_VERSION);
+        snapshot
+            .as_mut()
+            .set_version(ffi::GIT_CONFIG_BACKEND_VERSION);
         drop(snapshot);
         assert_eq!(SNAPSHOT_FREES.load(Ordering::SeqCst), 1);
 

@@ -1288,9 +1288,11 @@ mod scheduled_backend_foreach_tests {
         // C hands back, so the cursor write races with nothing.
         unsafe { addr_of_mut!((*iterator).next_index).write(index + 1) };
         // SAFETY: the bounds check above selects one initialized table slot.
-        let entry = unsafe { addr_of_mut!((*iterator).entries)
-            .cast::<ffi::git_config_backend_entry>()
-            .add(index) };
+        let entry = unsafe {
+            addr_of_mut!((*iterator).entries)
+                .cast::<ffi::git_config_backend_entry>()
+                .add(index)
+        };
         // SAFETY: the callback contract supplies a writable output slot.
         unsafe { out.write(entry) };
         0
@@ -1401,7 +1403,10 @@ mod scheduled_backend_foreach_tests {
         let mut all = Visited::default();
         git_config_backend_foreach_match(&mut backend, None, &mut all)
             .expect("a null expression selects every entry");
-        assert_eq!(all.names, ["core.bare", "core.filemode", "remote.origin.url"]);
+        assert_eq!(
+            all.names,
+            ["core.bare", "core.filemode", "remote.origin.url"]
+        );
         assert_eq!(ITERATOR_FREES.load(Ordering::SeqCst), 1);
 
         let mut matching = Visited::default();

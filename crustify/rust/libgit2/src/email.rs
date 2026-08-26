@@ -225,10 +225,7 @@ mod scheduled_initializer_tests {
         assert_eq!(view.reroll_number(), 0);
         assert_eq!(view.start_number(), 0);
         assert_eq!(view.subject_prefix(), None);
-        assert_eq!(
-            view.diff_options().version(),
-            ffi::GIT_DIFF_OPTIONS_VERSION
-        );
+        assert_eq!(view.diff_options().version(), ffi::GIT_DIFF_OPTIONS_VERSION);
         assert_eq!(
             view.diff_options().flags(),
             Ok(crate::api::diff::DiffOptions::SHOW_BINARY)

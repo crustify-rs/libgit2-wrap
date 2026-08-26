@@ -120,8 +120,9 @@ mod scheduled_graph_tests {
         let head_ref = unsafe { crate::oid::OidRef::from_ptr(addr_of!(head).cast_mut().cast()) }
             .expect("the address of a stack value is non-null");
         // SAFETY: as above, for the independent `parent` value.
-        let parent_ref = unsafe { crate::oid::OidRef::from_ptr(addr_of!(parent).cast_mut().cast()) }
-            .expect("the address of a stack value is non-null");
+        let parent_ref =
+            unsafe { crate::oid::OidRef::from_ptr(addr_of!(parent).cast_mut().cast()) }
+                .expect("the address of a stack value is non-null");
 
         // The ancestor is reachable from the descendant, but not the reverse.
         // Both walks open the repository's object database, which is why the

@@ -668,10 +668,9 @@ mod scheduled_hunk_lookup_tests {
         {
             // SAFETY: `created` is live, initialized, exclusively borrowed
             // local storage for the whole life of this handle.
-            let mut out = unsafe {
-                crate::oid::OidMut::from_ptr(core::ptr::addr_of_mut!(created).cast())
-            }
-            .expect("the address of a local value is non-null");
+            let mut out =
+                unsafe { crate::oid::OidMut::from_ptr(core::ptr::addr_of_mut!(created).cast()) }
+                    .expect("the address of a local value is non-null");
             crate::commit::git_commit_create_from_stage(
                 &mut out,
                 &mut repository.as_mut(),

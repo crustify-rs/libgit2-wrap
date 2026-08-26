@@ -176,7 +176,6 @@ pub fn git_reset_from_annotated(
     if status == 0 { Ok(()) } else { Err(status) }
 }
 
-
 #[cfg(test)]
 mod annotated_reset_tests {
     use core::ptr::{addr_of, addr_of_mut};
