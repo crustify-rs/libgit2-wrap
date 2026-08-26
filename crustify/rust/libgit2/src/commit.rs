@@ -714,6 +714,20 @@ pub fn git_commit_amend_from_stage(
 
 /// Wraps: git_commit_amend_from_tree
 /// Amends `HEAD` using `tree`, retaining the old message when omitted.
+///
+/// # Composition
+///
+/// Every safe route to a [`GitTreeRef`](crate::tree::GitTreeRef) — a
+/// [`RepositoryTree`](crate::tree::RepositoryTree) from
+/// [`git_tree_lookup`](crate::object_api::git_tree_lookup) or a
+/// [`CommitTree`] from [`git_commit_tree`] — pins a *shared*
+/// borrow of the repository owner, while this wrapper takes that owner
+/// exclusively, so the two cannot be held at once. Reaching this entry point
+/// therefore still needs a tree adopted through the raw seam. Closing the gap
+/// belongs to the tree lookups: returning a `RepositoryTree<'repo>` from a
+/// transient `&mut GitRepositoryMut<'repo>` reborrow, the way
+/// [`git_diff_tree_to_tree`](crate::diff_generate::git_diff_tree_to_tree)
+/// already returns its diff, would make the pair compose.
 pub fn git_commit_amend_from_tree(
     id: &mut crate::oid::OidMut<'_>,
     repo: &mut crate::repository::GitRepositoryMut<'_>,
@@ -756,6 +770,23 @@ pub fn git_commit_create_from_stage(
 
 /// Wraps: git_commit_create_from_tree
 /// Creates a commit from an existing tree.
+///
+/// `git_commit_create_ext` asserts `git_tree_owner(tree) == repo`, so `tree`
+/// has to come from `repo` rather than from any repository handle.
+///
+/// # Composition
+///
+/// Every safe route to a [`GitTreeRef`](crate::tree::GitTreeRef) — a
+/// [`RepositoryTree`](crate::tree::RepositoryTree) from
+/// [`git_tree_lookup`](crate::object_api::git_tree_lookup) or a
+/// [`CommitTree`] from [`git_commit_tree`] — pins a *shared*
+/// borrow of the repository owner, while this wrapper takes that owner
+/// exclusively, so the two cannot be held at once. Reaching this entry point
+/// therefore still needs a tree adopted through the raw seam. Closing the gap
+/// belongs to the tree lookups: returning a `RepositoryTree<'repo>` from a
+/// transient `&mut GitRepositoryMut<'repo>` reborrow, the way
+/// [`git_diff_tree_to_tree`](crate::diff_generate::git_diff_tree_to_tree)
+/// already returns its diff, would make the pair compose.
 pub fn git_commit_create_from_tree(
     id: &mut crate::oid::OidMut<'_>,
     repo: &mut crate::repository::GitRepositoryMut<'_>,
@@ -814,5 +845,215 @@ mod simple_commit_api_tests {
         assert!(!options.as_ref().allow_empty_commit());
 
         git_commitarray_dispose(crate::api::commit::GitCommitArray::new());
+    }
+}
+
+#[cfg(test)]
+mod scheduled_creation_and_amend_tests {
+    use core::ptr::{addr_of, addr_of_mut};
+
+    use super::*;
+    use crate::api::commit::{GitCommitCreateOptions, GitCommitCreateOptionsRef};
+    use crate::oid::{Oid, OidMut, OidRef, OidType};
+    use crate::repository::{GitRepositoryInitFlags, GitRepositoryOwned};
+
+    /// Holds one libgit2 initialization count for the duration of a test.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and reference
+            // counted; this guard balances the successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the initialization this guard represents,
+            // after every libgit2 owner in the test has been dropped.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// Reads the message of the commit `HEAD` currently names.
+    fn head_message(repository: &mut GitRepositoryOwned) -> std::ffi::CString {
+        let id = crate::refs::git_reference_name_to_id(&mut repository.as_mut(), c"HEAD")
+            .expect("HEAD resolves to an object");
+        // SAFETY: `id` is live, initialized local storage borrowed only by
+        // this shared handle.
+        let id = unsafe { OidRef::from_ptr(addr_of!(id).cast_mut().cast()) }
+            .expect("the address of a local value is non-null");
+        let commit = crate::object_api::git_commit_lookup(repository.as_ref(), id)
+            .expect("HEAD names a commit");
+        let message = crate::commit::git_commit_message(commit.as_ref())
+            .expect("a created commit carries a message");
+        message.to_owned()
+    }
+
+    /// Runs one scheduled creation entry point over a fresh output slot.
+    fn create(
+        repository: &mut GitRepositoryOwned,
+        options: GitCommitCreateOptionsRef<'_>,
+        call: impl FnOnce(
+            &mut OidMut<'_>,
+            &mut crate::repository::GitRepositoryMut<'_>,
+            GitCommitCreateOptionsRef<'_>,
+        ) -> Result<(), i32>,
+    ) -> Oid {
+        let mut created = Oid::zeroed();
+        {
+            // SAFETY: `created` is live, initialized, exclusively borrowed
+            // local storage for the whole life of this handle.
+            let mut out = unsafe { OidMut::from_ptr(addr_of_mut!(created).cast()) }
+                .expect("the address of a local value is non-null");
+            call(&mut out, &mut repository.as_mut(), options).expect("the commit is created");
+        }
+        created
+    }
+
+    /// Walks `HEAD` through all four scheduled commit entry points.
+    ///
+    /// Every one of them ends in `git_commit__create_internal` with
+    /// `update_ref` pointing at `HEAD`, so each call has to leave `HEAD`
+    /// naming the object it just wrote. The two amending forms additionally
+    /// keep the previous commit's message when none is supplied, which is the
+    /// only place the wrapper's optional message is observable.
+    #[test]
+    fn creating_and_amending_walk_head_through_the_scheduled_entry_points() {
+        let _libgit2 = Libgit2Init::acquire();
+
+        let directory = std::env::temp_dir().join(format!(
+            "crustify-commit-entry-points-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let path = std::ffi::CString::new(
+            directory
+                .to_str()
+                .expect("a temporary directory path is UTF-8"),
+        )
+        .expect("a temporary directory path holds no interior NUL");
+
+        // A SHA-256 repository sidesteps the bundled SHA1DC collision
+        // detector, whose unaligned 32-bit loads trip the C build's UBSan on
+        // every object it hashes.
+        let mut init_options = crate::repository::git_repository_init_options_init(1)
+            .expect("the current init-options version");
+        init_options.as_mut().set_oid_type(Some(OidType::Sha256));
+        init_options
+            .as_mut()
+            .set_flags(GitRepositoryInitFlags::MKPATH | GitRepositoryInitFlags::BARE);
+        let mut repository =
+            crate::repository::git_repository_init_ext(&path, &mut init_options.as_mut())
+                .expect("a fresh directory initializes as a bare repository");
+
+        let signature = crate::signature::git_signature_now(c"Crustify", c"crustify@example.com")
+            .expect("a signature stamped with the current time");
+        let mut options = GitCommitCreateOptions::new();
+        // Every commit below has the same (empty) tree as its parent, so the
+        // creating forms need the empty-commit gate opened.
+        options.as_mut().set_allow_empty_commit(true);
+        // SAFETY: the signature owner outlives the options and every call
+        // that reads them below.
+        unsafe {
+            options
+                .as_mut()
+                .set_borrowed_author(Some(signature.as_ref()));
+            options
+                .as_mut()
+                .set_borrowed_committer(Some(signature.as_ref()));
+        }
+
+        let initial = create(&mut repository, options.as_ref(), |out, repo, opts| {
+            git_commit_create_from_stage(out, repo, c"initial", Some(opts))
+        });
+        assert_eq!(head_message(&mut repository), c"initial".to_owned());
+
+        // The staged tree is the tree of the commit just written, so it is
+        // also what the by-tree forms are handed.
+        //
+        // Reaching it goes through the raw seam on purpose. A tree looked up
+        // with `git_tree_lookup` comes back as a `RepositoryTree<'repo>` whose
+        // `'repo` is a *shared* borrow of the repository owner, while the
+        // by-tree entry points below take that same owner exclusively, so safe
+        // code cannot hold both at once. The adopted owner here carries no
+        // repository tether, and this test keeps the repository alive around
+        // every use of it.
+        let tree_id = {
+            // SAFETY: `initial` is live, initialized local storage borrowed
+            // only by this shared handle.
+            let initial = unsafe { OidRef::from_ptr(addr_of!(initial).cast_mut().cast()) }
+                .expect("the address of a local value is non-null");
+            let commit = crate::object_api::git_commit_lookup(repository.as_ref(), initial)
+                .expect("the created commit is readable");
+            crate::oid::git_oid_cpy(git_commit_tree_id(commit.as_ref()))
+        };
+        let mut raw_tree = core::ptr::null_mut();
+        let status = {
+            // SAFETY: `tree_id` is live, initialized local storage borrowed
+            // only by this shared handle.
+            let tree_id = unsafe { OidRef::from_ptr(addr_of!(tree_id).cast_mut().cast()) }
+                .expect("the address of a local value is non-null");
+            // SAFETY: the output slot is writable and both the repository and
+            // the object ID are live for this synchronous lookup.
+            unsafe {
+                ffi::git_tree_lookup(
+                    addr_of_mut!(raw_tree),
+                    repository.as_ref().as_ptr().cast_mut(),
+                    tree_id.as_ptr(),
+                )
+            }
+        };
+        assert_eq!(status, 0, "the staged tree is readable");
+        // SAFETY: success transferred one complete owned tree reference, and
+        // `repository` outlives every use of it below.
+        let tree = unsafe { crate::tree::GitTreeOwned::from_raw(raw_tree) }
+            .expect("a successful lookup returns a tree");
+
+        let from_tree = create(&mut repository, options.as_ref(), |out, repo, opts| {
+            git_commit_create_from_tree(out, repo, tree.as_ref(), c"from tree", Some(opts))
+        });
+        assert_ne!(
+            crate::oid::git_oid_tostr_s(
+                // SAFETY: live, initialized local storage borrowed only here.
+                unsafe { OidRef::from_ptr(addr_of!(from_tree).cast_mut().cast()) }.unwrap()
+            ),
+            crate::oid::git_oid_tostr_s(
+                // SAFETY: live, initialized local storage borrowed only here.
+                unsafe { OidRef::from_ptr(addr_of!(initial).cast_mut().cast()) }.unwrap()
+            ),
+        );
+        assert_eq!(head_message(&mut repository), c"from tree".to_owned());
+
+        // Amending without a message keeps the amended commit's own message.
+        let _ = create(&mut repository, options.as_ref(), |out, repo, opts| {
+            git_commit_amend_from_tree(out, repo, tree.as_ref(), None, Some(opts))
+        });
+        assert_eq!(head_message(&mut repository), c"from tree".to_owned());
+
+        let _ = create(&mut repository, options.as_ref(), |out, repo, opts| {
+            git_commit_amend_from_tree(out, repo, tree.as_ref(), Some(c"retitled"), Some(opts))
+        });
+        assert_eq!(head_message(&mut repository), c"retitled".to_owned());
+
+        // The staged form reaches the same amend through the repository index.
+        let _ = create(&mut repository, options.as_ref(), |out, repo, opts| {
+            git_commit_amend_from_stage(out, repo, Some(c"amended"), Some(opts))
+        });
+        assert_eq!(head_message(&mut repository), c"amended".to_owned());
+
+        let _ = create(&mut repository, options.as_ref(), |out, repo, opts| {
+            git_commit_amend_from_stage(out, repo, None, Some(opts))
+        });
+        assert_eq!(head_message(&mut repository), c"amended".to_owned());
+
+        drop(tree);
+        drop(options);
+        drop(signature);
+        drop(repository);
+        let _ = std::fs::remove_dir_all(&directory);
     }
 }

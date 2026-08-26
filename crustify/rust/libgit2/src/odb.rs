@@ -974,3 +974,147 @@ pub fn git_odb_read_prefix(
     // SAFETY: success transfers one independently releasable cache reference.
     unsafe { GitOdbObjectOwned::from_raw(out) }.ok_or(ffi::git_error_code_GIT_ERROR)
 }
+
+#[cfg(test)]
+mod scheduled_alternate_and_prefix_tests {
+    use super::*;
+    use crate::oid::OidType;
+
+    /// Holds one libgit2 initialization count for the duration of a test.
+    ///
+    /// Every allocation libgit2 performs goes through the allocator that
+    /// initialization installs, so an unbracketed call corrupts memory rather
+    /// than failing.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and reference
+            // counted; this guard balances the successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the initialization this guard represents,
+            // after every libgit2 owner in the test has been dropped.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// Creates one empty loose-object directory and its C path.
+    fn objects_directory(tag: &str) -> (std::path::PathBuf, std::ffi::CString) {
+        let directory = std::env::temp_dir().join(format!(
+            "crustify-odb-{tag}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("a fresh loose-object directory");
+        let path = std::ffi::CString::new(
+            directory
+                .to_str()
+                .expect("a temporary directory path is UTF-8"),
+        )
+        .expect("a temporary directory path holds no interior NUL");
+        (directory, path)
+    }
+
+    /// Drives the three scheduled database operations against real backends.
+    ///
+    /// `git_odb_add_alternate` transfers the backend: `add_backend_internal`
+    /// records it in the database's vector and `git_odb_free` later calls its
+    /// `free` callback, so the owner has to be consumed. Every failing path
+    /// in that helper returns before the vector insert, which is what lets the
+    /// wrapper hand the still-owned backend back in the error case.
+    ///
+    /// `git_odb_get_backend` hands back a pointer the database keeps owning,
+    /// so its handle is borrowed rather than owned, and bounded by the
+    /// exclusive database reborrow that the C lock acquisition requires.
+    #[test]
+    fn an_alternate_backend_is_owned_by_the_database_and_answers_prefix_reads() {
+        let _libgit2 = Libgit2Init::acquire();
+        let (primary_directory, primary) = objects_directory("primary");
+        let (alternate_directory, alternate) = objects_directory("alternate");
+
+        // A SHA-256 database keeps every hash away from the bundled SHA1DC
+        // implementation, whose unaligned 32-bit loads trip the C build's
+        // UBSan on each object it hashes.
+        let mut options = git_odb_options_init(ffi::GIT_ODB_OPTIONS_VERSION)
+            .expect("the published database options version initializes");
+        options.as_mut().set_oid_type(Some(OidType::Sha256));
+        let mut odb = git_odb_new_ext(Some(options.as_ref())).expect("an empty database");
+
+        let mut loose = crate::odb_loose::git_odb_backend_loose_options_init(
+            ffi::GIT_ODB_BACKEND_LOOSE_OPTIONS_VERSION,
+        )
+        .expect("the published loose options version initializes");
+        loose.as_mut().set_oid_type(Some(OidType::Sha256));
+
+        let writable = crate::odb_loose::git_odb_backend_loose(&primary, Some(loose.as_ref()))
+            .expect("a loose backend over the primary directory");
+        git_odb_add_backend(&mut odb.as_mut(), writable, 1)
+            .map_err(|(code, _backend)| code)
+            .expect("the writable backend installs");
+
+        let extra = crate::odb_loose::git_odb_backend_loose(&alternate, Some(loose.as_ref()))
+            .expect("a loose backend over the alternate directory");
+        git_odb_add_alternate(&mut odb.as_mut(), extra, 2)
+            .map_err(|(code, _backend)| code)
+            .expect("the alternate backend installs");
+
+        assert_eq!(git_odb_num_backends(&mut odb.as_mut()), 2);
+        assert_eq!(
+            git_odb_get_backend(&mut odb.as_mut(), 0)
+                .expect("the first slot is installed")
+                .version(),
+            1
+        );
+        assert_eq!(
+            git_odb_get_backend(&mut odb.as_mut(), 1)
+                .expect("the second slot is installed")
+                .version(),
+            1
+        );
+        assert_eq!(
+            git_odb_get_backend(&mut odb.as_mut(), 2).err(),
+            Some(ffi::git_error_code_GIT_ENOTFOUND),
+            "an unused slot is a clean not-found rather than a null handle"
+        );
+
+        // Only the non-alternate backend accepts writes, so this lands in the
+        // primary directory while the alternate stays readable and empty.
+        let mut id = git_odb_write(odb.as_ref(), b"crustify", GitObjectType::BLOB)
+            .expect("the writable loose backend stores the blob");
+        // SAFETY: `id` is live, initialized, exclusively borrowed local
+        // storage for the whole life of this handle.
+        let id = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(id).cast()) }
+            .expect("the address of a local value is non-null");
+
+        // A short prefix takes the backend search; the full hex length takes
+        // the cache fast path in `git_odb_read_prefix` instead.
+        for hex_len in [8, 64] {
+            let object = git_odb_read_prefix(&mut odb.as_mut(), id, hex_len)
+                .expect("the stored blob resolves from its prefix");
+            assert_eq!(git_odb_object_size(object.as_ref()), b"crustify".len());
+            assert!(crate::oid::git_oid_equal(
+                git_odb_object_id(object.as_ref()),
+                id
+            ));
+        }
+
+        assert_eq!(
+            git_odb_read_prefix(&mut odb.as_mut(), id, 3).err(),
+            Some(ffi::git_error_code_GIT_EAMBIGUOUS),
+            "libgit2 refuses a prefix shorter than GIT_OID_MINPREFIXLEN"
+        );
+
+        // Dropping the database runs both installed `free` callbacks; the
+        // sanitized C library reports a double free if either owner survived.
+        drop(odb);
+        let _ = std::fs::remove_dir_all(&primary_directory);
+        let _ = std::fs::remove_dir_all(&alternate_directory);
+    }
+}

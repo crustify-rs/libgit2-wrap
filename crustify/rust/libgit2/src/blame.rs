@@ -576,3 +576,149 @@ mod current_hunk_lookup_tests {
             git_blame_hunk_byline;
     }
 }
+
+#[cfg(test)]
+mod scheduled_hunk_lookup_tests {
+    use super::*;
+
+    /// Holds one libgit2 initialization count for the duration of a test.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and reference
+            // counted; this guard balances the successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the initialization this guard represents,
+            // after every libgit2 owner in the test has been dropped.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// Both scheduled lookups reach the same hunk storage, from opposite ends
+    /// of the borrow split.
+    ///
+    /// `git_blame_hunk_byindex` is a plain `git_vector_get`, so it reads
+    /// through a shared handle. `git_blame_hunk_byline` runs
+    /// `git_vector_bsearch2`, which calls `git_vector_sort` on the result's
+    /// hunk vector before searching it, so it needs the exclusive handle; the
+    /// hunks are separate allocations, which is why the hunk it returns is
+    /// still valid storage owned by the blame.
+    #[test]
+    fn the_two_lookups_agree_on_the_hunk_covering_a_line() {
+        let _libgit2 = Libgit2Init::acquire();
+
+        let directory = std::env::temp_dir().join(format!(
+            "crustify-blame-hunks-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let path = std::ffi::CString::new(
+            directory
+                .to_str()
+                .expect("a temporary directory path is UTF-8"),
+        )
+        .expect("a temporary directory path holds no interior NUL");
+
+        // A SHA-256 repository sidesteps the bundled SHA1DC collision
+        // detector, whose unaligned 32-bit loads trip the C build's UBSan on
+        // every object it hashes.
+        let mut init_options = crate::repository::git_repository_init_options_init(1)
+            .expect("the current init-options version");
+        init_options
+            .as_mut()
+            .set_oid_type(Some(crate::oid::OidType::Sha256));
+        init_options
+            .as_mut()
+            .set_flags(crate::repository::GitRepositoryInitFlags::MKPATH);
+        let mut repository =
+            crate::repository::git_repository_init_ext(&path, &mut init_options.as_mut())
+                .expect("a fresh directory initializes as a work-tree repository");
+
+        std::fs::write(directory.join("lines.txt"), "one\ntwo\nthree\n")
+            .expect("the blamed file is written into the work tree");
+        {
+            let mut index = crate::repository::git_repository_index(&mut repository.as_mut())
+                .expect("the repository index opens");
+            crate::index::git_index_add_bypath(&mut index.as_mut(), c"lines.txt")
+                .expect("the new file is staged");
+            crate::index::git_index_write(&mut index.as_mut()).expect("the index is persisted");
+        }
+
+        let signature = crate::signature::git_signature_now(c"Crustify", c"crustify@example.com")
+            .expect("a signature stamped with the current time");
+        let mut options = crate::api::commit::GitCommitCreateOptions::new();
+        // SAFETY: the signature owner outlives the options and the call below.
+        unsafe {
+            options
+                .as_mut()
+                .set_borrowed_author(Some(signature.as_ref()));
+            options
+                .as_mut()
+                .set_borrowed_committer(Some(signature.as_ref()));
+        }
+        let mut created = crate::oid::Oid::zeroed();
+        {
+            // SAFETY: `created` is live, initialized, exclusively borrowed
+            // local storage for the whole life of this handle.
+            let mut out = unsafe {
+                crate::oid::OidMut::from_ptr(core::ptr::addr_of_mut!(created).cast())
+            }
+            .expect("the address of a local value is non-null");
+            crate::commit::git_commit_create_from_stage(
+                &mut out,
+                &mut repository.as_mut(),
+                c"add lines",
+                Some(options.as_ref()),
+            )
+            .expect("the staged file commits");
+        }
+
+        let mut blame = git_blame_file(repository.as_ref(), c"lines.txt", None)
+            .expect("the committed file is blamable");
+
+        assert_eq!(git_blame_hunkcount(blame.as_ref()), 1);
+        let hunk = git_blame_hunk_byindex(blame.as_ref(), 0).expect("the sole hunk");
+        assert_eq!(hunk.final_start_line_number(), 1);
+        assert_eq!(hunk.lines_in_hunk(), 3);
+        assert!(
+            git_blame_hunk_byindex(blame.as_ref(), 1).is_none(),
+            "an out-of-range index is a clean absence"
+        );
+
+        // The by-line lookup selects the same hunk for every covered line and
+        // reports nothing past the end of the file.
+        for line in 1..=3 {
+            let mut exclusive = blame.as_mut();
+            let found = git_blame_hunk_byline(&mut exclusive, line)
+                .expect("every committed line belongs to the sole hunk");
+            assert_eq!(found.final_start_line_number(), 1);
+            assert_eq!(found.lines_in_hunk(), 3);
+        }
+        assert!(
+            git_blame_hunk_byline(&mut blame.as_mut(), 4).is_none(),
+            "a line past the blamed file has no hunk"
+        );
+        assert!(
+            git_blame_hunk_byline(&mut blame.as_mut(), 0).is_none(),
+            "line numbers are one-based"
+        );
+
+        // The searched vector is the one the index lookup reads, so indexing
+        // still resolves after the search sorted it.
+        assert!(git_blame_hunk_byindex(blame.as_ref(), 0).is_some());
+
+        drop(blame);
+        drop(options);
+        drop(signature);
+        drop(repository);
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+}

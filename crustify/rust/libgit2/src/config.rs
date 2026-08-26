@@ -1336,3 +1336,164 @@ mod scheduled_configmap_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod scheduled_traversal_tests {
+    use super::*;
+
+    /// Holds one libgit2 initialization count for the duration of a test.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and reference
+            // counted; this guard balances the successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the initialization this guard represents,
+            // after every libgit2 owner in the test has been dropped.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// Writes a fixed configuration file and returns its path and C path.
+    fn config_file() -> (std::path::PathBuf, std::ffi::CString) {
+        let directory = std::env::temp_dir().join(format!(
+            "crustify-config-foreach-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("a fresh configuration directory");
+        let file = directory.join("config");
+        std::fs::write(
+            &file,
+            concat!(
+                "[core]\n",
+                "\tbare = true\n",
+                "[remote \"origin\"]\n",
+                "\tfetch = +refs/heads/*:refs/remotes/origin/*\n",
+                "\tfetch = +refs/tags/*:refs/tags/*\n",
+            ),
+        )
+        .expect("the fixture configuration is written");
+        let path = std::ffi::CString::new(file.to_str().expect("a temporary path is UTF-8"))
+            .expect("a temporary path holds no interior NUL");
+        (directory, path)
+    }
+
+    /// The three scheduled traversals differ in what they select, and each
+    /// difference is observable rather than a naming convention.
+    ///
+    /// `git_config_foreach` delegates to `git_config_foreach_match` with a
+    /// null expression, so the two agree when no expression is supplied.
+    /// `all_iter_glob_next` matches the expression against the entry *name*,
+    /// while `multivar_iter_next` matches its own against the entry *value*
+    /// after selecting a single normalized name.
+    #[test]
+    fn each_traversal_selects_what_its_c_iterator_filters_on() {
+        let _libgit2 = Libgit2Init::acquire();
+        let (directory, path) = config_file();
+        let config = git_config_open_ondisk(&path).expect("the fixture file opens");
+
+        let mut names = Vec::new();
+        git_config_foreach(config.as_ref(), &mut |entry: GitConfigEntryRef<'_>| {
+            names.push(entry.name().to_owned());
+            0
+        })
+        .expect("the full traversal succeeds");
+        names.sort();
+        assert_eq!(
+            names,
+            vec![
+                c"core.bare".to_owned(),
+                c"remote.origin.fetch".to_owned(),
+                c"remote.origin.fetch".to_owned(),
+            ]
+        );
+
+        let mut without_expression = 0;
+        git_config_foreach_match(config.as_ref(), None, &mut |_e: GitConfigEntryRef<'_>| {
+            without_expression += 1;
+            0
+        })
+        .expect("a null expression selects every entry");
+        assert_eq!(without_expression, names.len());
+
+        let mut matched = Vec::new();
+        git_config_foreach_match(
+            config.as_ref(),
+            Some(c"^remote\\."),
+            &mut |entry: GitConfigEntryRef<'_>| {
+                matched.push(entry.value().expect("a set entry has a value").to_owned());
+                0
+            },
+        )
+        .expect("the name expression selects the remote entries");
+        assert_eq!(matched.len(), 2, "the expression matched the entry names");
+
+        let mut values = Vec::new();
+        git_config_get_multivar_foreach(
+            config.as_ref(),
+            c"remote.origin.fetch",
+            None,
+            &mut |entry: GitConfigEntryRef<'_>| {
+                values.push(entry.value().expect("a set entry has a value").to_owned());
+                0
+            },
+        )
+        .expect("both values of the multivar are visited");
+        values.sort();
+        assert_eq!(
+            values,
+            vec![
+                c"+refs/heads/*:refs/remotes/origin/*".to_owned(),
+                c"+refs/tags/*:refs/tags/*".to_owned(),
+            ]
+        );
+
+        let mut tags = 0;
+        git_config_get_multivar_foreach(
+            config.as_ref(),
+            c"remote.origin.fetch",
+            Some(c"refs/tags"),
+            &mut |_e: GitConfigEntryRef<'_>| {
+                tags += 1;
+                0
+            },
+        )
+        .expect("the value expression selects one of the two values");
+        assert_eq!(tags, 1);
+
+        // An unset name is not an empty walk: `git_config_get_multivar_foreach`
+        // turns a traversal that visited nothing into `GIT_ENOTFOUND`.
+        assert_eq!(
+            git_config_get_multivar_foreach(
+                config.as_ref(),
+                c"remote.origin.push",
+                None,
+                &mut |_e: GitConfigEntryRef<'_>| 0,
+            ),
+            Err(ffi::git_error_code_GIT_ENOTFOUND)
+        );
+
+        // A callback that stops the walk propagates its own code unchanged.
+        let mut visited = 0;
+        assert_eq!(
+            git_config_foreach(config.as_ref(), &mut |_e: GitConfigEntryRef<'_>| {
+                visited += 1;
+                -42
+            }),
+            Err(-42)
+        );
+        assert_eq!(visited, 1);
+
+        drop(config);
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+}
