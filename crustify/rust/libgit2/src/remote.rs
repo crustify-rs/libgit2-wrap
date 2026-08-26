@@ -1686,6 +1686,13 @@ mod scheduled_transfer_repository_tests {
             Self::to_c(&format!("file://{path}-absent"))
         }
 
+        /// A `file://` URL naming the fixture itself, so the local transport
+        /// connects.
+        fn url(&self) -> std::ffi::CString {
+            let path = self.0.to_str().expect("a UTF-8 temporary path");
+            Self::to_c(&format!("file://{path}"))
+        }
+
         fn to_c(value: &str) -> std::ffi::CString {
             std::ffi::CString::new(value).expect("a path without interior NUL")
         }
@@ -1810,6 +1817,57 @@ mod scheduled_transfer_repository_tests {
             error.message.as_deref(),
             Some(c"custom HTTP header 'malformed' is malformed")
         );
+        assert!(!git_remote_connected(remote.as_ref()));
+    }
+
+    /// The connection [`git_remote_upload`] opens is what forces `'static`
+    /// nested option data, and it is still open when the call returns — the
+    /// distinction from [`git_remote_push`], which disconnects unconditionally.
+    #[test]
+    fn upload_leaves_the_transport_connected_after_a_refspec_failure() {
+        let _init = Libgit2Init::acquire();
+        let directory = BareRepo::create("upload-stays-connected");
+        let mut repository =
+            git_repository_open(&directory.c_path()).expect("the bare repository opens");
+        let mut owner = repository.as_mut();
+        let mut remote = git_remote_create_anonymous(&mut owner, &directory.url())
+            .expect("an anonymous remote for the fixture itself");
+
+        // `git_push_add_refspec` runs after `connect_or_reset_options`, and
+        // `check_lref` rejects a source that names no object in the empty
+        // fixture, so the failure lands with the transport already connected.
+        let refspec = c"refs/heads/absent:refs/heads/absent";
+        let mut entries = [refspec.as_ptr().cast_mut()];
+        let mut header = ffi::git_strarray {
+            strings: entries.as_mut_ptr(),
+            count: entries.len(),
+        };
+        // SAFETY: `header` is an initialized string-array header over a live
+        // pointer run whose single entry is a live NUL-terminated string, and
+        // both outlive the handle borrowed here.
+        let refspecs = unsafe { GitStrArrayRef::from_ptr(&raw mut header) }
+            .expect("the address of a stack value is non-null");
+
+        // Default options keep every retained slot null, so the transport copy
+        // this call installs borrows nothing at all.
+        let push_options = GitPushOptions::new();
+        assert_eq!(
+            git_remote_upload(
+                &mut remote.as_mut(),
+                Some(refspecs),
+                Some(push_options.as_ref()),
+            ),
+            Err(-1)
+        );
+        let error = git_error_last();
+        assert_eq!(error.klass, Ok(GitErrorClass::Reference));
+        assert_eq!(
+            error.message.as_deref(),
+            Some(c"src refspec 'refs/heads/absent' does not match any existing object")
+        );
+
+        assert!(git_remote_connected(remote.as_ref()));
+        assert_eq!(git_remote_disconnect(&mut remote.as_mut()), Ok(()));
         assert!(!git_remote_connected(remote.as_ref()));
     }
 }
@@ -1940,16 +1998,40 @@ fn remote_create_with_opts_raw(
 /// Wraps: git_remote_upload
 /// Uploads the selected refspecs and leaves the remote connected.
 ///
-/// Refspec strings, HTTP headers, the proxy URL and remote push options are
-/// copied by libgit2. Callback and proxy payload slots are not: they are
-/// copied into the connected transport, and callbacks are also copied into
-/// the push state retained by the remote. Because this operation deliberately
-/// leaves both states installed for later remote operations, nested option
-/// data must be `'static`.
+/// Every string input is copied during the call: `git_refspec__parse`
+/// duplicates each refspec, `git_remote_connect_options_dup` runs
+/// `git_strarray_copy` over the custom headers and `git__strdup` over the
+/// proxy URL, and this function `git__strdup`s each remote push option into
+/// the push state.
 ///
-/// A shorter-lived proxy payload is therefore rejected:
+/// The payload slots are not copied, only their pointers, and this operation
+/// deliberately returns without disconnecting.
+/// `connect_or_reset_options` installs the callback table and the proxy
+/// options — payloads included — in the transport's own `connect_opts`, where
+/// `git_transport_smart_credentials`, `git_transport_smart_certificate_check`
+/// and the sideband and transfer-progress readers reach them on every later
+/// request over the connection this call leaves open. Nothing on the way out
+/// clears them either: `git_smart__close` disposes the stream and not the
+/// options, so they survive a later [`git_remote_disconnect`], are replaced
+/// only by the next connect or reconfigure, and are released only with the
+/// remote. Nested option data must therefore be `'static`.
 ///
-/// ```compile_fail
+/// `git_push_new` copies the callback table into `remote->push` as well, and
+/// that copy also outlives the call, but only `do_push` reads it and that runs
+/// inside this call's `git_push_finish`. A later [`git_remote_update_tips`]
+/// does reach the same `git_push`, and hands `git_push_update_tips` its own
+/// callbacks. The transport copy is what makes the bound load-bearing.
+///
+/// The bound is not a restatement of the unsafe
+/// [`GitRemoteCallbacksMut::set_handler`] contract, because
+/// [`GitProxyOptionsMut::set_credentials`] installs the retained proxy payload
+/// from safe code. `'data` is one parameter for the whole options tree, so it
+/// also pins the deep-copied URL that the rejected snippet below installs:
+///
+/// [`GitRemoteCallbacksMut::set_handler`]: crate::api::remote::GitRemoteCallbacksMut::set_handler
+/// [`GitProxyOptionsMut::set_credentials`]: crate::api::proxy::GitProxyOptionsMut::set_credentials
+///
+/// ```compile_fail,E0597
 /// use core::ffi::CStr;
 ///
 /// use libgit2::api::remote::GitPushOptions;
