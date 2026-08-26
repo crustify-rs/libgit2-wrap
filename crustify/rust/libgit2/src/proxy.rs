@@ -83,6 +83,24 @@ mod tests {
         assert_eq!(options.as_ref().version(), ffi::GIT_PROXY_OPTIONS_VERSION);
         assert_eq!(options.as_ref().proxy_type(), Ok(ProxyType::None));
     }
+
+    #[test]
+    fn an_unsupported_version_yields_no_options_at_all() {
+        // The rejection path reports through `git_error_set`, which needs the
+        // thread state libgit2 installs at initialization.
+        // SAFETY: libgit2 initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        // `git_error__check_version` accepts `0 < version <= current` only, so
+        // both ends are refused and the wrapper hands back no options rather
+        // than a partially written record.
+        assert_eq!(git_proxy_options_init(0).err(), Some(-1));
+        assert_eq!(
+            git_proxy_options_init(ffi::GIT_PROXY_OPTIONS_VERSION + 1).err(),
+            Some(-1)
+        );
+        // SAFETY: balances the successful initialization above.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
 }
 
 /// Wraps: git_proxy_options_init

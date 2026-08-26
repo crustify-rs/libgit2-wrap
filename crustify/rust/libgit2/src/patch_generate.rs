@@ -33,6 +33,20 @@ impl GitGeneratedPatch<'_> {
     }
 }
 
+/// Splits an optional borrowed buffer into the pointer and length pair the C
+/// comparison entry points take.
+///
+/// libgit2 distinguishes a null side from an empty one: a null buffer sets
+/// `GIT_DIFF_FLAG__NO_DATA` and makes the delta added or deleted, while a
+/// non-null zero-length buffer is a present but empty file, which compares as
+/// modified. `None` therefore becomes a real null pointer instead of the
+/// dangling pointer an empty Rust slice carries.
+fn buffer_parts(buffer: Option<&[u8]>) -> (*const u8, usize) {
+    buffer.map_or((core::ptr::null(), 0), |buffer| {
+        (buffer.as_ptr(), buffer.len())
+    })
+}
+
 fn patch_result(status: i32, patch: Option<GitPatchOwned>) -> Result<GitPatchOwned, i32> {
     if status == 0 {
         patch.ok_or(ffi::git_error_code_GIT_ERROR)
@@ -277,9 +291,9 @@ mod tests {
             0
         };
         git_diff_buffers(
-            b"old\n",
+            Some(b"old\n"),
             Some(c"file"),
-            b"new\n",
+            Some(b"new\n"),
             Some(c"file"),
             None,
             Some(&mut file),
@@ -294,7 +308,7 @@ mod tests {
         git_diff_blob_to_buffer(
             None,
             None,
-            b"new\n",
+            Some(b"new\n"),
             Some(c"file"),
             None,
             None,
@@ -302,7 +316,65 @@ mod tests {
             None,
             None,
         )
-        .expect("an empty blob side compares with a buffer");
+        .expect("an absent blob side compares with a buffer");
+
+        // SAFETY: balances the successful initialization above.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    /// Records the status of the single delta a buffer comparison reports.
+    fn compared_status(
+        old_buffer: Option<&[u8]>,
+        new_buffer: Option<&[u8]>,
+    ) -> Option<crate::diff::Delta> {
+        let mut status = None;
+        let mut file = |delta: crate::api::diff::DiffDeltaRef<'_>, _: f32| {
+            status = delta.status().ok();
+            0
+        };
+        git_diff_buffers(
+            old_buffer,
+            Some(c"file"),
+            new_buffer,
+            Some(c"file"),
+            None,
+            Some(&mut file),
+            None,
+            None,
+            None,
+        )
+        .expect("every buffer pairing compares successfully");
+        status
+    }
+
+    #[test]
+    fn an_absent_buffer_side_is_not_an_empty_one() {
+        // SAFETY: libgit2 initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+
+        // A null side carries `GIT_DIFF_FLAG__NO_DATA`, so the file is absent
+        // and the delta is added or deleted...
+        assert_eq!(
+            compared_status(None, Some(b"new\n")),
+            Some(crate::diff::Delta::Added)
+        );
+        assert_eq!(
+            compared_status(Some(b"old\n"), None),
+            Some(crate::diff::Delta::Deleted)
+        );
+        // ...while a zero-length side is a present, empty file, which makes
+        // the same comparison a modification. Only `Option<&[u8]>` can state
+        // both, which is why an empty slice must not become a null pointer.
+        assert_eq!(
+            compared_status(Some(b""), Some(b"new\n")),
+            Some(crate::diff::Delta::Modified)
+        );
+        assert_eq!(
+            compared_status(Some(b"old\n"), Some(b"")),
+            Some(crate::diff::Delta::Modified)
+        );
+        // Two absent sides are unmodified, so no file callback runs at all.
+        assert_eq!(compared_status(None, None), None);
 
         // SAFETY: balances the successful initialization above.
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
@@ -310,13 +382,17 @@ mod tests {
 }
 
 /// Wraps: git_diff_blob_to_buffer
-/// Compares an optional blob with a borrowed byte buffer and reports the
-/// differences synchronously.
+/// Compares an optional blob with an optional borrowed byte buffer and reports
+/// the differences synchronously.
+///
+/// Both sides are optional and absent is not the same as empty: `None` marks
+/// the side as having no data, so the delta is added or deleted, while
+/// `Some(&[])` is a present, empty file, which compares as modified.
 #[allow(clippy::too_many_arguments)]
 pub fn git_diff_blob_to_buffer<'callbacks>(
     old_blob: Option<crate::blob::GitBlobRef<'_>>,
     old_path: Option<&core::ffi::CStr>,
-    buffer: &[u8],
+    buffer: Option<&[u8]>,
     buffer_path: Option<&core::ffi::CStr>,
     options: Option<crate::api::diff::GitDiffOptionsRef<'_, '_>>,
     file: Option<&'callbacks mut dyn crate::api::diff::GitDiffFileCallback>,
@@ -326,6 +402,7 @@ pub fn git_diff_blob_to_buffer<'callbacks>(
 ) -> Result<(), i32> {
     let old_blob = old_blob.map_or(core::ptr::null(), |blob| blob.as_ptr());
     let old_path = old_path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
+    let (buffer, buffer_len) = buffer_parts(buffer);
     let buffer_path = buffer_path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
     let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
     let mut callbacks = crate::diff::DiffCallbacks {
@@ -351,14 +428,14 @@ pub fn git_diff_blob_to_buffer<'callbacks>(
         .as_ref()
         .map(|_| crate::diff::diff_line_trampoline as _);
     // SAFETY: all object, string and buffer inputs remain live for the call;
-    // the buffer length bounds every C read, and callback state plus payload
-    // stays exclusively borrowed until this synchronous comparison returns.
+    // the buffer is null or readable for its paired length, and callback state
+    // plus payload stays exclusively borrowed until this comparison returns.
     let status = unsafe {
         ffi::git_diff_blob_to_buffer(
             old_blob,
             old_path,
-            buffer.as_ptr().cast(),
-            buffer.len(),
+            buffer.cast(),
+            buffer_len,
             buffer_path,
             options,
             file,
@@ -372,13 +449,17 @@ pub fn git_diff_blob_to_buffer<'callbacks>(
 }
 
 /// Wraps: git_diff_buffers
-/// Compares two borrowed byte buffers and reports the differences
+/// Compares two optional borrowed byte buffers and reports the differences
 /// synchronously.
+///
+/// Either side may be absent and absent is not the same as empty: `None` marks
+/// the side as having no data, so the delta is added or deleted, while
+/// `Some(&[])` is a present, empty file, which compares as modified.
 #[allow(clippy::too_many_arguments)]
 pub fn git_diff_buffers<'callbacks>(
-    old_buffer: &[u8],
+    old_buffer: Option<&[u8]>,
     old_path: Option<&core::ffi::CStr>,
-    new_buffer: &[u8],
+    new_buffer: Option<&[u8]>,
     new_path: Option<&core::ffi::CStr>,
     options: Option<crate::api::diff::GitDiffOptionsRef<'_, '_>>,
     file: Option<&'callbacks mut dyn crate::api::diff::GitDiffFileCallback>,
@@ -386,6 +467,8 @@ pub fn git_diff_buffers<'callbacks>(
     hunk: Option<&'callbacks mut dyn crate::api::diff::GitDiffHunkCallback>,
     line: Option<&'callbacks mut dyn crate::api::diff::GitDiffLineCallback>,
 ) -> Result<(), i32> {
+    let (old_buffer, old_len) = buffer_parts(old_buffer);
+    let (new_buffer, new_len) = buffer_parts(new_buffer);
     let old_path = old_path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
     let new_path = new_path.map_or(core::ptr::null(), core::ffi::CStr::as_ptr);
     let options = options.map_or(core::ptr::null(), |options| options.as_ptr());
@@ -411,16 +494,16 @@ pub fn git_diff_buffers<'callbacks>(
         .line
         .as_ref()
         .map(|_| crate::diff::diff_line_trampoline as _);
-    // SAFETY: each slice pointer is readable for its paired length, optional
-    // strings and options remain live, and callback state plus payload stays
-    // exclusively borrowed until this synchronous comparison returns.
+    // SAFETY: each buffer pointer is null or readable for its paired length,
+    // optional strings and options remain live, and callback state plus
+    // payload stays exclusively borrowed until this comparison returns.
     let status = unsafe {
         ffi::git_diff_buffers(
-            old_buffer.as_ptr().cast(),
-            old_buffer.len(),
+            old_buffer.cast(),
+            old_len,
             old_path,
-            new_buffer.as_ptr().cast(),
-            new_buffer.len(),
+            new_buffer.cast(),
+            new_len,
             new_path,
             options,
             file,

@@ -45,6 +45,19 @@ impl_dropped!(
 );
 
 /// An owned annotated commit whose lifetime is tied to its repository borrow.
+///
+/// # Composition
+///
+/// Every consumer of an annotated commit — reset, merge, rebase, branch
+/// creation and detaching `HEAD` — takes the same repository exclusively while
+/// the annotated commit is alive. The constructors below therefore borrow a
+/// transient `&mut GitRepositoryMut<'repo>` and tether the result to `'repo`,
+/// the handle's own borrow of the repository owner, rather than consuming the
+/// handle: consuming it would pin the exclusive borrow for as long as the
+/// annotated commit lives and leave every one of those consumers unreachable
+/// from safe code. This is the shape
+/// [`git_diff_tree_to_tree`](crate::diff_generate::git_diff_tree_to_tree)
+/// already uses for the diff it returns.
 pub struct AnnotatedCommitOwned<'repo> {
     inner: ffibox::CBox<AnnotatedCommit>,
     _repository: core::marker::PhantomData<crate::repository::GitRepositoryRef<'repo>>,
@@ -83,7 +96,7 @@ fn annotated_result<'repo>(
 /// Wraps: git_annotated_commit_from_fetchhead
 /// Creates an annotated commit from fetch-head metadata.
 pub fn git_annotated_commit_from_fetchhead<'repo>(
-    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    repo: &mut crate::repository::GitRepositoryMut<'repo>,
     branch_name: &core::ffi::CStr,
     remote_url: &core::ffi::CStr,
     id: crate::oid::OidRef<'_>,
@@ -110,7 +123,7 @@ pub fn git_annotated_commit_from_fetchhead<'repo>(
 /// Wraps: git_annotated_commit_from_ref
 /// Creates an annotated commit from a reference in `repo`.
 pub fn git_annotated_commit_from_ref<'repo>(
-    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    repo: &mut crate::repository::GitRepositoryMut<'repo>,
     reference: crate::refs::GitReferenceRef<'_>,
 ) -> Result<AnnotatedCommitOwned<'repo>, i32> {
     let mut out = core::ptr::null_mut();
@@ -143,7 +156,7 @@ pub fn git_annotated_commit_id<'a>(
 /// Wraps: git_annotated_commit_lookup
 /// Creates an annotated commit by object ID.
 pub fn git_annotated_commit_lookup<'repo>(
-    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    repo: &mut crate::repository::GitRepositoryMut<'repo>,
     id: crate::oid::OidRef<'_>,
 ) -> Result<AnnotatedCommitOwned<'repo>, i32> {
     let mut out = core::ptr::null_mut();
@@ -240,7 +253,7 @@ mod tests {
 /// Wraps: git_annotated_commit_from_revspec
 /// Resolves `revspec` to a commit and returns an annotated commit tied to `repo`.
 pub fn git_annotated_commit_from_revspec<'repo>(
-    mut repo: crate::repository::GitRepositoryMut<'repo>,
+    repo: &mut crate::repository::GitRepositoryMut<'repo>,
     revspec: &core::ffi::CStr,
 ) -> Result<AnnotatedCommitOwned<'repo>, i32> {
     let mut out = core::ptr::null_mut();

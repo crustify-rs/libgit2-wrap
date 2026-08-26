@@ -175,3 +175,156 @@ pub fn git_reset_from_annotated(
     };
     if status == 0 { Ok(()) } else { Err(status) }
 }
+
+
+#[cfg(test)]
+mod annotated_reset_tests {
+    use core::ptr::{addr_of, addr_of_mut};
+
+    use super::*;
+    use crate::api::commit::{GitCommitCreateOptions, GitCommitCreateOptionsRef};
+    use crate::oid::{Oid, OidMut, OidRef, OidType};
+    use crate::repository::{GitRepositoryInitFlags, GitRepositoryOwned};
+
+    /// Holds one libgit2 initialization count for the duration of a test.
+    struct Libgit2Init;
+
+    impl Libgit2Init {
+        fn acquire() -> Self {
+            // SAFETY: libgit2 initialization is process-global and reference
+            // counted; this guard balances the successful acquisition.
+            assert!(unsafe { ffi::git_libgit2_init() } > 0);
+            Self
+        }
+    }
+
+    impl Drop for Libgit2Init {
+        fn drop(&mut self) {
+            // SAFETY: balances the initialization this guard represents,
+            // after every libgit2 owner in the test has been dropped.
+            assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+        }
+    }
+
+    /// Commits the (empty) stage and returns the object ID that was written.
+    fn commit(
+        repository: &mut GitRepositoryOwned,
+        options: GitCommitCreateOptionsRef<'_>,
+        message: &core::ffi::CStr,
+    ) -> Oid {
+        let mut created = Oid::zeroed();
+        {
+            // SAFETY: `created` is live, initialized, exclusively borrowed
+            // local storage for the whole life of this handle.
+            let mut out = unsafe { OidMut::from_ptr(addr_of_mut!(created).cast()) }
+                .expect("the address of a local value is non-null");
+            crate::commit::git_commit_create_from_stage(
+                &mut out,
+                &mut repository.as_mut(),
+                message,
+                Some(options),
+            )
+            .expect("the commit is created");
+        }
+        created
+    }
+
+    /// Resolves `HEAD` to the object ID it currently names.
+    fn head_id(repository: &mut GitRepositoryOwned) -> Oid {
+        crate::refs::git_reference_name_to_id(&mut repository.as_mut(), c"HEAD")
+            .expect("HEAD resolves to an object")
+    }
+
+    /// Borrows a local object-ID value.
+    fn borrow(id: &Oid) -> OidRef<'_> {
+        // SAFETY: `id` is live, initialized storage the caller keeps alive for
+        // the returned handle, and this borrow is the only path to it.
+        unsafe { OidRef::from_ptr(addr_of!(*id).cast_mut().cast()) }
+            .expect("the address of a local value is non-null")
+    }
+
+    /// Walks `HEAD` back one commit through the annotated-commit entry point.
+    ///
+    /// The composition is the point of the test as much as the reset is: an
+    /// annotated commit tethers itself to the repository it was looked up in,
+    /// and the reset takes that same repository exclusively, so the two only
+    /// compose because the constructor borrows a transient
+    /// `&mut GitRepositoryMut<'repo>` rather than consuming the handle.
+    #[test]
+    fn a_soft_reset_moves_head_to_the_annotated_commit() {
+        let _libgit2 = Libgit2Init::acquire();
+
+        let directory = std::env::temp_dir().join(format!(
+            "crustify-reset-from-annotated-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let path = std::ffi::CString::new(
+            directory
+                .to_str()
+                .expect("a temporary directory path is UTF-8"),
+        )
+        .expect("a temporary directory path holds no interior NUL");
+
+        // A SHA-256 repository sidesteps the bundled SHA1DC collision
+        // detector, whose unaligned 32-bit loads trip the C build's UBSan on
+        // every object it hashes.
+        let mut init_options = crate::repository::git_repository_init_options_init(1)
+            .expect("the current init-options version");
+        init_options.as_mut().set_oid_type(Some(OidType::Sha256));
+        init_options
+            .as_mut()
+            .set_flags(GitRepositoryInitFlags::MKPATH | GitRepositoryInitFlags::BARE);
+        let mut repository =
+            crate::repository::git_repository_init_ext(&path, &mut init_options.as_mut())
+                .expect("a fresh directory initializes as a bare repository");
+
+        let signature = crate::signature::git_signature_now(c"Crustify", c"crustify@example.com")
+            .expect("a signature stamped with the current time");
+        let mut options = GitCommitCreateOptions::new();
+        // Both commits carry the same empty tree, so the creating form needs
+        // the empty-commit gate opened.
+        options.as_mut().set_allow_empty_commit(true);
+        // SAFETY: the signature owner outlives the options and every call
+        // that reads them below.
+        unsafe {
+            options
+                .as_mut()
+                .set_borrowed_author(Some(signature.as_ref()));
+            options
+                .as_mut()
+                .set_borrowed_committer(Some(signature.as_ref()));
+        }
+
+        let first = commit(&mut repository, options.as_ref(), c"first");
+        let second = commit(&mut repository, options.as_ref(), c"second");
+        assert!(!crate::oid::git_oid_equal(borrow(&first), borrow(&second)));
+        assert!(crate::oid::git_oid_equal(
+            borrow(&head_id(&mut repository)),
+            borrow(&second)
+        ));
+
+        {
+            let mut handle = repository.as_mut();
+            let annotated =
+                crate::annotated_commit::git_annotated_commit_lookup(&mut handle, borrow(&first))
+                    .expect("the first commit is readable by ID");
+            assert!(crate::oid::git_oid_equal(
+                crate::annotated_commit::git_annotated_commit_id(annotated.as_ref())
+                    .expect("a real annotated commit carries an ID"),
+                borrow(&first)
+            ));
+            git_reset_from_annotated(&mut handle, annotated.as_ref(), ResetType::Soft, None)
+                .expect("a soft reset to an ancestor succeeds");
+        }
+
+        assert!(crate::oid::git_oid_equal(
+            borrow(&head_id(&mut repository)),
+            borrow(&first)
+        ));
+
+        drop(repository);
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+}

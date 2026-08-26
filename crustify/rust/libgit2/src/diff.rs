@@ -1729,6 +1729,29 @@ mod scheduled_symbol_tests {
     }
 
     #[test]
+    fn an_unsupported_version_yields_no_diff_options_at_all() {
+        // The rejection path reports through `git_error_set`, which needs the
+        // thread state libgit2 installs at initialization.
+        // SAFETY: libgit2 initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        // `git_error__check_version` accepts `0 < version <= current` only, so
+        // both ends are refused and each wrapper hands back no options rather
+        // than a partially written record.
+        assert_eq!(git_diff_options_init(0).err(), Some(-1));
+        assert_eq!(
+            git_diff_options_init(ffi::GIT_DIFF_OPTIONS_VERSION + 1).err(),
+            Some(-1)
+        );
+        assert_eq!(git_diff_find_options_init(0).err(), Some(-1));
+        assert_eq!(
+            git_diff_find_options_init(ffi::GIT_DIFF_FIND_OPTIONS_VERSION + 1).err(),
+            Some(-1)
+        );
+        // SAFETY: balances the successful initialization above.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
+
+    #[test]
     fn file_trampoline_delivers_a_typed_transient_delta() {
         // SAFETY: all-zero is valid for this C record's scalar, pointer, and
         // inline object-ID fields; status is replaced before it is observed.

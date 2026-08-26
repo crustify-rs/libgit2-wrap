@@ -390,6 +390,24 @@ mod scheduled_symbol_tests {
             ffi::GIT_CHECKOUT_OPTIONS_VERSION
         );
     }
+
+    #[test]
+    fn an_unsupported_version_yields_no_checkout_options_at_all() {
+        // The rejection path reports through `git_error_set`, which needs the
+        // thread state libgit2 installs at initialization.
+        // SAFETY: libgit2 initialization is refcounted and balanced below.
+        assert!(unsafe { ffi::git_libgit2_init() } > 0);
+        // `git_error__check_version` accepts `0 < version <= current` only, so
+        // both ends are refused and the wrapper hands back no options rather
+        // than a partially written record.
+        assert_eq!(git_checkout_options_init(0).err(), Some(-1));
+        assert_eq!(
+            git_checkout_options_init(ffi::GIT_CHECKOUT_OPTIONS_VERSION + 1).err(),
+            Some(-1)
+        );
+        // SAFETY: balances the successful initialization above.
+        assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
+    }
 }
 
 /// Wraps: git_checkout_options_init
