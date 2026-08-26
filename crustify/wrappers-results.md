@@ -31,7 +31,8 @@
 - **`--min-fields`** — `60`
 - **`--parallel-max`** — `16`
 - **branch** — `crustify/src-gpt-5.6-sol`, tip `e8556b61c`
-- **agents** — `79`, over `9` session(s); all three wrap sub-campaigns
+- **agents** — `63`, over `6` session(s); all three wrap sub-campaigns.
+  The `2` in-model raw-tier reviews are counted under Raw lifetime discovery
 
 `rv`-prefixed columns below carry the review pass; the unprefixed ones remain
 the campaign's.
@@ -83,13 +84,13 @@ in Notes.
 
 ## Overview
 
-- **Rust LoC, non-test** — `24,849`
-- **Rust LoC, tests** — `14,445`
+- **Rust LoC, non-test** — `24,928`
+- **Rust LoC, tests** — `16,799`
 - **C LoC** — `171,084`
 - **ported types** — `0`
 - **ported symbols** — `0`
 - **wrapped types** — `230` (`88.5`% of API)
-- **wrapped symbols** — `899` (`85.0`% of API)
+- **wrapped symbols** — `899` (`85.1`% of API)
 - **remaining types** — `30` with no anchor
 - **remaining symbols** — `158` with no anchor
 
@@ -679,17 +680,27 @@ commits chain onto the session ref and same-stem batches collide on name.
 `154` of `175` agents resolved. The rest read `—`; no number was inferred, so
 Σ `loc` understates.
 
-### Gates the agents broke, twice
+### `items_after_test_module`, in every single wave
 
-Both the review pass and the second half landed code that failed the gates the
-previous checkpoint had passed, in the same two ways: `items_after_test_module`
-(`15` after the review, `13` after the second half) where agents appended items
-below `mod tests`, and a SAFETY comment attached to an `assert_eq!` whose
-argument held the `unsafe` block, which clippy cannot see. The second half also
-shipped a `revwalk` test opening `"../.."`, which resolves to `crustify/` rather
-than the repository root and returned `GIT_ENOTFOUND` outside an agent worktree.
-All were fixed at landing. Agents validate inside their own worktree, where the
-relative path and the pre-move file layout both happen to work.
+Every wave since the checkpoint landed code that failed gates the previous
+checkpoint had passed, and always the same way first: agents append items below
+an existing `#[cfg(test)] mod tests`, which `clippy::items_after_test_module`
+rejects. It ran `15` after the first-half review, `13` after the second half,
+`8` after the API remainder, `9` files unformatted after its review — five waves,
+five recurrences, `36` modules moved back to end of file in total. One file
+names its module `print_tests` rather than `tests`, which defeated the first
+mechanical sweep.
+
+The other two were one-offs. A SAFETY comment attached to an `assert_eq!` whose
+argument held the `unsafe` block, which clippy cannot see through, twice. And a
+`revwalk` test opening `"../.."`, which resolves to `crustify/` rather than the
+repository root and returns `GIT_ENOTFOUND` outside an agent worktree.
+
+All were fixed at landing. The common cause is that an agent validates inside
+its own worktree, where the pre-move file layout and the relative path both
+happen to work, and never sees the merged tree the gate actually runs against.
+This is the campaign's most reliable finding: it recurred in every wave
+regardless of model, caps or objective.
 
 ### The internal review changed C
 
