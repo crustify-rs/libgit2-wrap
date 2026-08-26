@@ -15,7 +15,7 @@
 - **`--max-loc`** — `1000`
 - **`--min-fields`** — `20`
 - **`--parallel-max`** — `16`
-- **branch** — `crustify/src-gpt-5.6-sol`, tip `3d930bef6`
+- **branch** — `crustify/src-gpt-5.6-sol`, tip `e8556b61c`
 - **deps** — crustify-cli `51d44d1` (`docs/results-template-ub`), ffibox `600399f` (`main`)
 
 ## Review pass
@@ -30,8 +30,8 @@
 - **`--max-loc`** — `3000`
 - **`--min-fields`** — `60`
 - **`--parallel-max`** — `16`
-- **branch** — `crustify/src-gpt-5.6-sol`, tip `3d930bef6`
-- **agents** — `44`, over `5` session(s); both halves
+- **branch** — `crustify/src-gpt-5.6-sol`, tip `e8556b61c`
+- **agents** — `79`, over `9` session(s); all three wrap sub-campaigns
 
 `rv`-prefixed columns below carry the review pass; the unprefixed ones remain
 the campaign's.
@@ -104,8 +104,10 @@ via `claude`. Each row names the model that produced it.
 | `4-review-first-half` | review | `115` | `288` | `1h20m44s` | `$257.58` (`claude-opus-5`) | `$1.91` | `$0.13` | — | — |
 | `4-second-half` | wrap | `55` | `350` | `3h16m09s` | `$303.91` (`gpt-5.6-sol`) | `$3.40` | `$0.33` | — | — |
 | `1-review-second-half` | review | `55` | `350` | `2h39m47s` | `$198.27` (`claude-opus-5`) | `$1.47` | `$0.34` | — | — |
+| `2-api-remainder` | wrap | `62` | `225` | `1h59m13s` | `$178.40` (`gpt-5.6-sol`) | `$1.62` | `$0.35` | — | — |
+| `2-review-api-remainder` | review | `62` | `225` | `2h38m39s` | `$163.78` (`claude-opus-5`) | `$1.13` | `$0.42` | — | — |
 | orchestrator | orchestration | `—` | `—` | — | `not metered`+ (`claude-opus-5`) | — | — | — | — |
-| **Σ recorded agents** | | **`170`** | **`638`** | **`11h01m49s`** | **`$1,139.61`** | **`$4.68`** | **`$0.54`** | | **—** |
+| **Σ recorded agents** | | **`232`** | **`893`** | **`15h39m41s`** | **`$1,481.79`** | **`$4.17`** | **`$0.58`** | | **—** |
 
 ## Raw lifetime discovery
 
@@ -270,7 +272,26 @@ Not run; the raw lifetime tiers were judged in-model only.
 | `1` | `4` | `0` | `$2.28` | `4m56s` | `$2.28` | `$0.57` |
 | `1` | `0` | `2` | `$2.87` | `4m22s` | `$2.87` | `—` |
 | `1` | `14` | `0` | `$3.48` | `5m33s` | `$3.48` | `$0.25` |
-| **Σ `205`** | **`516`** | **`64`** | **`$495.08`** | — | **`$2.42`** | **`$0.96`** |
+| `4` | `0` | `0` | `$5.29` | `9m26s` | `$1.32` | `—` |
+| `4` | `2` | `0` | `$6.60` | `11m15s` | `$1.65` | `$3.30` |
+| `4` | `2` | `0` | `$6.68` | `13m25s` | `$1.67` | `$3.34` |
+| `4` | `2` | `0` | `$6.67` | `10m00s` | `$1.67` | `$3.33` |
+| `4` | `0` | `0` | `$8.70` | `12m32s` | `$2.18` | `—` |
+| `4` | `0` | `0` | `$6.28` | `10m26s` | `$1.57` | `—` |
+| `4` | `0` | `0` | `$8.59` | `14m56s` | `$2.15` | `—` |
+| `4` | `0` | `0` | `$4.53` | `8m08s` | `$1.13` | `—` |
+| `4` | `0` | `0` | `$4.46` | `8m42s` | `$1.12` | `—` |
+| `4` | `0` | `0` | `$3.71` | `6m34s` | `$0.93` | `—` |
+| `4` | `0` | `0` | `$4.75` | `7m46s` | `$1.19` | `—` |
+| `4` | `0` | `0` | `$4.30` | `5m30s` | `$1.07` | `—` |
+| `4` | `20` | `0` | `$5.12` | `10m37s` | `$1.28` | `$0.26` |
+| `4` | `17` | `0` | `$5.46` | `12m05s` | `$1.37` | `$0.32` |
+| `2` | `8` | `0` | `$3.65` | `7m15s` | `$1.83` | `$0.46` |
+| `2` | `11` | `0` | `$2.84` | `6m21s` | `$1.42` | `$0.26` |
+| `2` | `19` | `0` | `$6.27` | `11m43s` | `$3.14` | `$0.33` |
+| `1` | `0` | `0` | `$4.08` | `7m31s` | `$4.08` | `—` |
+| `1` | `2` | `1` | `$2.74` | `4m37s` | `$2.74` | `$1.37` |
+| **Σ `269`** | **`599`** | **`65`** | **`$595.81`** | — | **`$2.21`** | **`$0.99`** |
 
 ### Batches — types, port
 
@@ -318,7 +339,15 @@ No port wave ran; this is a `wrap` campaign.
 | `8` | `+323/-42` | `$11.77` | `15m21s` | `$1.47` |
 | `3` | `+157/-3` | `$5.99` | `10m24s` | `$2.00` |
 | `2` | `+97/-2` | `$4.00` | `6m27s` | `$2.00` |
-| **Σ `175`** | **`+4021/-486`** | **`$300.98`** | — | **`$1.72`** |
+| `15` | `+147/-35` | `$9.83` | `12m57s` | `$0.66` |
+| `15` | `+129/-14` | `$11.21` | `14m56s` | `$0.75` |
+| `15` | `+95/-1` | `$8.17` | `13m33s` | `$0.54` |
+| `3` | `+84/-7` | `$5.52` | `9m11s` | `$1.84` |
+| `10` | `+202/-22` | `$11.40` | `14m49s` | `$1.14` |
+| `2` | `+236/-4` | `$15.83` | `25m19s` | `$7.92` |
+| `2` | — | — | `2m05s` | — |
+| `2` | `+150/-10` | `$8.40` | `14m24s` | `$4.20` |
+| **Σ `239`** | **`+5064/-579`** | **`$371.34`** | — | **`$1.55`** |
 
 ### Batches — symbols
 
@@ -348,7 +377,17 @@ No port wave ran; this is a `wrap` campaign.
 | wrap | `22` | `723` | `$7.25` | `13m02s` | `$0.33` | `$0.01` |
 | wrap | `3` | `125` | `$5.49` | `9m07s` | `$1.83` | `$0.04` |
 | wrap | `4` | `184` | `$6.63` | `12m22s` | `$1.66` | `$0.04` |
-| **Σ** | **`636`** | **`15,273`** | **`$181.14`** | | **`$0.28`** | **`$0.01`** |
+| wrap | `7` | `521` | `$8.38` | `11m44s` | `$1.20` | `$0.02` |
+| wrap | `50` | `1040` | `$10.56` | `19m44s` | `$0.21` | `$0.01` |
+| wrap | `48` | `880` | `$11.26` | `22m14s` | `$0.23` | `$0.01` |
+| wrap | `50` | `1169` | `$11.86` | `22m15s` | `$0.24` | `$0.01` |
+| wrap | `29` | `646` | `$8.12` | `14m20s` | `$0.28` | `$0.01` |
+| wrap | `21` | `566` | `$9.04` | `14m16s` | `$0.43` | `$0.02` |
+| wrap | `8` | `326` | `$4.47` | `8m37s` | `$0.56` | `$0.01` |
+| wrap | `7` | `189` | `$6.14` | `8m58s` | `$0.88` | `$0.03` |
+| wrap | `3` | `124` | `$4.01` | `5m50s` | `$1.34` | `$0.03` |
+| wrap | `2` | `111` | `$3.82` | `6m46s` | `$1.91` | `$0.03` |
+| **Σ** | **`861`** | **`20,845`** | **`$258.80`** | | **`$0.30`** | **`$0.01`** |
 
 ### Batches — review symbols
 
@@ -371,7 +410,19 @@ No port wave ran; this is a `wrap` campaign.
 | `22` | `+301/-29` | `$18.22` | `22m37s` | `$0.83` |
 | `3` | `+283/-30` | `$11.21` | `19m11s` | `$3.74` |
 | `4` | `+335/-3` | `$8.83` | `14m23s` | `$2.21` |
-| **Σ `761`** | **`+2284/-233`** | **`$162.42`** | — | **`$0.21`** |
+| `7` | `+474/-2` | `$11.11` | `17m27s` | `$1.59` |
+| `95` | `+143/-9` | `$18.13` | `19m30s` | `$0.19` |
+| `79` | `+245/-14` | `$14.07` | `18m27s` | `$0.18` |
+| `20` | `+787/-0` | `$15.14` | `23m08s` | `$0.76` |
+| `8` | — | — | `2m04s` | — |
+| `7` | — | — | `0m01s` | — |
+| `3` | — | — | `0m01s` | — |
+| `2` | — | — | `0m02s` | — |
+| `8` | `+351/-25` | `$10.30` | `16m19s` | `$1.29` |
+| `7` | `+506/-27` | `$10.66` | `16m48s` | `$1.52` |
+| `3` | `+363/-49` | `$10.04` | `15m52s` | `$3.35` |
+| `2` | `+295/-66` | `$3.98` | `7m36s` | `$1.99` |
+| **Σ `1002`** | **`+5448/-425`** | **`$255.84`** | — | **`$0.26`** |
 
 ## Safety audit
 
@@ -484,23 +535,32 @@ whole surface in the `-sys` crate — a generated `pub const` or a
 libgit2's `157` published macros as unwrapped would measure a decision rather
 than a gap.
 
-### What the remaining `479` are
+### What the remaining `188` are, and why
 
-`477` of them were never scheduled: the campaign's declared coverage was the
-surface reached by the industry safe wrapper crate, not the whole API. Measured
-against that target the campaign is `790` of `792` — and the two it appears to
-miss, `git_oidarray_free` and `git_strarray_free`, are deprecated aliases whose
-types are wrapped through the current spelling, `git_oidarray_dispose` and
-`git_strarray_dispose`, both bound with `ffibox::impl_cvalued!`. Against its own
-scope the campaign is complete.
+Published API coverage is `1,129` of `1,317` non-macro entities, `85.7`% — `230`
+of `260` types, `854` of `996` functions, `45` of `61` callbacks. It reached
+there in two steps: the industry-surface campaign took it to `63.6`%, and the
+`api-remainder` sub-campaign added `+22.1`pp by wrapping every published entity
+that campaign had not scheduled, except two sets held back deliberately.
 
-The unscheduled remainder is not uniform. `149` sit in `include/git2/sys/*`,
-the backend-authoring interfaces a consumer never calls — custom ODB, refdb,
-transport, filter and stream implementations. `42` are deprecated spellings.
-The other `286` are mainstream API that git2-rs simply does not bind, densest in
-`index.h` (`19`), `oid.h` (`17`), and `commit.h`, `filter.h` and `repository.h`
-(`12` each). That `286` is the natural next scope; the `sys/` and deprecated
-sets are deliberate exclusions rather than backlog.
+What remains is exactly those two sets and nothing else — `144` in
+`include/git2/sys/*` and `44` in `deprecated.h`, with `0` other. Of the
+addressable API the campaign is complete.
+
+`sys/` publishes the backend-authoring interfaces: custom ODB, refdb, transport,
+filter and stream implementations. A consumer of libgit2 never calls them; an
+implementor of a backend does, and wrapping them is a different project with a
+different safety contract.
+
+`deprecated.h` is renames. Thirteen `*_init_options` superseded by
+`*_options_init`, four `giterr_*` by `git_error_*`, five `git_cred_*` by
+`git_credential_*`, and a tail of respellings — `git_oid_iszero`,
+`git_oidarray_free`, `git_blob_create_fromworkdir`. Every one forwards to a
+current entry point this campaign already wraps, so wrapping them would emit a
+second Rust surface over the same behaviour and add `44` units to every later
+review and audit. They still compile — the build configures
+`-DDEPRECATE_HARD=OFF` — so the `-sys` crate can bind an old spelling if a
+consumer ever needs one.
 
 ### Review is a sub-campaign, not a column
 
@@ -511,70 +571,74 @@ judged by `25` review agents under `--max-types 15 --max-syms 150`. That is why
 the review batches are their own tables rather than `rv` columns on the wrap
 tables, and why no row-for-row mapping between them exists.
 
-### Both halves are reviewed, under different caps
+### Every wrap wave is reviewed, under two different caps
 
-The first half was judged at `--max-types 15 --max-syms 150 --min-fields 30`,
-the second at the same types and symbol caps but `--min-fields 60`. The wider
-floor packs harder: `19` batches covered the second half's `403` judged units
-against `21` batches for the first half's `373`.
+The first half was judged at `--min-fields 30`, the second half and the API
+remainder at `60`. The wider floor packs harder: the second half's `403` judged
+units took `19` batches where the first half's `373` took `21`.
 
-The two passes did not behave alike. The first-half review broke three gates it
-inherited green — `18` clippy errors and three unformatted files — and pushed
-two categorical audit targets off zero, which cost a further remediation wave.
-The second-half review broke only formatting, in seven files, and moved no audit
-target at all: the non-seam raw-pointer remainder held at exactly `15` and
-unsafe density was flat, `26.76`% to `26.71`%. It added `48` tests.
+The three passes did not behave alike. The first-half review broke three gates
+it inherited green — `18` clippy errors and three unformatted files — and pushed
+two categorical audit targets off zero, costing a further remediation wave. The
+second-half review broke only formatting, in seven files, and moved no audit
+target. The API-remainder review broke formatting in nine files and moved none
+either. Reviewing appears to have become less disruptive as the tree's
+conventions settled, not because the caps changed.
 
 Each review drops the lifecycle primitives its schedule would otherwise
-duplicate — `28` from the first half, `2` from the second
-(`git_config_iterator_free`, `git_odb_object_free`). Those units are judged
-inside their owning type's batch and carry no row of their own, which is why a
-review's judged count is below the wave's emitted count.
+duplicate — `28` from the first half, `2` from the second, `4` from the API
+remainder. Those units are judged inside their owning type's batch and carry no
+row of their own, which is why a review's judged count sits below the wave's
+emitted count.
 
 ### Campaign-end audit
 
 The `Safety audit` table brackets the review pass, so its "after" column is the
 tree at `d71102b84` — before the second half existed. The campaign's final tree
-at `3d930bef6` measures:
+at `e8556b61c` measures:
 
-| metric | after first-half review (`d71102b84`) | campaign end (`3d930bef6`) |
+| metric | after first-half review (`d71102b84`) | campaign end (`e8556b61c`) |
 |---|---|---|
-| `code_lines` | `7,423` | `18,508` |
-| unsafe loc | `2,164` | `4,944` |
-| % of loc | `29.15`% | `26.71`% |
-| `unsafe_blocks` | `1,303` | `2,769` |
-| `unsafe_fns` / seam | `498` / `398` | `809` / `638` |
-| `ffi_calls` | `366` | `703` |
-| `wrapper_newtypes` / declared | `79` / `79` | `120` / `120` |
-| raw-ptr positions / seam | `565` / `557` | `952` / `937` |
-| **non-seam remainder** | **`8`** | **`15`** |
+| `code_lines` | `7,423` | `24,928` |
+| unsafe loc | `2,164` | `6,268` |
+| % of loc | `29.15`% | `25.14`% |
+| `unsafe_blocks` | `1,303` | `3,444` |
+| `unsafe_fns` / seam | `498` / `398` | `998` / `781` |
+| `ffi_calls` | `366` | `919` |
+| `wrapper_newtypes` / declared | `79` / `79` | `147` / `147` |
+| raw-ptr positions / seam | `565` / `557` | `1166` / `1147` |
+| **non-seam remainder** | **`8`** | **`19`** |
 
-The tree grew `2.5x` while unsafe density FELL, from
-`29.15`% to `26.71`%.
+The tree grew `3.4x` while unsafe density FELL, from
+`29.15`% to `25.14`%.
 
-### Seven of eight categorical targets end at zero
+### Six of eight categorical targets end at zero
 
 `wrapper_declared_nonconformant`, `wrapper_newtypes_undeclared`,
-`raw_ptr_wrapped`, `ref_to_type_wrapper`, `field_ref_wrapped`,
-`field_proj_outside_impl` and `void_ptr_smell` all read `0` at `3d930bef6`.
-`raw_ptr_in_wrapper` reads `1`.
+`ref_to_type_wrapper`, `field_ref_wrapped`, `field_proj_outside_impl` and
+`void_ptr_smell` all read `0` at `e8556b61c`. `raw_ptr_wrapped` reads `2` and
+`raw_ptr_in_wrapper` reads `2`, over a non-seam remainder of `19`.
 
-The second half's first merged scan was much worse — `raw_ptr_wrapped` `8`,
-`raw_ptr_in_wrapper` `4`, `void_ptr_smell` `4`, non-seam remainder `27`. Every
-site was one of two shapes. The inbound `*_result` helpers took a raw pointer C
-had just returned and built an owned wrapper from it; the outbound helpers took
-`Option<Wrapper>` and produced the raw pointer an FFI argument needed. Two
-translator remediation waves (`7` batches, `38m`) confined both: the first
-cleared the inbound helpers and the two void-pointer cases, the second moved the
-outbound marshalling to the call site.
+Every wrap wave introduced the same defect shape and every remediation but the
+last cleared it. The inbound helper takes a raw pointer C has just returned and
+builds an owned wrapper from it; the outbound helper takes `Option<Wrapper>` and
+produces the pointer an FFI argument needs. The second half opened `8`
+`raw_ptr_wrapped`, `4` `raw_ptr_in_wrapper` and `4` `void_ptr_smell`, and two
+remediation waves took all three to `0`. The API remainder opened `2` and `2`
+again, at `adopt_filter_list` and `credential_from_status`.
 
-The residual `raw_ptr_in_wrapper: 1` was left deliberately. `raw_ptr_wrapped` is
-`0`, so its pointee is not a wrapped C type — the README calls the wrapped-pointee
-count "the actionable defect". More practically, `crustify-audit` publishes no
-site list for `raw_ptr_in_wrapper`: `raw_ptr_sites` carries only the
-wrapped-pointee subset and is empty, so the tool reports the count without
-saying where. A third speculative wave against an unlocatable position was not
-worth its cost.
+That last remediation wave ran clean and moved nothing. Its agents added tests
+exercising the handles rather than restructuring the two signatures, having
+judged them necessary seams — both are private, both carry a SAFETY
+justification, and the pointer never escapes the adopting call. Identical shapes
+were therefore treated differently by different waves, which is the honest
+finding: the standard held everywhere it was enforced, and the enforcement is a
+judgement each agent makes rather than something the objective guarantees. A
+third wave was not spent chasing it.
+
+`raw_ptr_in_wrapper` also remains unactionable by tooling. `crustify-audit`
+publishes no site list for it — `raw_ptr_sites` carries only the wrapped-pointee
+subset — so the count can be read but the positions behind it cannot be found.
 
 ### One second-half unit landed unanchored
 
