@@ -8,7 +8,7 @@ use ffibox::{CBox, CCloned};
 
 use crate::api::buffer::GitBuf;
 use crate::api::submodule::{
-    GitSubmoduleCallback, GitSubmoduleStatusFlags, GitSubmoduleUpdateOptions,
+    GitSubmoduleCallback, GitSubmoduleStatusFlags, GitSubmoduleUpdateOptionsMut,
     GitSubmoduleUpdateOptionsRef,
 };
 use crate::api::types::{
@@ -889,57 +889,172 @@ pub fn git_submodule_set_fetch_recurse_submodules(
 }
 
 /// Wraps: git_submodule_update_options_init
-/// Creates submodule-update options initialized for `version`.
-pub fn git_submodule_update_options_init<'data>(
+/// Restores caller-owned submodule-update options to the published defaults.
+///
+/// The record belongs to the caller throughout: C validates `version`, copies
+/// the current `GIT_SUBMODULE_UPDATE_OPTIONS_INIT` template over the storage
+/// it was handed, and retains no pointer into it. This is the reinitializing
+/// counterpart of
+/// [`GitSubmoduleUpdateOptions::new`](crate::api::submodule::GitSubmoduleUpdateOptions::new),
+/// which writes the same defaults into fresh storage.
+///
+/// `version` is a compatibility gate, not a selector. C accepts only
+/// `1..=GIT_SUBMODULE_UPDATE_OPTIONS_VERSION`, and every accepted value copies
+/// the same single template. Any other value is refused with
+/// `GIT_ERROR_INVALID` before the record is touched, so a failed call leaves
+/// the caller's values exactly as they were.
+///
+/// A successful call overwrites the whole record. This type stores no `'data`
+/// borrow directly, but both nested subrecords do: the checkout options'
+/// labels and target directory, and the fetch options' custom headers,
+/// callback table and proxy URL all stop being reachable through it. The
+/// record owns none of them, so clearing them frees nothing and leaks nothing.
+pub fn git_submodule_update_options_init(
+    options: &mut GitSubmoduleUpdateOptionsMut<'_, '_>,
     version: core::ffi::c_uint,
-) -> Result<ffibox::CVal<GitSubmoduleUpdateOptions<'data>>, i32> {
-    let mut options = GitSubmoduleUpdateOptions::<'data>::new();
-    // SAFETY: the inline options storage is exclusively writable and the C
-    // initializer retains no pointer to it or to any of its cleared fields.
-    let status =
-        unsafe { ffi::git_submodule_update_options_init(options.as_mut().as_mut_ptr(), version) };
-    if status == 0 {
-        Ok(options)
-    } else {
-        Err(status)
-    }
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies non-null writable
+    // layout-compatible storage, and the initializer retains no pointer to
+    // the options header or to any field it clears.
+    let status = unsafe { ffi::git_submodule_update_options_init(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
 }
 
 #[cfg(test)]
 mod submodule_update_options_init_tests {
-    use super::*;
+    use std::ffi::CString;
 
-    #[test]
-    fn current_initializer_writes_published_update_defaults() {
-        let _initialization = crate::libgit2::git_libgit2_init().unwrap();
-        let options = git_submodule_update_options_init(ffi::GIT_SUBMODULE_UPDATE_OPTIONS_VERSION)
-            .expect("the published submodule-update-options version initializes");
-        let options = options.as_ref();
+    use super::*;
+    use crate::api::remote::GitRemoteUpdateFlags;
+    use crate::api::submodule::GitSubmoduleUpdateOptions;
+    use crate::remote::{GitFetchPrune, GitRemoteAutotagOption};
+
+    /// Writes a non-default value into every reachable slot, including a
+    /// borrowed string one nested subrecord must be able to forget.
+    fn garble<'data>(
+        options: &mut GitSubmoduleUpdateOptionsMut<'_, 'data>,
+        directory: &'data CStr,
+    ) {
+        options.set_version(0);
+        options.set_allow_fetch(false);
+        {
+            let mut checkout = options.checkout_options_mut();
+            checkout.set_version(0);
+            checkout.set_target_directory(Some(directory));
+        }
+        let mut fetch = options.fetch_options_mut();
+        fetch.set_version(0);
+        fetch.set_prune(GitFetchPrune::Prune);
+        fetch.set_download_tags(GitRemoteAutotagOption::All);
+        fetch.set_update_flags(GitRemoteUpdateFlags::REPORT_UNCHANGED);
+        fetch.callbacks_mut().set_version(0);
+        fetch.proxy_options_mut().set_version(0);
+    }
+
+    /// Asserts the whole record equals `GIT_SUBMODULE_UPDATE_OPTIONS_INIT`,
+    /// including its nested checkout and fetch templates.
+    fn assert_published_defaults(options: GitSubmoduleUpdateOptionsRef<'_, '_>) {
         assert_eq!(options.version(), ffi::GIT_SUBMODULE_UPDATE_OPTIONS_VERSION);
         assert!(options.allow_fetch());
+
+        let checkout = options.checkout_options();
+        assert_eq!(checkout.version(), ffi::GIT_CHECKOUT_OPTIONS_VERSION);
+        assert_eq!(checkout.target_directory(), None);
+
+        let fetch = options.fetch_options();
         assert_eq!(
-            options.checkout_options().version(),
-            ffi::GIT_CHECKOUT_OPTIONS_VERSION
+            fetch.version(),
+            ffi::GIT_FETCH_OPTIONS_VERSION as core::ffi::c_int
+        );
+        assert_eq!(fetch.prune(), Ok(GitFetchPrune::Unspecified));
+        assert_eq!(
+            fetch.download_tags(),
+            Ok(GitRemoteAutotagOption::Unspecified)
+        );
+        assert_eq!(fetch.update_flags(), Ok(GitRemoteUpdateFlags::FETCH_HEAD));
+        assert_eq!(
+            fetch.callbacks().version(),
+            ffi::GIT_REMOTE_CALLBACKS_VERSION
         );
         assert_eq!(
-            options.fetch_options().version(),
-            ffi::GIT_FETCH_OPTIONS_VERSION as core::ffi::c_int
+            fetch.proxy_options().version(),
+            ffi::GIT_PROXY_OPTIONS_VERSION
         );
     }
 
     #[test]
-    fn initializer_rejects_unknown_versions() {
+    fn the_initializer_reinitializes_the_callers_own_record() {
         let _initialization = crate::libgit2::git_libgit2_init().unwrap();
+        let directory = CString::new("/tmp/crustify-submodule").expect("a path without NUL");
+        let mut options = GitSubmoduleUpdateOptions::new();
+        garble(&mut options.as_mut(), &directory);
+
+        git_submodule_update_options_init(
+            &mut options.as_mut(),
+            ffi::GIT_SUBMODULE_UPDATE_OPTIONS_VERSION,
+        )
+        .expect("the published version reinitializes the record in place");
+
+        assert_published_defaults(options.as_ref());
+        // The nested borrowed directory was cleared, never freed: the caller's
+        // own string still owns its buffer and reads back unchanged.
+        assert_eq!(directory.as_c_str(), c"/tmp/crustify-submodule");
+    }
+
+    #[test]
+    fn the_rust_constructor_agrees_with_the_c_template() {
+        let _initialization = crate::libgit2::git_libgit2_init().unwrap();
+        let mut from_c = GitSubmoduleUpdateOptions::new();
+        git_submodule_update_options_init(
+            &mut from_c.as_mut(),
+            ffi::GIT_SUBMODULE_UPDATE_OPTIONS_VERSION,
+        )
+        .expect("the published version initializes");
+
+        // `GitSubmoduleUpdateOptions::new` hand-writes what the C template
+        // contains, so the two must agree through every accessor.
+        assert_published_defaults(from_c.as_ref());
+        let from_rust = GitSubmoduleUpdateOptions::new();
+        assert_published_defaults(from_rust.as_ref());
+    }
+
+    #[test]
+    fn an_unsupported_version_is_refused_without_writing() {
+        let _initialization = crate::libgit2::git_libgit2_init().unwrap();
+        let directory = CString::new("/tmp/crustify-submodule").expect("a path without NUL");
+        let mut options = GitSubmoduleUpdateOptions::new();
+        garble(&mut options.as_mut(), &directory);
+
+        for version in [0, ffi::GIT_SUBMODULE_UPDATE_OPTIONS_VERSION + 1] {
+            assert_eq!(
+                git_submodule_update_options_init(&mut options.as_mut(), version),
+                Err(ffi::git_error_code_GIT_ERROR),
+                "version {version} is outside the accepted compatibility range"
+            );
+        }
+
+        // Refusal happens before the template is copied, so the caller keeps
+        // every value it installed, nested subrecords included.
+        let view = options.as_ref();
+        assert_eq!(view.version(), 0);
+        assert!(!view.allow_fetch());
+        assert_eq!(view.checkout_options().version(), 0);
         assert_eq!(
-            git_submodule_update_options_init::<'static>(0).err(),
-            Some(ffi::git_error_code_GIT_ERROR)
+            view.checkout_options().target_directory(),
+            Some(directory.as_c_str())
         );
-        assert_eq!(
-            git_submodule_update_options_init::<'static>(
-                ffi::GIT_SUBMODULE_UPDATE_OPTIONS_VERSION + 1,
-            )
-            .err(),
-            Some(ffi::git_error_code_GIT_ERROR)
-        );
+        assert_eq!(view.fetch_options().version(), 0);
+    }
+
+    #[test]
+    fn the_initializer_takes_the_callers_storage_and_never_allocates_it() {
+        // C's contract is "initialize the record I hand you". A wrapper that
+        // returned fresh storage instead would make reinitialization of an
+        // existing record unreachable from safe Rust.
+        let wrapper: fn(
+            &mut GitSubmoduleUpdateOptionsMut<'_, '_>,
+            core::ffi::c_uint,
+        ) -> Result<(), i32> = git_submodule_update_options_init;
+        let _ = wrapper;
     }
 }

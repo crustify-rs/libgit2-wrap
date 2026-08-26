@@ -347,54 +347,168 @@ mod scheduled_clone_symbol_tests {
 }
 
 /// Wraps: git_clone_options_init
-/// Creates clone options initialized for `version`.
-pub fn git_clone_options_init<'data>(
+/// Restores caller-owned clone-options storage to the published defaults.
+///
+/// The record belongs to the caller throughout: C validates `version`, copies
+/// the current `GIT_CLONE_OPTIONS_INIT` template over the storage it was
+/// handed, and retains no pointer into it. This is the reinitializing
+/// counterpart of [`GitCloneOptions::new`](crate::api::clone::GitCloneOptions::new),
+/// which writes the same defaults into fresh storage, and the current spelling
+/// of the deprecated [`git_clone_init_options`].
+///
+/// `version` is a compatibility gate, not a selector. C accepts only
+/// `1..=GIT_CLONE_OPTIONS_VERSION`, and every accepted value copies the same
+/// single template. Any other value is refused with `GIT_ERROR_INVALID`
+/// before the record is touched, so a failed call leaves the caller's values
+/// exactly as they were.
+///
+/// A successful call overwrites the whole record, so every `'data` borrow it
+/// held stops being reachable through it: the checkout branch name, both
+/// creation callbacks with their payloads, and the nested checkout and fetch
+/// options with their own borrowed strings and callback tables. The record
+/// owns none of them, so clearing them frees nothing and leaks nothing — the
+/// caller's storage behind each borrow is untouched.
+pub fn git_clone_options_init(
+    options: &mut GitCloneOptionsMut<'_, '_>,
     version: core::ffi::c_uint,
-) -> Result<ffibox::CVal<crate::api::clone::GitCloneOptions<'data>>, i32> {
-    let mut options = crate::api::clone::GitCloneOptions::<'data>::new();
-    // SAFETY: the inline options storage is exclusively writable and the C
-    // initializer retains no pointer to it or to any of its cleared fields.
-    let status = unsafe { ffi::git_clone_options_init(options.as_mut().as_mut_ptr(), version) };
-    if status == 0 {
-        Ok(options)
-    } else {
-        Err(status)
-    }
+) -> Result<(), i32> {
+    // SAFETY: the exclusive handle supplies non-null writable
+    // layout-compatible storage, and the initializer retains no pointer to
+    // the options header or to any field it clears.
+    let status = unsafe { ffi::git_clone_options_init(options.as_mut_ptr(), version) };
+    if status == 0 { Ok(()) } else { Err(status) }
 }
 
 #[cfg(test)]
 mod clone_options_init_tests {
-    use super::*;
+    use std::ffi::CString;
 
-    #[test]
-    fn current_initializer_writes_published_clone_defaults() {
-        let _initialization = crate::libgit2::git_libgit2_init().unwrap();
-        let options = git_clone_options_init(ffi::GIT_CLONE_OPTIONS_VERSION)
-            .expect("the published clone-options version initializes");
-        let options = options.as_ref();
+    use super::*;
+    use crate::api::clone::GitCloneOptions;
+    use crate::api::remote::GitRemoteUpdateFlags;
+    use crate::remote::{GitFetchPrune, GitRemoteAutotagOption};
+
+    /// Writes a non-default value into every reachable slot, including a
+    /// borrowed string the record must be able to forget without freeing.
+    fn garble<'data>(options: &mut GitCloneOptionsMut<'_, 'data>, branch: &'data CStr) {
+        options.set_version(0);
+        options.set_bare(true);
+        options.set_local(GitCloneLocal::NoLinks);
+        options.set_checkout_branch(Some(branch));
+        {
+            let mut checkout = options.checkout_options_mut();
+            checkout.set_version(0);
+            checkout.set_target_directory(Some(branch));
+        }
+        let mut fetch = options.fetch_options_mut();
+        fetch.set_version(0);
+        fetch.set_prune(GitFetchPrune::Prune);
+        fetch.set_download_tags(GitRemoteAutotagOption::All);
+        fetch.set_update_flags(GitRemoteUpdateFlags::REPORT_UNCHANGED);
+        fetch.callbacks_mut().set_version(0);
+        fetch.proxy_options_mut().set_version(0);
+    }
+
+    /// Asserts the whole record equals `GIT_CLONE_OPTIONS_INIT`, including the
+    /// nested `GIT_CHECKOUT_OPTIONS_INIT` and `GIT_FETCH_OPTIONS_INIT`.
+    fn assert_published_defaults(options: GitCloneOptionsRef<'_, '_>) {
         assert_eq!(options.version(), ffi::GIT_CLONE_OPTIONS_VERSION);
-        assert_eq!(options.local(), Ok(GitCloneLocal::Auto));
         assert!(!options.bare());
+        assert_eq!(options.local(), Ok(GitCloneLocal::Auto));
+        assert_eq!(options.checkout_branch(), None);
+        assert!(!options.has_repository_callback());
+        assert!(!options.has_repository_callback_payload());
+        assert!(!options.has_remote_callback());
+        assert!(!options.has_remote_callback_payload());
+
+        let checkout = options.checkout_options();
+        assert_eq!(checkout.version(), ffi::GIT_CHECKOUT_OPTIONS_VERSION);
+        assert_eq!(checkout.target_directory(), None);
+
+        let fetch = options.fetch_options();
         assert_eq!(
-            options.checkout_options().version(),
-            ffi::GIT_CHECKOUT_OPTIONS_VERSION
+            fetch.version(),
+            ffi::GIT_FETCH_OPTIONS_VERSION as core::ffi::c_int
+        );
+        assert_eq!(fetch.prune(), Ok(GitFetchPrune::Unspecified));
+        assert_eq!(
+            fetch.download_tags(),
+            Ok(GitRemoteAutotagOption::Unspecified)
+        );
+        assert_eq!(fetch.update_flags(), Ok(GitRemoteUpdateFlags::FETCH_HEAD));
+        assert_eq!(
+            fetch.callbacks().version(),
+            ffi::GIT_REMOTE_CALLBACKS_VERSION
         );
         assert_eq!(
-            options.fetch_options().version(),
-            ffi::GIT_FETCH_OPTIONS_VERSION as core::ffi::c_int
+            fetch.proxy_options().version(),
+            ffi::GIT_PROXY_OPTIONS_VERSION
         );
     }
 
     #[test]
-    fn initializer_rejects_unknown_versions() {
+    fn the_initializer_reinitializes_the_callers_own_record() {
         let _initialization = crate::libgit2::git_libgit2_init().unwrap();
-        assert_eq!(
-            git_clone_options_init::<'static>(0).err(),
-            Some(ffi::git_error_code_GIT_ERROR)
-        );
-        assert_eq!(
-            git_clone_options_init::<'static>(ffi::GIT_CLONE_OPTIONS_VERSION + 1).err(),
-            Some(ffi::git_error_code_GIT_ERROR)
-        );
+        let branch = CString::new("refs/heads/scratch").expect("a branch name without NUL");
+        let mut options = GitCloneOptions::new();
+        garble(&mut options.as_mut(), &branch);
+
+        git_clone_options_init(&mut options.as_mut(), ffi::GIT_CLONE_OPTIONS_VERSION)
+            .expect("the published version reinitializes the record in place");
+
+        assert_published_defaults(options.as_ref());
+        // The borrowed branch name was cleared, never freed: the caller's own
+        // string still owns its buffer and reads back unchanged.
+        assert_eq!(branch.as_c_str(), c"refs/heads/scratch");
+    }
+
+    #[test]
+    fn the_rust_constructor_agrees_with_the_c_template() {
+        let _initialization = crate::libgit2::git_libgit2_init().unwrap();
+        let mut from_c = GitCloneOptions::new();
+        git_clone_options_init(&mut from_c.as_mut(), ffi::GIT_CLONE_OPTIONS_VERSION)
+            .expect("the published version initializes");
+
+        // `GitCloneOptions::new` hand-writes what the C template contains, so
+        // the two must be indistinguishable through every accessor.
+        assert_published_defaults(from_c.as_ref());
+        let from_rust = GitCloneOptions::new();
+        assert_published_defaults(from_rust.as_ref());
+    }
+
+    #[test]
+    fn an_unsupported_version_is_refused_without_writing() {
+        let _initialization = crate::libgit2::git_libgit2_init().unwrap();
+        let branch = CString::new("refs/heads/scratch").expect("a branch name without NUL");
+        let mut options = GitCloneOptions::new();
+        garble(&mut options.as_mut(), &branch);
+
+        for version in [0, ffi::GIT_CLONE_OPTIONS_VERSION + 1] {
+            assert_eq!(
+                git_clone_options_init(&mut options.as_mut(), version),
+                Err(ffi::git_error_code_GIT_ERROR),
+                "version {version} is outside the accepted compatibility range"
+            );
+        }
+
+        // Refusal happens before the template is copied, so the caller keeps
+        // every value it installed — including the borrowed branch name.
+        let view = options.as_ref();
+        assert_eq!(view.version(), 0);
+        assert!(view.bare());
+        assert_eq!(view.local(), Ok(GitCloneLocal::NoLinks));
+        assert_eq!(view.checkout_branch(), Some(branch.as_c_str()));
+        assert_eq!(view.checkout_options().version(), 0);
+        assert_eq!(view.fetch_options().version(), 0);
+    }
+
+    #[test]
+    fn the_initializer_takes_the_callers_storage_and_never_allocates_it() {
+        // C's contract is "initialize the record I hand you". A wrapper that
+        // returned fresh storage instead would make reinitialization of an
+        // existing record unreachable from safe Rust.
+        let wrapper: fn(&mut GitCloneOptionsMut<'_, '_>, core::ffi::c_uint) -> Result<(), i32> =
+            git_clone_options_init;
+        let _ = wrapper;
     }
 }
