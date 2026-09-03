@@ -189,7 +189,7 @@ pub fn git_annotated_commit_ref<'a>(commit: AnnotatedCommitRef<'a>) -> Option<&'
 
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
-mod tests {
+mod unit_tests {
     use core::mem::{MaybeUninit, align_of, size_of};
 
     use ffibox::CDropped;

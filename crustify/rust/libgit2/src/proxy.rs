@@ -50,7 +50,7 @@ impl TryFrom<ffi::git_proxy_t> for ProxyType {
 
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
 
     use super::*;

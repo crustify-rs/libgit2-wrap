@@ -17,7 +17,7 @@ use crate::trace::GitTraceLevel;
 pub type GitTraceCallback = fn(GitTraceLevel, &CStr);
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
 
     #[test]

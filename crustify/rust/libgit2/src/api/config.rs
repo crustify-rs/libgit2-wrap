@@ -55,7 +55,7 @@ impl TryFrom<ffi::git_configmap_t> for GitConfigmapType {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
 
     use super::*;

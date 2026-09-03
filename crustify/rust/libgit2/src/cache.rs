@@ -225,7 +225,7 @@ unsafe impl CCloned for GitCachedObj {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
 
     use ffibox::{CCell, CCloned, CDropped};

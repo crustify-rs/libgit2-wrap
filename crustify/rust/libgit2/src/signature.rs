@@ -112,7 +112,7 @@ pub fn git_signature_now(name: &CStr, email: &CStr) -> Result<GitSignatureOwned,
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
 
     #[test]

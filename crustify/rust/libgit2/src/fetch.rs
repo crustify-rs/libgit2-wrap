@@ -35,7 +35,7 @@ pub fn git_fetch_options_init(
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
     use crate::api::errors::GitErrorClass;
     use crate::api::remote::{

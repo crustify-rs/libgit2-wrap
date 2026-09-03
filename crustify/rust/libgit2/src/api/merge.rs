@@ -130,7 +130,7 @@ impl From<MergeFileFlags> for ffi::git_merge_file_flag_t {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
 
     use super::*;

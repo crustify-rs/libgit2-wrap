@@ -55,7 +55,7 @@ pub type GitRepositoryOwned = CBox<GitRepository>;
 ffibox::impl_dropped!(GitRepository, ffi::git_repository, ffi::git_repository_free);
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
     use core::ptr;
 

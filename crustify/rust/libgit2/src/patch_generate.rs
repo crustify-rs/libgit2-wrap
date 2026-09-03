@@ -237,7 +237,7 @@ pub fn git_diff_blobs<'callbacks>(
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
 
     #[test]

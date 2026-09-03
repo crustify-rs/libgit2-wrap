@@ -295,7 +295,7 @@ impl Not for DiffOptions {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
 
     use super::*;

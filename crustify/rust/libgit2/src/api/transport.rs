@@ -27,7 +27,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
 
     fn accepts_callback<C: GitTransportCallback>(_callback: &mut C) {}

@@ -513,7 +513,7 @@ unsafe extern "C" fn remote_create_trampoline<C: GitRemoteCreateCallback>(
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{MaybeUninit, align_of, size_of};
 
     use super::*;

@@ -127,7 +127,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
     use crate::sys::transport::GitTransportWithRemote;
 

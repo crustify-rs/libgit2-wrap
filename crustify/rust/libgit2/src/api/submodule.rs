@@ -21,7 +21,7 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::MaybeUninit;
 
     use super::*;

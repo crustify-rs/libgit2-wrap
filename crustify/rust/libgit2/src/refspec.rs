@@ -167,7 +167,7 @@ pub fn git_refspec_src_matches_negative(refspec: GitRefspecRef<'_>, refname: &CS
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
     use core::ptr;
 

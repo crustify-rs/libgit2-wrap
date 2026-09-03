@@ -52,7 +52,7 @@ ffibox::define_ctype!(
 );
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{MaybeUninit, align_of, size_of};
 
     use ffibox::CCell;

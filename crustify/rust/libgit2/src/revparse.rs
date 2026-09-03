@@ -493,7 +493,7 @@ pub fn git_revparse<'repo>(
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{MaybeUninit, align_of, size_of};
 
     use super::*;

@@ -56,7 +56,7 @@ pub fn git_odb_backend_loose(
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
 
     #[test]

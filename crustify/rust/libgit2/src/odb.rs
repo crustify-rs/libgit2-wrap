@@ -96,7 +96,7 @@ pub fn git_odb_hashfile(path: &core::ffi::CStr, kind: GitObjectType) -> Result<O
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
     use core::ptr;
 

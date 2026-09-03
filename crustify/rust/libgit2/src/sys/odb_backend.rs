@@ -658,7 +658,7 @@ unsafe extern "C" fn progress_trampoline<C: GitIndexerProgressCallback>(
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
     use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 

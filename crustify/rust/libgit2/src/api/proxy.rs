@@ -353,7 +353,7 @@ unsafe extern "C" fn certificate_trampoline<C: GitTransportCertificateCheckCallb
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
 
     use crate::api::cert::GitCertType;

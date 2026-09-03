@@ -77,7 +77,7 @@ fn backend_result(
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
 
     #[test]

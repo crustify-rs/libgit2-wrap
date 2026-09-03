@@ -178,7 +178,7 @@ impl From<Delta> for ffi::git_delta_t {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
     use core::mem::{align_of, size_of};
 

@@ -26,7 +26,7 @@ ffibox::impl_dropped!(
 );
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::size_of;
 
     use ffibox::{CCell, CDropped};

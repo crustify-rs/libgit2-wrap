@@ -40,7 +40,7 @@ define_ctype!(
 impl_dropped!(GitIterator, ffi::git_iterator, ffi::git_note_iterator_free);
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
     use core::ptr;
 

@@ -114,7 +114,7 @@ pub fn git_trace_set(level: GitTraceLevel, callback: Option<GitTraceCallback>) -
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
     use core::mem::{align_of, size_of};
 

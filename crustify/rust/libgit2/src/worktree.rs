@@ -215,7 +215,7 @@ pub fn git_worktree_validate(worktree: GitWorktreeRef<'_>) -> Result<(), i32> {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
     use core::ptr;
 

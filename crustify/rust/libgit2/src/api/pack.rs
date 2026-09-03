@@ -44,7 +44,7 @@ impl TryFrom<ffi::git_packbuilder_stage_t> for GitPackbuilderStage {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
 
     use super::*;

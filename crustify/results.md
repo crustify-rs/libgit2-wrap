@@ -512,8 +512,10 @@ counted by brace-matching each one. On that same basis the non-test tree is
 `10,231 / 18,452` — the two numbers in the Overview come from different
 instruments and should not be divided into each other.
 
-There are no integration test directories; all `560` tests live in the `193`
-inline modules.
+There are no integration test directories; all `560` original unit tests live
+in the `193` inline unit-test modules. Modules formerly named `mod tests` are
+now named `mod unit_tests`; equivalence tests live separately in
+`mod io_equiv`.
 
 ### What the coverage percentages measure
 
@@ -747,4 +749,3 @@ Corrected while homing the second half.
 `crustify-audit ub` requires its own explicit approval, which has not been given.
 `crustify/audit/advisories/` does not exist, and every `ub` column reads `—` for
 that reason rather than because a run found nothing.
-

@@ -283,7 +283,7 @@ pub fn git_status_should_ignore(
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
     use core::ptr;
 

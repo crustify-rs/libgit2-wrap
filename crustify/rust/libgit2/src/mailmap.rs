@@ -42,7 +42,7 @@ pub type GitMailmapOwned = CBox<GitMailmap>;
 ffibox::impl_dropped!(GitMailmap, ffi::git_mailmap, ffi::git_mailmap_free);
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{MaybeUninit, align_of, size_of};
 
     use ffibox::CDropped;

@@ -101,7 +101,7 @@ pub fn git_commit_extract_signature(
 
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
-mod tests {
+mod unit_tests {
     use core::mem::{MaybeUninit, align_of, size_of};
 
     use ffibox::{CCloned, CDropped};

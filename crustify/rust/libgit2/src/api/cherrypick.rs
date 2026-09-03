@@ -232,7 +232,7 @@ impl<'object, 'data> GitCherrypickOptionsMut<'object, 'data> {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
     use core::mem::{align_of, size_of};
 

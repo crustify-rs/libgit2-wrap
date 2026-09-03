@@ -101,7 +101,7 @@ impl From<GitBlobFilterFlags> for ffi::git_blob_filter_flag_t {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
 
     use super::*;

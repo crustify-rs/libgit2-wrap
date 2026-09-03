@@ -240,7 +240,7 @@ pub fn git_pathspec_new(pathspec: GitStrArrayRef<'_>) -> Result<GitPathspecOwned
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
     use core::ptr;
 

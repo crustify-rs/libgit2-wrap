@@ -284,7 +284,7 @@ pub fn git_branch_upstream_remote(
 
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
-mod tests {
+mod unit_tests {
     use super::*;
     use core::mem::{align_of, size_of};
 

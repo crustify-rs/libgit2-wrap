@@ -208,7 +208,7 @@ pub fn git_config_parse_int64(value: Option<&core::ffi::CStr>) -> Result<i64, i3
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
 
     use ffibox::CDropped;

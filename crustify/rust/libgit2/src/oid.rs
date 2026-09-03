@@ -234,7 +234,7 @@ pub fn git_oid_tostr<'a>(out: &'a mut [u8], oid: OidRef<'_>) -> Option<&'a core:
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
 
     use super::*;

@@ -21,7 +21,7 @@ unsafe impl CDropped for MallocFree {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use ffibox::CVoidBox;
 
     use super::*;

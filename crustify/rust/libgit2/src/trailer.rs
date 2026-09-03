@@ -25,7 +25,7 @@ pub fn git_message_trailers(message: &CStr) -> Result<CVal<GitMessageTrailerArra
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
 
     #[test]

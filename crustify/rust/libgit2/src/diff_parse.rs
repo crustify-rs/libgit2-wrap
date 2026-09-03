@@ -48,7 +48,7 @@ pub fn git_diff_from_buffer_ext(
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
 
     /// Holds one libgit2 initialization count for the duration of a test.

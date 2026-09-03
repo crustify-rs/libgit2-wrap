@@ -67,7 +67,7 @@ impl From<GitBranchType> for ffi::git_branch_t {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
     use core::mem::{align_of, size_of};
 

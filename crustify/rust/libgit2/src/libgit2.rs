@@ -121,7 +121,7 @@ pub unsafe fn git_libgit2_shutdown(_initialization: Libgit2Init) -> Result<usize
 
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
-mod tests {
+mod unit_tests {
     use super::*;
 
     #[test]

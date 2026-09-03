@@ -73,7 +73,7 @@ unsafe impl CCloned for GitStrdupFree {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use ffibox::{CVoidBox, CrustifyStr};
 
     use super::*;

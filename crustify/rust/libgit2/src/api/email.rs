@@ -94,7 +94,7 @@ impl From<GitEmailCreateFlags> for ffi::git_email_create_flags_t {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
 
     use super::*;

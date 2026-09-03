@@ -75,7 +75,7 @@ pub fn git_error_set_str(
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
 
     use super::*;

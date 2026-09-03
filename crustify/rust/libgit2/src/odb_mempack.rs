@@ -354,7 +354,7 @@ mod io_equiv {
 }
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use super::*;
     use crate::api::buffer::GitBuf;
 

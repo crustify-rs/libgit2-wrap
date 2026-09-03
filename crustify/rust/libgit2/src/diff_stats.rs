@@ -25,7 +25,7 @@ pub type DiffStatsOwned = CBox<DiffStats>;
 ffibox::impl_dropped!(DiffStats, ffi::git_diff_stats, ffi::git_diff_stats_free);
 
 #[cfg(test)]
-mod tests {
+mod unit_tests {
     use core::mem::{align_of, size_of};
     use core::ptr;
 
