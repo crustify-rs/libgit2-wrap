@@ -263,6 +263,350 @@ pub fn git_revwalk_repository<'a>(walk: GitRevwalkRef<'a>) -> GitRepositoryRef<'
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    unsafe fn raw_walk(repository: *mut ffi::git_repository) -> Vec<Vec<u8>> {
+        let mut walk = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_revwalk_new(&mut walk, repository) }, 0);
+        assert_eq!(unsafe { ffi::git_revwalk_push_head(walk) }, 0);
+        let mut ids = Vec::new();
+        loop {
+            let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+            match unsafe { ffi::git_revwalk_next(&mut id, walk) } {
+                0 => ids.push(id.id.to_vec()),
+                ffi::git_error_code_GIT_ITEROVER => break,
+                error => panic!("raw revision walk failed: {error}"),
+            }
+        }
+        unsafe { ffi::git_revwalk_free(walk) };
+        ids
+    }
+
+    fn safe_walk(repository: crate::repository::GitRepositoryMut<'_>) -> Vec<Vec<u8>> {
+        let mut walk = git_revwalk_new(repository).unwrap();
+        git_revwalk_push_head(&mut walk.as_mut()).unwrap();
+        let mut ids = Vec::new();
+        loop {
+            match git_revwalk_next(&mut walk.as_mut()) {
+                Ok(mut id) => {
+                    let id =
+                        unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of_mut!(id).cast()) }
+                            .unwrap();
+                    ids.push(id.raw_bytes().elems().collect());
+                }
+                Err(ffi::git_error_code_GIT_ITEROVER) => break,
+                Err(error) => panic!("safe revision walk failed: {error}"),
+            }
+        }
+        ids
+    }
+
+    unsafe fn raw_revisions(repository: *mut ffi::git_repository) -> Vec<Vec<u8>> {
+        [c"HEAD", c"HEAD~1", c"HEAD~2", c"v1.0^{commit}"]
+            .into_iter()
+            .map(|spec| {
+                let mut object = core::ptr::null_mut();
+                assert_eq!(
+                    unsafe { ffi::git_revparse_single(&mut object, repository, spec.as_ptr()) },
+                    0
+                );
+                let id = unsafe { ffi::git_object_id(object) };
+                let bytes = unsafe { (*id).id }.to_vec();
+                unsafe { ffi::git_object_free(object) };
+                bytes
+            })
+            .collect()
+    }
+
+    fn safe_revisions(repository: *mut ffi::git_repository) -> Vec<Vec<u8>> {
+        [c"HEAD", c"HEAD~1", c"HEAD~2", c"v1.0^{commit}"]
+            .into_iter()
+            .map(|spec| {
+                let view =
+                    unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+                let object = crate::revparse::git_revparse_single(view, spec).unwrap();
+                crate::object::git_object_id(object.as_ref())
+                    .raw_bytes()
+                    .elems()
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn io_equiv_revision_walk_and_parse() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("revwalk-raw");
+        let safe = HistoryFixture::new("revwalk-safe");
+        let raw_walk = unsafe { raw_walk(raw.repository.as_ptr()) };
+        let raw_revisions = unsafe { raw_revisions(raw.repository.as_ptr()) };
+        assert_eq!(raw_revisions, safe_revisions(safe.repository.as_ptr()));
+        let safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        assert_eq!(raw_walk, safe_walk(safe_repository));
+        assert_eq!(raw_walk.len(), 3);
+    }
+
+    fn expand_graph(fixture: &HistoryFixture) {
+        let path = fixture.directory.path();
+        let run = |arguments: &[&str], tick: usize| {
+            let status = std::process::Command::new("git")
+                .current_dir(path)
+                .args(arguments)
+                .env("GIT_AUTHOR_DATE", format!("17002{tick:05} +0000"))
+                .env("GIT_COMMITTER_DATE", format!("17002{tick:05} +0000"))
+                .stdout(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(status.success(), "git command failed: {arguments:?}");
+        };
+        for revision in 0..14 {
+            std::fs::write(
+                path.join("series.txt"),
+                format!("main revision {revision}\n"),
+            )
+            .unwrap();
+            run(&["add", "series.txt"], revision);
+            run(
+                &[
+                    "-c",
+                    "user.name=Crustify",
+                    "-c",
+                    "user.email=crustify@example.com",
+                    "commit",
+                    "-q",
+                    "-m",
+                    &format!("main {revision}"),
+                ],
+                revision,
+            );
+        }
+        run(&["checkout", "-q", "-b", "walk-side", "HEAD~5"], 30);
+        for revision in 0..3 {
+            std::fs::write(path.join("side.txt"), format!("side revision {revision}\n")).unwrap();
+            run(&["add", "side.txt"], 31 + revision);
+            run(
+                &[
+                    "-c",
+                    "user.name=Crustify",
+                    "-c",
+                    "user.email=crustify@example.com",
+                    "commit",
+                    "-q",
+                    "-m",
+                    &format!("side {revision}"),
+                ],
+                31 + revision,
+            );
+        }
+        run(&["checkout", "-q", "master"], 40);
+        run(
+            &[
+                "-c",
+                "user.name=Crustify",
+                "-c",
+                "user.email=crustify@example.com",
+                "merge",
+                "-q",
+                "--no-ff",
+                "-m",
+                "merge walk side",
+                "walk-side",
+            ],
+            41,
+        );
+    }
+
+    unsafe fn raw_drain(walk: *mut ffi::git_revwalk) -> Vec<Vec<u8>> {
+        let mut output = Vec::new();
+        loop {
+            let mut oid = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+            match unsafe { ffi::git_revwalk_next(&mut oid, walk) } {
+                0 => output.push(oid.id.to_vec()),
+                ffi::git_error_code_GIT_ITEROVER => break,
+                error => panic!("revision walk failed: {error}"),
+            }
+        }
+        output
+    }
+
+    unsafe fn raw_modes(repository: *mut ffi::git_repository) -> (Vec<Vec<Vec<u8>>>, usize, bool) {
+        unsafe extern "C" fn visible(
+            _: *const ffi::git_oid,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            unsafe { *payload.cast::<usize>() += 1 };
+            0
+        }
+        let mut walk = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_revwalk_new(&mut walk, repository) }, 0);
+        let owner_matches = unsafe { ffi::git_revwalk_repository(walk) == repository };
+        let mut variants = Vec::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_revwalk_sorting(
+                    walk,
+                    ffi::git_sort_t_GIT_SORT_TOPOLOGICAL | ffi::git_sort_t_GIT_SORT_TIME,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_revwalk_push_glob(walk, c"refs/heads/*".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_revwalk_hide_ref(walk, c"refs/heads/walk-side".as_ptr()) },
+            0
+        );
+        variants.push(unsafe { raw_drain(walk) });
+        assert_eq!(unsafe { ffi::git_revwalk_reset(walk) }, 0);
+        assert_eq!(
+            unsafe {
+                ffi::git_revwalk_sorting(
+                    walk,
+                    ffi::git_sort_t_GIT_SORT_REVERSE | ffi::git_sort_t_GIT_SORT_TIME,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_revwalk_push_range(walk, c"HEAD~10..HEAD".as_ptr()) },
+            0
+        );
+        variants.push(unsafe { raw_drain(walk) });
+        assert_eq!(unsafe { ffi::git_revwalk_reset(walk) }, 0);
+        assert_eq!(
+            unsafe { ffi::git_revwalk_push_ref(walk, c"refs/heads/master".as_ptr()) },
+            0
+        );
+        let mut hidden_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut hidden_object, repository, c"HEAD~5".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_revwalk_hide(walk, ffi::git_object_id(hidden_object)) },
+            0
+        );
+        unsafe { ffi::git_object_free(hidden_object) };
+        variants.push(unsafe { raw_drain(walk) });
+        assert_eq!(unsafe { ffi::git_revwalk_reset(walk) }, 0);
+        assert_eq!(unsafe { ffi::git_revwalk_push_head(walk) }, 0);
+        assert_eq!(unsafe { ffi::git_revwalk_simplify_first_parent(walk) }, 0);
+        variants.push(unsafe { raw_drain(walk) });
+        assert_eq!(unsafe { ffi::git_revwalk_reset(walk) }, 0);
+        let mut callbacks = 0usize;
+        assert_eq!(
+            unsafe {
+                ffi::git_revwalk_add_hide_cb(
+                    walk,
+                    Some(visible),
+                    core::ptr::from_mut(&mut callbacks).cast(),
+                )
+            },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_revwalk_push_head(walk) }, 0);
+        variants.push(unsafe { raw_drain(walk) });
+        unsafe { ffi::git_revwalk_free(walk) };
+        (variants, callbacks, owner_matches)
+    }
+
+    fn safe_drain(walk: &mut GitRevwalkOwned<'_>) -> Vec<Vec<u8>> {
+        let mut output = Vec::new();
+        loop {
+            match git_revwalk_next(&mut walk.as_mut()) {
+                Ok(mut oid) => output.push(
+                    unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of_mut!(oid).cast()) }
+                        .unwrap()
+                        .raw_bytes()
+                        .elems()
+                        .collect(),
+                ),
+                Err(ffi::git_error_code_GIT_ITEROVER) => break,
+                Err(error) => panic!("revision walk failed: {error}"),
+            }
+        }
+        output
+    }
+
+    fn safe_modes(repository: *mut ffi::git_repository) -> (Vec<Vec<Vec<u8>>>, usize, bool) {
+        let repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut walk = git_revwalk_new(repository_view).unwrap();
+        let owner_matches = git_revwalk_repository(walk.as_ref()).as_ptr() == repository;
+        let mut variants = Vec::new();
+        git_revwalk_sorting(
+            &mut walk.as_mut(),
+            GitSortFlags::TOPOLOGICAL | GitSortFlags::TIME,
+        )
+        .unwrap();
+        git_revwalk_push_glob(&mut walk.as_mut(), c"refs/heads/*").unwrap();
+        git_revwalk_hide_ref(&mut walk.as_mut(), c"refs/heads/walk-side").unwrap();
+        variants.push(safe_drain(&mut walk));
+        git_revwalk_reset(&mut walk.as_mut()).unwrap();
+        git_revwalk_sorting(
+            &mut walk.as_mut(),
+            GitSortFlags::REVERSE | GitSortFlags::TIME,
+        )
+        .unwrap();
+        git_revwalk_push_range(&mut walk.as_mut(), c"HEAD~10..HEAD").unwrap();
+        variants.push(safe_drain(&mut walk));
+        git_revwalk_reset(&mut walk.as_mut()).unwrap();
+        git_revwalk_push_ref(&mut walk.as_mut(), c"refs/heads/master").unwrap();
+        let mut hidden_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut hidden_object, repository, c"HEAD~5".as_ptr()) },
+            0
+        );
+        let hidden =
+            unsafe { crate::oid::OidRef::from_ptr(ffi::git_object_id(hidden_object).cast_mut()) }
+                .unwrap();
+        git_revwalk_hide(&mut walk.as_mut(), hidden).unwrap();
+        unsafe { ffi::git_object_free(hidden_object) };
+        variants.push(safe_drain(&mut walk));
+        git_revwalk_reset(&mut walk.as_mut()).unwrap();
+        git_revwalk_push_head(&mut walk.as_mut()).unwrap();
+        git_revwalk_simplify_first_parent(&mut walk.as_mut()).unwrap();
+        variants.push(safe_drain(&mut walk));
+        git_revwalk_reset(&mut walk.as_mut()).unwrap();
+        let callback_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let callback_counter = callback_count.clone();
+        git_revwalk_add_hide_cb(
+            &mut walk,
+            Some(Box::new(move |_: crate::oid::OidRef<'_>| {
+                callback_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                0
+            })),
+        )
+        .unwrap();
+        git_revwalk_push_head(&mut walk.as_mut()).unwrap();
+        variants.push(safe_drain(&mut walk));
+        let callbacks = callback_count.load(std::sync::atomic::Ordering::Relaxed);
+        (variants, callbacks, owner_matches)
+    }
+
+    #[test]
+    fn io_equiv_revwalk_sort_push_hide_reset_callback_and_first_parent_modes() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("revwalk-modes-raw");
+        let safe = HistoryFixture::new("revwalk-modes-safe");
+        expand_graph(&raw);
+        expand_graph(&safe);
+        let raw_observation = unsafe { raw_modes(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_modes(safe.repository.as_ptr()));
+        assert!(raw_observation.2);
+        assert!(raw_observation.1 > 0);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
     use core::ptr;

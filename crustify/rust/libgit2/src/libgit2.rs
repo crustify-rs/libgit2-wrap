@@ -194,3 +194,80 @@ mod scheduled_backend_tests {
         assert_eq!(git_libgit2_feature_backend(Libgit2Features::HTTP), None);
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    use super::*;
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct RuntimeObservation {
+        version: (i32, i32, i32),
+        prerelease: Option<Vec<u8>>,
+        features: ffi::git_feature_t,
+        backends: Vec<Option<Vec<u8>>>,
+    }
+
+    fn bytes(value: *const core::ffi::c_char) -> Option<Vec<u8>> {
+        (!value.is_null()).then(|| {
+            unsafe { core::ffi::CStr::from_ptr(value) }
+                .to_bytes()
+                .to_vec()
+        })
+    }
+
+    fn raw_observation() -> RuntimeObservation {
+        let (mut major, mut minor, mut revision) = (0, 0, 0);
+        assert_eq!(
+            unsafe { ffi::git_libgit2_version(&mut major, &mut minor, &mut revision) },
+            0
+        );
+        let features = unsafe { ffi::git_libgit2_features() } as ffi::git_feature_t;
+        let backends = [
+            ffi::git_feature_t_GIT_FEATURE_THREADS,
+            ffi::git_feature_t_GIT_FEATURE_HTTPS,
+            ffi::git_feature_t_GIT_FEATURE_SHA1,
+            ffi::git_feature_t_GIT_FEATURE_SHA256,
+            ffi::git_feature_t_GIT_FEATURE_HTTP,
+        ]
+        .into_iter()
+        .map(|feature| bytes(unsafe { ffi::git_libgit2_feature_backend(feature) }))
+        .collect();
+        RuntimeObservation {
+            version: (major, minor, revision),
+            prerelease: bytes(unsafe { ffi::git_libgit2_prerelease() }),
+            features,
+            backends,
+        }
+    }
+
+    fn safe_observation() -> RuntimeObservation {
+        let version = git_libgit2_version().unwrap();
+        let features = git_libgit2_features();
+        let backends = [
+            Libgit2Features::THREADS,
+            Libgit2Features::HTTPS,
+            Libgit2Features::SHA1,
+            Libgit2Features::SHA256,
+            Libgit2Features::HTTP,
+        ]
+        .into_iter()
+        .map(|feature| git_libgit2_feature_backend(feature).map(|value| value.to_bytes().to_vec()))
+        .collect();
+        RuntimeObservation {
+            version: (version.major, version.minor, version.revision),
+            prerelease: git_libgit2_prerelease().map(|value| value.to_bytes().to_vec()),
+            features: features.bits(),
+            backends,
+        }
+    }
+
+    #[test]
+    fn io_equiv_runtime_version_features_and_backends() {
+        let raw = raw_observation();
+        assert_eq!(raw, safe_observation());
+        assert!(raw.version.0 >= 1);
+        let token = git_libgit2_init().unwrap();
+        assert!(token.initial_count() > 0);
+        unsafe { git_libgit2_shutdown(token) }.unwrap();
+    }
+}

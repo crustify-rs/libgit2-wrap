@@ -565,6 +565,110 @@ pub fn git_blame_hunk_byline<'a>(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct BlameObservation {
+        base_hunks: u32,
+        buffer_hunks: u32,
+        base_lines: usize,
+        buffer_lines: usize,
+        final_commits: Vec<Vec<u8>>,
+    }
+
+    unsafe fn raw_observation(repository: *mut ffi::git_repository) -> BlameObservation {
+        let mut base = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_blame_file(
+                    &mut base,
+                    repository,
+                    c"README.md".as_ptr(),
+                    core::ptr::null_mut(),
+                )
+            },
+            0
+        );
+        let changed = b"fixture\nrewritten by the blame buffer\nwith another line\n";
+        let mut buffer = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_blame_buffer(&mut buffer, base, changed.as_ptr().cast(), changed.len())
+            },
+            0
+        );
+        let base_hunks = unsafe { ffi::git_blame_get_hunk_count(base) };
+        let buffer_hunks = unsafe { ffi::git_blame_get_hunk_count(buffer) };
+        let base_lines = unsafe { ffi::git_blame_linecount(base) };
+        let buffer_lines = unsafe { ffi::git_blame_linecount(buffer) };
+        let mut final_commits = Vec::new();
+        for index in 0..buffer_hunks {
+            let hunk = unsafe { ffi::git_blame_get_hunk_byindex(buffer, index) };
+            assert!(!hunk.is_null());
+            final_commits.push(unsafe { (*hunk).final_commit_id.id }.to_vec());
+        }
+        unsafe {
+            ffi::git_blame_free(buffer);
+            ffi::git_blame_free(base);
+        }
+        BlameObservation {
+            base_hunks,
+            buffer_hunks,
+            base_lines,
+            buffer_lines,
+            final_commits,
+        }
+    }
+
+    fn safe_observation(
+        repository: &mut crate::repository::GitRepositoryMut<'_>,
+    ) -> BlameObservation {
+        let base = git_blame_file(repository.as_ref(), c"README.md", None).unwrap();
+        let changed = b"fixture\nrewritten by the blame buffer\nwith another line\n";
+        let buffer = git_blame_buffer(base.as_ref(), changed).unwrap();
+        let base_hunks = git_blame_get_hunk_count(base.as_ref());
+        let buffer_hunks = git_blame_get_hunk_count(buffer.as_ref());
+        let base_lines = git_blame_linecount(base.as_ref());
+        let buffer_lines = git_blame_linecount(buffer.as_ref());
+        let final_commits = (0..buffer_hunks)
+            .map(|index| {
+                git_blame_get_hunk_byindex(buffer.as_ref(), index)
+                    .unwrap()
+                    .final_commit_id()
+                    .raw_bytes()
+                    .elems()
+                    .collect()
+            })
+            .collect();
+        BlameObservation {
+            base_hunks,
+            buffer_hunks,
+            base_lines,
+            buffer_lines,
+            final_commits,
+        }
+    }
+
+    #[test]
+    fn io_equiv_file_and_buffer_blame() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("blame-raw");
+        let safe = HistoryFixture::new("blame-safe");
+        let raw_observation = unsafe { raw_observation(raw.repository.as_ptr()) };
+        let mut safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        assert_eq!(raw_observation, safe_observation(&mut safe_repository));
+        assert!(raw_observation.base_lines >= 2);
+        assert!(raw_observation.buffer_hunks > 0);
+    }
+}
+
+#[cfg(test)]
 mod current_hunk_lookup_tests {
     use super::*;
 

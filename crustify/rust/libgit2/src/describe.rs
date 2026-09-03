@@ -526,6 +526,263 @@ pub fn git_describe_options_init(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, RawBuf, safe_buf_bytes};
+
+    unsafe fn raw_description(repository: *mut ffi::git_repository) -> Vec<u8> {
+        let mut object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut object, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut result = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_describe_commit(&mut result, object, core::ptr::null_mut()) },
+            0
+        );
+        let mut buffer = RawBuf::new();
+        assert_eq!(
+            unsafe { ffi::git_describe_format(&mut buffer.0, result, core::ptr::null()) },
+            0
+        );
+        let bytes = buffer.bytes();
+        unsafe {
+            ffi::git_describe_result_free(result);
+            ffi::git_object_free(object);
+        }
+        bytes
+    }
+
+    unsafe fn raw_describe_matrix(repository: *mut ffi::git_repository) -> Vec<Vec<u8>> {
+        let mut object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut object, repository, c"HEAD".as_ptr()) },
+            0
+        );
+
+        let mut observations = Vec::new();
+        let cases = [
+            (
+                ffi::git_describe_strategy_t_GIT_DESCRIBE_DEFAULT,
+                core::ptr::null(),
+                0,
+                0,
+            ),
+            (
+                ffi::git_describe_strategy_t_GIT_DESCRIBE_TAGS,
+                c"v*".as_ptr(),
+                1,
+                0,
+            ),
+            (
+                ffi::git_describe_strategy_t_GIT_DESCRIBE_ALL,
+                c"*".as_ptr(),
+                1,
+                0,
+            ),
+            (
+                ffi::git_describe_strategy_t_GIT_DESCRIBE_ALL,
+                c"missing-*".as_ptr(),
+                1,
+                1,
+            ),
+        ];
+        for (strategy, pattern, first_parent, fallback) in cases {
+            let mut options = unsafe { core::mem::zeroed::<ffi::git_describe_options>() };
+            assert_eq!(
+                unsafe {
+                    ffi::git_describe_options_init(&mut options, ffi::GIT_DESCRIBE_OPTIONS_VERSION)
+                },
+                0
+            );
+            options.describe_strategy = strategy;
+            options.pattern = pattern;
+            options.only_follow_first_parent = first_parent;
+            options.show_commit_oid_as_fallback = fallback;
+            options.max_candidates_tags = 16;
+
+            let mut result = core::ptr::null_mut();
+            assert_eq!(
+                unsafe { ffi::git_describe_commit(&mut result, object, &mut options) },
+                0
+            );
+            let mut format = unsafe { core::mem::zeroed::<ffi::git_describe_format_options>() };
+            assert_eq!(
+                unsafe {
+                    ffi::git_describe_format_options_init(
+                        &mut format,
+                        ffi::GIT_DESCRIBE_FORMAT_OPTIONS_VERSION,
+                    )
+                },
+                0
+            );
+            format.always_use_long_format = 1;
+            format.abbreviated_size = 12;
+            let mut buffer = RawBuf::new();
+            assert_eq!(
+                unsafe { ffi::git_describe_format(&mut buffer.0, result, &format) },
+                0
+            );
+            observations.push(buffer.bytes());
+            unsafe { ffi::git_describe_result_free(result) };
+        }
+
+        std::fs::write(
+            unsafe { std::ffi::CStr::from_ptr(ffi::git_repository_workdir(repository)) }
+                .to_str()
+                .unwrap()
+                .to_owned()
+                + "README.md",
+            b"dirty describe worktree\n",
+        )
+        .unwrap();
+        let mut result = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_describe_workdir(&mut result, repository, core::ptr::null_mut()) },
+            0
+        );
+        let mut format = unsafe { core::mem::zeroed::<ffi::git_describe_format_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_describe_format_options_init(
+                    &mut format,
+                    ffi::GIT_DESCRIBE_FORMAT_OPTIONS_VERSION,
+                )
+            },
+            0
+        );
+        format.dirty_suffix = c"-worktree".as_ptr();
+        let mut buffer = RawBuf::new();
+        assert_eq!(
+            unsafe { ffi::git_describe_format(&mut buffer.0, result, &format) },
+            0
+        );
+        observations.push(buffer.bytes());
+        unsafe {
+            ffi::git_describe_result_free(result);
+            ffi::git_object_free(object);
+        }
+        observations
+    }
+
+    fn safe_description(repository: crate::repository::GitRepositoryMut<'_>) -> Vec<u8> {
+        let object = crate::revparse::git_revparse_single(repository, c"HEAD").unwrap();
+        let result = git_describe_commit(object.as_ref(), None).unwrap();
+        let mut buffer = GitBuf::new();
+        git_describe_format(&mut buffer, result.as_ref(), None).unwrap();
+        safe_buf_bytes(buffer.as_ref())
+    }
+
+    fn safe_describe_matrix(
+        mut repository: crate::repository::GitRepositoryMut<'_>,
+    ) -> Vec<Vec<u8>> {
+        let repository_ptr = repository.as_mut_ptr();
+        let object = crate::revparse::git_revparse_single(repository, c"HEAD").unwrap();
+        let cases = [
+            (
+                crate::api::describe::GitDescribeStrategy::DEFAULT,
+                None,
+                false,
+            ),
+            (
+                crate::api::describe::GitDescribeStrategy::TAGS,
+                Some(c"v*"),
+                false,
+            ),
+            (
+                crate::api::describe::GitDescribeStrategy::ALL,
+                Some(c"*"),
+                false,
+            ),
+            (
+                crate::api::describe::GitDescribeStrategy::ALL,
+                Some(c"missing-*"),
+                true,
+            ),
+        ];
+        let mut observations = Vec::new();
+        for (strategy, pattern, fallback) in cases {
+            let mut options = DescribeOptions::zeroed();
+            let mut options =
+                unsafe { DescribeOptionsMut::from_ptr(core::ptr::addr_of_mut!(options).cast()) }
+                    .unwrap();
+            git_describe_options_init(&mut options, ffi::GIT_DESCRIBE_OPTIONS_VERSION).unwrap();
+            options.set_describe_strategy(strategy);
+            options.set_only_follow_first_parent(true);
+            options.set_show_commit_oid_as_fallback(fallback);
+            options.set_max_candidates_tags(16);
+            unsafe { options.set_pattern(pattern) };
+
+            let result = git_describe_commit(object.as_ref(), Some(options.as_ref())).unwrap();
+            let mut format = DescribeFormatOptions::zeroed();
+            let mut format = unsafe {
+                DescribeFormatOptionsMut::from_ptr(core::ptr::addr_of_mut!(format).cast())
+            }
+            .unwrap();
+            git_describe_format_options_init(&mut format, ffi::GIT_DESCRIBE_FORMAT_OPTIONS_VERSION)
+                .unwrap();
+            format.set_always_use_long_format(true);
+            format.set_abbreviated_size(12);
+            let mut buffer = GitBuf::new();
+            git_describe_format(&mut buffer, result.as_ref(), Some(format.as_ref())).unwrap();
+            observations.push(safe_buf_bytes(buffer.as_ref()));
+        }
+        drop(object);
+        let repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository_ptr) }.unwrap();
+
+        let workdir = crate::repository::git_repository_workdir(repository.as_ref()).unwrap();
+        std::fs::write(
+            std::path::Path::new(workdir.to_str().unwrap()).join("README.md"),
+            b"dirty describe worktree\n",
+        )
+        .unwrap();
+        let result = git_describe_workdir(repository.as_ref(), None).unwrap();
+        let mut format = DescribeFormatOptions::zeroed();
+        let mut format =
+            unsafe { DescribeFormatOptionsMut::from_ptr(core::ptr::addr_of_mut!(format).cast()) }
+                .unwrap();
+        git_describe_format_options_init(&mut format, ffi::GIT_DESCRIBE_FORMAT_OPTIONS_VERSION)
+            .unwrap();
+        unsafe { format.set_dirty_suffix(Some(c"-worktree")) };
+        let mut buffer = GitBuf::new();
+        git_describe_format(&mut buffer, result.as_ref(), Some(format.as_ref())).unwrap();
+        observations.push(safe_buf_bytes(buffer.as_ref()));
+        observations
+    }
+
+    #[test]
+    fn io_equiv_describe_tagged_head() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("describe-raw");
+        let safe = HistoryFixture::new("describe-safe");
+        let raw_description = unsafe { raw_description(raw.repository.as_ptr()) };
+        let safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        assert_eq!(raw_description, safe_description(safe_repository));
+        assert_eq!(raw_description, b"v1.0");
+    }
+
+    #[test]
+    fn io_equiv_describe_strategies_fallback_long_format_and_dirty_worktree() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("describe-matrix-raw");
+        let safe = HistoryFixture::new("describe-matrix-safe");
+        let raw_observations = unsafe { raw_describe_matrix(raw.repository.as_ptr()) };
+        let safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        let safe_observations = safe_describe_matrix(safe_repository);
+        assert_eq!(raw_observations, safe_observations);
+        assert!(raw_observations.last().unwrap().ends_with(b"-worktree"));
+    }
+}
+
+#[cfg(test)]
 mod scheduled_initializer_tests {
     use super::*;
     #[test]

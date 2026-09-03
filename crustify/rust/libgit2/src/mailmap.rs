@@ -297,3 +297,74 @@ pub fn git_mailmap_resolve<'a>(
     // owned by the live mailmap, all bounded by `'a`.
     Ok(unsafe { (CStr::from_ptr(real_name), CStr::from_ptr(real_email)) })
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::Libgit2Init;
+
+    const MAP: &[u8] = b"Real Person <real@example.com> Alias <alias@example.com>\n\
+Second Person <second@example.com> <other@example.com>\n";
+
+    unsafe fn raw_resolution() -> (Vec<u8>, Vec<u8>) {
+        let mut map = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_mailmap_from_buffer(&mut map, MAP.as_ptr().cast(), MAP.len()) },
+            0
+        );
+        let mut signature = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_signature_new(
+                    &mut signature,
+                    c"Alias".as_ptr(),
+                    c"alias@example.com".as_ptr(),
+                    1_700_000_000,
+                    0,
+                )
+            },
+            0
+        );
+        let mut resolved = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_mailmap_resolve_signature(&mut resolved, map, signature) },
+            0
+        );
+        let observation = (
+            unsafe { CStr::from_ptr((*resolved).name) }
+                .to_bytes()
+                .to_vec(),
+            unsafe { CStr::from_ptr((*resolved).email) }
+                .to_bytes()
+                .to_vec(),
+        );
+        unsafe {
+            ffi::git_signature_free(resolved);
+            ffi::git_signature_free(signature);
+            ffi::git_mailmap_free(map);
+        }
+        observation
+    }
+
+    fn safe_resolution() -> (Vec<u8>, Vec<u8>) {
+        let map = git_mailmap_from_buffer(MAP).unwrap();
+        let signature =
+            crate::signature::git_signature_new(c"Alias", c"alias@example.com", 1_700_000_000, 0)
+                .unwrap();
+        let resolved = git_mailmap_resolve_signature(map.as_ref(), signature.as_ref()).unwrap();
+        (
+            resolved.as_ref().name().to_bytes().to_vec(),
+            resolved.as_ref().email().to_bytes().to_vec(),
+        )
+    }
+
+    #[test]
+    fn io_equiv_mailmap_signature_resolution() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = unsafe { raw_resolution() };
+        assert_eq!(raw, safe_resolution());
+        assert_eq!(raw, (b"Real Person".to_vec(), b"real@example.com".to_vec()));
+    }
+}

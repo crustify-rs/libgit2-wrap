@@ -353,3 +353,265 @@ pub fn git_libgit2_buildinfo(info: crate::api::common::GitBuildInfo) -> Option<&
         Some(unsafe { CStr::from_ptr(value) })
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{Libgit2Init, RawBuf, safe_buf_bytes};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct SettingsObservation {
+        window: usize,
+        mapped: usize,
+        files: usize,
+        pack_objects: usize,
+        pack_object_size: usize,
+        owner_validation: bool,
+        connect_timeout: i32,
+        server_timeout: i32,
+        user_agent: Vec<u8>,
+        product: Vec<u8>,
+        extensions: Vec<Vec<u8>>,
+    }
+
+    struct SavedSettings {
+        owner_validation: bool,
+        connect_timeout: i32,
+        server_timeout: i32,
+    }
+
+    fn save_settings() -> SavedSettings {
+        use Libgit2Option::*;
+        let mut owner_validation = true;
+        let (mut connect_timeout, mut server_timeout) = (0, 0);
+        git_libgit2_opts(GetOwnerValidation(&mut owner_validation)).unwrap();
+        git_libgit2_opts(GetServerConnectTimeout(&mut connect_timeout)).unwrap();
+        git_libgit2_opts(GetServerTimeout(&mut server_timeout)).unwrap();
+        SavedSettings {
+            owner_validation,
+            connect_timeout,
+            server_timeout,
+        }
+    }
+
+    fn restore_settings(saved: &SavedSettings) {
+        use Libgit2Option::*;
+        git_libgit2_opts(SetOwnerValidation(saved.owner_validation)).unwrap();
+        git_libgit2_opts(SetServerConnectTimeout(saved.connect_timeout)).unwrap();
+        git_libgit2_opts(SetServerTimeout(saved.server_timeout)).unwrap();
+        git_libgit2_opts(SetUserAgent(None)).unwrap();
+        git_libgit2_opts(SetUserAgentProduct(None)).unwrap();
+    }
+
+    unsafe fn raw_settings() -> SettingsObservation {
+        unsafe {
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_SET_OWNER_VALIDATION as c_int,
+                    0 as c_int
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_SET_SERVER_CONNECT_TIMEOUT as c_int,
+                    321 as c_int
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_SET_SERVER_TIMEOUT as c_int,
+                    654 as c_int
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_SET_USER_AGENT as c_int,
+                    c"crustify-equiv/1".as_ptr()
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_SET_USER_AGENT_PRODUCT as c_int,
+                    c"crustify-equiv".as_ptr()
+                ),
+                0
+            );
+        }
+        let mut window = 0usize;
+        let mut mapped = 0usize;
+        let mut files = 0usize;
+        let mut pack_objects = 0usize;
+        let mut pack_object_size = 0usize;
+        let mut owner = 1 as c_int;
+        let mut connect_timeout = 0 as c_int;
+        let mut server_timeout = 0 as c_int;
+        let mut user_agent = RawBuf::new();
+        let mut product = RawBuf::new();
+        let mut extensions = ffi::git_strarray {
+            strings: core::ptr::null_mut(),
+            count: 0,
+        };
+        unsafe {
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_GET_MWINDOW_SIZE as c_int,
+                    &mut window
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_GET_MWINDOW_MAPPED_LIMIT as c_int,
+                    &mut mapped
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_GET_MWINDOW_FILE_LIMIT as c_int,
+                    &mut files
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_GET_PACK_MAX_OBJECTS as c_int,
+                    &mut pack_objects
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_GET_PACK_MAX_OBJECT_SIZE as c_int,
+                    &mut pack_object_size
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_GET_OWNER_VALIDATION as c_int,
+                    &mut owner
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_GET_SERVER_CONNECT_TIMEOUT as c_int,
+                    &mut connect_timeout
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_GET_SERVER_TIMEOUT as c_int,
+                    &mut server_timeout
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_GET_USER_AGENT as c_int,
+                    &mut user_agent.0
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_GET_USER_AGENT_PRODUCT as c_int,
+                    &mut product.0
+                ),
+                0
+            );
+            assert_eq!(
+                ffi::git_libgit2_opts(
+                    ffi::git_libgit2_opt_t_GIT_OPT_GET_EXTENSIONS as c_int,
+                    &mut extensions
+                ),
+                0
+            );
+        }
+        let mut extension_bytes = (0..extensions.count)
+            .map(|index| {
+                unsafe { CStr::from_ptr(*extensions.strings.add(index)) }
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect::<Vec<_>>();
+        extension_bytes.sort();
+        unsafe { ffi::git_strarray_dispose(&mut extensions) };
+        SettingsObservation {
+            window,
+            mapped,
+            files,
+            pack_objects,
+            pack_object_size,
+            owner_validation: owner != 0,
+            connect_timeout,
+            server_timeout,
+            user_agent: user_agent.bytes(),
+            product: product.bytes(),
+            extensions: extension_bytes,
+        }
+    }
+
+    fn safe_settings() -> SettingsObservation {
+        use Libgit2Option::*;
+        git_libgit2_opts(SetOwnerValidation(false)).unwrap();
+        git_libgit2_opts(SetServerConnectTimeout(321)).unwrap();
+        git_libgit2_opts(SetServerTimeout(654)).unwrap();
+        git_libgit2_opts(SetUserAgent(Some(c"crustify-equiv/1"))).unwrap();
+        git_libgit2_opts(SetUserAgentProduct(Some(c"crustify-equiv"))).unwrap();
+        let (mut window, mut mapped, mut files) = (0, 0, 0);
+        let (mut pack_objects, mut pack_object_size) = (0, 0);
+        let mut owner = true;
+        let (mut connect_timeout, mut server_timeout) = (0, 0);
+        let mut user_agent = GitBuf::new();
+        let mut product = GitBuf::new();
+        let mut extensions = GitStrArray::new();
+        git_libgit2_opts(GetMwindowSize(&mut window)).unwrap();
+        git_libgit2_opts(GetMwindowMappedLimit(&mut mapped)).unwrap();
+        git_libgit2_opts(GetMwindowFileLimit(&mut files)).unwrap();
+        git_libgit2_opts(GetPackMaxObjects(&mut pack_objects)).unwrap();
+        git_libgit2_opts(GetPackMaxObjectSize(&mut pack_object_size)).unwrap();
+        git_libgit2_opts(GetOwnerValidation(&mut owner)).unwrap();
+        git_libgit2_opts(GetServerConnectTimeout(&mut connect_timeout)).unwrap();
+        git_libgit2_opts(GetServerTimeout(&mut server_timeout)).unwrap();
+        git_libgit2_opts(GetUserAgent(&mut user_agent)).unwrap();
+        git_libgit2_opts(GetUserAgentProduct(&mut product)).unwrap();
+        git_libgit2_opts(GetExtensions(&mut extensions)).unwrap();
+        let strings = extensions.as_ref().strings().unwrap();
+        let mut extension_bytes = (0..strings.len())
+            .map(|index| strings.get(index).unwrap().to_bytes().to_vec())
+            .collect::<Vec<_>>();
+        extension_bytes.sort();
+        SettingsObservation {
+            window,
+            mapped,
+            files,
+            pack_objects,
+            pack_object_size,
+            owner_validation: owner,
+            connect_timeout,
+            server_timeout,
+            user_agent: safe_buf_bytes(user_agent.as_ref()),
+            product: safe_buf_bytes(product.as_ref()),
+            extensions: extension_bytes,
+        }
+    }
+
+    #[test]
+    fn io_equiv_global_settings_round_trip() {
+        let _libgit2 = Libgit2Init::acquire();
+        let saved = save_settings();
+        let raw = unsafe { raw_settings() };
+        assert_eq!(raw, safe_settings());
+        assert_eq!(raw.user_agent, b"crustify-equiv/1");
+        restore_settings(&saved);
+    }
+}

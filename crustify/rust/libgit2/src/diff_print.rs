@@ -189,3 +189,113 @@ mod scheduled_status_tests {
         assert_eq!(git_diff_status_char(crate::diff::Delta::Untracked), b'?');
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    use super::*;
+    use crate::io_equiv_support::{Libgit2Init, RawDiff};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct LineObservation {
+        origin: core::ffi::c_char,
+        has_hunk: bool,
+        old_line: i32,
+        new_line: i32,
+        line_count: i32,
+        content: Vec<u8>,
+    }
+
+    unsafe extern "C" fn raw_line_callback(
+        _delta: *const ffi::git_diff_delta,
+        hunk: *const ffi::git_diff_hunk,
+        line: *const ffi::git_diff_line,
+        payload: *mut core::ffi::c_void,
+    ) -> i32 {
+        if line.is_null() || payload.is_null() {
+            return ffi::git_error_code_GIT_ERROR;
+        }
+        // SAFETY: libgit2 supplies the transient line and this test supplies a
+        // live exclusive vector as the synchronous payload.
+        let line = unsafe { &*line };
+        let content = if line.content.is_null() || line.content_len == 0 {
+            Vec::new()
+        } else {
+            // SAFETY: the callback contract supplies `content_len` readable
+            // bytes for the complete invocation.
+            unsafe { core::slice::from_raw_parts(line.content.cast::<u8>(), line.content_len) }
+                .to_vec()
+        };
+        let observation = LineObservation {
+            origin: line.origin,
+            has_hunk: !hunk.is_null(),
+            old_line: line.old_lineno,
+            new_line: line.new_lineno,
+            line_count: line.num_lines,
+            content,
+        };
+        // SAFETY: `payload` is the live vector passed below and callbacks are
+        // synchronous and non-reentrant for this diff.
+        unsafe { &mut *payload.cast::<Vec<LineObservation>>() }.push(observation);
+        0
+    }
+
+    struct SafeTrace<'a>(&'a mut Vec<LineObservation>);
+
+    impl crate::api::diff::GitDiffLineCallback for SafeTrace<'_> {
+        fn call(
+            &mut self,
+            _delta: DiffDeltaRef<'_>,
+            hunk: Option<DiffHunkRef<'_>>,
+            line: DiffLineRef<'_>,
+        ) -> i32 {
+            self.0.push(LineObservation {
+                origin: line.origin().unwrap().as_char(),
+                has_hunk: hunk.is_some(),
+                old_line: line.old_lineno(),
+                new_line: line.new_lineno(),
+                line_count: line.num_lines(),
+                content: line
+                    .content()
+                    .map(|content| content.elems().collect())
+                    .unwrap_or_default(),
+            });
+            0
+        }
+    }
+
+    #[test]
+    fn io_equiv_git_diff_print() {
+        let _init = Libgit2Init::acquire();
+        let patch = b"diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1,2 +1,2 @@\n-old\n same\n+new\n";
+        let raw = RawDiff::from_buffer(patch).unwrap();
+        let mut raw_trace = Vec::new();
+        // SAFETY: the raw diff and callback payload remain live throughout
+        // this synchronous traversal.
+        let raw_status = unsafe {
+            ffi::git_diff_print(
+                raw.as_ptr(),
+                ffi::git_diff_format_t_GIT_DIFF_FORMAT_PATCH,
+                Some(raw_line_callback),
+                core::ptr::from_mut(&mut raw_trace).cast(),
+            )
+        };
+
+        let mut safe = crate::diff_parse::git_diff_from_buffer(patch).unwrap();
+        let mut safe_trace = Vec::new();
+        let safe_status = git_diff_print(
+            &mut safe.as_mut(),
+            crate::diff::DiffFormat::Patch,
+            &mut SafeTrace(&mut safe_trace),
+        );
+
+        assert_eq!(
+            safe_status,
+            if raw_status == 0 {
+                Ok(())
+            } else {
+                Err(raw_status)
+            }
+        );
+        assert_eq!(safe_trace, raw_trace);
+    }
+}

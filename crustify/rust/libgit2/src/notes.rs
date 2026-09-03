@@ -428,3 +428,147 @@ pub fn git_note_foreach<C: GitNoteForeachCallback>(
     };
     if status == 0 { Ok(()) } else { Err(status) }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    unsafe fn raw_notes(repository: *mut ffi::git_repository) -> (Vec<u8>, Vec<u8>, usize) {
+        let mut target = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut target, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut signature = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_signature_new(
+                    &mut signature,
+                    c"Crustify".as_ptr(),
+                    c"crustify@example.com".as_ptr(),
+                    1_700_000_300,
+                    0,
+                )
+            },
+            0
+        );
+        let mut commit = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_note_create(
+                    &mut commit,
+                    repository,
+                    core::ptr::null(),
+                    signature,
+                    signature,
+                    &target,
+                    c"reviewed by equivalence test".as_ptr(),
+                    0,
+                )
+            },
+            0
+        );
+        let mut note = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_note_read(&mut note, repository, core::ptr::null(), &target) },
+            0
+        );
+        let message = unsafe { CStr::from_ptr(ffi::git_note_message(note)) }
+            .to_bytes()
+            .to_vec();
+        unsafe extern "C" fn count(
+            _blob: *const ffi::git_oid,
+            _target: *const ffi::git_oid,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            unsafe { *payload.cast::<usize>() += 1 };
+            0
+        }
+        let mut notes = 0usize;
+        assert_eq!(
+            unsafe {
+                ffi::git_note_foreach(
+                    repository,
+                    core::ptr::null(),
+                    Some(count),
+                    core::ptr::from_mut(&mut notes).cast(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_note_remove(repository, core::ptr::null(), signature, signature, &target)
+            },
+            0
+        );
+        unsafe {
+            ffi::git_note_free(note);
+            ffi::git_signature_free(signature);
+        }
+        (commit.id.to_vec(), message, notes)
+    }
+
+    fn safe_notes(
+        repository: &mut crate::repository::GitRepositoryMut<'_>,
+    ) -> (Vec<u8>, Vec<u8>, usize) {
+        let mut target = crate::refs::git_reference_name_to_id(repository, c"HEAD").unwrap();
+        let target = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(target).cast()) }.unwrap();
+        let signature = crate::signature::git_signature_new(
+            c"Crustify",
+            c"crustify@example.com",
+            1_700_000_300,
+            0,
+        )
+        .unwrap();
+        let mut commit = git_note_create(
+            repository.as_ref(),
+            None,
+            signature.as_ref(),
+            signature.as_ref(),
+            target,
+            c"reviewed by equivalence test",
+            false,
+        )
+        .unwrap();
+        let note = git_note_read(repository.as_ref(), None, target).unwrap();
+        let message = git_note_message(note.as_ref()).to_bytes().to_vec();
+        let mut notes = 0usize;
+        git_note_foreach(
+            repository.as_ref(),
+            None,
+            &mut |_blob: OidRef<'_>, _target: OidRef<'_>| {
+                notes += 1;
+                0
+            },
+        )
+        .unwrap();
+        git_note_remove(
+            repository.as_ref(),
+            None,
+            signature.as_ref(),
+            signature.as_ref(),
+            target,
+        )
+        .unwrap();
+        let commit = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(commit).cast()) }.unwrap();
+        (commit.raw_bytes().elems().collect(), message, notes)
+    }
+
+    #[test]
+    fn io_equiv_note_create_read_foreach_and_remove() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("notes-raw");
+        let safe = HistoryFixture::new("notes-safe");
+        let raw_observation = unsafe { raw_notes(raw.repository.as_ptr()) };
+        let mut safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        assert_eq!(raw_observation, safe_notes(&mut safe_repository));
+        assert_eq!(raw_observation.1, b"reviewed by equivalence test");
+        assert_eq!(raw_observation.2, 1);
+    }
+}

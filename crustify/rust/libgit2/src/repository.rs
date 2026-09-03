@@ -1593,6 +1593,1044 @@ pub fn git_repository_init_options_init(
     }
 }
 
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, RawBuf, safe_buf_bytes};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct RepositoryObservation {
+        is_bare: bool,
+        is_empty: bool,
+        is_shallow: bool,
+        is_worktree: bool,
+        head_detached: bool,
+        state: i32,
+        head_name: Vec<u8>,
+        head_target: Vec<u8>,
+        references: Vec<Vec<u8>>,
+    }
+
+    unsafe fn raw_observation(repository: *mut ffi::git_repository) -> RepositoryObservation {
+        let mut head = core::ptr::null_mut();
+        // SAFETY: repository and output are live for the lookup.
+        assert_eq!(
+            unsafe { ffi::git_repository_head(&mut head, repository) },
+            0
+        );
+        // SAFETY: a successful lookup returns live name and target pointers.
+        let head_name = unsafe { CStr::from_ptr(ffi::git_reference_name(head)) }
+            .to_bytes()
+            .to_vec();
+        let target = unsafe { ffi::git_reference_target(head) };
+        assert!(!target.is_null());
+        // SAFETY: target points at a complete OID embedded in the live ref.
+        let head_target = unsafe {
+            core::slice::from_raw_parts((*target).id.as_ptr(), crate::oid::RAW_DIGEST_LEN)
+        }
+        .to_vec();
+        // SAFETY: successful lookup transferred this owner.
+        unsafe { ffi::git_reference_free(head) };
+
+        let mut names = ffi::git_strarray {
+            strings: core::ptr::null_mut(),
+            count: 0,
+        };
+        // SAFETY: repository and output header are live.
+        assert_eq!(
+            unsafe { ffi::git_reference_list(&mut names, repository) },
+            0
+        );
+        let mut references = Vec::with_capacity(names.count);
+        for index in 0..names.count {
+            // SAFETY: the successful call initialized each pointer slot.
+            let name = unsafe { *names.strings.add(index) };
+            assert!(!name.is_null());
+            // SAFETY: each entry is a live NUL-terminated owned string.
+            references.push(unsafe { CStr::from_ptr(name) }.to_bytes().to_vec());
+        }
+        // SAFETY: successful list construction initialized owned fields.
+        unsafe { ffi::git_strarray_dispose(&mut names) };
+        references.sort();
+
+        RepositoryObservation {
+            // SAFETY: scalar repository queries retain no pointers.
+            is_bare: unsafe { ffi::git_repository_is_bare(repository) } != 0,
+            is_empty: unsafe { ffi::git_repository_is_empty(repository) } != 0,
+            is_shallow: unsafe { ffi::git_repository_is_shallow(repository) } != 0,
+            is_worktree: unsafe { ffi::git_repository_is_worktree(repository) } != 0,
+            head_detached: unsafe { ffi::git_repository_head_detached(repository) } != 0,
+            state: unsafe { ffi::git_repository_state(repository) },
+            head_name,
+            head_target,
+            references,
+        }
+    }
+
+    fn safe_observation(repository: &mut GitRepositoryMut<'_>) -> RepositoryObservation {
+        let (head_name, head_target) = {
+            let head = git_repository_head(repository).unwrap();
+            let reference = head.as_ref();
+            let name = crate::refs::git_reference_name(reference)
+                .to_bytes()
+                .to_vec();
+            let target = crate::refs::git_reference_target(reference).unwrap();
+            (name, target.raw_bytes().elems().collect())
+        };
+        let names = crate::refs::git_reference_list(repository).unwrap();
+        let strings = names.as_ref().strings().unwrap();
+        let mut references = (0..strings.len())
+            .map(|index| strings.get(index).unwrap().to_bytes().to_vec())
+            .collect::<Vec<_>>();
+        references.sort();
+
+        RepositoryObservation {
+            is_bare: git_repository_is_bare(repository.as_ref()),
+            is_empty: git_repository_is_empty(repository).unwrap(),
+            is_shallow: git_repository_is_shallow(repository.as_ref()).unwrap(),
+            is_worktree: git_repository_is_worktree(repository.as_ref()),
+            head_detached: git_repository_head_detached(repository).unwrap(),
+            state: git_repository_state(repository).unwrap() as ffi::git_repository_state_t as i32,
+            head_name,
+            head_target,
+            references,
+        }
+    }
+
+    fn normalize_fixture_path(path: &[u8], root: &std::path::Path) -> Vec<u8> {
+        let root = root.to_str().unwrap().as_bytes();
+        path.strip_prefix(root).unwrap_or(path).to_vec()
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct RepositorySurfaceObservation {
+        discovered: Vec<u8>,
+        gitdir: Vec<u8>,
+        commondir: Vec<u8>,
+        workdir: Vec<u8>,
+        item_paths: Vec<(i32, Vec<u8>)>,
+        identity: (Vec<u8>, Vec<u8>),
+        namespace: Vec<u8>,
+        message: Vec<u8>,
+        hash: Vec<u8>,
+        child_statuses: [i32; 4],
+        detached_after_detach: bool,
+        detached_after_attach: bool,
+        state: i32,
+    }
+
+    unsafe fn raw_surface_observation(fixture: &HistoryFixture) -> RepositorySurfaceObservation {
+        let repository = fixture.repository.as_ptr();
+        let nested = fixture.directory.path().join("src/nested/deeper");
+        std::fs::create_dir_all(&nested).unwrap();
+        let nested = std::ffi::CString::new(nested.to_str().unwrap()).unwrap();
+
+        let mut discovered = RawBuf::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_repository_discover(
+                    &mut discovered.0,
+                    nested.as_ptr(),
+                    0,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+
+        let gitdir = unsafe { CStr::from_ptr(ffi::git_repository_path(repository)) }
+            .to_bytes()
+            .to_vec();
+        let commondir = unsafe { CStr::from_ptr(ffi::git_repository_commondir(repository)) }
+            .to_bytes()
+            .to_vec();
+        let workdir = unsafe { CStr::from_ptr(ffi::git_repository_workdir(repository)) }
+            .to_bytes()
+            .to_vec();
+
+        let items = [
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_GITDIR,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_WORKDIR,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_COMMONDIR,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_INDEX,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_OBJECTS,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_REFS,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_PACKED_REFS,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_REMOTES,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_CONFIG,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_INFO,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_HOOKS,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_LOGS,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_MODULES,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_WORKTREES,
+            ffi::git_repository_item_t_GIT_REPOSITORY_ITEM_WORKTREE_CONFIG,
+        ];
+        let item_paths = items
+            .into_iter()
+            .map(|item| {
+                let mut output = RawBuf::new();
+                let status =
+                    unsafe { ffi::git_repository_item_path(&mut output.0, repository, item) };
+                (
+                    status,
+                    normalize_fixture_path(&output.bytes(), fixture.directory.path()),
+                )
+            })
+            .collect();
+
+        assert_eq!(
+            unsafe {
+                ffi::git_repository_set_ident(
+                    repository,
+                    c"Differential User".as_ptr(),
+                    c"diff@example.com".as_ptr(),
+                )
+            },
+            0
+        );
+        let mut name = core::ptr::null();
+        let mut email = core::ptr::null();
+        assert_eq!(
+            unsafe { ffi::git_repository_ident(&mut name, &mut email, repository) },
+            0
+        );
+        let identity = (
+            unsafe { CStr::from_ptr(name) }.to_bytes().to_vec(),
+            unsafe { CStr::from_ptr(email) }.to_bytes().to_vec(),
+        );
+
+        assert_eq!(
+            unsafe { ffi::git_repository_set_namespace(repository, c"team/one".as_ptr()) },
+            0
+        );
+        let namespace = unsafe { CStr::from_ptr(ffi::git_repository_get_namespace(repository)) }
+            .to_bytes()
+            .to_vec();
+        assert_eq!(
+            unsafe { ffi::git_repository_set_namespace(repository, core::ptr::null()) },
+            0
+        );
+
+        std::fs::write(
+            fixture.directory.path().join(".git/MERGE_MSG"),
+            b"prepared merge message\n",
+        )
+        .unwrap();
+        let mut message = RawBuf::new();
+        assert_eq!(
+            unsafe { ffi::git_repository_message(&mut message.0, repository) },
+            0
+        );
+        let message = message.bytes();
+        assert_eq!(unsafe { ffi::git_repository_message_remove(repository) }, 0);
+
+        let readme =
+            std::ffi::CString::new(fixture.directory.path().join("README.md").to_str().unwrap())
+                .unwrap();
+        let mut hash = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_repository_hashfile(
+                    &mut hash,
+                    repository,
+                    readme.as_ptr(),
+                    ffi::git_object_t_GIT_OBJECT_BLOB,
+                    c"README.md".as_ptr(),
+                )
+            },
+            0
+        );
+
+        let mut config = core::ptr::null_mut();
+        let config_status = unsafe { ffi::git_repository_config(&mut config, repository) };
+        if !config.is_null() {
+            unsafe { ffi::git_config_free(config) };
+        }
+        let mut refdb = core::ptr::null_mut();
+        let refdb_status = unsafe { ffi::git_repository_refdb(&mut refdb, repository) };
+        if !refdb.is_null() {
+            unsafe { ffi::git_refdb_free(refdb) };
+        }
+        let mut index = core::ptr::null_mut();
+        let index_status = unsafe { ffi::git_repository_index(&mut index, repository) };
+        if !index.is_null() {
+            unsafe { ffi::git_index_free(index) };
+        }
+        let mut odb = core::ptr::null_mut();
+        let odb_status = unsafe { ffi::git_repository_odb(&mut odb, repository) };
+        if !odb.is_null() {
+            unsafe { ffi::git_odb_free(odb) };
+        }
+
+        assert_eq!(unsafe { ffi::git_repository_detach_head(repository) }, 0);
+        let detached_after_detach = unsafe { ffi::git_repository_head_detached(repository) } == 1;
+        assert_eq!(
+            unsafe { ffi::git_repository_set_head(repository, c"refs/heads/master".as_ptr()) },
+            0
+        );
+        let detached_after_attach = unsafe { ffi::git_repository_head_detached(repository) } == 1;
+        assert_eq!(unsafe { ffi::git_repository_state_cleanup(repository) }, 0);
+        let state = unsafe { ffi::git_repository_state(repository) };
+
+        RepositorySurfaceObservation {
+            discovered: normalize_fixture_path(&discovered.bytes(), fixture.directory.path()),
+            gitdir: normalize_fixture_path(&gitdir, fixture.directory.path()),
+            commondir: normalize_fixture_path(&commondir, fixture.directory.path()),
+            workdir: normalize_fixture_path(&workdir, fixture.directory.path()),
+            item_paths,
+            identity,
+            namespace,
+            message,
+            hash: hash.id.to_vec(),
+            child_statuses: [config_status, refdb_status, index_status, odb_status],
+            detached_after_detach,
+            detached_after_attach,
+            state,
+        }
+    }
+
+    fn safe_surface_observation(fixture: &HistoryFixture) -> RepositorySurfaceObservation {
+        let mut repository = unsafe { GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+            .expect("fixture repository is non-null");
+        let nested = fixture.directory.path().join("src/nested/deeper");
+        std::fs::create_dir_all(&nested).unwrap();
+        let nested = std::ffi::CString::new(nested.to_str().unwrap()).unwrap();
+
+        let mut discovered = GitBuf::new();
+        git_repository_discover(&mut discovered.as_mut(), &nested, false, None).unwrap();
+
+        let gitdir = git_repository_path(repository.as_ref())
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        let commondir = git_repository_commondir(repository.as_ref())
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        let workdir = git_repository_workdir(repository.as_ref())
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+
+        let items = [
+            GitRepositoryItem::GitDir,
+            GitRepositoryItem::WorkDir,
+            GitRepositoryItem::CommonDir,
+            GitRepositoryItem::Index,
+            GitRepositoryItem::Objects,
+            GitRepositoryItem::Refs,
+            GitRepositoryItem::PackedRefs,
+            GitRepositoryItem::Remotes,
+            GitRepositoryItem::Config,
+            GitRepositoryItem::Info,
+            GitRepositoryItem::Hooks,
+            GitRepositoryItem::Logs,
+            GitRepositoryItem::Modules,
+            GitRepositoryItem::Worktrees,
+            GitRepositoryItem::WorktreeConfig,
+        ];
+        let item_paths = items
+            .into_iter()
+            .map(
+                |item| match git_repository_item_path(repository.as_ref(), item) {
+                    Ok(path) => (
+                        0,
+                        normalize_fixture_path(
+                            &safe_buf_bytes(path.as_ref()),
+                            fixture.directory.path(),
+                        ),
+                    ),
+                    Err(status) => (status, Vec::new()),
+                },
+            )
+            .collect();
+
+        git_repository_set_ident(
+            &mut repository,
+            Some(c"Differential User"),
+            Some(c"diff@example.com"),
+        )
+        .unwrap();
+        let (name, email) = git_repository_ident(repository.as_ref());
+        let identity = (
+            name.unwrap().to_bytes().to_vec(),
+            email.unwrap().to_bytes().to_vec(),
+        );
+
+        git_repository_set_namespace(&mut repository, Some(c"team/one")).unwrap();
+        let namespace = git_repository_get_namespace(repository.as_ref())
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        git_repository_set_namespace(&mut repository, None).unwrap();
+
+        std::fs::write(
+            fixture.directory.path().join(".git/MERGE_MSG"),
+            b"prepared merge message\n",
+        )
+        .unwrap();
+        let mut message = GitBuf::new();
+        git_repository_message(&mut message.as_mut(), repository.as_ref()).unwrap();
+        let message = safe_buf_bytes(message.as_ref());
+        git_repository_message_remove(repository.as_ref()).unwrap();
+
+        let readme =
+            std::ffi::CString::new(fixture.directory.path().join("README.md").to_str().unwrap())
+                .unwrap();
+        let hash = git_repository_hashfile(
+            &mut repository,
+            &readme,
+            GitObjectType::BLOB,
+            Some(c"README.md"),
+        )
+        .unwrap();
+        let hash = unsafe { OidRef::from_ptr(core::ptr::addr_of!(hash).cast_mut().cast()) }
+            .unwrap()
+            .raw_bytes()
+            .elems()
+            .collect();
+
+        let child_statuses = [
+            {
+                let value = git_repository_config(&mut repository).unwrap();
+                drop(value);
+                0
+            },
+            {
+                let value = git_repository_refdb(&mut repository).unwrap();
+                drop(value);
+                0
+            },
+            {
+                let value = git_repository_index(&mut repository).unwrap();
+                drop(value);
+                0
+            },
+            {
+                let value = git_repository_odb(&mut repository).unwrap();
+                drop(value);
+                0
+            },
+        ];
+
+        git_repository_detach_head(&mut repository).unwrap();
+        let detached_after_detach = git_repository_head_detached(&mut repository).unwrap();
+        git_repository_set_head(&mut repository, c"refs/heads/master").unwrap();
+        let detached_after_attach = git_repository_head_detached(&mut repository).unwrap();
+        git_repository_state_cleanup(&mut repository).unwrap();
+        let state = git_repository_state(&mut repository).unwrap() as i32;
+
+        RepositorySurfaceObservation {
+            discovered: normalize_fixture_path(
+                &safe_buf_bytes(discovered.as_ref()),
+                fixture.directory.path(),
+            ),
+            gitdir: normalize_fixture_path(&gitdir, fixture.directory.path()),
+            commondir: normalize_fixture_path(&commondir, fixture.directory.path()),
+            workdir: normalize_fixture_path(&workdir, fixture.directory.path()),
+            item_paths,
+            identity,
+            namespace,
+            message,
+            hash,
+            child_statuses,
+            detached_after_detach,
+            detached_after_attach,
+            state,
+        }
+    }
+
+    unsafe fn raw_replace_backends_and_workdir(
+        target: &HistoryFixture,
+        donor: &HistoryFixture,
+        workdir: &CStr,
+    ) -> (bool, bool, bool, usize, bool) {
+        let repository = target.repository.as_ptr();
+        let config_path = std::ffi::CString::new(
+            target
+                .directory
+                .path()
+                .join(".git/config")
+                .to_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let mut config = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_config_open_ondisk(&mut config, config_path.as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_repository_set_config(repository, config) },
+            0
+        );
+        unsafe { ffi::git_config_free(config) };
+
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, repository) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_repository_set_index(repository, index) },
+            0
+        );
+        unsafe { ffi::git_index_free(index) };
+        assert_eq!(
+            unsafe { ffi::git_repository_set_index(repository, core::ptr::null_mut()) },
+            0
+        );
+        let mut reopened_index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut reopened_index, repository) },
+            0
+        );
+        let index_entries = unsafe { ffi::git_index_entrycount(reopened_index) };
+        unsafe { ffi::git_index_free(reopened_index) };
+
+        let mut odb = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_repository_odb(&mut odb, repository) }, 0);
+        assert_eq!(unsafe { ffi::git_repository_set_odb(repository, odb) }, 0);
+        let mut wrapped = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_wrap_odb(&mut wrapped, odb) },
+            0
+        );
+        let wrapped_pathless = unsafe { ffi::git_repository_path(wrapped) }.is_null()
+            && unsafe { ffi::git_repository_workdir(wrapped) }.is_null();
+
+        let mut refdb = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_refdb(&mut refdb, donor.repository.as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_repository_set_refdb(repository, refdb) },
+            0
+        );
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut object = core::ptr::null_mut();
+        let object_found = unsafe {
+            ffi::git_object_lookup(
+                &mut object,
+                wrapped,
+                &head,
+                ffi::git_object_t_GIT_OBJECT_ANY,
+            )
+        } == 0;
+        unsafe {
+            ffi::git_object_free(object);
+            ffi::git_refdb_free(refdb);
+            ffi::git_repository_free(wrapped);
+            ffi::git_odb_free(odb);
+        }
+
+        let gitdir =
+            std::ffi::CString::new(target.directory.path().join(".git").to_str().unwrap()).unwrap();
+        let mut bare = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_open_bare(&mut bare, gitdir.as_ptr()) },
+            0
+        );
+        let opened_bare = unsafe { ffi::git_repository_is_bare(bare) } != 0;
+        unsafe { ffi::git_repository_free(bare) };
+
+        assert_eq!(
+            unsafe { ffi::git_repository_set_workdir(repository, workdir.as_ptr(), 0) },
+            0
+        );
+        let current_workdir = unsafe { CStr::from_ptr(ffi::git_repository_workdir(repository)) }
+            .to_bytes()
+            .to_vec();
+        (
+            opened_bare,
+            wrapped_pathless,
+            object_found,
+            index_entries,
+            current_workdir.ends_with(b"/"),
+        )
+    }
+
+    fn safe_replace_backends_and_workdir(
+        target: &HistoryFixture,
+        donor: &HistoryFixture,
+        workdir: &CStr,
+    ) -> (bool, bool, bool, usize, bool) {
+        let mut repository = unsafe { GitRepositoryMut::from_ptr(target.repository.as_ptr()) }
+            .expect("target repository is non-null");
+        let config_path = std::ffi::CString::new(
+            target
+                .directory
+                .path()
+                .join(".git/config")
+                .to_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let config = crate::config::git_config_open_ondisk(&config_path).unwrap();
+        git_repository_set_config(&mut repository, config).unwrap();
+
+        let index = git_repository_index(&mut repository).unwrap();
+        git_repository_set_index(&mut repository, Some(index.as_ref())).unwrap();
+        drop(index);
+        git_repository_set_index(&mut repository, None).unwrap();
+        let reopened_index = git_repository_index(&mut repository).unwrap();
+        let index_entries = crate::index::git_index_entrycount(reopened_index.as_ref());
+        drop(reopened_index);
+
+        let odb = git_repository_odb(&mut repository).unwrap();
+        git_repository_set_odb(&mut repository, odb.as_ref()).unwrap();
+        let wrapped = git_repository_wrap_odb(odb.as_ref()).unwrap();
+        let wrapped_pathless = git_repository_path(wrapped.as_ref()).is_none()
+            && git_repository_workdir(wrapped.as_ref()).is_none();
+
+        let mut donor_repository =
+            unsafe { GitRepositoryMut::from_ptr(donor.repository.as_ptr()) }.unwrap();
+        let refdb = git_repository_refdb(&mut donor_repository).unwrap();
+        git_repository_set_refdb(&mut repository, refdb.as_ref()).unwrap();
+        let mut head = crate::refs::git_reference_name_to_id(&mut repository, c"HEAD").unwrap();
+        let head = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(head).cast()) }.unwrap();
+        let object_found =
+            crate::object::git_object_lookup(wrapped.as_ref(), head, GitObjectType::ANY).is_ok();
+        drop(refdb);
+        drop(wrapped);
+        drop(odb);
+
+        let gitdir =
+            std::ffi::CString::new(target.directory.path().join(".git").to_str().unwrap()).unwrap();
+        let bare = git_repository_open_bare(&gitdir).unwrap();
+        let opened_bare = git_repository_is_bare(bare.as_ref());
+        drop(bare);
+
+        git_repository_set_workdir(&mut repository, workdir, false).unwrap();
+        let current_workdir = git_repository_workdir(repository.as_ref())
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        (
+            opened_bare,
+            wrapped_pathless,
+            object_found,
+            index_entries,
+            current_workdir.ends_with(b"/"),
+        )
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct InitExtObservation {
+        bare: bool,
+        empty: bool,
+        unborn: bool,
+        workdir_set: bool,
+        head: Vec<u8>,
+        description: Vec<u8>,
+        origin: Vec<u8>,
+        gitlink_relative: bool,
+        hook_copied: bool,
+        no_reinit_status: i32,
+    }
+
+    fn init_ext_paths(
+        label: &str,
+    ) -> (
+        crate::io_equiv_support::TempDir,
+        std::path::PathBuf,
+        std::path::PathBuf,
+        std::path::PathBuf,
+    ) {
+        let root = crate::io_equiv_support::TempDir::new(label);
+        let gitdir = root.path().join("metadata/nested/repository.git");
+        let workdir = root.path().join("checkout/nested/worktree");
+        let template = root.path().join("template");
+        std::fs::create_dir_all(template.join("hooks")).unwrap();
+        std::fs::write(template.join("hooks/pre-commit"), b"#!/bin/sh\nexit 0\n").unwrap();
+        (root, gitdir, workdir, template)
+    }
+
+    unsafe fn raw_init_ext_observation(label: &str) -> InitExtObservation {
+        let (root, gitdir, workdir, template) = init_ext_paths(label);
+        let gitdir_c = std::ffi::CString::new(gitdir.to_str().unwrap()).unwrap();
+        let workdir_c = std::ffi::CString::new(workdir.to_str().unwrap()).unwrap();
+        let template_c = std::ffi::CString::new(template.to_str().unwrap()).unwrap();
+        let origin = c"https://example.invalid/upstream/repository.git";
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_repository_init_options>() };
+        assert_eq!(
+            unsafe { ffi::git_repository_init_options_init(&mut options, 1,) },
+            0
+        );
+        options.flags = ffi::git_repository_init_flag_t_GIT_REPOSITORY_INIT_MKPATH
+            | ffi::git_repository_init_flag_t_GIT_REPOSITORY_INIT_EXTERNAL_TEMPLATE
+            | ffi::git_repository_init_flag_t_GIT_REPOSITORY_INIT_RELATIVE_GITLINK;
+        options.description = c"differential init repository".as_ptr();
+        options.initial_head = c"trunk".as_ptr();
+        options.origin_url = origin.as_ptr();
+        options.workdir_path = workdir_c.as_ptr();
+        options.template_path = template_c.as_ptr();
+        let mut repository = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_repository_init_ext(&mut repository, gitdir_c.as_ptr(), &mut options)
+            },
+            0
+        );
+        let bare = unsafe { ffi::git_repository_is_bare(repository) != 0 };
+        let empty = unsafe { ffi::git_repository_is_empty(repository) != 0 };
+        let unborn = unsafe { ffi::git_repository_head_unborn(repository) != 0 };
+        let workdir_set = !unsafe { ffi::git_repository_workdir(repository) }.is_null();
+        let head = std::fs::read(gitdir.join("HEAD")).unwrap();
+        let description = std::fs::read(gitdir.join("description")).unwrap_or_default();
+        let mut config = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_config(&mut config, repository) },
+            0
+        );
+        let mut origin_value = core::ptr::null();
+        let origin_status = unsafe {
+            ffi::git_config_get_string(&mut origin_value, config, c"remote.origin.url".as_ptr())
+        };
+        let origin_value = if origin_status == 0 {
+            unsafe { CStr::from_ptr(origin_value) }.to_bytes().to_vec()
+        } else {
+            Vec::new()
+        };
+        unsafe { ffi::git_config_free(config) };
+        let gitlink = std::fs::read(workdir.join(".git")).unwrap();
+        let gitlink_relative = !gitlink
+            .windows(root.path().as_os_str().len())
+            .any(|window| window == root.path().to_str().unwrap().as_bytes());
+        let hook_copied = gitdir.join("hooks/pre-commit").is_file();
+        unsafe { ffi::git_repository_free(repository) };
+
+        let mut no_reinit = unsafe { core::mem::zeroed::<ffi::git_repository_init_options>() };
+        assert_eq!(
+            unsafe { ffi::git_repository_init_options_init(&mut no_reinit, 1,) },
+            0
+        );
+        no_reinit.flags = ffi::git_repository_init_flag_t_GIT_REPOSITORY_INIT_NO_REINIT;
+        no_reinit.workdir_path = workdir_c.as_ptr();
+        let mut rejected = core::ptr::null_mut();
+        let no_reinit_status = unsafe {
+            ffi::git_repository_init_ext(&mut rejected, gitdir_c.as_ptr(), &mut no_reinit)
+        };
+        assert!(rejected.is_null());
+        InitExtObservation {
+            bare,
+            empty,
+            unborn,
+            workdir_set,
+            head,
+            description,
+            origin: origin_value,
+            gitlink_relative,
+            hook_copied,
+            no_reinit_status,
+        }
+    }
+
+    fn safe_init_ext_observation(label: &str) -> InitExtObservation {
+        let (root, gitdir, workdir, template) = init_ext_paths(label);
+        let gitdir_c = std::ffi::CString::new(gitdir.to_str().unwrap()).unwrap();
+        let workdir_c = std::ffi::CString::new(workdir.to_str().unwrap()).unwrap();
+        let template_c = std::ffi::CString::new(template.to_str().unwrap()).unwrap();
+        let origin = c"https://example.invalid/upstream/repository.git";
+        let mut options = git_repository_init_options_init(1).unwrap();
+        options.as_mut().set_flags(
+            GitRepositoryInitFlags::MKPATH
+                | GitRepositoryInitFlags::EXTERNAL_TEMPLATE
+                | GitRepositoryInitFlags::RELATIVE_GITLINK,
+        );
+        unsafe {
+            options
+                .as_mut()
+                .set_borrowed_description(Some(c"differential init repository"));
+            options.as_mut().set_borrowed_initial_head(Some(c"trunk"));
+            options.as_mut().set_borrowed_origin_url(Some(origin));
+            options.as_mut().set_borrowed_workdir_path(Some(&workdir_c));
+            options
+                .as_mut()
+                .set_borrowed_template_path(Some(&template_c));
+        }
+        let mut repository = git_repository_init_ext(&gitdir_c, &mut options.as_mut()).unwrap();
+        let bare = git_repository_is_bare(repository.as_ref());
+        let empty = git_repository_is_empty(&mut repository.as_mut()).unwrap();
+        let unborn = git_repository_head_unborn(&mut repository.as_mut()).unwrap();
+        let workdir_set = git_repository_workdir(repository.as_ref()).is_some();
+        let head = std::fs::read(gitdir.join("HEAD")).unwrap();
+        let description = std::fs::read(gitdir.join("description")).unwrap_or_default();
+        let mut repository_borrow = repository.as_mut();
+        let config = git_repository_config(&mut repository_borrow).unwrap();
+        let origin_value =
+            crate::config::git_config_get_string(config.as_ref(), c"remote.origin.url")
+                .map(|value| value.to_bytes().to_vec())
+                .unwrap_or_default();
+        drop(config);
+        drop(repository_borrow);
+        let gitlink = std::fs::read(workdir.join(".git")).unwrap();
+        let gitlink_relative = !gitlink
+            .windows(root.path().as_os_str().len())
+            .any(|window| window == root.path().to_str().unwrap().as_bytes());
+        let hook_copied = gitdir.join("hooks/pre-commit").is_file();
+        drop(repository);
+
+        let mut no_reinit = git_repository_init_options_init(1).unwrap();
+        no_reinit
+            .as_mut()
+            .set_flags(GitRepositoryInitFlags::NO_REINIT);
+        unsafe {
+            no_reinit
+                .as_mut()
+                .set_borrowed_workdir_path(Some(&workdir_c));
+        }
+        let no_reinit_status = git_repository_init_ext(&gitdir_c, &mut no_reinit.as_mut())
+            .err()
+            .unwrap();
+        InitExtObservation {
+            bare,
+            empty,
+            unborn,
+            workdir_set,
+            head,
+            description,
+            origin: origin_value,
+            gitlink_relative,
+            hook_copied,
+            no_reinit_status,
+        }
+    }
+
+    #[test]
+    fn io_equiv_repository_history_and_reference_observations() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("repository-raw");
+        let safe = HistoryFixture::new("repository-safe");
+
+        // SAFETY: the fixture repository is live and is not accessed through
+        // another handle for the duration of this exclusive view.
+        let mut safe_repository = unsafe { GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+            .expect("fixture repository is non-null");
+        // SAFETY: the raw fixture remains live for the synchronous snapshot.
+        let raw_observation = unsafe { raw_observation(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_observation(&mut safe_repository));
+        assert_eq!(
+            raw_observation.references,
+            [
+                b"refs/heads/master".to_vec(),
+                b"refs/heads/topic".to_vec(),
+                b"refs/tags/v1.0".to_vec(),
+            ]
+        );
+    }
+
+    #[test]
+    fn io_equiv_repository_discovery_layout_identity_and_state_transitions() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("repository-surface-raw");
+        let safe = HistoryFixture::new("repository-surface-safe");
+
+        let raw_observation = unsafe { raw_surface_observation(&raw) };
+        let safe_observation = safe_surface_observation(&safe);
+        assert_eq!(raw_observation, safe_observation);
+        assert!(raw_observation.detached_after_detach);
+        assert!(!raw_observation.detached_after_attach);
+        assert_eq!(raw_observation.child_statuses, [0; 4]);
+    }
+
+    #[test]
+    fn io_equiv_repository_init_ext_separate_workdir_template_and_reinit() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = unsafe { raw_init_ext_observation("init-ext-raw") };
+        let safe = safe_init_ext_observation("init-ext-safe");
+        assert_eq!(raw, safe);
+        assert!(raw.workdir_set);
+        assert!(raw.gitlink_relative);
+        assert_eq!(raw.head, b"ref: refs/heads/trunk\n");
+    }
+
+    #[test]
+    fn io_equiv_repository_backend_replacement_wrap_odb_open_bare_and_set_workdir() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw_target = HistoryFixture::new("repository-backends-raw");
+        let raw_donor = HistoryFixture::new("repository-backends-donor-raw");
+        let safe_target = HistoryFixture::new("repository-backends-safe");
+        let safe_donor = HistoryFixture::new("repository-backends-donor-safe");
+        let raw_workdir = crate::io_equiv_support::TempDir::new("repository-new-workdir-raw");
+        let safe_workdir = crate::io_equiv_support::TempDir::new("repository-new-workdir-safe");
+        let raw_path = std::ffi::CString::new(raw_workdir.path().to_str().unwrap()).unwrap();
+        let safe_path = std::ffi::CString::new(safe_workdir.path().to_str().unwrap()).unwrap();
+        let raw_observation =
+            unsafe { raw_replace_backends_and_workdir(&raw_target, &raw_donor, &raw_path) };
+        let safe_observation =
+            safe_replace_backends_and_workdir(&safe_target, &safe_donor, &safe_path);
+        assert_eq!(raw_observation, safe_observation);
+        assert_eq!(raw_observation.0, true);
+        assert_eq!(raw_observation.1, true);
+        assert_eq!(raw_observation.2, true);
+        assert_eq!(raw_observation.3, 3);
+    }
+
+    unsafe fn raw_open_snapshot_and_annotated_head(
+        fixture: &HistoryFixture,
+    ) -> (bool, bool, bool, i32, i32) {
+        let workdir = fixture.directory.c_path();
+        let nested_path = fixture.directory.path().join("src/nested/open");
+        std::fs::create_dir_all(&nested_path).unwrap();
+        let nested = std::ffi::CString::new(nested_path.to_str().unwrap()).unwrap();
+        let gitdir =
+            std::ffi::CString::new(fixture.directory.path().join(".git").to_str().unwrap())
+                .unwrap();
+        let mut opened = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_open(&mut opened, workdir.as_ptr()) },
+            0
+        );
+        let ordinary_bare = unsafe { ffi::git_repository_is_bare(opened) != 0 };
+        unsafe { ffi::git_repository_free(opened) };
+        let mut discovered = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_repository_open_ext(&mut discovered, nested.as_ptr(), 0, core::ptr::null())
+            },
+            0
+        );
+        let discovered_bare = unsafe { ffi::git_repository_is_bare(discovered) != 0 };
+        unsafe { ffi::git_repository_free(discovered) };
+        let mut bare = core::ptr::null_mut();
+        let flags = ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_BARE
+            | ffi::git_repository_open_flag_t_GIT_REPOSITORY_OPEN_NO_SEARCH;
+        assert_eq!(
+            unsafe {
+                ffi::git_repository_open_ext(&mut bare, gitdir.as_ptr(), flags, core::ptr::null())
+            },
+            0
+        );
+        let explicit_bare = unsafe { ffi::git_repository_is_bare(bare) != 0 };
+        unsafe { ffi::git_repository_free(bare) };
+        let mut config = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_repository_config_snapshot(&mut config, fixture.repository.as_ptr())
+            },
+            0
+        );
+        let mut format = -1;
+        assert_eq!(
+            unsafe {
+                ffi::git_config_get_int32(
+                    &mut format,
+                    config,
+                    c"core.repositoryformatversion".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_config_free(config) };
+        let mut annotated = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_revspec(
+                    &mut annotated,
+                    fixture.repository.as_ptr(),
+                    c"HEAD~1".as_ptr(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_repository_set_head_detached_from_annotated(
+                    fixture.repository.as_ptr(),
+                    annotated,
+                )
+            },
+            0
+        );
+        let detached = unsafe { ffi::git_repository_head_detached(fixture.repository.as_ptr()) };
+        unsafe { ffi::git_annotated_commit_free(annotated) };
+        (
+            ordinary_bare,
+            discovered_bare,
+            explicit_bare,
+            detached,
+            format,
+        )
+    }
+
+    fn safe_open_snapshot_and_annotated_head(
+        fixture: &HistoryFixture,
+    ) -> (bool, bool, bool, i32, i32) {
+        let workdir = fixture.directory.c_path();
+        let nested_path = fixture.directory.path().join("src/nested/open");
+        std::fs::create_dir_all(&nested_path).unwrap();
+        let nested = std::ffi::CString::new(nested_path.to_str().unwrap()).unwrap();
+        let gitdir =
+            std::ffi::CString::new(fixture.directory.path().join(".git").to_str().unwrap())
+                .unwrap();
+        let opened = git_repository_open(&workdir).unwrap();
+        let ordinary_bare = git_repository_is_bare(opened.as_ref());
+        drop(opened);
+        let discovered =
+            git_repository_open_ext(Some(&nested), GitRepositoryOpenFlags::EMPTY, None).unwrap();
+        let discovered_bare = git_repository_is_bare(discovered.as_ref());
+        drop(discovered);
+        let bare = git_repository_open_ext(
+            Some(&gitdir),
+            GitRepositoryOpenFlags::BARE | GitRepositoryOpenFlags::NO_SEARCH,
+            None,
+        )
+        .unwrap();
+        let explicit_bare = git_repository_is_bare(bare.as_ref());
+        drop(bare);
+        let mut repository =
+            unsafe { GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }.unwrap();
+        let config = git_repository_config_snapshot(&mut repository).unwrap();
+        let format =
+            crate::config::git_config_get_int32(config.as_ref(), c"core.repositoryformatversion")
+                .unwrap();
+        drop(config);
+        let mut annotated = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_revspec(
+                    &mut annotated,
+                    fixture.repository.as_ptr(),
+                    c"HEAD~1".as_ptr(),
+                )
+            },
+            0
+        );
+        let annotated = unsafe { AnnotatedCommitRef::from_ptr(annotated) }.unwrap();
+        git_repository_set_head_detached_from_annotated(&mut repository, annotated).unwrap();
+        let detached = i32::from(git_repository_head_detached(&mut repository).unwrap());
+        unsafe { ffi::git_annotated_commit_free(annotated.as_ptr().cast_mut()) };
+        (
+            ordinary_bare,
+            discovered_bare,
+            explicit_bare,
+            detached,
+            format,
+        )
+    }
+
+    #[test]
+    fn io_equiv_repository_open_modes_snapshot_and_annotated_detach() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("repository-open-modes-raw");
+        let safe = HistoryFixture::new("repository-open-modes-safe");
+        let raw = unsafe { raw_open_snapshot_and_annotated_head(&raw) };
+        assert_eq!(raw, safe_open_snapshot_and_annotated_head(&safe));
+        assert_eq!(raw.0, false);
+        assert_eq!(raw.1, false);
+        assert_eq!(raw.2, true);
+        assert_eq!(raw.3, 1);
+    }
+}
+
 /// Wraps: git_repository_commit_parents
 /// Collects the parents implied by the repository's current operation state.
 ///

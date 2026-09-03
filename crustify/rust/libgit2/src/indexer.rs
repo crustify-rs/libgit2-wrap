@@ -563,3 +563,175 @@ pub fn git_indexer_hash<'a>(indexer: IndexerRef<'a>) -> ffibox::CSlice<'a, u8> {
     // first 20 initialized checksum bytes, retained by `indexer` for `'a`.
     unsafe { ffibox::CSlice::from_raw_parts(hash, 20) }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, TempDir};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct IndexerObservation {
+        name: Vec<u8>,
+        hash: Vec<u8>,
+        total_objects: u32,
+        indexed_objects: u32,
+        received_objects: u32,
+        total_deltas: u32,
+        indexed_deltas: u32,
+        received_bytes: usize,
+        output_files: usize,
+    }
+
+    fn expand_delta_history(fixture: &HistoryFixture) {
+        for revision in 0..24 {
+            let mut content = String::with_capacity(80_000);
+            for line in 0..1_500 {
+                use core::fmt::Write as _;
+                writeln!(
+                    content,
+                    "stable record {line:04}: revision marker {revision:02}"
+                )
+                .unwrap();
+            }
+            std::fs::write(fixture.directory.path().join("large-history.txt"), content).unwrap();
+            let add = std::process::Command::new("git")
+                .arg("-C")
+                .arg(fixture.directory.path())
+                .args(["add", "large-history.txt"])
+                .status()
+                .unwrap();
+            assert!(add.success());
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(fixture.directory.path())
+                .args([
+                    "-c",
+                    "user.name=Crustify",
+                    "-c",
+                    "user.email=crustify@example.com",
+                    "commit",
+                    "-q",
+                    "-m",
+                    &format!("large revision {revision}"),
+                ])
+                .env("GIT_AUTHOR_DATE", format!("1700001{revision:03} +0000"))
+                .env("GIT_COMMITTER_DATE", format!("1700001{revision:03} +0000"))
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+    }
+
+    fn pack_bytes(fixture: &HistoryFixture) -> Vec<u8> {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(fixture.directory.path())
+            .args(["pack-objects", "--stdout", "--all", "--delta-base-offset"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert!(output.stdout.starts_with(b"PACK"));
+        output.stdout
+    }
+
+    fn chunks(data: &[u8]) -> Vec<&[u8]> {
+        let boundaries = [1usize, 3, 7, 12, 31, 64, 127, 255, 511, 1023];
+        let mut offset = 0;
+        let mut chunks = Vec::new();
+        for length in boundaries {
+            if offset >= data.len() {
+                break;
+            }
+            let end = (offset + length).min(data.len());
+            chunks.push(&data[offset..end]);
+            offset = end;
+        }
+        if offset < data.len() {
+            chunks.push(&data[offset..]);
+        }
+        chunks
+    }
+
+    unsafe fn raw_index(prefix: &TempDir, pack: &[u8]) -> IndexerObservation {
+        let path = prefix.c_path();
+        let mut indexer = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_indexer_new(&mut indexer, path.as_ptr(), core::ptr::null_mut()) },
+            0
+        );
+        let mut stats = unsafe { core::mem::zeroed::<ffi::git_indexer_progress>() };
+        for chunk in chunks(pack) {
+            assert_eq!(
+                unsafe {
+                    ffi::git_indexer_append(indexer, chunk.as_ptr().cast(), chunk.len(), &mut stats)
+                },
+                0
+            );
+        }
+        assert_eq!(unsafe { ffi::git_indexer_commit(indexer, &mut stats) }, 0);
+        let name = unsafe { CStr::from_ptr(ffi::git_indexer_name(indexer)) }
+            .to_bytes()
+            .to_vec();
+        let hash = unsafe {
+            core::slice::from_raw_parts(ffi::git_indexer_hash(indexer).cast::<u8>(), 20).to_vec()
+        };
+        let output_files = std::fs::read_dir(prefix.path()).unwrap().count();
+        unsafe { ffi::git_indexer_free(indexer) };
+        IndexerObservation {
+            name,
+            hash,
+            total_objects: stats.total_objects,
+            indexed_objects: stats.indexed_objects,
+            received_objects: stats.received_objects,
+            total_deltas: stats.total_deltas,
+            indexed_deltas: stats.indexed_deltas,
+            received_bytes: stats.received_bytes,
+            output_files,
+        }
+    }
+
+    fn safe_index(prefix: &TempDir, pack: &[u8]) -> IndexerObservation {
+        let path = prefix.c_path();
+        let mut indexer = git_indexer_new(&path, None).unwrap();
+        let mut stats = unsafe { core::mem::zeroed::<ffi::git_indexer_progress>() };
+        let mut stats_handle =
+            unsafe { IndexerProgressMut::from_ptr(core::ptr::from_mut(&mut stats)) }.unwrap();
+        for chunk in chunks(pack) {
+            git_indexer_append(&mut indexer.as_mut(), chunk, &mut stats_handle).unwrap();
+        }
+        git_indexer_commit(&mut indexer.as_mut(), &mut stats_handle).unwrap();
+        let name = git_indexer_name(indexer.as_ref())
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        let hash = git_indexer_hash(indexer.as_ref()).elems().collect();
+        let progress = stats_handle.as_ref();
+        IndexerObservation {
+            name,
+            hash,
+            total_objects: progress.total_objects(),
+            indexed_objects: progress.indexed_objects(),
+            received_objects: progress.received_objects(),
+            total_deltas: progress.total_deltas(),
+            indexed_deltas: progress.indexed_deltas(),
+            received_bytes: progress.received_bytes(),
+            output_files: std::fs::read_dir(prefix.path()).unwrap().count(),
+        }
+    }
+
+    #[test]
+    fn io_equiv_incremental_pack_indexing_and_finalization() {
+        let _libgit2 = Libgit2Init::acquire();
+        let fixture = HistoryFixture::new("indexer-pack-source");
+        expand_delta_history(&fixture);
+        let pack = pack_bytes(&fixture);
+        let raw_output = TempDir::new("indexer-pack-raw");
+        let safe_output = TempDir::new("indexer-pack-safe");
+        let raw = unsafe { raw_index(&raw_output, &pack) };
+        assert_eq!(raw, safe_index(&safe_output, &pack));
+        assert!(raw.total_objects >= 10);
+        assert_eq!(raw.output_files, 2);
+    }
+}

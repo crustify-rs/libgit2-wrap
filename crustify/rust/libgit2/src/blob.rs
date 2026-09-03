@@ -410,3 +410,126 @@ pub fn git_blob_filter_options_init()
         Err(status)
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    fn oid_bytes(id: &ffi::git_oid) -> Vec<u8> {
+        id.id.to_vec()
+    }
+
+    unsafe fn raw_blobs(fixture: &HistoryFixture, disk_path: &core::ffi::CStr) -> Vec<Vec<u8>> {
+        let repository = fixture.repository.as_ptr();
+        let mut buffer: ffi::git_oid = unsafe { core::mem::zeroed() };
+        let mut disk: ffi::git_oid = unsafe { core::mem::zeroed() };
+        let mut workdir: ffi::git_oid = unsafe { core::mem::zeroed() };
+        let mut streamed: ffi::git_oid = unsafe { core::mem::zeroed() };
+        assert_eq!(
+            unsafe {
+                ffi::git_blob_create_from_buffer(
+                    &mut buffer,
+                    repository,
+                    b"buffer blob\n".as_ptr().cast(),
+                    12,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_blob_create_from_disk(&mut disk, repository, disk_path.as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_blob_create_from_workdir(
+                    &mut workdir,
+                    repository,
+                    c"blob-input.bin".as_ptr(),
+                )
+            },
+            0
+        );
+        let mut stream = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_blob_create_from_stream(&mut stream, repository, c"stream.bin".as_ptr())
+            },
+            0
+        );
+        let write = unsafe { (*stream).write.unwrap() };
+        assert_eq!(
+            unsafe { write(stream, b"streamed blob\n".as_ptr().cast(), 14) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_blob_create_from_stream_commit(&mut streamed, stream) },
+            0
+        );
+        [&buffer, &disk, &workdir, &streamed]
+            .into_iter()
+            .map(oid_bytes)
+            .collect()
+    }
+
+    fn safe_blobs(fixture: &HistoryFixture, disk_path: &core::ffi::CStr) -> Vec<Vec<u8>> {
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+                .unwrap();
+        let mut buffer = crate::oid::Oid::zeroed();
+        let mut disk = crate::oid::Oid::zeroed();
+        let mut workdir = crate::oid::Oid::zeroed();
+        let mut streamed = crate::oid::Oid::zeroed();
+        let mut buffer_out =
+            unsafe { crate::oid::OidMut::from_ptr(core::ptr::addr_of_mut!(buffer).cast()) }
+                .unwrap();
+        git_blob_create_from_buffer(&mut buffer_out, &mut repository, b"buffer blob\n").unwrap();
+        let mut disk_out =
+            unsafe { crate::oid::OidMut::from_ptr(core::ptr::addr_of_mut!(disk).cast()) }.unwrap();
+        git_blob_create_from_disk(&mut disk_out, &mut repository, disk_path).unwrap();
+        let mut workdir_out =
+            unsafe { crate::oid::OidMut::from_ptr(core::ptr::addr_of_mut!(workdir).cast()) }
+                .unwrap();
+        git_blob_create_from_workdir(&mut workdir_out, &mut repository, c"blob-input.bin").unwrap();
+        let mut stream = git_blob_create_from_stream(repository, Some(c"stream.bin")).unwrap();
+        stream.as_mut().write(b"streamed blob\n").unwrap();
+        let mut streamed_out =
+            unsafe { crate::oid::OidMut::from_ptr(core::ptr::addr_of_mut!(streamed).cast()) }
+                .unwrap();
+        git_blob_create_from_stream_commit(&mut streamed_out, stream).unwrap();
+        [buffer, disk, workdir, streamed]
+            .iter()
+            .map(|id| {
+                unsafe { crate::oid::OidRef::from_ptr(core::ptr::from_ref(id).cast_mut().cast()) }
+                    .unwrap()
+                    .raw_bytes()
+                    .elems()
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn io_equiv_blob_creation_from_buffer_disk_workdir_and_stream() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("blob-create-raw");
+        let safe = HistoryFixture::new("blob-create-safe");
+        for fixture in [&raw, &safe] {
+            std::fs::write(
+                fixture.directory.path().join("blob-input.bin"),
+                b"binary\0blob\n",
+            )
+            .unwrap();
+        }
+        let raw_path = raw.directory.path().join("blob-input.bin");
+        let safe_path = safe.directory.path().join("blob-input.bin");
+        let raw_path = std::ffi::CString::new(raw_path.to_str().unwrap()).unwrap();
+        let safe_path = std::ffi::CString::new(safe_path.to_str().unwrap()).unwrap();
+        let raw_ids = unsafe { raw_blobs(&raw, &raw_path) };
+        assert_eq!(raw_ids, safe_blobs(&safe, &safe_path));
+        assert_eq!(raw_ids[1], raw_ids[2]);
+    }
+}

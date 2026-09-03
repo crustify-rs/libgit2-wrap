@@ -532,3 +532,278 @@ mod scheduled_object_id_options_tests {
         assert!(options.as_ref().filters().is_none());
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, RawBuf, safe_buf_bytes};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct ObjectObservation {
+        head: Vec<u8>,
+        duplicate: Vec<u8>,
+        prefix: Vec<u8>,
+        tree: Vec<u8>,
+        readme: Vec<u8>,
+        short_id: Vec<u8>,
+        owner_matches: bool,
+        kinds: Vec<ffi::git_object_t>,
+        names: Vec<Vec<u8>>,
+        loose: Vec<bool>,
+        raw_validity: Vec<(i32, bool)>,
+        buffer_id: (i32, Vec<u8>),
+    }
+
+    unsafe fn raw_observe(repository: *mut ffi::git_repository) -> ObjectObservation {
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_object_lookup(
+                    &mut object,
+                    repository,
+                    &head,
+                    ffi::git_object_t_GIT_OBJECT_ANY,
+                )
+            },
+            0
+        );
+        let mut duplicate = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_object_dup(&mut duplicate, object) }, 0);
+        let duplicate_id = unsafe { (*ffi::git_object_id(duplicate)).id }.to_vec();
+
+        let mut prefix_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_object_lookup_prefix(
+                    &mut prefix_object,
+                    repository,
+                    &head,
+                    8,
+                    ffi::git_object_t_GIT_OBJECT_COMMIT,
+                )
+            },
+            0
+        );
+        let prefix = unsafe { (*ffi::git_object_id(prefix_object)).id }.to_vec();
+
+        let mut tree = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_object_peel(&mut tree, object, ffi::git_object_t_GIT_OBJECT_TREE) },
+            0
+        );
+        let tree_id = unsafe { (*ffi::git_object_id(tree)).id }.to_vec();
+        let mut readme = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_object_lookup_bypath(
+                    &mut readme,
+                    tree,
+                    c"README.md".as_ptr(),
+                    ffi::git_object_t_GIT_OBJECT_BLOB,
+                )
+            },
+            0
+        );
+        let readme_id = unsafe { (*ffi::git_object_id(readme)).id }.to_vec();
+        let mut short = RawBuf::new();
+        assert_eq!(unsafe { ffi::git_object_short_id(&mut short.0, object) }, 0);
+        let owner_matches = unsafe { ffi::git_object_owner(object) == repository };
+
+        let kind_values = [
+            ffi::git_object_t_GIT_OBJECT_COMMIT,
+            ffi::git_object_t_GIT_OBJECT_TREE,
+            ffi::git_object_t_GIT_OBJECT_BLOB,
+            ffi::git_object_t_GIT_OBJECT_TAG,
+            ffi::git_object_t_GIT_OBJECT_ANY,
+            ffi::git_object_t_GIT_OBJECT_INVALID,
+        ];
+        let names = kind_values
+            .iter()
+            .map(|kind| {
+                unsafe { core::ffi::CStr::from_ptr(ffi::git_object_type2string(*kind)) }
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect();
+        let loose = kind_values
+            .iter()
+            .map(|kind| unsafe { ffi::git_object_typeisloose(*kind) != 0 })
+            .collect();
+        let kinds = [
+            c"commit",
+            c"commitment",
+            c"comm",
+            c"tree",
+            c"blob",
+            c"tag",
+            c"nonsense",
+        ]
+        .iter()
+        .map(|name| unsafe { ffi::git_object_string2type(name.as_ptr()) })
+        .collect();
+
+        let samples: &[(&[u8], ffi::git_object_t)] = &[
+            (b"arbitrary blob bytes", ffi::git_object_t_GIT_OBJECT_BLOB),
+            (b"tree 0000000000000000000000000000000000000000\n", ffi::git_object_t_GIT_OBJECT_COMMIT),
+            (b"not a tree", ffi::git_object_t_GIT_OBJECT_TREE),
+            (b"object 0000000000000000000000000000000000000000\ntype commit\ntag v1\ntagger A <a@example.com> 1 +0000\n\ntag\n", ffi::git_object_t_GIT_OBJECT_TAG),
+        ];
+        let raw_validity = samples
+            .iter()
+            .map(|(bytes, kind)| {
+                let mut valid = 0;
+                let status = unsafe {
+                    ffi::git_object_rawcontent_is_valid(
+                        &mut valid,
+                        bytes.as_ptr().cast(),
+                        bytes.len(),
+                        *kind,
+                        ffi::git_oid_t_GIT_OID_SHA1,
+                    )
+                };
+                (status, valid != 0)
+            })
+            .collect();
+
+        let buffer = b"object-id buffer contents\n";
+        let mut buffer_oid = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        let buffer_status = unsafe {
+            ffi::git_object_id_from_buffer(
+                &mut buffer_oid,
+                buffer.as_ptr().cast(),
+                buffer.len(),
+                core::ptr::null(),
+            )
+        };
+
+        unsafe {
+            ffi::git_object_free(readme);
+            ffi::git_object_free(tree);
+            ffi::git_object_free(prefix_object);
+            ffi::git_object_free(duplicate);
+            ffi::git_object_free(object);
+        }
+        ObjectObservation {
+            head: head.id.to_vec(),
+            duplicate: duplicate_id,
+            prefix,
+            tree: tree_id,
+            readme: readme_id,
+            short_id: short.bytes(),
+            owner_matches,
+            kinds,
+            names,
+            loose,
+            raw_validity,
+            buffer_id: (buffer_status, buffer_oid.id.to_vec()),
+        }
+    }
+
+    fn safe_observe(repository: *mut ffi::git_repository) -> ObjectObservation {
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let repository =
+            unsafe { crate::repository::GitRepositoryRef::from_ptr(repository) }.unwrap();
+        let head_ref = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(head).cast()) }.unwrap();
+        let object = git_object_lookup(repository, head_ref, GitObjectType::ANY).unwrap();
+        let duplicate = git_object_dup(&object);
+        let prefix_object =
+            git_object_lookup_prefix(repository, head_ref, 8, GitObjectType::COMMIT).unwrap();
+        let tree = git_object_peel(&object, GitObjectType::TREE).unwrap();
+        let readme =
+            git_object_lookup_bypath(tree.as_ref(), c"README.md", GitObjectType::BLOB).unwrap();
+        let short = git_object_short_id(object.as_ref()).unwrap();
+
+        let kind_values = [
+            GitObjectType::COMMIT,
+            GitObjectType::TREE,
+            GitObjectType::BLOB,
+            GitObjectType::TAG,
+            GitObjectType::ANY,
+            GitObjectType::INVALID,
+        ];
+        let names = kind_values
+            .iter()
+            .map(|kind| git_object_type2string(*kind).to_bytes().to_vec())
+            .collect();
+        let loose = kind_values
+            .iter()
+            .map(|kind| git_object_typeisloose(*kind))
+            .collect();
+        let kinds = [
+            c"commit",
+            c"commitment",
+            c"comm",
+            c"tree",
+            c"blob",
+            c"tag",
+            c"nonsense",
+        ]
+        .iter()
+        .map(|name| git_object_string2type(Some(*name)).as_raw())
+        .collect();
+        let samples: &[(&[u8], GitObjectType)] = &[
+            (b"arbitrary blob bytes", GitObjectType::BLOB),
+            (b"tree 0000000000000000000000000000000000000000\n", GitObjectType::COMMIT),
+            (b"not a tree", GitObjectType::TREE),
+            (b"object 0000000000000000000000000000000000000000\ntype commit\ntag v1\ntagger A <a@example.com> 1 +0000\n\ntag\n", GitObjectType::TAG),
+        ];
+        let raw_validity = samples
+            .iter()
+            .map(|(bytes, kind)| {
+                match git_object_rawcontent_is_valid(bytes, *kind, crate::oid::OidType::Sha1) {
+                    Ok(valid) => (0, valid),
+                    Err(status) => (status, false),
+                }
+            })
+            .collect();
+        let buffer = b"object-id buffer contents\n";
+        let buffer_id = match git_object_id_from_buffer(buffer, None) {
+            Ok(mut id) => {
+                let id = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(id).cast()) }.unwrap();
+                (0, id.raw_bytes().elems().collect())
+            }
+            Err(status) => (status, vec![0; core::mem::size_of_val(&head.id)]),
+        };
+        ObjectObservation {
+            head: head.id.to_vec(),
+            duplicate: git_object_id(duplicate.as_ref())
+                .raw_bytes()
+                .elems()
+                .collect(),
+            prefix: git_object_id(prefix_object.as_ref())
+                .raw_bytes()
+                .elems()
+                .collect(),
+            tree: git_object_id(tree.as_ref()).raw_bytes().elems().collect(),
+            readme: git_object_id(readme.as_ref()).raw_bytes().elems().collect(),
+            short_id: safe_buf_bytes(short.as_ref()),
+            owner_matches: git_object_owner(object.as_ref()).as_ptr() == repository.as_ptr(),
+            kinds,
+            names,
+            loose,
+            raw_validity,
+            buffer_id,
+        }
+    }
+
+    #[test]
+    fn io_equiv_object_lookup_peeling_validation_and_identity() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("object-raw");
+        let safe = HistoryFixture::new("object-safe");
+        let raw_observation = unsafe { raw_observe(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_observe(safe.repository.as_ptr()));
+        assert!(raw_observation.owner_matches);
+    }
+}

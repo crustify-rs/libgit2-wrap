@@ -88,3 +88,100 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{Libgit2Init, TempDir};
+
+    unsafe fn raw_loose(path: &core::ffi::CStr) -> (Vec<u8>, Vec<u8>, usize) {
+        let mut odb = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_odb_new(&mut odb) }, 0);
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_odb_backend_loose_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_backend_loose_options_init(
+                    &mut options,
+                    ffi::GIT_ODB_BACKEND_LOOSE_OPTIONS_VERSION,
+                )
+            },
+            0
+        );
+        options.compression_level = 1;
+        options.dir_mode = 0o755;
+        options.file_mode = 0o644;
+        let mut backend = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_odb_backend_loose(&mut backend, path.as_ptr(), &mut options) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_odb_add_backend(odb, backend, 10) }, 0);
+        let payload = b"loose backend equivalence payload\n";
+        let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_write(
+                    &mut id,
+                    odb,
+                    payload.as_ptr().cast(),
+                    payload.len(),
+                    ffi::git_object_t_GIT_OBJECT_BLOB,
+                )
+            },
+            0
+        );
+        let mut object = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_odb_read(&mut object, odb, &id) }, 0);
+        let size = unsafe { ffi::git_odb_object_size(object) };
+        let data = unsafe {
+            core::slice::from_raw_parts(ffi::git_odb_object_data(object).cast::<u8>(), size)
+                .to_vec()
+        };
+        unsafe {
+            ffi::git_odb_object_free(object);
+            ffi::git_odb_free(odb);
+        }
+        (id.id.to_vec(), data, size)
+    }
+
+    fn safe_loose(path: &core::ffi::CStr) -> (Vec<u8>, Vec<u8>, usize) {
+        let mut odb = crate::odb::git_odb_new().unwrap();
+        let mut options =
+            git_odb_backend_loose_options_init(ffi::GIT_ODB_BACKEND_LOOSE_OPTIONS_VERSION).unwrap();
+        options.as_mut().set_compression_level(1);
+        options.as_mut().set_dir_mode(0o755);
+        options.as_mut().set_file_mode(0o644);
+        let backend = git_odb_backend_loose(path, Some(options.as_ref())).unwrap();
+        crate::odb::git_odb_add_backend(&mut odb.as_mut(), backend, 10).unwrap();
+        let mut id = crate::odb::git_odb_write(
+            odb.as_ref(),
+            b"loose backend equivalence payload\n",
+            crate::api::types::GitObjectType::BLOB,
+        )
+        .unwrap();
+        let id_ref =
+            unsafe { crate::oid::OidRef::from_ptr(core::ptr::from_mut(&mut id).cast()) }.unwrap();
+        let object = crate::odb::git_odb_read(&mut odb.as_mut(), id_ref).unwrap();
+        let data = crate::odb::git_odb_object_data(object.as_ref())
+            .unwrap()
+            .elems()
+            .collect();
+        (
+            id_ref.raw_bytes().elems().collect(),
+            data,
+            crate::odb::git_odb_object_size(object.as_ref()),
+        )
+    }
+
+    #[test]
+    fn io_equiv_loose_backend_options_write_and_read() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = TempDir::new("odb-loose-raw");
+        let safe = TempDir::new("odb-loose-safe");
+        let raw = unsafe { raw_loose(&raw.c_path()) };
+        assert_eq!(raw, safe_loose(&safe.c_path()));
+        assert_eq!(raw.1, b"loose backend equivalence payload\n");
+    }
+}

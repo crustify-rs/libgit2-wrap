@@ -697,3 +697,552 @@ pub fn git_rebase_onto_name<'a>(rebase: GitRebaseRef<'a>) -> Option<&'a core::ff
         Some(unsafe { core::ffi::CStr::from_ptr(name) })
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+    use std::ffi::CStr;
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct RebaseObservation {
+        original_head: Vec<u8>,
+        onto: Vec<u8>,
+        operations: Vec<Vec<u8>>,
+        rewritten: Vec<Vec<u8>>,
+    }
+
+    unsafe fn annotated(
+        repository: *mut ffi::git_repository,
+        spec: &core::ffi::CStr,
+    ) -> *mut ffi::git_annotated_commit {
+        let mut commit = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_revspec(&mut commit, repository, spec.as_ptr())
+            },
+            0
+        );
+        commit
+    }
+
+    unsafe fn raw_plan(repository: *mut ffi::git_repository) -> RebaseObservation {
+        let branch = unsafe { annotated(repository, c"HEAD") };
+        let upstream = unsafe { annotated(repository, c"HEAD~2") };
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_rebase_options>() };
+        assert_eq!(
+            unsafe { ffi::git_rebase_options_init(&mut options, ffi::GIT_REBASE_OPTIONS_VERSION) },
+            0
+        );
+        options.inmemory = 1;
+        let mut rebase = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_rebase_init(
+                    &mut rebase,
+                    repository,
+                    branch,
+                    upstream,
+                    upstream,
+                    &options,
+                )
+            },
+            0
+        );
+        let count = unsafe { ffi::git_rebase_operation_entrycount(rebase) };
+        let operations = (0..count)
+            .map(|index| {
+                let operation = unsafe { ffi::git_rebase_operation_byindex(rebase, index) };
+                unsafe { (*operation).id.id }.to_vec()
+            })
+            .collect();
+        let mut signature = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_signature_new(
+                    &mut signature,
+                    c"Crustify".as_ptr(),
+                    c"crustify@example.com".as_ptr(),
+                    1_700_000_400,
+                    0,
+                )
+            },
+            0
+        );
+        let mut rewritten = Vec::new();
+        loop {
+            let mut operation = core::ptr::null_mut();
+            match unsafe { ffi::git_rebase_next(&mut operation, rebase) } {
+                0 => {
+                    let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+                    assert_eq!(
+                        unsafe {
+                            ffi::git_rebase_commit(
+                                &mut id,
+                                rebase,
+                                core::ptr::null(),
+                                signature,
+                                core::ptr::null(),
+                                core::ptr::null(),
+                            )
+                        },
+                        0
+                    );
+                    rewritten.push(id.id.to_vec());
+                }
+                ffi::git_error_code_GIT_ITEROVER => break,
+                error => panic!("raw rebase failed: {error}"),
+            }
+        }
+        let observation = RebaseObservation {
+            original_head: unsafe { (*ffi::git_rebase_orig_head_id(rebase)).id }.to_vec(),
+            onto: unsafe { (*ffi::git_rebase_onto_id(rebase)).id }.to_vec(),
+            operations,
+            rewritten,
+        };
+        assert_eq!(unsafe { ffi::git_rebase_finish(rebase, signature) }, 0);
+        unsafe {
+            ffi::git_signature_free(signature);
+            ffi::git_rebase_free(rebase);
+            ffi::git_annotated_commit_free(upstream);
+            ffi::git_annotated_commit_free(branch);
+        }
+        observation
+    }
+
+    fn safe_plan(repository: *mut ffi::git_repository) -> RebaseObservation {
+        let branch_raw = unsafe { annotated(repository, c"HEAD") };
+        let upstream_raw = unsafe { annotated(repository, c"HEAD~2") };
+        let branch = unsafe { AnnotatedCommitRef::from_ptr(branch_raw) }.unwrap();
+        let upstream = unsafe { AnnotatedCommitRef::from_ptr(upstream_raw) }.unwrap();
+        let mut options = crate::api::rebase::GitRebaseOptions::new();
+        options.as_mut().set_inmemory(true);
+        let view = unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut rebase = git_rebase_init(
+            view,
+            Some(branch),
+            Some(upstream),
+            Some(upstream),
+            Some(options.as_ref()),
+        )
+        .unwrap();
+        let operations = (0..git_rebase_operation_entrycount(rebase.as_ref()))
+            .map(|index| {
+                git_rebase_operation_byindex(rebase.as_ref(), index)
+                    .unwrap()
+                    .id()
+                    .unwrap()
+                    .unwrap()
+                    .raw_bytes()
+                    .elems()
+                    .collect()
+            })
+            .collect();
+        let signature = crate::signature::git_signature_new(
+            c"Crustify",
+            c"crustify@example.com",
+            1_700_000_400,
+            0,
+        )
+        .unwrap();
+        let mut rewritten = Vec::new();
+        loop {
+            match git_rebase_next(&mut rebase.as_mut()) {
+                Ok(_) => {
+                    let mut id = git_rebase_commit(
+                        &mut rebase.as_mut(),
+                        None,
+                        signature.as_ref(),
+                        None,
+                        None,
+                    )
+                    .unwrap();
+                    let id =
+                        unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(id).cast()) }.unwrap();
+                    rewritten.push(id.raw_bytes().elems().collect());
+                }
+                Err(ffi::git_error_code_GIT_ITEROVER) => break,
+                Err(error) => panic!("safe rebase failed: {error}"),
+            }
+        }
+        let observation = RebaseObservation {
+            original_head: git_rebase_orig_head_id(rebase.as_ref())
+                .raw_bytes()
+                .elems()
+                .collect(),
+            onto: git_rebase_onto_id(rebase.as_ref())
+                .raw_bytes()
+                .elems()
+                .collect(),
+            operations,
+            rewritten,
+        };
+        git_rebase_finish(&mut rebase.as_mut(), Some(signature.as_ref())).unwrap();
+        drop(rebase);
+        unsafe {
+            ffi::git_annotated_commit_free(upstream_raw);
+            ffi::git_annotated_commit_free(branch_raw);
+        }
+        observation
+    }
+
+    #[test]
+    fn io_equiv_inmemory_rebase_plan_and_finish() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("rebase-raw");
+        let safe = HistoryFixture::new("rebase-safe");
+        let raw_plan = unsafe { raw_plan(raw.repository.as_ptr()) };
+        assert_eq!(raw_plan, safe_plan(safe.repository.as_ptr()));
+        assert_eq!(raw_plan.operations.len(), 2);
+        assert_eq!(raw_plan.rewritten.len(), 2);
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct OnDiskObservation {
+        entry_count: usize,
+        current_after_next: Option<usize>,
+        original_head_name: Option<Vec<u8>>,
+        onto_name: Option<Vec<u8>>,
+        state_while_open: ffi::git_repository_state_t,
+        state_after_abort: ffi::git_repository_state_t,
+    }
+
+    unsafe fn raw_open_and_abort(repository: *mut ffi::git_repository) -> OnDiskObservation {
+        let branch = unsafe { annotated(repository, c"HEAD") };
+        let upstream = unsafe { annotated(repository, c"HEAD~2") };
+        let mut rebase = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_rebase_init(
+                    &mut rebase,
+                    repository,
+                    branch,
+                    upstream,
+                    upstream,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let entry_count = unsafe { ffi::git_rebase_operation_entrycount(rebase) };
+        let bytes = |value: *const core::ffi::c_char| {
+            (!value.is_null()).then(|| unsafe { CStr::from_ptr(value) }.to_bytes().to_vec())
+        };
+        let original_head_name = bytes(unsafe { ffi::git_rebase_orig_head_name(rebase) });
+        let onto_name = bytes(unsafe { ffi::git_rebase_onto_name(rebase) });
+        let mut operation = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_rebase_next(&mut operation, rebase) }, 0);
+        let current = unsafe { ffi::git_rebase_operation_current(rebase) };
+        unsafe { ffi::git_rebase_free(rebase) };
+
+        let mut reopened = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_rebase_open(&mut reopened, repository, core::ptr::null()) },
+            0
+        );
+        let state_while_open = unsafe { ffi::git_repository_state(repository) } as _;
+        assert_eq!(unsafe { ffi::git_rebase_abort(reopened) }, 0);
+        unsafe {
+            ffi::git_rebase_free(reopened);
+            ffi::git_annotated_commit_free(upstream);
+            ffi::git_annotated_commit_free(branch);
+        }
+        OnDiskObservation {
+            entry_count,
+            current_after_next: (current != usize::MAX).then_some(current),
+            original_head_name,
+            onto_name,
+            state_while_open,
+            state_after_abort: unsafe { ffi::git_repository_state(repository) } as _,
+        }
+    }
+
+    fn safe_open_and_abort(repository: *mut ffi::git_repository) -> OnDiskObservation {
+        let branch_raw = unsafe { annotated(repository, c"HEAD") };
+        let upstream_raw = unsafe { annotated(repository, c"HEAD~2") };
+        let branch = unsafe { AnnotatedCommitRef::from_ptr(branch_raw) }.unwrap();
+        let upstream = unsafe { AnnotatedCommitRef::from_ptr(upstream_raw) }.unwrap();
+        let repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut rebase = git_rebase_init(
+            repository_view,
+            Some(branch),
+            Some(upstream),
+            Some(upstream),
+            None,
+        )
+        .unwrap();
+        let entry_count = git_rebase_operation_entrycount(rebase.as_ref());
+        let original_head_name =
+            git_rebase_orig_head_name(rebase.as_ref()).map(|value| value.to_bytes().to_vec());
+        let onto_name =
+            git_rebase_onto_name(rebase.as_ref()).map(|value| value.to_bytes().to_vec());
+        git_rebase_next(&mut rebase.as_mut()).unwrap();
+        let current_after_next = git_rebase_operation_current(rebase.as_ref());
+        drop(rebase);
+
+        let repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut reopened = git_rebase_open(repository_view, None).unwrap();
+        let state_while_open = unsafe { ffi::git_repository_state(repository) } as _;
+        git_rebase_abort(&mut reopened.as_mut()).unwrap();
+        drop(reopened);
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let state_after_abort = crate::repository::git_repository_state(&mut repository_view)
+            .unwrap()
+            .into();
+        unsafe {
+            ffi::git_annotated_commit_free(upstream_raw);
+            ffi::git_annotated_commit_free(branch_raw);
+        }
+        OnDiskObservation {
+            entry_count,
+            current_after_next,
+            original_head_name,
+            onto_name,
+            state_while_open,
+            state_after_abort,
+        }
+    }
+
+    #[test]
+    fn io_equiv_ondisk_rebase_can_be_reopened_and_aborted() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("rebase-disk-raw");
+        let safe = HistoryFixture::new("rebase-disk-safe");
+        let raw_observation = unsafe { raw_open_and_abort(raw.repository.as_ptr()) };
+        assert_eq!(
+            raw_observation,
+            safe_open_and_abort(safe.repository.as_ptr())
+        );
+        assert_eq!(raw_observation.current_after_next, Some(0));
+        assert_eq!(
+            raw_observation.state_after_abort,
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_NONE
+        );
+    }
+
+    unsafe fn raw_ondisk_finish(repository: *mut ffi::git_repository) -> Vec<Vec<u8>> {
+        let branch = unsafe { annotated(repository, c"HEAD") };
+        let upstream = unsafe { annotated(repository, c"HEAD~2") };
+        let mut rebase = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_rebase_init(
+                    &mut rebase,
+                    repository,
+                    branch,
+                    upstream,
+                    upstream,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let mut signature = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_signature_new(
+                    &mut signature,
+                    c"Crustify".as_ptr(),
+                    c"crustify@example.com".as_ptr(),
+                    1_700_000_400,
+                    0,
+                )
+            },
+            0
+        );
+        let mut rewritten = Vec::new();
+        loop {
+            let mut operation = core::ptr::null_mut();
+            match unsafe { ffi::git_rebase_next(&mut operation, rebase) } {
+                0 => {
+                    let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+                    assert_eq!(
+                        unsafe {
+                            ffi::git_rebase_commit(
+                                &mut id,
+                                rebase,
+                                core::ptr::null(),
+                                signature,
+                                core::ptr::null(),
+                                core::ptr::null(),
+                            )
+                        },
+                        0
+                    );
+                    rewritten.push(id.id.to_vec());
+                }
+                ffi::git_error_code_GIT_ITEROVER => break,
+                error => panic!("raw on-disk rebase failed: {error}"),
+            }
+        }
+        assert_eq!(unsafe { ffi::git_rebase_finish(rebase, signature) }, 0);
+        assert_eq!(
+            unsafe { ffi::git_repository_state(repository) } as ffi::git_repository_state_t,
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_NONE
+        );
+        unsafe {
+            ffi::git_signature_free(signature);
+            ffi::git_rebase_free(rebase);
+            ffi::git_annotated_commit_free(upstream);
+            ffi::git_annotated_commit_free(branch);
+        }
+        rewritten
+    }
+
+    fn safe_ondisk_finish(repository: *mut ffi::git_repository) -> Vec<Vec<u8>> {
+        let branch_raw = unsafe { annotated(repository, c"HEAD") };
+        let upstream_raw = unsafe { annotated(repository, c"HEAD~2") };
+        let branch = unsafe { AnnotatedCommitRef::from_ptr(branch_raw) }.unwrap();
+        let upstream = unsafe { AnnotatedCommitRef::from_ptr(upstream_raw) }.unwrap();
+        let repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut rebase = git_rebase_init(
+            repository_view,
+            Some(branch),
+            Some(upstream),
+            Some(upstream),
+            None,
+        )
+        .unwrap();
+        let signature = crate::signature::git_signature_new(
+            c"Crustify",
+            c"crustify@example.com",
+            1_700_000_400,
+            0,
+        )
+        .unwrap();
+        let mut rewritten = Vec::new();
+        loop {
+            match git_rebase_next(&mut rebase.as_mut()) {
+                Ok(_) => {
+                    let mut id = git_rebase_commit(
+                        &mut rebase.as_mut(),
+                        None,
+                        signature.as_ref(),
+                        None,
+                        None,
+                    )
+                    .unwrap();
+                    let id =
+                        unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(id).cast()) }.unwrap();
+                    rewritten.push(id.raw_bytes().elems().collect());
+                }
+                Err(ffi::git_error_code_GIT_ITEROVER) => break,
+                Err(error) => panic!("safe on-disk rebase failed: {error}"),
+            }
+        }
+        git_rebase_finish(&mut rebase.as_mut(), Some(signature.as_ref())).unwrap();
+        drop(rebase);
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        assert_eq!(
+            crate::repository::git_repository_state(&mut repository_view).unwrap(),
+            crate::api::repository::GitRepositoryState::None
+        );
+        unsafe {
+            ffi::git_annotated_commit_free(upstream_raw);
+            ffi::git_annotated_commit_free(branch_raw);
+        }
+        rewritten
+    }
+
+    #[test]
+    fn io_equiv_ondisk_rebase_rewrites_and_finishes() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("rebase-finish-raw");
+        let safe = HistoryFixture::new("rebase-finish-safe");
+        let raw_rewritten = unsafe { raw_ondisk_finish(raw.repository.as_ptr()) };
+        assert_eq!(raw_rewritten, safe_ondisk_finish(safe.repository.as_ptr()));
+        assert_eq!(raw_rewritten.len(), 2);
+    }
+
+    fn prepare_rebase_notes(fixture: &HistoryFixture) {
+        let run = |arguments: &[&str]| {
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(fixture.directory.path())
+                .args(arguments)
+                .env("GIT_AUTHOR_DATE", "1700000500 +0000")
+                .env("GIT_COMMITTER_DATE", "1700000500 +0000")
+                .stdout(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(status.success(), "git command failed: {arguments:?}");
+        };
+        run(&["config", "notes.rewrite.rebase", "true"]);
+        run(&["config", "notes.rewriteRef", "refs/notes/commits"]);
+        run(&[
+            "-c",
+            "user.name=Crustify",
+            "-c",
+            "user.email=crustify@example.com",
+            "notes",
+            "add",
+            "-m",
+            "note for the second revision",
+            "HEAD~1",
+        ]);
+        run(&[
+            "-c",
+            "user.name=Crustify",
+            "-c",
+            "user.email=crustify@example.com",
+            "notes",
+            "add",
+            "-m",
+            "note for the third revision",
+            "HEAD",
+        ]);
+    }
+
+    unsafe fn rewritten_notes(
+        repository: *mut ffi::git_repository,
+        ids: &[Vec<u8>],
+    ) -> Vec<Vec<u8>> {
+        ids.iter()
+            .map(|bytes| {
+                let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+                id.id.copy_from_slice(bytes);
+                id.type_ = ffi::git_oid_t_GIT_OID_SHA1 as u8;
+                let mut note = core::ptr::null_mut();
+                assert_eq!(
+                    unsafe {
+                        ffi::git_note_read(
+                            &mut note,
+                            repository,
+                            c"refs/notes/commits".as_ptr(),
+                            &id,
+                        )
+                    },
+                    0
+                );
+                let message = unsafe { CStr::from_ptr(ffi::git_note_message(note)) }
+                    .to_bytes()
+                    .to_vec();
+                unsafe { ffi::git_note_free(note) };
+                message
+            })
+            .collect()
+    }
+
+    #[test]
+    fn io_equiv_ondisk_rebase_copies_rewrite_notes() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("rebase-notes-raw");
+        let safe = HistoryFixture::new("rebase-notes-safe");
+        prepare_rebase_notes(&raw);
+        prepare_rebase_notes(&safe);
+        let raw_ids = unsafe { raw_ondisk_finish(raw.repository.as_ptr()) };
+        let safe_ids = safe_ondisk_finish(safe.repository.as_ptr());
+        assert_eq!(raw_ids, safe_ids);
+        let raw_notes = unsafe { rewritten_notes(raw.repository.as_ptr(), &raw_ids) };
+        let safe_notes = unsafe { rewritten_notes(safe.repository.as_ptr(), &safe_ids) };
+        assert_eq!(raw_notes, safe_notes);
+        assert_eq!(raw_notes.len(), 2);
+    }
+}

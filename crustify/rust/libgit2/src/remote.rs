@@ -2064,3 +2064,1928 @@ pub fn git_remote_upload(
     };
     if status == 0 { Ok(()) } else { Err(status) }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{
+        HistoryFixture, Libgit2Init, RawRepository, TempDir, safe_buf_bytes,
+    };
+
+    fn file_url(path: &std::path::Path) -> std::ffi::CString {
+        std::ffi::CString::new(format!("file://{}", path.to_str().unwrap())).unwrap()
+    }
+
+    unsafe fn raw_send(remote: *mut ffi::git_remote, spec: &CStr, upload: bool) {
+        let mut value = spec.as_ptr().cast_mut();
+        let refspecs = ffi::git_strarray {
+            strings: &mut value,
+            count: 1,
+        };
+        let status = if upload {
+            unsafe { ffi::git_remote_upload(remote, &refspecs, core::ptr::null()) }
+        } else {
+            unsafe { ffi::git_remote_push(remote, &refspecs, core::ptr::null()) }
+        };
+        assert_eq!(status, 0);
+    }
+
+    fn safe_send(remote: &mut GitRemoteMut<'_>, spec: &CStr, upload: bool) {
+        let mut value = spec.as_ptr().cast_mut();
+        let mut raw_refspecs = ffi::git_strarray {
+            strings: &mut value,
+            count: 1,
+        };
+        let refspecs = unsafe { GitStrArrayRef::from_ptr(&raw mut raw_refspecs) }.unwrap();
+        if upload {
+            git_remote_upload(remote, Some(refspecs), None).unwrap();
+        } else {
+            git_remote_push(remote, Some(refspecs), None).unwrap();
+        }
+    }
+
+    unsafe fn raw_push(source: *mut ffi::git_repository, destination: &core::ffi::CStr) {
+        let mut remote = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_create(&mut remote, source, c"sink".as_ptr(), destination.as_ptr())
+            },
+            0
+        );
+        unsafe { raw_send(remote, c"refs/heads/master:refs/heads/copied", false) };
+        unsafe { raw_send(remote, c":refs/heads/copied", false) };
+        unsafe { raw_send(remote, c"+refs/heads/master:refs/heads/copied", true) };
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_update_tips(
+                    remote,
+                    core::ptr::null(),
+                    0,
+                    ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_UNSPECIFIED,
+                    c"upload update".as_ptr(),
+                )
+            },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_remote_disconnect(remote) }, 0);
+        unsafe { ffi::git_remote_free(remote) };
+    }
+
+    fn safe_push(
+        source: &mut crate::repository::GitRepositoryMut<'_>,
+        destination: &core::ffi::CStr,
+    ) {
+        let mut remote = git_remote_create(source, c"sink", destination).unwrap();
+        safe_send(
+            &mut remote.as_mut(),
+            c"refs/heads/master:refs/heads/copied",
+            false,
+        );
+        safe_send(&mut remote.as_mut(), c":refs/heads/copied", false);
+        safe_send(
+            &mut remote.as_mut(),
+            c"+refs/heads/master:refs/heads/copied",
+            true,
+        );
+        git_remote_update_tips(
+            &mut remote.as_mut(),
+            None,
+            GitRemoteUpdateFlags::EMPTY,
+            GitRemoteAutotagOption::Unspecified,
+            Some(c"upload update"),
+        )
+        .unwrap();
+        git_remote_disconnect(&mut remote.as_mut()).unwrap();
+    }
+
+    unsafe fn destination_observation(repository: *mut ffi::git_repository) -> (Vec<u8>, usize) {
+        let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(&mut id, repository, c"refs/heads/copied".as_ptr())
+            },
+            0
+        );
+        let mut odb = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_repository_odb(&mut odb, repository) }, 0);
+        unsafe extern "C" fn count(
+            _id: *const ffi::git_oid,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            unsafe { *payload.cast::<usize>() += 1 };
+            0
+        }
+        let mut objects = 0usize;
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_foreach(odb, Some(count), core::ptr::from_mut(&mut objects).cast())
+            },
+            0
+        );
+        unsafe { ffi::git_odb_free(odb) };
+        (id.id.to_vec(), objects)
+    }
+
+    #[test]
+    fn io_equiv_local_transport_push() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw_source = HistoryFixture::new("push-source-raw");
+        let safe_source = HistoryFixture::new("push-source-safe");
+        let raw_directory = TempDir::new("push-target-raw");
+        let safe_directory = TempDir::new("push-target-safe");
+        let raw_path = raw_directory.c_path();
+        let safe_path = safe_directory.c_path();
+        let raw_target = RawRepository::init(&raw_path, true).unwrap();
+        let safe_target = RawRepository::init(&safe_path, true).unwrap();
+        let raw_url = file_url(raw_directory.path());
+        let safe_url = file_url(safe_directory.path());
+
+        unsafe { raw_push(raw_source.repository.as_ptr(), &raw_url) };
+        let mut safe_repository = unsafe {
+            crate::repository::GitRepositoryMut::from_ptr(safe_source.repository.as_ptr())
+        }
+        .unwrap();
+        safe_push(&mut safe_repository, &safe_url);
+
+        let raw_observation = unsafe { destination_observation(raw_target.as_ptr()) };
+        let safe_observation = unsafe { destination_observation(safe_target.as_ptr()) };
+        assert_eq!(raw_observation, safe_observation);
+        assert!(raw_observation.1 >= 10);
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct FetchObservation {
+        remotes: usize,
+        rename_status: i32,
+        fetch_refspecs: usize,
+        push_refspecs: usize,
+        refspec_count: usize,
+        name: Vec<u8>,
+        url: Vec<u8>,
+        pushurl: Vec<u8>,
+        default_branch: Vec<u8>,
+        advertised_heads: usize,
+        received_objects: u32,
+        fetched_id: Vec<u8>,
+        connected_after_disconnect: bool,
+        tracking_ref_renamed: bool,
+    }
+
+    unsafe fn raw_fetch_management(
+        repository: *mut ffi::git_repository,
+        url: &core::ffi::CStr,
+    ) -> FetchObservation {
+        let mut remote = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_create_with_fetchspec(
+                    &mut remote,
+                    repository,
+                    c"origin".as_ptr(),
+                    url.as_ptr(),
+                    c"+refs/heads/*:refs/remotes/origin/*".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_remote_free(remote) };
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_add_fetch(
+                    repository,
+                    c"origin".as_ptr(),
+                    c"+refs/tags/*:refs/tags/*".as_ptr(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_add_push(
+                    repository,
+                    c"origin".as_ptr(),
+                    c"refs/heads/master:refs/heads/mirror".as_ptr(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_remote_set_pushurl(repository, c"origin".as_ptr(), url.as_ptr(),) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_set_autotag(
+                    repository,
+                    c"origin".as_ptr(),
+                    ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_ALL,
+                )
+            },
+            0
+        );
+        remote = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_remote_lookup(&mut remote, repository, c"origin".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_fetch(
+                    remote,
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    c"pre-rename fetch".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_remote_free(remote) };
+        remote = core::ptr::null_mut();
+        let mut problems = unsafe { core::mem::zeroed::<ffi::git_strarray>() };
+        let rename_status = unsafe {
+            ffi::git_remote_rename(
+                &mut problems,
+                repository,
+                c"origin".as_ptr(),
+                c"upstream".as_ptr(),
+            )
+        };
+        unsafe { ffi::git_strarray_dispose(&mut problems) };
+        let mut tracking = core::ptr::null_mut();
+        let tracking_ref_renamed = unsafe {
+            ffi::git_reference_lookup(
+                &mut tracking,
+                repository,
+                c"refs/remotes/upstream/master".as_ptr(),
+            ) == 0
+        };
+        if !tracking.is_null() {
+            unsafe { ffi::git_reference_free(tracking) };
+        }
+        let mut remotes = unsafe { core::mem::zeroed::<ffi::git_strarray>() };
+        assert_eq!(unsafe { ffi::git_remote_list(&mut remotes, repository) }, 0);
+        let remote_count = remotes.count;
+        unsafe { ffi::git_strarray_dispose(&mut remotes) };
+
+        assert_eq!(
+            unsafe { ffi::git_remote_lookup(&mut remote, repository, c"upstream".as_ptr()) },
+            0
+        );
+        let mut fetch = unsafe { core::mem::zeroed::<ffi::git_strarray>() };
+        let mut push = unsafe { core::mem::zeroed::<ffi::git_strarray>() };
+        assert_eq!(
+            unsafe { ffi::git_remote_get_fetch_refspecs(&mut fetch, remote) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_remote_get_push_refspecs(&mut push, remote) },
+            0
+        );
+        let fetch_refspecs = fetch.count;
+        let push_refspecs = push.count;
+        unsafe {
+            ffi::git_strarray_dispose(&mut fetch);
+            ffi::git_strarray_dispose(&mut push);
+        }
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_fetch(
+                    remote,
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    c"equivalence fetch".as_ptr(),
+                )
+            },
+            0
+        );
+        let stats = unsafe { ffi::git_remote_stats(remote) };
+        let received_objects = unsafe { (*stats).received_objects };
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_connect(
+                    remote,
+                    ffi::git_direction_GIT_DIRECTION_FETCH,
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let mut heads = core::ptr::null_mut();
+        let mut advertised_heads = 0;
+        assert_eq!(
+            unsafe { ffi::git_remote_ls(&mut heads, &mut advertised_heads, remote) },
+            0
+        );
+        let mut default_branch = unsafe { core::mem::zeroed::<ffi::git_buf>() };
+        assert_eq!(
+            unsafe { ffi::git_remote_default_branch(&mut default_branch, remote) },
+            0
+        );
+        let default_branch_bytes = unsafe {
+            core::slice::from_raw_parts(default_branch.ptr.cast::<u8>(), default_branch.size)
+                .to_vec()
+        };
+        unsafe { ffi::git_buf_dispose(&mut default_branch) };
+        assert_eq!(unsafe { ffi::git_remote_disconnect(remote) }, 0);
+        let connected_after_disconnect = unsafe { ffi::git_remote_connected(remote) != 0 };
+        let name = unsafe { core::ffi::CStr::from_ptr(ffi::git_remote_name(remote)) }
+            .to_bytes()
+            .to_vec();
+        let remote_url = unsafe { core::ffi::CStr::from_ptr(ffi::git_remote_url(remote)) }
+            .to_bytes()
+            .to_vec();
+        let pushurl = unsafe { core::ffi::CStr::from_ptr(ffi::git_remote_pushurl(remote)) }
+            .to_bytes()
+            .to_vec();
+        let refspec_count = unsafe { ffi::git_remote_refspec_count(remote) };
+        assert!(!unsafe { ffi::git_remote_get_refspec(remote, 0) }.is_null());
+        let mut fetched = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(
+                    &mut fetched,
+                    repository,
+                    c"refs/remotes/upstream/master".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_remote_free(remote) };
+        FetchObservation {
+            remotes: remote_count,
+            rename_status,
+            fetch_refspecs,
+            push_refspecs,
+            refspec_count,
+            name,
+            url: remote_url,
+            pushurl,
+            default_branch: default_branch_bytes,
+            advertised_heads,
+            received_objects,
+            fetched_id: fetched.id.to_vec(),
+            connected_after_disconnect,
+            tracking_ref_renamed,
+        }
+    }
+
+    fn safe_fetch_management(
+        repository: *mut ffi::git_repository,
+        url: &core::ffi::CStr,
+    ) -> FetchObservation {
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        drop(
+            git_remote_create_with_fetchspec(
+                &mut repository_view,
+                c"origin",
+                url,
+                Some(c"+refs/heads/*:refs/remotes/origin/*"),
+            )
+            .unwrap(),
+        );
+        git_remote_add_fetch(&mut repository_view, c"origin", c"+refs/tags/*:refs/tags/*").unwrap();
+        git_remote_add_push(
+            &mut repository_view,
+            c"origin",
+            c"refs/heads/master:refs/heads/mirror",
+        )
+        .unwrap();
+        git_remote_set_pushurl(&mut repository_view, c"origin", Some(url)).unwrap();
+        git_remote_set_autotag(&mut repository_view, c"origin", GitRemoteAutotagOption::All)
+            .unwrap();
+        let mut before_rename = git_remote_lookup(&mut repository_view, c"origin").unwrap();
+        git_remote_fetch(
+            &mut before_rename.as_mut(),
+            None,
+            None,
+            Some(c"pre-rename fetch"),
+        )
+        .unwrap();
+        drop(before_rename);
+        let rename_status = match git_remote_rename(&mut repository_view, c"origin", c"upstream") {
+            Ok(_) => 0,
+            Err(error) => error,
+        };
+        let mut tracking = core::ptr::null_mut();
+        let tracking_ref_renamed = unsafe {
+            ffi::git_reference_lookup(
+                &mut tracking,
+                repository,
+                c"refs/remotes/upstream/master".as_ptr(),
+            ) == 0
+        };
+        if !tracking.is_null() {
+            unsafe { ffi::git_reference_free(tracking) };
+        }
+        let remotes = git_remote_list(&mut repository_view)
+            .unwrap()
+            .as_ref()
+            .count();
+        let mut remote = git_remote_lookup(&mut repository_view, c"upstream").unwrap();
+        let fetch_refspecs = git_remote_get_fetch_refspecs(remote.as_ref())
+            .unwrap()
+            .as_ref()
+            .count();
+        let push_refspecs = git_remote_get_push_refspecs(remote.as_ref())
+            .unwrap()
+            .as_ref()
+            .count();
+        git_remote_fetch(&mut remote.as_mut(), None, None, Some(c"equivalence fetch")).unwrap();
+        let received_objects = git_remote_stats(remote.as_ref()).received_objects();
+        git_remote_connect(
+            &mut remote.as_mut(),
+            crate::util::net::Direction::Fetch,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let advertised_heads = git_remote_ls(&mut remote.as_mut()).unwrap().len();
+        let mut default_branch = crate::api::buffer::GitBuf::new();
+        git_remote_default_branch(&mut default_branch.as_mut(), &mut remote.as_mut()).unwrap();
+        let default_branch = safe_buf_bytes(default_branch.as_ref());
+        git_remote_disconnect(&mut remote.as_mut()).unwrap();
+        let connected_after_disconnect = git_remote_connected(remote.as_ref());
+        let name = git_remote_name(remote.as_ref())
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        let remote_url = git_remote_url(remote.as_ref()).unwrap().to_bytes().to_vec();
+        let pushurl = git_remote_pushurl(remote.as_ref())
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        let refspec_count = git_remote_refspec_count(remote.as_ref());
+        assert!(git_remote_get_refspec(remote.as_ref(), 0).is_some());
+        let mut fetched = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(
+                    &mut fetched,
+                    repository,
+                    c"refs/remotes/upstream/master".as_ptr(),
+                )
+            },
+            0
+        );
+        FetchObservation {
+            remotes,
+            rename_status,
+            fetch_refspecs,
+            push_refspecs,
+            refspec_count,
+            name,
+            url: remote_url,
+            pushurl,
+            default_branch,
+            advertised_heads,
+            received_objects,
+            fetched_id: fetched.id.to_vec(),
+            connected_after_disconnect,
+            tracking_ref_renamed,
+        }
+    }
+
+    #[test]
+    fn io_equiv_remote_configuration_fetch_and_advertisement_lifecycle() {
+        let _libgit2 = Libgit2Init::acquire();
+        let source = HistoryFixture::new("remote-fetch-source");
+        let raw_directory = TempDir::new("remote-fetch-raw");
+        let safe_directory = TempDir::new("remote-fetch-safe");
+        let raw_path = raw_directory.c_path();
+        let safe_path = safe_directory.c_path();
+        let raw_target = RawRepository::init(&raw_path, true).unwrap();
+        let safe_target = RawRepository::init(&safe_path, true).unwrap();
+        let url = file_url(source.directory.path());
+        let raw = unsafe { raw_fetch_management(raw_target.as_ptr(), &url) };
+        assert_eq!(raw, safe_fetch_management(safe_target.as_ptr(), &url));
+        assert_eq!(raw.remotes, 1);
+        assert!(!raw.connected_after_disconnect);
+        assert!(raw.advertised_heads >= 2);
+    }
+
+    struct SmartHttpServer {
+        url: std::ffi::CString,
+        stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        thread: Option<std::thread::JoinHandle<()>>,
+    }
+
+    impl Drop for SmartHttpServer {
+        fn drop(&mut self) {
+            self.stop.store(true, std::sync::atomic::Ordering::Release);
+            if let Some(thread) = self.thread.take() {
+                thread.join().unwrap();
+            }
+        }
+    }
+
+    fn decode_chunked_request(bytes: &[u8]) -> Option<Vec<u8>> {
+        let mut position = 0;
+        let mut decoded = Vec::new();
+        loop {
+            let line_end = bytes[position..]
+                .windows(2)
+                .position(|window| window == b"\r\n")?
+                + position;
+            let size = std::str::from_utf8(&bytes[position..line_end])
+                .ok()?
+                .split(';')
+                .next()
+                .and_then(|value| usize::from_str_radix(value.trim(), 16).ok())?;
+            position = line_end + 2;
+            if size == 0 {
+                return Some(decoded);
+            }
+            if bytes.len() < position + size + 2 {
+                return None;
+            }
+            decoded.extend_from_slice(&bytes[position..position + size]);
+            position += size;
+            if &bytes[position..position + 2] != b"\r\n" {
+                return None;
+            }
+            position += 2;
+        }
+    }
+
+    fn smart_http_server(source: &HistoryFixture) -> SmartHttpServer {
+        smart_http_server_framed(source, false)
+    }
+
+    fn smart_http_server_framed(source: &HistoryFixture, chunked: bool) -> SmartHttpServer {
+        use std::io::{Read, Write};
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let project_root = source.directory.path().parent().unwrap().to_owned();
+        let project = source.directory.path().file_name().unwrap().to_owned();
+        let url = std::ffi::CString::new(format!(
+            "http://127.0.0.1:{port}/{}",
+            project.to_str().unwrap()
+        ))
+        .unwrap();
+        let stop = std::sync::Arc::new(AtomicBool::new(false));
+        let thread_stop = stop.clone();
+        let thread = std::thread::spawn(move || {
+            while !thread_stop.load(Ordering::Acquire) {
+                let (mut stream, _) = match listener.accept() {
+                    Ok(value) => value,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(2));
+                        continue;
+                    }
+                    Err(error) => panic!("smart HTTP accept failed: {error}"),
+                };
+                stream
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0u8; 8192];
+                let header_end = loop {
+                    let read = stream.read(&mut buffer).unwrap();
+                    assert_ne!(read, 0, "HTTP request ended before its headers");
+                    request.extend_from_slice(&buffer[..read]);
+                    if let Some(position) = request.windows(4).position(|part| part == b"\r\n\r\n")
+                    {
+                        break position + 4;
+                    }
+                };
+                let headers = String::from_utf8_lossy(&request[..header_end]);
+                let mut lines = headers.lines();
+                let request_line = lines.next().unwrap();
+                let mut request_parts = request_line.split_whitespace();
+                let method = request_parts.next().unwrap().to_owned();
+                let target = request_parts.next().unwrap().to_owned();
+                let declared_content_length = lines
+                    .clone()
+                    .find_map(|line| {
+                        line.strip_prefix("Content-Length: ")
+                            .or_else(|| line.strip_prefix("content-length: "))
+                    })
+                    .map_or(0, |value| value.trim().parse::<usize>().unwrap());
+                let content_type = lines
+                    .find_map(|line| {
+                        line.strip_prefix("Content-Type: ")
+                            .or_else(|| line.strip_prefix("content-type: "))
+                    })
+                    .map(str::trim)
+                    .unwrap_or("")
+                    .to_owned();
+                let request_is_chunked = headers
+                    .lines()
+                    .any(|line| line.eq_ignore_ascii_case("Transfer-Encoding: chunked"));
+                let request_body = if request_is_chunked {
+                    loop {
+                        if let Some(decoded) = decode_chunked_request(&request[header_end..]) {
+                            break decoded;
+                        }
+                        let read = stream.read(&mut buffer).unwrap();
+                        assert_ne!(read, 0, "chunked HTTP request body ended early");
+                        request.extend_from_slice(&buffer[..read]);
+                    }
+                } else {
+                    while request.len() < header_end + declared_content_length {
+                        let read = stream.read(&mut buffer).unwrap();
+                        assert_ne!(read, 0, "HTTP request body ended early");
+                        request.extend_from_slice(&buffer[..read]);
+                    }
+                    request[header_end..header_end + declared_content_length].to_vec()
+                };
+                let content_length = request_body.len();
+                let (path, query) = target
+                    .split_once('?')
+                    .map_or((target.as_str(), ""), |(path, query)| (path, query));
+                let mut child = std::process::Command::new("git")
+                    .arg("http-backend")
+                    .env("GIT_PROJECT_ROOT", &project_root)
+                    .env("GIT_HTTP_EXPORT_ALL", "1")
+                    .env("PATH_INFO", path)
+                    .env("QUERY_STRING", query)
+                    .env("REQUEST_METHOD", &method)
+                    .env("CONTENT_TYPE", &content_type)
+                    .env("CONTENT_LENGTH", content_length.to_string())
+                    .stdin(std::process::Stdio::piped())
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .unwrap();
+                child
+                    .stdin
+                    .as_mut()
+                    .unwrap()
+                    .write_all(&request_body)
+                    .unwrap();
+                let output = child.wait_with_output().unwrap();
+                assert!(
+                    output.status.success(),
+                    "git http-backend failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                let split = output
+                    .stdout
+                    .windows(4)
+                    .position(|part| part == b"\r\n\r\n")
+                    .expect("CGI response separates headers from its body");
+                let body = &output.stdout[split + 4..];
+                stream.write_all(b"HTTP/1.1 200 OK\r\n").unwrap();
+                stream.write_all(&output.stdout[..split]).unwrap();
+                if chunked {
+                    stream
+                        .write_all(b"\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
+                        .unwrap();
+                    for chunk in body.chunks(97) {
+                        write!(stream, "{:x}\r\n", chunk.len()).unwrap();
+                        stream.write_all(chunk).unwrap();
+                        stream.write_all(b"\r\n").unwrap();
+                    }
+                    stream
+                        .write_all(b"0\r\nX-Equivalence: complete\r\n\r\n")
+                        .unwrap();
+                } else {
+                    write!(
+                        stream,
+                        "\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    )
+                    .unwrap();
+                    stream.write_all(body).unwrap();
+                }
+                stream.flush().unwrap();
+            }
+        });
+        SmartHttpServer {
+            url,
+            stop,
+            thread: Some(thread),
+        }
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct HttpFetchObservation {
+        fetched_id: Vec<u8>,
+        total_objects: u32,
+        received_objects: u32,
+        indexed_objects: u32,
+        received_bytes_nonzero: bool,
+        shallow: bool,
+    }
+
+    unsafe fn raw_http_fetch(
+        repository: *mut ffi::git_repository,
+        url: &core::ffi::CStr,
+        depth: Option<i32>,
+    ) -> HttpFetchObservation {
+        let mut remote = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_create(&mut remote, repository, c"origin".as_ptr(), url.as_ptr())
+            },
+            0
+        );
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_fetch_options>() };
+        let options = if let Some(depth) = depth {
+            assert_eq!(
+                unsafe {
+                    ffi::git_fetch_options_init(&mut options, ffi::GIT_FETCH_OPTIONS_VERSION)
+                },
+                0
+            );
+            options.depth = depth;
+            options.download_tags = ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_ALL;
+            &options
+        } else {
+            core::ptr::null()
+        };
+        let status = unsafe {
+            ffi::git_remote_fetch(
+                remote,
+                core::ptr::null(),
+                options,
+                c"smart HTTP equivalence".as_ptr(),
+            )
+        };
+        if status != 0 {
+            let error = unsafe { ffi::git_error_last() };
+            let message = if error.is_null() || unsafe { (*error).message }.is_null() {
+                "unknown".into()
+            } else {
+                unsafe { core::ffi::CStr::from_ptr((*error).message) }
+                    .to_string_lossy()
+                    .into_owned()
+            };
+            panic!("smart HTTP raw fetch failed ({status}): {message}");
+        }
+        let stats = unsafe { *ffi::git_remote_stats(remote) };
+        let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(
+                    &mut id,
+                    repository,
+                    c"refs/remotes/origin/master".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_remote_free(remote) };
+        HttpFetchObservation {
+            fetched_id: id.id.to_vec(),
+            total_objects: stats.total_objects,
+            received_objects: stats.received_objects,
+            indexed_objects: stats.indexed_objects,
+            received_bytes_nonzero: stats.received_bytes > 0,
+            shallow: unsafe { ffi::git_repository_is_shallow(repository) } != 0,
+        }
+    }
+
+    fn safe_http_fetch(
+        repository: *mut ffi::git_repository,
+        url: &core::ffi::CStr,
+        depth: Option<i32>,
+    ) -> HttpFetchObservation {
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut remote = git_remote_create(&mut repository_view, c"origin", url).unwrap();
+        let mut options = crate::api::remote::GitFetchOptions::new();
+        if let Some(depth) = depth {
+            options
+                .as_mut()
+                .set_depth(crate::api::remote::GitFetchDepth::new(depth as _).unwrap());
+            options
+                .as_mut()
+                .set_download_tags(GitRemoteAutotagOption::All);
+        }
+        git_remote_fetch(
+            &mut remote.as_mut(),
+            None,
+            depth.map(|_| options.as_ref()),
+            Some(c"smart HTTP equivalence"),
+        )
+        .unwrap();
+        let stats = git_remote_stats(remote.as_ref());
+        let observation = HttpFetchObservation {
+            fetched_id: {
+                let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+                assert_eq!(
+                    unsafe {
+                        ffi::git_reference_name_to_id(
+                            &mut id,
+                            repository,
+                            c"refs/remotes/origin/master".as_ptr(),
+                        )
+                    },
+                    0
+                );
+                id.id.to_vec()
+            },
+            total_objects: stats.total_objects(),
+            received_objects: stats.received_objects(),
+            indexed_objects: stats.indexed_objects(),
+            received_bytes_nonzero: stats.received_bytes() > 0,
+            shallow: unsafe { ffi::git_repository_is_shallow(repository) } != 0,
+        };
+        observation
+    }
+
+    #[test]
+    fn io_equiv_smart_http_fetch_downloads_pack_and_updates_refs() {
+        let _libgit2 = Libgit2Init::acquire();
+        let source = HistoryFixture::new("smart-http-source");
+        let server = smart_http_server(&source);
+        let raw_directory = TempDir::new("smart-http-raw");
+        let safe_directory = TempDir::new("smart-http-safe");
+        let raw_target = RawRepository::init(&raw_directory.c_path(), true).unwrap();
+        let safe_target = RawRepository::init(&safe_directory.c_path(), true).unwrap();
+        let raw = unsafe { raw_http_fetch(raw_target.as_ptr(), &server.url, None) };
+        assert_eq!(
+            raw,
+            safe_http_fetch(safe_target.as_ptr(), &server.url, None)
+        );
+        assert!(raw.received_objects >= 10);
+        assert!(!raw.shallow);
+    }
+
+    #[test]
+    fn io_equiv_smart_http_chunked_advertisement_and_pack_responses() {
+        let _libgit2 = Libgit2Init::acquire();
+        let source = HistoryFixture::new("smart-http-chunked-source");
+        let server = smart_http_server_framed(&source, true);
+        let raw_directory = TempDir::new("smart-http-chunked-raw");
+        let safe_directory = TempDir::new("smart-http-chunked-safe");
+        let raw_target = RawRepository::init(&raw_directory.c_path(), true).unwrap();
+        let safe_target = RawRepository::init(&safe_directory.c_path(), true).unwrap();
+        let raw = unsafe { raw_http_fetch(raw_target.as_ptr(), &server.url, None) };
+        assert_eq!(
+            raw,
+            safe_http_fetch(safe_target.as_ptr(), &server.url, None)
+        );
+        assert!(raw.total_objects > 0);
+    }
+
+    fn expand_http_history(fixture: &HistoryFixture) {
+        for revision in 0..16 {
+            std::fs::write(
+                fixture.directory.path().join("http-history.txt"),
+                format!("smart HTTP revision {revision}\n").repeat(128),
+            )
+            .unwrap();
+            let add = std::process::Command::new("git")
+                .arg("-C")
+                .arg(fixture.directory.path())
+                .args(["add", "http-history.txt"])
+                .status()
+                .unwrap();
+            assert!(add.success());
+            let commit = std::process::Command::new("git")
+                .arg("-C")
+                .arg(fixture.directory.path())
+                .args([
+                    "-c",
+                    "user.name=Crustify",
+                    "-c",
+                    "user.email=crustify@example.com",
+                    "commit",
+                    "-q",
+                    "-m",
+                    &format!("http revision {revision}"),
+                ])
+                .env("GIT_AUTHOR_DATE", format!("1700004{revision:03} +0000"))
+                .env("GIT_COMMITTER_DATE", format!("1700004{revision:03} +0000"))
+                .status()
+                .unwrap();
+            assert!(commit.success());
+        }
+    }
+
+    unsafe fn raw_http_unshallow(repository: *mut ffi::git_repository) -> bool {
+        let mut remote = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_remote_lookup(&mut remote, repository, c"origin".as_ptr()) },
+            0
+        );
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_fetch_options>() };
+        assert_eq!(
+            unsafe { ffi::git_fetch_options_init(&mut options, ffi::GIT_FETCH_OPTIONS_VERSION) },
+            0
+        );
+        options.depth = ffi::git_fetch_depth_t_GIT_FETCH_DEPTH_UNSHALLOW as i32;
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_fetch(
+                    remote,
+                    core::ptr::null(),
+                    &options,
+                    c"smart HTTP unshallow".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_remote_free(remote) };
+        unsafe { ffi::git_repository_is_shallow(repository) != 0 }
+    }
+
+    fn safe_http_unshallow(repository: *mut ffi::git_repository) -> bool {
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut remote = git_remote_lookup(&mut repository_view, c"origin").unwrap();
+        let mut options = crate::api::remote::GitFetchOptions::new();
+        options
+            .as_mut()
+            .set_depth(crate::api::remote::GitFetchDepth::UNSHALLOW);
+        git_remote_fetch(
+            &mut remote.as_mut(),
+            None,
+            Some(options.as_ref()),
+            Some(c"smart HTTP unshallow"),
+        )
+        .unwrap();
+        unsafe { ffi::git_repository_is_shallow(repository) != 0 }
+    }
+
+    #[test]
+    fn io_equiv_smart_http_shallow_fetch_limits_history() {
+        let _libgit2 = Libgit2Init::acquire();
+        let source = HistoryFixture::new("smart-http-shallow-source");
+        expand_http_history(&source);
+        let server = smart_http_server(&source);
+        let raw_directory = TempDir::new("smart-http-shallow-raw");
+        let safe_directory = TempDir::new("smart-http-shallow-safe");
+        let raw_target = RawRepository::init(&raw_directory.c_path(), true).unwrap();
+        let safe_target = RawRepository::init(&safe_directory.c_path(), true).unwrap();
+        let raw = unsafe { raw_http_fetch(raw_target.as_ptr(), &server.url, Some(4)) };
+        assert_eq!(
+            raw,
+            safe_http_fetch(safe_target.as_ptr(), &server.url, Some(4))
+        );
+        assert!(raw.shallow);
+        let raw_shallow = unsafe { raw_http_unshallow(raw_target.as_ptr()) };
+        assert_eq!(raw_shallow, safe_http_unshallow(safe_target.as_ptr()));
+        assert!(!raw_shallow);
+    }
+
+    fn unauthorized_server() -> (std::ffi::CString, std::thread::JoinHandle<Vec<u8>>) {
+        let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let handle = std::thread::spawn(move || {
+            use std::io::{Read, Write};
+
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 1024];
+            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                let read = stream.read(&mut buffer).unwrap();
+                if read == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buffer[..read]);
+            }
+            stream
+                .write_all(
+                    b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\nWWW-Authenticate: Basic realm=\"equivalence\"\r\n\r\n",
+                )
+                .unwrap();
+            request
+        });
+        (
+            std::ffi::CString::new(format!("http://{address}/repo.git")).unwrap(),
+            handle,
+        )
+    }
+
+    fn redirect_server(
+        destination: &CStr,
+    ) -> (std::ffi::CString, std::thread::JoinHandle<Vec<Vec<u8>>>) {
+        let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let destination = destination.to_string_lossy().into_owned();
+        let handle = std::thread::spawn(move || {
+            use std::io::{Read, Write};
+
+            let mut requests = Vec::new();
+            for _ in 0..2 {
+                let (mut stream, _) = listener.accept().unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0u8; 1024];
+                while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                    let read = stream.read(&mut buffer).unwrap();
+                    if read == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buffer[..read]);
+                }
+                let line = String::from_utf8_lossy(&request);
+                let target = line
+                    .lines()
+                    .next()
+                    .and_then(|line| line.split_whitespace().nth(1))
+                    .unwrap();
+                let suffix = target.strip_prefix("/alias.git").unwrap();
+                write!(
+                    stream,
+                    "HTTP/1.1 307 Temporary Redirect\r\nLocation: {destination}{suffix}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                )
+                .unwrap();
+                requests.push(request);
+            }
+            requests
+        });
+        (
+            std::ffi::CString::new(format!("http://{address}/alias.git")).unwrap(),
+            handle,
+        )
+    }
+
+    unsafe fn raw_http_failure(url: &core::ffi::CStr) -> i32 {
+        let mut remote = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_remote_create_detached(&mut remote, url.as_ptr()) },
+            0
+        );
+        let status = unsafe {
+            ffi::git_remote_connect(
+                remote,
+                ffi::git_direction_GIT_DIRECTION_FETCH,
+                core::ptr::null(),
+                core::ptr::null(),
+                core::ptr::null(),
+            )
+        };
+        unsafe { ffi::git_remote_free(remote) };
+        status
+    }
+
+    fn safe_http_failure(url: &core::ffi::CStr) -> i32 {
+        let mut remote = git_remote_create_detached(url).unwrap();
+        git_remote_connect(
+            &mut remote.as_mut(),
+            crate::util::net::Direction::Fetch,
+            None,
+            None,
+            None,
+        )
+        .unwrap_err()
+    }
+
+    #[test]
+    fn io_equiv_http_authentication_failure_and_request() {
+        let _libgit2 = Libgit2Init::acquire();
+        let (raw_url, raw_server) = unauthorized_server();
+        let raw_status = unsafe { raw_http_failure(&raw_url) };
+        let raw_request = raw_server.join().unwrap();
+        let (safe_url, safe_server) = unauthorized_server();
+        let safe_status = safe_http_failure(&safe_url);
+        let safe_request = safe_server.join().unwrap();
+
+        assert_eq!(raw_status, safe_status);
+        let normalize = |request: &[u8]| {
+            let request = String::from_utf8_lossy(request);
+            request
+                .lines()
+                .map(|line| {
+                    if line.to_ascii_lowercase().starts_with("host:") {
+                        "host: <dynamic>".to_owned()
+                    } else {
+                        line.to_owned()
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(normalize(&raw_request), normalize(&safe_request));
+        assert!(raw_request.starts_with(b"GET /repo.git/info/refs?service=git-upload-pack"));
+    }
+
+    #[test]
+    fn io_equiv_smart_http_follows_absolute_temporary_redirects() {
+        let _libgit2 = Libgit2Init::acquire();
+        let source = HistoryFixture::new("smart-http-redirect-source");
+        let backend = smart_http_server(&source);
+        let (redirect, requests) = redirect_server(&backend.url);
+        let raw_directory = TempDir::new("smart-http-redirect-raw");
+        let safe_directory = TempDir::new("smart-http-redirect-safe");
+        let raw_target = RawRepository::init(&raw_directory.c_path(), true).unwrap();
+        let safe_target = RawRepository::init(&safe_directory.c_path(), true).unwrap();
+        let raw = unsafe { raw_http_fetch(raw_target.as_ptr(), &redirect, None) };
+        assert_eq!(raw, safe_http_fetch(safe_target.as_ptr(), &redirect, None));
+        let requests = requests.join().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(requests.iter().all(|request| {
+            request.starts_with(b"GET /alias.git/info/refs?service=git-upload-pack")
+        }));
+    }
+
+    fn prepare_http_push_source(fixture: &HistoryFixture) {
+        std::fs::write(
+            fixture.directory.path().join("http-push.txt"),
+            b"smart HTTP push payload\n",
+        )
+        .unwrap();
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(fixture.directory.path())
+            .args(["add", "http-push.txt"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(fixture.directory.path())
+            .args([
+                "-c",
+                "user.name=Crustify",
+                "-c",
+                "user.email=crustify@example.com",
+                "commit",
+                "-q",
+                "-m",
+                "smart HTTP push commit",
+            ])
+            .env("GIT_AUTHOR_DATE", "1700006000 +0000")
+            .env("GIT_COMMITTER_DATE", "1700006000 +0000")
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[test]
+    fn io_equiv_smart_http_push_create_delete_and_upload() {
+        let _libgit2 = Libgit2Init::acquire();
+        let destination = HistoryFixture::new("smart-http-push-destination");
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(destination.directory.path())
+            .args(["config", "http.receivepack", "true"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let server = smart_http_server(&destination);
+        let raw = HistoryFixture::new("smart-http-push-raw");
+        let safe = HistoryFixture::new("smart-http-push-safe");
+        prepare_http_push_source(&raw);
+        prepare_http_push_source(&safe);
+        unsafe { raw_push(raw.repository.as_ptr(), &server.url) };
+        let mut safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        safe_push(&mut safe_repository, &server.url);
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(destination.directory.path())
+            .args(["show", "refs/heads/copied:http-push.txt"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout, b"smart HTTP push payload\n");
+    }
+
+    unsafe fn raw_http_push_once(repository: *mut ffi::git_repository, url: &CStr) -> i32 {
+        let mut remote = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_create(&mut remote, repository, c"reject".as_ptr(), url.as_ptr())
+            },
+            0
+        );
+        let mut spec = c"refs/heads/master:refs/heads/master".as_ptr().cast_mut();
+        let refspecs = ffi::git_strarray {
+            strings: &mut spec,
+            count: 1,
+        };
+        let status = unsafe { ffi::git_remote_push(remote, &refspecs, core::ptr::null()) };
+        unsafe { ffi::git_remote_free(remote) };
+        status
+    }
+
+    fn safe_http_push_once(repository: *mut ffi::git_repository, url: &CStr) -> i32 {
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut remote = git_remote_create(&mut repository, c"reject", url).unwrap();
+        let mut spec = c"refs/heads/master:refs/heads/master".as_ptr().cast_mut();
+        let mut raw_refspecs = ffi::git_strarray {
+            strings: &mut spec,
+            count: 1,
+        };
+        let refspecs = unsafe { GitStrArrayRef::from_ptr(&mut raw_refspecs) }.unwrap();
+        match git_remote_push(&mut remote.as_mut(), Some(refspecs), None) {
+            Ok(()) => 0,
+            Err(status) => status,
+        }
+    }
+
+    fn rewind_source(fixture: &HistoryFixture) {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(fixture.directory.path())
+            .args(["reset", "--hard", "-q", "HEAD~1"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[test]
+    fn io_equiv_smart_http_rejects_non_fast_forward_push() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw_destination = HistoryFixture::new("http-push-reject-destination-raw");
+        let safe_destination = HistoryFixture::new("http-push-reject-destination-safe");
+        for destination in [&raw_destination, &safe_destination] {
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(destination.directory.path())
+                .args(["config", "http.receivepack", "true"])
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+        let raw_server = smart_http_server(&raw_destination);
+        let safe_server = smart_http_server(&safe_destination);
+        let raw_source = HistoryFixture::new("http-push-reject-source-raw");
+        let safe_source = HistoryFixture::new("http-push-reject-source-safe");
+        rewind_source(&raw_source);
+        rewind_source(&safe_source);
+        let raw = unsafe { raw_http_push_once(raw_source.repository.as_ptr(), &raw_server.url) };
+        let safe = safe_http_push_once(safe_source.repository.as_ptr(), &safe_server.url);
+        assert_eq!(raw, safe);
+        assert_eq!(raw, ffi::git_error_code_GIT_ENONFASTFORWARD);
+        let raw_head = std::process::Command::new("git")
+            .arg("-C")
+            .arg(raw_destination.directory.path())
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .unwrap();
+        let safe_head = std::process::Command::new("git")
+            .arg("-C")
+            .arg(safe_destination.directory.path())
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .unwrap();
+        assert_eq!(raw_head.stdout, safe_head.stdout);
+    }
+
+    fn pkt_line(payload: &[u8]) -> Vec<u8> {
+        let mut packet = format!("{:04x}", payload.len() + 4).into_bytes();
+        packet.extend_from_slice(payload);
+        packet
+    }
+
+    fn advertisement_server() -> (std::ffi::CString, std::thread::JoinHandle<Vec<u8>>) {
+        let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let address = listener.local_addr().unwrap();
+        let handle = std::thread::spawn(move || {
+            use std::io::{Read, Write};
+
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0u8; 1024];
+            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                let read = stream.read(&mut buffer).unwrap();
+                if read == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buffer[..read]);
+            }
+            let oid = b"0123456789012345678901234567890123456789";
+            let mut body = pkt_line(b"# service=git-upload-pack\n");
+            body.extend_from_slice(b"0000");
+            let mut head = oid.to_vec();
+            head.extend_from_slice(b" HEAD\0symref=HEAD:refs/heads/main agent=crustify-equiv/1\n");
+            body.extend_from_slice(&pkt_line(&head));
+            let mut main = oid.to_vec();
+            main.extend_from_slice(b" refs/heads/main\n");
+            body.extend_from_slice(&pkt_line(&main));
+            body.extend_from_slice(b"0000");
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Type: application/x-git-upload-pack-advertisement\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .unwrap();
+            stream.write_all(&body).unwrap();
+            request
+        });
+        (
+            std::ffi::CString::new(format!("http://{address}/repo.git")).unwrap(),
+            handle,
+        )
+    }
+
+    unsafe fn raw_http_advertisement(url: &core::ffi::CStr) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut remote = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_remote_create_detached(&mut remote, url.as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_connect(
+                    remote,
+                    ffi::git_direction_GIT_DIRECTION_FETCH,
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let mut heads = core::ptr::null_mut();
+        let mut count = 0;
+        assert_eq!(
+            unsafe { ffi::git_remote_ls(&mut heads, &mut count, remote) },
+            0
+        );
+        let observed = (0..count)
+            .map(|index| {
+                let head = unsafe { *heads.add(index) };
+                (
+                    unsafe { core::ffi::CStr::from_ptr((*head).name) }
+                        .to_bytes()
+                        .to_vec(),
+                    unsafe { (*head).oid.id.to_vec() },
+                )
+            })
+            .collect();
+        assert_eq!(unsafe { ffi::git_remote_disconnect(remote) }, 0);
+        unsafe { ffi::git_remote_free(remote) };
+        observed
+    }
+
+    fn safe_http_advertisement(url: &core::ffi::CStr) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut remote = git_remote_create_detached(url).unwrap();
+        let observed = {
+            let mut remote_view = remote.as_mut();
+            git_remote_connect(
+                &mut remote_view,
+                crate::util::net::Direction::Fetch,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            let heads = git_remote_ls(&mut remote_view).unwrap();
+            (0..heads.len())
+                .map(|index| {
+                    let head = heads.get(index).unwrap();
+                    (
+                        head.name().unwrap().to_bytes().to_vec(),
+                        head.oid().raw_bytes().elems().collect(),
+                    )
+                })
+                .collect()
+        };
+        git_remote_disconnect(&mut remote.as_mut()).unwrap();
+        observed
+    }
+
+    #[test]
+    fn io_equiv_smart_http_advertisement_parsing() {
+        let _libgit2 = Libgit2Init::acquire();
+        let (raw_url, raw_server) = advertisement_server();
+        let raw = unsafe { raw_http_advertisement(&raw_url) };
+        let raw_request = raw_server.join().unwrap();
+        let (safe_url, safe_server) = advertisement_server();
+        let safe = safe_http_advertisement(&safe_url);
+        let safe_request = safe_server.join().unwrap();
+        assert_eq!(raw, safe);
+        assert_eq!(
+            raw.iter().map(|head| head.0.as_slice()).collect::<Vec<_>>(),
+            [b"HEAD".as_slice(), b"refs/heads/main".as_slice()]
+        );
+        assert_eq!(
+            raw_request.split(|byte| *byte == b'\n').next(),
+            safe_request.split(|byte| *byte == b'\n').next()
+        );
+    }
+
+    unsafe fn prepare_prunable_remote(
+        target: *mut ffi::git_repository,
+        source: *mut ffi::git_repository,
+        url: &core::ffi::CStr,
+    ) {
+        let mut remote = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_create_with_fetchspec(
+                    &mut remote,
+                    target,
+                    c"origin".as_ptr(),
+                    url.as_ptr(),
+                    c"+refs/heads/*:refs/remotes/origin/*".as_ptr(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_fetch(
+                    remote,
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    c"initial fetch".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_remote_free(remote) };
+        assert_eq!(
+            unsafe { ffi::git_reference_remove(source, c"refs/heads/topic".as_ptr()) },
+            0
+        );
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct PruneObservation {
+        topic_status: i32,
+        master: Vec<u8>,
+        tag: Vec<u8>,
+        prune_refs: bool,
+        autotag: ffi::git_remote_autotag_option_t,
+        remotes_after_delete: usize,
+    }
+
+    unsafe fn raw_prune(repository: *mut ffi::git_repository) -> PruneObservation {
+        let mut remote = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_remote_lookup(&mut remote, repository, c"origin".as_ptr()) },
+            0
+        );
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_fetch_options>() };
+        assert_eq!(
+            unsafe { ffi::git_fetch_options_init(&mut options, ffi::GIT_FETCH_OPTIONS_VERSION) },
+            0
+        );
+        options.prune = ffi::git_fetch_prune_t_GIT_FETCH_PRUNE;
+        options.download_tags = ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_ALL;
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_fetch(
+                    remote,
+                    core::ptr::null(),
+                    &options,
+                    c"pruning fetch".as_ptr(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_connect(
+                    remote,
+                    ffi::git_direction_GIT_DIRECTION_FETCH,
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_remote_prune(remote, core::ptr::null()) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_remote_disconnect(remote) }, 0);
+        let prune_refs = unsafe { ffi::git_remote_prune_refs(remote) != 0 };
+        let autotag = unsafe { ffi::git_remote_autotag(remote) };
+        unsafe { ffi::git_remote_free(remote) };
+        let mut topic = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        let topic_status = unsafe {
+            ffi::git_reference_name_to_id(
+                &mut topic,
+                repository,
+                c"refs/remotes/origin/topic".as_ptr(),
+            )
+        };
+        let mut master = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        let mut tag = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(
+                    &mut master,
+                    repository,
+                    c"refs/remotes/origin/master".as_ptr(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(&mut tag, repository, c"refs/tags/v1.0".as_ptr())
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_remote_delete(repository, c"origin".as_ptr()) },
+            0
+        );
+        let mut remotes = unsafe { core::mem::zeroed::<ffi::git_strarray>() };
+        assert_eq!(unsafe { ffi::git_remote_list(&mut remotes, repository) }, 0);
+        let remotes_after_delete = remotes.count;
+        unsafe { ffi::git_strarray_dispose(&mut remotes) };
+        PruneObservation {
+            topic_status,
+            master: master.id.to_vec(),
+            tag: tag.id.to_vec(),
+            prune_refs,
+            autotag,
+            remotes_after_delete,
+        }
+    }
+
+    fn safe_prune(repository: *mut ffi::git_repository) -> PruneObservation {
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut remote = git_remote_lookup(&mut repository, c"origin").unwrap();
+        let mut options = crate::api::remote::GitFetchOptions::new();
+        options.as_mut().set_prune(GitFetchPrune::Prune);
+        options
+            .as_mut()
+            .set_download_tags(GitRemoteAutotagOption::All);
+        git_remote_fetch(
+            &mut remote.as_mut(),
+            None,
+            Some(options.as_ref()),
+            Some(c"pruning fetch"),
+        )
+        .unwrap();
+        git_remote_connect(
+            &mut remote.as_mut(),
+            crate::util::net::Direction::Fetch,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        git_remote_prune(&mut remote.as_mut(), None).unwrap();
+        git_remote_disconnect(&mut remote.as_mut()).unwrap();
+        let prune_refs = git_remote_prune_refs(remote.as_ref());
+        let autotag = git_remote_autotag(remote.as_ref()).unwrap().into();
+        drop(remote);
+        let mut topic = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        let topic_status = unsafe {
+            ffi::git_reference_name_to_id(
+                &mut topic,
+                repository.as_mut_ptr(),
+                c"refs/remotes/origin/topic".as_ptr(),
+            )
+        };
+        let mut master =
+            crate::refs::git_reference_name_to_id(&mut repository, c"refs/remotes/origin/master")
+                .unwrap();
+        let mut tag =
+            crate::refs::git_reference_name_to_id(&mut repository, c"refs/tags/v1.0").unwrap();
+        let bytes = |value: &mut crate::oid::Oid| {
+            unsafe { crate::oid::OidRef::from_ptr(core::ptr::from_mut(value).cast()) }
+                .unwrap()
+                .raw_bytes()
+                .elems()
+                .collect()
+        };
+        let master = bytes(&mut master);
+        let tag = bytes(&mut tag);
+        git_remote_delete(&mut repository, c"origin").unwrap();
+        let remotes_after_delete = git_remote_list(&mut repository).unwrap().as_ref().count();
+        PruneObservation {
+            topic_status,
+            master,
+            tag,
+            prune_refs,
+            autotag,
+            remotes_after_delete,
+        }
+    }
+
+    #[test]
+    fn io_equiv_remote_fetch_prune_tags_explicit_prune_and_delete() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw_source = HistoryFixture::new("prune-source-raw");
+        let safe_source = HistoryFixture::new("prune-source-safe");
+        let raw_directory = TempDir::new("prune-target-raw");
+        let safe_directory = TempDir::new("prune-target-safe");
+        let raw_target = RawRepository::init(&raw_directory.c_path(), true).unwrap();
+        let safe_target = RawRepository::init(&safe_directory.c_path(), true).unwrap();
+        let raw_url = file_url(raw_source.directory.path());
+        let safe_url = file_url(safe_source.directory.path());
+        unsafe {
+            prepare_prunable_remote(
+                raw_target.as_ptr(),
+                raw_source.repository.as_ptr(),
+                &raw_url,
+            );
+            prepare_prunable_remote(
+                safe_target.as_ptr(),
+                safe_source.repository.as_ptr(),
+                &safe_url,
+            );
+        }
+        let raw = unsafe { raw_prune(raw_target.as_ptr()) };
+        assert_eq!(raw, safe_prune(safe_target.as_ptr()));
+        assert_eq!(raw.topic_status, ffi::git_error_code_GIT_ENOTFOUND);
+        assert_eq!(raw.remotes_after_delete, 0);
+    }
+
+    unsafe fn raw_remote_construction(
+        repository: *mut ffi::git_repository,
+        url: &CStr,
+    ) -> Vec<(Option<Vec<u8>>, Vec<u8>, Option<Vec<u8>>, bool, usize)> {
+        let mut observations = Vec::new();
+        let mut anonymous = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_remote_create_anonymous(&mut anonymous, repository, url.as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_set_instance_url(anonymous, c"file:///instance-fetch".as_ptr())
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_set_instance_pushurl(anonymous, c"file:///instance-push".as_ptr())
+            },
+            0
+        );
+        observations.push(unsafe { raw_remote_shape(anonymous) });
+        unsafe { ffi::git_remote_free(anonymous) };
+
+        let mut detached = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_remote_create_detached(&mut detached, url.as_ptr()) },
+            0
+        );
+        observations.push(unsafe { raw_remote_shape(detached) });
+        unsafe { ffi::git_remote_free(detached) };
+
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_remote_create_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_create_options_init(
+                    &mut options,
+                    ffi::GIT_REMOTE_CREATE_OPTIONS_VERSION,
+                )
+            },
+            0
+        );
+        options.repository = repository;
+        options.name = c"constructed".as_ptr();
+        options.fetchspec = c"+refs/heads/*:refs/remotes/constructed/*".as_ptr();
+        let mut configured = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_remote_create_with_opts(&mut configured, url.as_ptr(), &options) },
+            0
+        );
+        observations.push(unsafe { raw_remote_shape(configured) });
+        unsafe { ffi::git_remote_free(configured) };
+        observations
+    }
+
+    unsafe fn raw_remote_shape(
+        remote: *mut ffi::git_remote,
+    ) -> (Option<Vec<u8>>, Vec<u8>, Option<Vec<u8>>, bool, usize) {
+        let optional = |value: *const core::ffi::c_char| {
+            (!value.is_null()).then(|| unsafe { CStr::from_ptr(value) }.to_bytes().to_vec())
+        };
+        (
+            optional(unsafe { ffi::git_remote_name(remote) }),
+            optional(unsafe { ffi::git_remote_url(remote) }).unwrap(),
+            optional(unsafe { ffi::git_remote_pushurl(remote) }),
+            !unsafe { ffi::git_remote_owner(remote) }.is_null(),
+            unsafe { ffi::git_remote_refspec_count(remote) },
+        )
+    }
+
+    fn safe_remote_shape(
+        remote: GitRemoteRef<'_>,
+    ) -> (Option<Vec<u8>>, Vec<u8>, Option<Vec<u8>>, bool, usize) {
+        (
+            git_remote_name(remote).map(|value| value.to_bytes().to_vec()),
+            git_remote_url(remote).unwrap().to_bytes().to_vec(),
+            git_remote_pushurl(remote).map(|value| value.to_bytes().to_vec()),
+            git_remote_owner(remote).is_some(),
+            git_remote_refspec_count(remote),
+        )
+    }
+
+    fn safe_remote_construction(
+        repository: *mut ffi::git_repository,
+        url: &CStr,
+    ) -> Vec<(Option<Vec<u8>>, Vec<u8>, Option<Vec<u8>>, bool, usize)> {
+        let mut observations = Vec::new();
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut anonymous = git_remote_create_anonymous(&mut repository_view, url).unwrap();
+        git_remote_set_instance_url(&mut anonymous.as_mut(), c"file:///instance-fetch").unwrap();
+        git_remote_set_instance_pushurl(&mut anonymous.as_mut(), c"file:///instance-push").unwrap();
+        observations.push(safe_remote_shape(anonymous.as_ref()));
+        drop(anonymous);
+
+        let detached = git_remote_create_detached(url).unwrap();
+        observations.push(safe_remote_shape(detached.as_ref()));
+        drop(detached);
+
+        let mut options =
+            git_remote_create_options_init(ffi::GIT_REMOTE_CREATE_OPTIONS_VERSION).unwrap();
+        {
+            let mut view = options.as_mut();
+            unsafe {
+                view.set_borrowed_repository(Some(
+                    crate::repository::GitRepositoryMut::from_ptr(repository).unwrap(),
+                ));
+                view.set_borrowed_name(Some(c"constructed"));
+                view.set_borrowed_fetchspec(Some(c"+refs/heads/*:refs/remotes/constructed/*"));
+            }
+        }
+        let configured = git_remote_create_with_opts(url, options.as_ref()).unwrap();
+        observations.push(safe_remote_shape(configured.as_ref()));
+        observations
+    }
+
+    #[test]
+    fn io_equiv_remote_anonymous_detached_options_and_instance_urls() {
+        let _libgit2 = Libgit2Init::acquire();
+        let source = HistoryFixture::new("remote-construction-source");
+        let raw = HistoryFixture::new("remote-construction-raw");
+        let safe = HistoryFixture::new("remote-construction-safe");
+        let url = file_url(source.directory.path());
+        let raw_observation = unsafe { raw_remote_construction(raw.repository.as_ptr(), &url) };
+        let safe_observation = safe_remote_construction(safe.repository.as_ptr(), &url);
+        assert_eq!(raw_observation, safe_observation);
+        assert_eq!(raw_observation[0].0, None);
+        assert_eq!(
+            raw_observation[2].0.as_deref(),
+            Some(b"constructed".as_slice())
+        );
+        assert!(raw_observation[2].3);
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct DownloadObservation {
+        received: u32,
+        indexed: u32,
+        connected_during_download: bool,
+        tracking_id: Vec<u8>,
+        fetch_head_exists: bool,
+    }
+
+    unsafe fn raw_download_then_update(
+        repository: *mut ffi::git_repository,
+        url: &CStr,
+    ) -> DownloadObservation {
+        let mut remote = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_create_with_fetchspec(
+                    &mut remote,
+                    repository,
+                    c"origin".as_ptr(),
+                    url.as_ptr(),
+                    c"+refs/heads/*:refs/remotes/origin/*".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_remote_free(remote) };
+        assert_eq!(
+            unsafe { ffi::git_remote_set_url(repository, c"origin".as_ptr(), url.as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_remote_lookup(&mut remote, repository, c"origin".as_ptr()) },
+            0
+        );
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_fetch_options>() };
+        assert_eq!(
+            unsafe { ffi::git_fetch_options_init(&mut options, ffi::GIT_FETCH_OPTIONS_VERSION) },
+            0
+        );
+        options.download_tags = ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_ALL;
+        assert_eq!(
+            unsafe { ffi::git_remote_download(remote, core::ptr::null(), &options) },
+            0
+        );
+        let connected_during_download = unsafe { ffi::git_remote_connected(remote) != 0 };
+        let stats = unsafe { ffi::git_remote_stats(remote) };
+        let received = unsafe { (*stats).received_objects };
+        let indexed = unsafe { (*stats).indexed_objects };
+        assert_eq!(
+            unsafe {
+                ffi::git_remote_update_tips(
+                    remote,
+                    core::ptr::null(),
+                    ffi::git_remote_update_flags_GIT_REMOTE_UPDATE_FETCHHEAD
+                        | ffi::git_remote_update_flags_GIT_REMOTE_UPDATE_REPORT_UNCHANGED,
+                    ffi::git_remote_autotag_option_t_GIT_REMOTE_DOWNLOAD_TAGS_ALL,
+                    c"separate download and update".as_ptr(),
+                )
+            },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_remote_disconnect(remote) }, 0);
+        assert_eq!(unsafe { ffi::git_remote_stop(remote) }, 0);
+        unsafe { ffi::git_remote_free(remote) };
+        let mut tracking = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(
+                    &mut tracking,
+                    repository,
+                    c"refs/remotes/origin/master".as_ptr(),
+                )
+            },
+            0
+        );
+        let repo_path = unsafe { CStr::from_ptr(ffi::git_repository_path(repository)) };
+        let fetch_head_exists = std::path::Path::new(repo_path.to_str().unwrap())
+            .join("FETCH_HEAD")
+            .exists();
+        DownloadObservation {
+            received,
+            indexed,
+            connected_during_download,
+            tracking_id: tracking.id.to_vec(),
+            fetch_head_exists,
+        }
+    }
+
+    fn safe_download_then_update(
+        repository: *mut ffi::git_repository,
+        url: &CStr,
+    ) -> DownloadObservation {
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let remote = git_remote_create_with_fetchspec(
+            &mut repository_view,
+            c"origin",
+            url,
+            Some(c"+refs/heads/*:refs/remotes/origin/*"),
+        )
+        .unwrap();
+        drop(remote);
+        git_remote_set_url(&mut repository_view, c"origin", Some(url)).unwrap();
+        let mut remote = git_remote_lookup(&mut repository_view, c"origin").unwrap();
+        let mut options = crate::api::remote::GitFetchOptions::new();
+        options
+            .as_mut()
+            .set_download_tags(GitRemoteAutotagOption::All);
+        git_remote_download(&mut remote.as_mut(), None, Some(options.as_ref())).unwrap();
+        let connected_during_download = git_remote_connected(remote.as_ref());
+        let stats = git_remote_stats(remote.as_ref());
+        let received = stats.received_objects();
+        let indexed = stats.indexed_objects();
+        git_remote_update_tips(
+            &mut remote.as_mut(),
+            None,
+            GitRemoteUpdateFlags::ALL,
+            GitRemoteAutotagOption::All,
+            Some(c"separate download and update"),
+        )
+        .unwrap();
+        git_remote_disconnect(&mut remote.as_mut()).unwrap();
+        git_remote_stop(&mut remote.as_mut()).unwrap();
+        drop(remote);
+        let mut tracking = crate::refs::git_reference_name_to_id(
+            &mut repository_view,
+            c"refs/remotes/origin/master",
+        )
+        .unwrap();
+        let tracking = unsafe { crate::oid::OidRef::from_ptr((&raw mut tracking).cast()) }
+            .unwrap()
+            .raw_bytes()
+            .elems()
+            .collect();
+        let repo_path = crate::repository::git_repository_path(repository_view.as_ref()).unwrap();
+        let fetch_head_exists = std::path::Path::new(repo_path.to_str().unwrap())
+            .join("FETCH_HEAD")
+            .exists();
+        DownloadObservation {
+            received,
+            indexed,
+            connected_during_download,
+            tracking_id: tracking,
+            fetch_head_exists,
+        }
+    }
+
+    #[test]
+    fn io_equiv_remote_separate_download_update_tips_and_stop() {
+        let _libgit2 = Libgit2Init::acquire();
+        let source = HistoryFixture::new("remote-download-source");
+        let raw_directory = TempDir::new("remote-download-raw");
+        let safe_directory = TempDir::new("remote-download-safe");
+        let raw_target = RawRepository::init(&raw_directory.c_path(), true).unwrap();
+        let safe_target = RawRepository::init(&safe_directory.c_path(), true).unwrap();
+        let url = file_url(source.directory.path());
+        let raw = unsafe { raw_download_then_update(raw_target.as_ptr(), &url) };
+        assert_eq!(raw, safe_download_then_update(safe_target.as_ptr(), &url));
+        assert!(raw.connected_during_download);
+        assert!(raw.fetch_head_exists);
+        assert!(raw.received > 0);
+    }
+}

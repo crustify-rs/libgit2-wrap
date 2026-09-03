@@ -543,3 +543,274 @@ mod current_options_initializer_tests {
         assert_eq!(options.as_ref().show(), Ok(StatusShow::IndexAndWorkdir));
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    fn prepare(fixture: &HistoryFixture) {
+        std::fs::rename(
+            fixture.directory.path().join("README.md"),
+            fixture.directory.path().join("README-renamed.md"),
+        )
+        .unwrap();
+        std::fs::write(
+            fixture.directory.path().join("src/alpha.c"),
+            b"int alpha(void) { return 99; }\n",
+        )
+        .unwrap();
+        std::fs::remove_file(fixture.directory.path().join("src/beta.c")).unwrap();
+        std::fs::write(fixture.directory.path().join("staged-new.txt"), b"staged\n").unwrap();
+        std::fs::write(
+            fixture.directory.path().join(".gitignore"),
+            b"ignored/\n*.tmp\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(fixture.directory.path().join("ignored/nested")).unwrap();
+        std::fs::write(
+            fixture.directory.path().join("ignored/nested/data.bin"),
+            b"ignored\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(fixture.directory.path().join("untracked/nested")).unwrap();
+        std::fs::write(
+            fixture.directory.path().join("untracked/nested/file.txt"),
+            b"untracked\n",
+        )
+        .unwrap();
+        std::fs::write(fixture.directory.path().join("scratch.tmp"), b"ignored\n").unwrap();
+        let status = std::process::Command::new("git")
+            .current_dir(fixture.directory.path())
+            .args([
+                "add",
+                "README.md",
+                "README-renamed.md",
+                "staged-new.txt",
+                ".gitignore",
+            ])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    fn path(pointer: *const core::ffi::c_char) -> Vec<u8> {
+        if pointer.is_null() {
+            Vec::new()
+        } else {
+            unsafe { core::ffi::CStr::from_ptr(pointer) }
+                .to_bytes()
+                .to_vec()
+        }
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct StatusObservation {
+        entries: Vec<(u32, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)>,
+        alpha: u32,
+        ignored: [bool; 3],
+        callback: Vec<(Vec<u8>, u32)>,
+        stopped: i32,
+    }
+
+    unsafe fn raw_observe(repository: *mut ffi::git_repository) -> StatusObservation {
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_status_options>() };
+        assert_eq!(
+            unsafe { ffi::git_status_options_init(&mut options, ffi::GIT_STATUS_OPTIONS_VERSION) },
+            0
+        );
+        options.flags = ffi::git_status_opt_t_GIT_STATUS_OPT_INCLUDE_UNTRACKED
+            | ffi::git_status_opt_t_GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS
+            | ffi::git_status_opt_t_GIT_STATUS_OPT_INCLUDE_IGNORED
+            | ffi::git_status_opt_t_GIT_STATUS_OPT_RECURSE_IGNORED_DIRS
+            | ffi::git_status_opt_t_GIT_STATUS_OPT_RENAMES_HEAD_TO_INDEX
+            | ffi::git_status_opt_t_GIT_STATUS_OPT_RENAMES_INDEX_TO_WORKDIR
+            | ffi::git_status_opt_t_GIT_STATUS_OPT_RENAMES_FROM_REWRITES
+            | ffi::git_status_opt_t_GIT_STATUS_OPT_SORT_CASE_SENSITIVELY;
+        options.rename_threshold = 45;
+        let mut list = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_status_list_new(&mut list, repository, &options) },
+            0
+        );
+        let count = unsafe { ffi::git_status_list_entrycount(list) };
+        let mut entries = Vec::new();
+        for index in 0..count {
+            let entry = unsafe { ffi::git_status_byindex(list, index) };
+            let (head_old, head_new) = if unsafe { (*entry).head_to_index }.is_null() {
+                (Vec::new(), Vec::new())
+            } else {
+                let delta = unsafe { (*entry).head_to_index };
+                (
+                    path(unsafe { (*delta).old_file.path }),
+                    path(unsafe { (*delta).new_file.path }),
+                )
+            };
+            let (work_old, work_new) = if unsafe { (*entry).index_to_workdir }.is_null() {
+                (Vec::new(), Vec::new())
+            } else {
+                let delta = unsafe { (*entry).index_to_workdir };
+                (
+                    path(unsafe { (*delta).old_file.path }),
+                    path(unsafe { (*delta).new_file.path }),
+                )
+            };
+            entries.push((
+                unsafe { (*entry).status },
+                head_old,
+                head_new,
+                work_old,
+                work_new,
+            ));
+        }
+        unsafe { ffi::git_status_list_free(list) };
+        let mut alpha = 0;
+        assert_eq!(
+            unsafe { ffi::git_status_file(&mut alpha, repository, c"src/alpha.c".as_ptr()) },
+            0
+        );
+        let ignored = [
+            c"ignored/nested/data.bin",
+            c"scratch.tmp",
+            c"untracked/nested/file.txt",
+        ]
+        .map(|candidate| {
+            let mut value = 0;
+            assert_eq!(
+                unsafe {
+                    ffi::git_status_should_ignore(&mut value, repository, candidate.as_ptr())
+                },
+                0
+            );
+            value != 0
+        });
+        unsafe extern "C" fn collect(
+            path: *const core::ffi::c_char,
+            status: u32,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            let output = unsafe { &mut *payload.cast::<Vec<(Vec<u8>, u32)>>() };
+            output.push((
+                unsafe { core::ffi::CStr::from_ptr(path) }
+                    .to_bytes()
+                    .to_vec(),
+                status,
+            ));
+            0
+        }
+        let mut callback = Vec::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_status_foreach_ext(
+                    repository,
+                    &options,
+                    Some(collect),
+                    core::ptr::from_mut(&mut callback).cast(),
+                )
+            },
+            0
+        );
+        unsafe extern "C" fn stop(
+            _: *const core::ffi::c_char,
+            _: u32,
+            _: *mut core::ffi::c_void,
+        ) -> i32 {
+            73
+        }
+        let stopped = unsafe {
+            ffi::git_status_foreach_ext(repository, &options, Some(stop), core::ptr::null_mut())
+        };
+        StatusObservation {
+            entries,
+            alpha,
+            ignored,
+            callback,
+            stopped,
+        }
+    }
+
+    fn safe_observe(repository: *mut ffi::git_repository) -> StatusObservation {
+        use crate::api::status::GitStatusOptionFlags;
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut options = git_status_options_init(ffi::GIT_STATUS_OPTIONS_VERSION).unwrap();
+        options.as_mut().set_flags(
+            GitStatusOptionFlags::INCLUDE_UNTRACKED
+                | GitStatusOptionFlags::RECURSE_UNTRACKED_DIRS
+                | GitStatusOptionFlags::INCLUDE_IGNORED
+                | GitStatusOptionFlags::RECURSE_IGNORED_DIRS
+                | GitStatusOptionFlags::RENAMES_HEAD_TO_INDEX
+                | GitStatusOptionFlags::RENAMES_INDEX_TO_WORKDIR
+                | GitStatusOptionFlags::RENAMES_FROM_REWRITES
+                | GitStatusOptionFlags::SORT_CASE_SENSITIVELY,
+        );
+        options.as_mut().set_rename_threshold(45);
+        let list = git_status_list_new(&mut repository, Some(options.as_ref())).unwrap();
+        let mut entries = Vec::new();
+        for index in 0..git_status_list_entrycount(list.as_ref()) {
+            let entry = git_status_byindex(list.as_ref(), index).unwrap();
+            let head = entry.head_to_index();
+            let work = entry.index_to_workdir();
+            entries.push((
+                entry.status().bits(),
+                head.and_then(|delta| delta.old_file().path())
+                    .map_or_else(Vec::new, |value| value.to_bytes().to_vec()),
+                head.and_then(|delta| delta.new_file().path())
+                    .map_or_else(Vec::new, |value| value.to_bytes().to_vec()),
+                work.and_then(|delta| delta.old_file().path())
+                    .map_or_else(Vec::new, |value| value.to_bytes().to_vec()),
+                work.and_then(|delta| delta.new_file().path())
+                    .map_or_else(Vec::new, |value| value.to_bytes().to_vec()),
+            ));
+        }
+        drop(list);
+        let alpha = git_status_file(&mut repository, c"src/alpha.c")
+            .unwrap()
+            .bits();
+        let ignored = [
+            c"ignored/nested/data.bin",
+            c"scratch.tmp",
+            c"untracked/nested/file.txt",
+        ]
+        .map(|candidate| git_status_should_ignore(&mut repository, candidate).unwrap());
+        let mut callback = Vec::new();
+        git_status_foreach_ext(
+            &mut repository,
+            Some(options.as_ref()),
+            &mut |path: &core::ffi::CStr, status: Status| {
+                callback.push((path.to_bytes().to_vec(), status.bits()));
+                0
+            },
+        )
+        .unwrap();
+        let stopped = git_status_foreach_ext(
+            &mut repository,
+            Some(options.as_ref()),
+            &mut |_: &core::ffi::CStr, _: Status| 73,
+        )
+        .err()
+        .unwrap();
+        StatusObservation {
+            entries,
+            alpha,
+            ignored,
+            callback,
+            stopped,
+        }
+    }
+
+    #[test]
+    fn io_equiv_status_lists_renames_ignored_paths_and_callbacks() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("status-raw");
+        let safe = HistoryFixture::new("status-safe");
+        prepare(&raw);
+        prepare(&safe);
+        let raw_observation = unsafe { raw_observe(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_observe(safe.repository.as_ptr()));
+        assert_eq!(raw_observation.ignored, [true, true, false]);
+        assert!(!raw_observation.entries.is_empty());
+    }
+}

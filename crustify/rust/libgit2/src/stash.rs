@@ -454,6 +454,317 @@ pub fn git_stash_pop(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    fn edit(fixture: &HistoryFixture) {
+        std::fs::write(
+            fixture.directory.path().join("README.md"),
+            b"fixture\nstashed worktree contents\n",
+        )
+        .unwrap();
+    }
+
+    fn edit_index_untracked_and_ignored(fixture: &HistoryFixture) {
+        std::fs::write(
+            fixture.directory.path().join("README.md"),
+            b"fixture\nstaged stash contents\n",
+        )
+        .unwrap();
+        std::fs::write(fixture.directory.path().join(".gitignore"), b"*.ignored\n").unwrap();
+        std::fs::write(
+            fixture.directory.path().join("untracked.txt"),
+            b"untracked stash contents\n",
+        )
+        .unwrap();
+        std::fs::write(
+            fixture.directory.path().join("private.ignored"),
+            b"ignored stash contents\n",
+        )
+        .unwrap();
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, fixture.repository.as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_index_add_bypath(index, c"README.md".as_ptr()) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_index_write(index) }, 0);
+        unsafe { ffi::git_index_free(index) };
+    }
+
+    unsafe fn raw_stash(repository: *mut ffi::git_repository) -> (Vec<u8>, Vec<Vec<u8>>) {
+        let mut signature = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_signature_new(
+                    &mut signature,
+                    c"Crustify".as_ptr(),
+                    c"crustify@example.com".as_ptr(),
+                    1_700_000_200,
+                    0,
+                )
+            },
+            0
+        );
+        let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_stash_save(
+                    &mut id,
+                    repository,
+                    signature,
+                    c"equivalence stash".as_ptr(),
+                    ffi::git_stash_flags_GIT_STASH_DEFAULT,
+                )
+            },
+            0
+        );
+        unsafe extern "C" fn collect(
+            _index: usize,
+            message: *const core::ffi::c_char,
+            _id: *const ffi::git_oid,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            unsafe { &mut *payload.cast::<Vec<Vec<u8>>>() }
+                .push(unsafe { CStr::from_ptr(message) }.to_bytes().to_vec());
+            0
+        }
+        let mut messages = Vec::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_stash_foreach(
+                    repository,
+                    Some(collect),
+                    core::ptr::from_mut(&mut messages).cast(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_stash_pop(repository, 0, core::ptr::null()) },
+            0
+        );
+        unsafe { ffi::git_signature_free(signature) };
+        (id.id.to_vec(), messages)
+    }
+
+    fn safe_stash(
+        repository: &mut crate::repository::GitRepositoryMut<'_>,
+    ) -> (Vec<u8>, Vec<Vec<u8>>) {
+        let signature = crate::signature::git_signature_new(
+            c"Crustify",
+            c"crustify@example.com",
+            1_700_000_200,
+            0,
+        )
+        .unwrap();
+        let mut id = git_stash_save(
+            repository,
+            signature.as_ref(),
+            Some(c"equivalence stash"),
+            GitStashFlags::NONE,
+        )
+        .unwrap();
+        let mut messages = Vec::new();
+        git_stash_foreach(
+            repository,
+            &mut |_index: usize, message: Option<&CStr>, _id: OidRef<'_>| {
+                messages.push(message.unwrap().to_bytes().to_vec());
+                0
+            },
+        )
+        .unwrap();
+        git_stash_pop(repository, 0, None).unwrap();
+        let id = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(id).cast()) }.unwrap();
+        (id.raw_bytes().elems().collect(), messages)
+    }
+
+    unsafe fn raw_stash_options(
+        repository: *mut ffi::git_repository,
+    ) -> (Vec<u8>, Vec<u32>, Vec<Vec<u8>>, u32) {
+        let mut signature = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_signature_new(
+                    &mut signature,
+                    c"Crustify".as_ptr(),
+                    c"crustify@example.com".as_ptr(),
+                    1_700_000_300,
+                    0,
+                )
+            },
+            0
+        );
+        let mut save = unsafe { core::mem::zeroed::<ffi::git_stash_save_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_stash_save_options_init(&mut save, ffi::GIT_STASH_SAVE_OPTIONS_VERSION)
+            },
+            0
+        );
+        save.stasher = signature;
+        save.message = c"options stash".as_ptr();
+        save.flags = ffi::git_stash_flags_GIT_STASH_INCLUDE_UNTRACKED
+            | ffi::git_stash_flags_GIT_STASH_INCLUDE_IGNORED;
+        let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_stash_save_with_opts(&mut id, repository, &save) },
+            0
+        );
+
+        unsafe extern "C" fn progress(
+            stage: ffi::git_stash_apply_progress_t,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            unsafe { &mut *payload.cast::<Vec<u32>>() }.push(stage);
+            0
+        }
+        let mut stages = Vec::new();
+        let mut apply = unsafe { core::mem::zeroed::<ffi::git_stash_apply_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_stash_apply_options_init(&mut apply, ffi::GIT_STASH_APPLY_OPTIONS_VERSION)
+            },
+            0
+        );
+        apply.flags = ffi::git_stash_apply_flags_GIT_STASH_APPLY_REINSTATE_INDEX;
+        apply.progress_cb = Some(progress);
+        apply.progress_payload = core::ptr::from_mut(&mut stages).cast();
+        assert_eq!(unsafe { ffi::git_stash_apply(repository, 0, &apply) }, 0);
+
+        let mut status = 0;
+        assert_eq!(
+            unsafe { ffi::git_status_file(&mut status, repository, c"README.md".as_ptr()) },
+            0
+        );
+        let workdir = unsafe { CStr::from_ptr(ffi::git_repository_workdir(repository)) }
+            .to_str()
+            .unwrap();
+        let contents = [
+            "README.md",
+            ".gitignore",
+            "untracked.txt",
+            "private.ignored",
+        ]
+        .map(|path| std::fs::read(std::path::Path::new(workdir).join(path)).unwrap())
+        .to_vec();
+        assert_eq!(unsafe { ffi::git_stash_drop(repository, 0) }, 0);
+        unsafe { ffi::git_signature_free(signature) };
+        (id.id.to_vec(), stages, contents, status)
+    }
+
+    fn safe_stash_options(
+        repository: &mut crate::repository::GitRepositoryMut<'_>,
+    ) -> (Vec<u8>, Vec<u32>, Vec<Vec<u8>>, u32) {
+        use crate::api::stash::{GitStashApplyFlags, GitStashApplyOptions, GitStashSaveOptions};
+
+        let signature = crate::signature::git_signature_new(
+            c"Crustify",
+            c"crustify@example.com",
+            1_700_000_300,
+            0,
+        )
+        .unwrap();
+        let mut save = GitStashSaveOptions::new();
+        git_stash_save_options_init(&mut save.as_mut(), ffi::GIT_STASH_SAVE_OPTIONS_VERSION)
+            .unwrap();
+        {
+            let mut options = save.as_mut();
+            options.set_stasher(Some(signature.as_ref()));
+            options.set_message(Some(c"options stash"));
+            options.set_flags(GitStashFlags::INCLUDE_UNTRACKED | GitStashFlags::INCLUDE_IGNORED);
+        }
+        let mut id = git_stash_save_with_opts(repository, save.as_ref()).unwrap();
+
+        let mut stages = Vec::new();
+        let mut progress = |stage: StashApplyProgress| {
+            stages.push(stage as u32);
+            0
+        };
+        let mut apply = GitStashApplyOptions::new();
+        git_stash_apply_options_init(&mut apply.as_mut(), ffi::GIT_STASH_APPLY_OPTIONS_VERSION)
+            .unwrap();
+        {
+            let mut options = apply.as_mut();
+            options.set_flags(GitStashApplyFlags::REINSTATE_INDEX);
+            options.set_progress_callback(&mut progress);
+        }
+        git_stash_apply(repository, 0, Some(apply.as_ref())).unwrap();
+        drop(apply);
+        drop(progress);
+
+        let status = crate::status::git_status_file(repository, c"README.md")
+            .unwrap()
+            .bits();
+        let workdir = crate::repository::git_repository_workdir(repository.as_ref()).unwrap();
+        let contents = [
+            "README.md",
+            ".gitignore",
+            "untracked.txt",
+            "private.ignored",
+        ]
+        .map(|path| {
+            std::fs::read(std::path::Path::new(workdir.to_str().unwrap()).join(path)).unwrap()
+        })
+        .to_vec();
+        git_stash_drop(repository, 0).unwrap();
+        let id = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(id).cast()) }.unwrap();
+        (id.raw_bytes().elems().collect(), stages, contents, status)
+    }
+
+    #[test]
+    fn io_equiv_stash_save_list_and_pop() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("stash-raw");
+        let safe = HistoryFixture::new("stash-safe");
+        edit(&raw);
+        edit(&safe);
+        let raw_observation = unsafe { raw_stash(raw.repository.as_ptr()) };
+        let mut safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        assert_eq!(raw_observation, safe_stash(&mut safe_repository));
+        assert_eq!(
+            std::fs::read(raw.directory.path().join("README.md")).unwrap(),
+            std::fs::read(safe.directory.path().join("README.md")).unwrap()
+        );
+        assert_eq!(
+            std::fs::read(raw.directory.path().join("README.md")).unwrap(),
+            b"fixture\nstashed worktree contents\n"
+        );
+    }
+
+    #[test]
+    fn io_equiv_stash_options_untracked_ignored_reinstate_index_progress_and_drop() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("stash-options-raw");
+        let safe = HistoryFixture::new("stash-options-safe");
+        edit_index_untracked_and_ignored(&raw);
+        edit_index_untracked_and_ignored(&safe);
+        let raw_observation = unsafe { raw_stash_options(raw.repository.as_ptr()) };
+        let mut safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        let safe_observation = safe_stash_options(&mut safe_repository);
+        assert_eq!(raw_observation, safe_observation);
+        assert_eq!(
+            raw_observation.3,
+            ffi::git_status_t_GIT_STATUS_INDEX_MODIFIED
+        );
+        assert_eq!(
+            raw_observation.1.last(),
+            Some(&ffi::git_stash_apply_progress_t_GIT_STASH_APPLY_PROGRESS_DONE)
+        );
+    }
+}
+
+#[cfg(test)]
 mod scheduled_apply_tests {
     use super::*;
     use crate::api::stash::GitStashApplyOptions;

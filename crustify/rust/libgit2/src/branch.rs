@@ -382,3 +382,339 @@ pub fn git_branch_is_checked_out(branch: crate::refs::GitReferenceRef<'_>) -> Re
         error => Err(error),
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct BranchObservation {
+        moved_name: Vec<u8>,
+        upstream_name: Vec<u8>,
+        upstream_details: Vec<Vec<u8>>,
+        name_valid: bool,
+        moved_is_head: bool,
+        moved_is_checked_out: bool,
+        branches: Vec<(Vec<u8>, ffi::git_branch_t)>,
+        ahead_behind: (usize, usize),
+        descendant: bool,
+        reachable: bool,
+    }
+
+    unsafe fn raw_branches(repository: *mut ffi::git_repository) -> BranchObservation {
+        let mut topic = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_branch_lookup(
+                    &mut topic,
+                    repository,
+                    c"topic".as_ptr(),
+                    ffi::git_branch_t_GIT_BRANCH_LOCAL,
+                )
+            },
+            0
+        );
+        let mut moved = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_branch_move(&mut moved, topic, c"renamed".as_ptr(), 0) },
+            0
+        );
+        unsafe { ffi::git_reference_free(topic) };
+        let mut name = core::ptr::null();
+        assert_eq!(unsafe { ffi::git_branch_name(&mut name, moved) }, 0);
+        let moved_name = unsafe { core::ffi::CStr::from_ptr(name) }
+            .to_bytes()
+            .to_vec();
+        assert_eq!(
+            unsafe { ffi::git_branch_set_upstream(moved, c"master".as_ptr()) },
+            0
+        );
+        let mut upstream = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_branch_upstream(&mut upstream, moved) }, 0);
+        let upstream_name = unsafe { core::ffi::CStr::from_ptr(ffi::git_reference_name(upstream)) }
+            .to_bytes()
+            .to_vec();
+        let moved_is_head = unsafe { ffi::git_branch_is_head(moved) } != 0;
+        let moved_is_checked_out = unsafe { ffi::git_branch_is_checked_out(moved) } != 0;
+        let mut upstream_details = Vec::new();
+        for query in [
+            ffi::git_branch_upstream_name,
+            ffi::git_branch_upstream_remote,
+            ffi::git_branch_upstream_merge,
+        ] {
+            let mut value = unsafe { core::mem::zeroed::<ffi::git_buf>() };
+            assert_eq!(
+                unsafe { query(&mut value, repository, c"refs/heads/renamed".as_ptr()) },
+                0
+            );
+            upstream_details.push(
+                unsafe { core::slice::from_raw_parts(value.ptr.cast::<u8>(), value.size) }.to_vec(),
+            );
+            unsafe { ffi::git_buf_dispose(&mut value) };
+        }
+        let mut name_valid = 0;
+        assert_eq!(
+            unsafe { ffi::git_branch_name_is_valid(&mut name_valid, c"feature/valid".as_ptr()) },
+            0
+        );
+        unsafe { ffi::git_reference_free(upstream) };
+        unsafe { ffi::git_reference_free(moved) };
+
+        let mut annotated = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_revspec(
+                    &mut annotated,
+                    repository,
+                    c"HEAD~1".as_ptr(),
+                )
+            },
+            0
+        );
+        let mut temporary = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_branch_create_from_annotated(
+                    &mut temporary,
+                    repository,
+                    c"temporary".as_ptr(),
+                    annotated,
+                    0,
+                )
+            },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_branch_delete(temporary) }, 0);
+        unsafe { ffi::git_reference_free(temporary) };
+        unsafe { ffi::git_annotated_commit_free(annotated) };
+
+        let mut iterator = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_branch_iterator_new(
+                    &mut iterator,
+                    repository,
+                    ffi::git_branch_t_GIT_BRANCH_ALL,
+                )
+            },
+            0
+        );
+        let mut branches = Vec::new();
+        loop {
+            let mut branch = core::ptr::null_mut();
+            let mut kind = 0;
+            let status = unsafe { ffi::git_branch_next(&mut branch, &mut kind, iterator) };
+            if status == ffi::git_error_code_GIT_ITEROVER {
+                break;
+            }
+            assert_eq!(status, 0);
+            branches.push((
+                unsafe { core::ffi::CStr::from_ptr(ffi::git_reference_name(branch)) }
+                    .to_bytes()
+                    .to_vec(),
+                kind,
+            ));
+            unsafe { ffi::git_reference_free(branch) };
+        }
+        branches.sort();
+        unsafe { ffi::git_branch_iterator_free(iterator) };
+
+        let mut head: ffi::git_oid = unsafe { core::mem::zeroed() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut ancestor_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_revparse_single(&mut ancestor_object, repository, c"HEAD~2".as_ptr())
+            },
+            0
+        );
+        let ancestor = unsafe { *ffi::git_object_id(ancestor_object) };
+        let (mut ahead, mut behind) = (0, 0);
+        assert_eq!(
+            unsafe {
+                ffi::git_graph_ahead_behind(&mut ahead, &mut behind, repository, &head, &ancestor)
+            },
+            0
+        );
+        let descendant = unsafe { ffi::git_graph_descendant_of(repository, &head, &ancestor) } != 0;
+        let descendants = [head];
+        let reachable = unsafe {
+            ffi::git_graph_reachable_from_any(
+                repository,
+                &ancestor,
+                descendants.as_ptr(),
+                descendants.len(),
+            )
+        } != 0;
+        unsafe { ffi::git_object_free(ancestor_object) };
+
+        BranchObservation {
+            moved_name,
+            upstream_name,
+            upstream_details,
+            name_valid: name_valid != 0,
+            moved_is_head,
+            moved_is_checked_out,
+            branches,
+            ahead_behind: (ahead, behind),
+            descendant,
+            reachable,
+        }
+    }
+
+    fn safe_branches(repository: *mut ffi::git_repository) -> BranchObservation {
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let topic = git_branch_lookup(
+            &mut repository_view,
+            c"topic",
+            crate::api::types::GitBranchType::LOCAL,
+        )
+        .unwrap();
+        let moved = git_branch_move(topic, c"renamed", false).unwrap();
+        let moved_name = git_branch_name(moved.as_ref()).unwrap().to_bytes().to_vec();
+        git_branch_set_upstream(moved.as_ref(), Some(c"master")).unwrap();
+        let upstream = git_branch_upstream(moved.as_ref()).unwrap();
+        let upstream_name = crate::refs::git_reference_name(upstream.as_ref())
+            .to_bytes()
+            .to_vec();
+        let moved_is_head = git_branch_is_head(moved.as_ref()).unwrap();
+        let moved_is_checked_out = git_branch_is_checked_out(moved.as_ref()).unwrap();
+        let mut upstream_details = Vec::new();
+        for query in [
+            git_branch_upstream_name,
+            git_branch_upstream_remote,
+            git_branch_upstream_merge,
+        ] {
+            let mut value = crate::api::buffer::GitBuf::new();
+            query(
+                &mut value.as_mut(),
+                &mut repository_view,
+                c"refs/heads/renamed",
+            )
+            .unwrap();
+            upstream_details.push(
+                value
+                    .as_ref()
+                    .contents()
+                    .unwrap()
+                    .elems()
+                    .collect::<Vec<_>>(),
+            );
+        }
+        let name_valid = git_branch_name_is_valid(Some(c"feature/valid")).unwrap();
+        drop(upstream);
+        drop(moved);
+
+        let mut annotated = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_revspec(
+                    &mut annotated,
+                    repository,
+                    c"HEAD~1".as_ptr(),
+                )
+            },
+            0
+        );
+        let annotated_view =
+            unsafe { crate::annotated_commit::AnnotatedCommitRef::from_ptr(annotated) }.unwrap();
+        let temporary = git_branch_create_from_annotated(
+            &mut repository_view,
+            c"temporary",
+            annotated_view,
+            false,
+        )
+        .unwrap();
+        git_branch_delete(temporary).unwrap();
+        unsafe { ffi::git_annotated_commit_free(annotated) };
+
+        let mut iterator =
+            git_branch_iterator_new(&mut repository_view, crate::api::types::GitBranchType::ALL)
+                .unwrap();
+        let mut branches = Vec::new();
+        loop {
+            let next = {
+                let mut view = iterator.as_mut();
+                git_branch_next(&mut view)
+            };
+            match next {
+                Ok((branch, kind)) => branches.push((
+                    crate::refs::git_reference_name(branch.as_ref())
+                        .to_bytes()
+                        .to_vec(),
+                    kind.bits(),
+                )),
+                Err(ffi::git_error_code_GIT_ITEROVER) => break,
+                Err(status) => panic!("branch iteration failed: {status}"),
+            }
+        }
+        branches.sort();
+
+        let mut head =
+            crate::refs::git_reference_name_to_id(&mut repository_view, c"HEAD").unwrap();
+        let mut ancestor_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_revparse_single(&mut ancestor_object, repository, c"HEAD~2".as_ptr())
+            },
+            0
+        );
+        let mut ancestor = unsafe { *ffi::git_object_id(ancestor_object) };
+        let head_ref =
+            unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of_mut!(head).cast()) }.unwrap();
+        let ancestor_ref =
+            unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of_mut!(ancestor).cast()) }
+                .unwrap();
+        let ahead_behind =
+            crate::graph::git_graph_ahead_behind(repository_view.as_ref(), head_ref, ancestor_ref)
+                .unwrap();
+        let descendant =
+            crate::graph::git_graph_descendant_of(repository_view.as_ref(), head_ref, ancestor_ref)
+                .unwrap();
+        let descendant_ids = [head];
+        let descendants = unsafe {
+            ffibox::CSlice::from_raw_parts(
+                core::ptr::NonNull::new(descendant_ids.as_ptr().cast_mut()).unwrap(),
+                descendant_ids.len(),
+            )
+        };
+        let reachable = crate::graph::git_graph_reachable_from_any(
+            &mut repository_view,
+            ancestor_ref,
+            descendants,
+        )
+        .unwrap();
+        unsafe { ffi::git_object_free(ancestor_object) };
+
+        BranchObservation {
+            moved_name,
+            upstream_name,
+            upstream_details,
+            name_valid,
+            moved_is_head,
+            moved_is_checked_out,
+            branches,
+            ahead_behind,
+            descendant,
+            reachable,
+        }
+    }
+
+    #[test]
+    fn io_equiv_branch_lifecycle_iteration_upstream_and_graph_queries() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("branch-raw");
+        let safe = HistoryFixture::new("branch-safe");
+        let raw_observation = unsafe { raw_branches(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_branches(safe.repository.as_ptr()));
+        assert_eq!(raw_observation.ahead_behind, (2, 0));
+        assert!(raw_observation.descendant && raw_observation.reachable);
+    }
+}

@@ -420,6 +420,284 @@ pub fn git_worktree_add_options_init(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, RawBuf, TempDir, safe_buf_bytes};
+
+    unsafe fn raw_add(
+        repository: *mut ffi::git_repository,
+        path: &CStr,
+    ) -> (Vec<u8>, Vec<Vec<u8>>, Vec<u8>) {
+        let mut worktree = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_worktree_add(
+                    &mut worktree,
+                    repository,
+                    c"linked".as_ptr(),
+                    path.as_ptr(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_worktree_validate(worktree) }, 0);
+        assert_eq!(
+            unsafe { ffi::git_worktree_lock(worktree, c"equivalence lock".as_ptr()) },
+            0
+        );
+        let mut reason = RawBuf::new();
+        assert_eq!(
+            unsafe { ffi::git_worktree_is_locked(&mut reason.0, worktree) },
+            1
+        );
+        assert_eq!(unsafe { ffi::git_worktree_unlock(worktree) }, 0);
+        let name = unsafe { CStr::from_ptr(ffi::git_worktree_name(worktree)) }
+            .to_bytes()
+            .to_vec();
+        let mut list = ffi::git_strarray {
+            strings: core::ptr::null_mut(),
+            count: 0,
+        };
+        assert_eq!(unsafe { ffi::git_worktree_list(&mut list, repository) }, 0);
+        let names = (0..list.count)
+            .map(|index| {
+                unsafe { CStr::from_ptr(*list.strings.add(index)) }
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect();
+        unsafe {
+            ffi::git_strarray_dispose(&mut list);
+            ffi::git_worktree_free(worktree);
+        }
+        (name, names, reason.bytes())
+    }
+
+    fn safe_add(
+        repository: &mut crate::repository::GitRepositoryMut<'_>,
+        path: &CStr,
+    ) -> (Vec<u8>, Vec<Vec<u8>>, Vec<u8>) {
+        let mut worktree = git_worktree_add(repository, c"linked", path, None).unwrap();
+        git_worktree_validate(worktree.as_ref()).unwrap();
+        git_worktree_lock(&mut worktree.as_mut(), Some(c"equivalence lock")).unwrap();
+        let mut reason = crate::api::buffer::GitBuf::new();
+        assert!(git_worktree_is_locked(worktree.as_ref(), Some(&mut reason.as_mut())).unwrap());
+        assert!(git_worktree_unlock(&mut worktree.as_mut()).unwrap());
+        let name = git_worktree_name(worktree.as_ref()).to_bytes().to_vec();
+        let list = git_worktree_list(repository.as_ref()).unwrap();
+        let strings = list.as_ref().strings().unwrap();
+        let names = (0..strings.len())
+            .map(|index| strings.get(index).unwrap().to_bytes().to_vec())
+            .collect();
+        (name, names, safe_buf_bytes(reason.as_ref()))
+    }
+
+    unsafe fn raw_open_and_prune(
+        repository: *mut ffi::git_repository,
+        path: &CStr,
+    ) -> (Vec<u8>, Vec<u8>, bool, bool, bool, usize) {
+        let mut worktree = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_worktree_add(
+                    &mut worktree,
+                    repository,
+                    c"ephemeral".as_ptr(),
+                    path.as_ptr(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let mut looked_up = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_worktree_lookup(&mut looked_up, repository, c"ephemeral".as_ptr(),) },
+            0
+        );
+        let mut linked_repository = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_open_from_worktree(&mut linked_repository, looked_up) },
+            0
+        );
+        let mut reopened = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_worktree_open_from_repository(&mut reopened, linked_repository) },
+            0
+        );
+        let reopened_name = unsafe { CStr::from_ptr(ffi::git_worktree_name(reopened)) }
+            .to_bytes()
+            .to_vec();
+        let reopened_path = unsafe { CStr::from_ptr(ffi::git_worktree_path(reopened)) }
+            .to_bytes()
+            .to_vec();
+        let mut head = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_repository_head_for_worktree(&mut head, repository, c"ephemeral".as_ptr())
+            },
+            0
+        );
+        let detached = unsafe {
+            ffi::git_repository_head_detached_for_worktree(repository, c"ephemeral".as_ptr())
+        } != 0;
+        let prunable =
+            unsafe { ffi::git_worktree_is_prunable(worktree, core::ptr::null_mut()) } != 0;
+        let already_unlocked = unsafe { ffi::git_worktree_unlock(worktree) } == 1;
+
+        unsafe {
+            ffi::git_reference_free(head);
+            ffi::git_worktree_free(reopened);
+            ffi::git_repository_free(linked_repository);
+            ffi::git_worktree_free(looked_up);
+        }
+        let mut prune = unsafe { core::mem::zeroed::<ffi::git_worktree_prune_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_worktree_prune_options_init(
+                    &mut prune,
+                    ffi::GIT_WORKTREE_PRUNE_OPTIONS_VERSION,
+                )
+            },
+            0
+        );
+        prune.flags = ffi::git_worktree_prune_t_GIT_WORKTREE_PRUNE_VALID
+            | ffi::git_worktree_prune_t_GIT_WORKTREE_PRUNE_WORKING_TREE;
+        assert_eq!(unsafe { ffi::git_worktree_prune(worktree, &mut prune) }, 0);
+        let checkout_exists = std::path::Path::new(path.to_str().unwrap()).exists();
+        let mut list = ffi::git_strarray {
+            strings: core::ptr::null_mut(),
+            count: 0,
+        };
+        assert_eq!(unsafe { ffi::git_worktree_list(&mut list, repository) }, 0);
+        let remaining = list.count;
+        unsafe {
+            ffi::git_strarray_dispose(&mut list);
+            ffi::git_worktree_free(worktree);
+        }
+        (
+            reopened_name,
+            reopened_path
+                .rsplit(|byte| *byte == b'/')
+                .next()
+                .unwrap()
+                .to_vec(),
+            detached,
+            prunable,
+            already_unlocked && !checkout_exists,
+            remaining,
+        )
+    }
+
+    fn safe_open_and_prune(
+        repository: &mut crate::repository::GitRepositoryMut<'_>,
+        path: &CStr,
+    ) -> (Vec<u8>, Vec<u8>, bool, bool, bool, usize) {
+        let mut worktree = git_worktree_add(repository, c"ephemeral", path, None).unwrap();
+        let looked_up = git_worktree_lookup(repository.as_ref(), c"ephemeral").unwrap();
+        let linked_repository =
+            crate::repository::git_repository_open_from_worktree(looked_up.as_ref()).unwrap();
+        let reopened = git_worktree_open_from_repository(linked_repository.as_ref()).unwrap();
+        let reopened_name = git_worktree_name(reopened.as_ref()).to_bytes().to_vec();
+        let reopened_path = git_worktree_path(reopened.as_ref()).to_bytes().to_vec();
+        let head =
+            crate::repository::git_repository_head_for_worktree(repository, c"ephemeral").unwrap();
+        drop(head);
+        let detached =
+            crate::repository::git_repository_head_detached_for_worktree(repository, c"ephemeral")
+                .unwrap();
+        let prunable = git_worktree_is_prunable(worktree.as_ref(), None).unwrap();
+        let already_unlocked = !git_worktree_unlock(&mut worktree.as_mut()).unwrap();
+        drop(reopened);
+        drop(linked_repository);
+        drop(looked_up);
+
+        let mut prune = git_worktree_prune_options_init().unwrap();
+        let mut prune =
+            unsafe { GitWorktreePruneOptionsMut::from_ptr(core::ptr::addr_of_mut!(prune).cast()) }
+                .unwrap();
+        prune.set_flags(GitWorktreePruneFlags::VALID | GitWorktreePruneFlags::WORKING_TREE);
+        git_worktree_prune(&mut worktree.as_mut(), Some(prune.as_ref())).unwrap();
+        let checkout_exists = std::path::Path::new(path.to_str().unwrap()).exists();
+        let remaining = git_worktree_list(repository.as_ref())
+            .unwrap()
+            .as_ref()
+            .count();
+        (
+            reopened_name,
+            reopened_path
+                .rsplit(|byte| *byte == b'/')
+                .next()
+                .unwrap()
+                .to_vec(),
+            detached,
+            prunable,
+            already_unlocked && !checkout_exists,
+            remaining,
+        )
+    }
+
+    #[test]
+    fn io_equiv_linked_worktree_add_lock_and_list() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("worktree-parent-raw");
+        let safe = HistoryFixture::new("worktree-parent-safe");
+        let raw_checkout = TempDir::new("worktree-raw");
+        let safe_checkout = TempDir::new("worktree-safe");
+        let raw_checkout_path = raw_checkout.path().join("checkout");
+        let safe_checkout_path = safe_checkout.path().join("checkout");
+        let raw_path = std::ffi::CString::new(raw_checkout_path.to_str().unwrap()).unwrap();
+        let safe_path = std::ffi::CString::new(safe_checkout_path.to_str().unwrap()).unwrap();
+        let raw_observation = unsafe { raw_add(raw.repository.as_ptr(), &raw_path) };
+        let mut safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        assert_eq!(raw_observation, safe_add(&mut safe_repository, &safe_path));
+        assert_eq!(raw_observation.0, b"linked");
+        assert_eq!(raw_observation.2, b"equivalence lock");
+        assert_eq!(
+            std::fs::read(raw_checkout_path.join("README.md")).unwrap(),
+            std::fs::read(safe_checkout_path.join("README.md")).unwrap()
+        );
+    }
+
+    #[test]
+    fn io_equiv_worktree_lookup_repository_roundtrip_and_forced_prune() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("worktree-roundtrip-parent-raw");
+        let safe = HistoryFixture::new("worktree-roundtrip-parent-safe");
+        let raw_checkout = TempDir::new("worktree-roundtrip-raw");
+        let safe_checkout = TempDir::new("worktree-roundtrip-safe");
+        let raw_path =
+            std::ffi::CString::new(raw_checkout.path().join("checkout").to_str().unwrap()).unwrap();
+        let safe_path =
+            std::ffi::CString::new(safe_checkout.path().join("checkout").to_str().unwrap())
+                .unwrap();
+        let raw_observation = unsafe { raw_open_and_prune(raw.repository.as_ptr(), &raw_path) };
+        let mut safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        assert_eq!(
+            raw_observation,
+            safe_open_and_prune(&mut safe_repository, &safe_path)
+        );
+        assert_eq!(
+            raw_observation,
+            (
+                b"ephemeral".to_vec(),
+                b"checkout".to_vec(),
+                true,
+                false,
+                true,
+                0
+            )
+        );
+    }
+}
+
+#[cfg(test)]
 mod scheduled_add_tests {
     use super::*;
     use crate::api::worktree::GitWorktreeAddOptions;

@@ -854,6 +854,484 @@ where
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct ReferenceObservation {
+        validity: Vec<bool>,
+        normalized: Vec<u8>,
+        direct: (Vec<u8>, Vec<u8>, Vec<u8>, i32, [bool; 4], bool),
+        symbolic: (Vec<u8>, Vec<u8>, Vec<u8>, i32),
+        peeled: Vec<u8>,
+        names: Vec<Vec<u8>>,
+        head_names: Vec<Vec<u8>>,
+        packed_refs: bool,
+        removed: [i32; 2],
+    }
+
+    unsafe fn raw_observe(fixture: &HistoryFixture) -> ReferenceObservation {
+        let repository = fixture.repository.as_ptr();
+        let validity = [
+            c"refs/heads/valid",
+            c"HEAD",
+            c"refs//bad",
+            c"refs/heads/dot.",
+        ]
+        .iter()
+        .map(|name| {
+            let mut valid = 0;
+            assert_eq!(
+                unsafe { ffi::git_reference_name_is_valid(&mut valid, name.as_ptr()) },
+                0
+            );
+            valid != 0
+        })
+        .collect();
+        let mut buffer = [0u8; 128];
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_normalize_name(
+                    buffer.as_mut_ptr().cast(),
+                    buffer.len(),
+                    c"refs/heads/equiv-direct".as_ptr(),
+                    ffi::git_reference_format_t_GIT_REFERENCE_FORMAT_NORMAL,
+                )
+            },
+            0
+        );
+        let normalized = core::ffi::CStr::from_bytes_until_nul(&buffer)
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut parent_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut parent_object, repository, c"HEAD~1".as_ptr()) },
+            0
+        );
+        let parent = unsafe { *ffi::git_object_id(parent_object) };
+        unsafe { ffi::git_object_free(parent_object) };
+
+        let mut direct = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_create(
+                    &mut direct,
+                    repository,
+                    c"refs/heads/equiv-direct".as_ptr(),
+                    &head,
+                    0,
+                    c"create direct".as_ptr(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_ensure_log(repository, c"refs/heads/equiv-direct".as_ptr())
+            },
+            0
+        );
+        let has_log =
+            unsafe { ffi::git_reference_has_log(repository, c"refs/heads/equiv-direct".as_ptr()) }
+                == 1;
+        let mut duplicate = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_reference_dup(&mut duplicate, direct) }, 0);
+        let comparison = unsafe { ffi::git_reference_cmp(direct, duplicate) };
+        unsafe { ffi::git_reference_free(duplicate) };
+        let class = [
+            unsafe { ffi::git_reference_is_branch(direct) != 0 },
+            unsafe { ffi::git_reference_is_note(direct) != 0 },
+            unsafe { ffi::git_reference_is_remote(direct) != 0 },
+            unsafe { ffi::git_reference_is_tag(direct) != 0 },
+        ];
+        let mut updated = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_set_target(
+                    &mut updated,
+                    direct,
+                    &parent,
+                    c"move direct".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_reference_free(direct) };
+        let mut renamed = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_rename(
+                    &mut renamed,
+                    updated,
+                    c"refs/heads/equiv-renamed".as_ptr(),
+                    0,
+                    c"rename direct".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_reference_free(updated) };
+        let direct_observation = (
+            unsafe { CStr::from_ptr(ffi::git_reference_name(renamed)) }
+                .to_bytes()
+                .to_vec(),
+            unsafe { CStr::from_ptr(ffi::git_reference_shorthand(renamed)) }
+                .to_bytes()
+                .to_vec(),
+            unsafe { (*ffi::git_reference_target(renamed)).id }.to_vec(),
+            comparison,
+            class,
+            has_log,
+        );
+
+        let mut symbolic = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_symbolic_create(
+                    &mut symbolic,
+                    repository,
+                    c"refs/equiv/alias".as_ptr(),
+                    c"refs/heads/equiv-renamed".as_ptr(),
+                    0,
+                    c"create symbolic".as_ptr(),
+                )
+            },
+            0
+        );
+        let symbolic_type = unsafe { ffi::git_reference_type(symbolic) } as i32;
+        let original_target =
+            unsafe { CStr::from_ptr(ffi::git_reference_symbolic_target(symbolic)) }
+                .to_bytes()
+                .to_vec();
+        let mut retargeted = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_symbolic_set_target(
+                    &mut retargeted,
+                    symbolic,
+                    c"refs/heads/master".as_ptr(),
+                    c"retarget symbolic".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_reference_free(symbolic) };
+        let mut resolved = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_reference_resolve(&mut resolved, retargeted) },
+            0
+        );
+        let symbolic_observation = (
+            unsafe { CStr::from_ptr(ffi::git_reference_name(retargeted)) }
+                .to_bytes()
+                .to_vec(),
+            original_target,
+            unsafe { (*ffi::git_reference_target(resolved)).id }.to_vec(),
+            symbolic_type,
+        );
+        unsafe {
+            ffi::git_reference_free(resolved);
+            ffi::git_reference_free(retargeted);
+        }
+        let mut dwim = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_reference_dwim(&mut dwim, repository, c"equiv-renamed".as_ptr()) },
+            0
+        );
+        unsafe { ffi::git_reference_free(dwim) };
+
+        let mut tag = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_reference_lookup(&mut tag, repository, c"refs/tags/v1.0".as_ptr()) },
+            0
+        );
+        let mut peeled = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_peel(&mut peeled, tag, ffi::git_object_t_GIT_OBJECT_COMMIT)
+            },
+            0
+        );
+        let peeled_id = unsafe { (*ffi::git_object_id(peeled)).id }.to_vec();
+        unsafe {
+            ffi::git_object_free(peeled);
+            ffi::git_reference_free(tag);
+        }
+
+        let mut names = ffi::git_strarray {
+            strings: core::ptr::null_mut(),
+            count: 0,
+        };
+        assert_eq!(
+            unsafe { ffi::git_reference_list(&mut names, repository) },
+            0
+        );
+        let mut all_names = (0..names.count)
+            .map(|index| {
+                unsafe { CStr::from_ptr(*names.strings.add(index)) }
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect::<Vec<_>>();
+        all_names.sort();
+        unsafe { ffi::git_strarray_dispose(&mut names) };
+        unsafe extern "C" fn collect(
+            name: *const core::ffi::c_char,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            unsafe { &mut *payload.cast::<Vec<Vec<u8>>>() }
+                .push(unsafe { CStr::from_ptr(name) }.to_bytes().to_vec());
+            0
+        }
+        let mut head_names = Vec::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_foreach_glob(
+                    repository,
+                    c"refs/heads/*".as_ptr(),
+                    Some(collect),
+                    core::ptr::from_mut(&mut head_names).cast(),
+                )
+            },
+            0
+        );
+        head_names.sort();
+        let mut refdb = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_refdb(&mut refdb, repository) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_refdb_compress(refdb) }, 0);
+        unsafe { ffi::git_refdb_free(refdb) };
+        let packed_refs = fixture.directory.path().join(".git/packed-refs").is_file();
+        let remove_alias =
+            unsafe { ffi::git_reference_remove(repository, c"refs/equiv/alias".as_ptr()) };
+        let delete_renamed = unsafe { ffi::git_reference_delete(renamed) };
+        unsafe { ffi::git_reference_free(renamed) };
+        ReferenceObservation {
+            validity,
+            normalized,
+            direct: direct_observation,
+            symbolic: symbolic_observation,
+            peeled: peeled_id,
+            names: all_names,
+            head_names,
+            packed_refs,
+            removed: [remove_alias, delete_renamed],
+        }
+    }
+
+    fn oid_bytes(id: OidRef<'_>) -> Vec<u8> {
+        id.raw_bytes().elems().collect()
+    }
+
+    fn safe_observe(fixture: &HistoryFixture) -> ReferenceObservation {
+        let mut repository =
+            unsafe { GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }.unwrap();
+        let validity = [
+            c"refs/heads/valid",
+            c"HEAD",
+            c"refs//bad",
+            c"refs/heads/dot.",
+        ]
+        .iter()
+        .map(|name| git_reference_name_is_valid(name).unwrap())
+        .collect();
+        let mut buffer = [0u8; 128];
+        let normalized = git_reference_normalize_name(
+            &mut buffer,
+            c"refs/heads/equiv-direct",
+            GitReferenceFormatFlags::NORMAL,
+        )
+        .unwrap()
+        .to_bytes()
+        .to_vec();
+        let mut head = git_reference_name_to_id(&mut repository, c"HEAD").unwrap();
+        let mut parent_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_revparse_single(
+                    &mut parent_object,
+                    fixture.repository.as_ptr(),
+                    c"HEAD~1".as_ptr(),
+                )
+            },
+            0
+        );
+        let mut parent = unsafe { *ffi::git_object_id(parent_object) };
+        unsafe { ffi::git_object_free(parent_object) };
+        let head_ref = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(head).cast()) }.unwrap();
+        let parent_ref =
+            unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(parent).cast()) }.unwrap();
+        drop(
+            git_reference_create(
+                &mut repository,
+                c"refs/heads/equiv-direct",
+                head_ref,
+                false,
+                Some(c"create direct"),
+            )
+            .unwrap(),
+        );
+        git_reference_ensure_log(&mut repository, c"refs/heads/equiv-direct").unwrap();
+        let has_log = git_reference_has_log(&mut repository, c"refs/heads/equiv-direct").unwrap();
+        let direct = git_reference_lookup(&mut repository, c"refs/heads/equiv-direct").unwrap();
+        let duplicate = git_reference_dup(direct.as_ref()).unwrap();
+        let comparison = git_reference_cmp(direct.as_ref(), duplicate.as_ref()) as i32;
+        drop(duplicate);
+        let class = [
+            git_reference_is_branch(direct.as_ref()),
+            git_reference_is_note(direct.as_ref()),
+            git_reference_is_remote(direct.as_ref()),
+            git_reference_is_tag(direct.as_ref()),
+        ];
+        drop(direct);
+        let mut direct = git_reference_lookup(&mut repository, c"refs/heads/equiv-direct").unwrap();
+        {
+            let mut direct_view = direct.as_mut();
+            drop(
+                git_reference_set_target(&mut direct_view, parent_ref, Some(c"move direct"))
+                    .unwrap(),
+            );
+        }
+        drop(direct);
+        let mut updated =
+            git_reference_lookup(&mut repository, c"refs/heads/equiv-direct").unwrap();
+        let direct_observation = {
+            let mut updated_view = updated.as_mut();
+            let renamed = git_reference_rename(
+                &mut updated_view,
+                c"refs/heads/equiv-renamed",
+                false,
+                Some(c"rename direct"),
+            )
+            .unwrap();
+            let observation = (
+                git_reference_name(renamed.as_ref()).to_bytes().to_vec(),
+                git_reference_shorthand(renamed.as_ref())
+                    .to_bytes()
+                    .to_vec(),
+                oid_bytes(git_reference_target(renamed.as_ref()).unwrap()),
+                comparison,
+                class,
+                has_log,
+            );
+            drop(renamed);
+            observation
+        };
+        drop(updated);
+        drop(
+            git_reference_symbolic_create(
+                &mut repository,
+                c"refs/equiv/alias",
+                c"refs/heads/equiv-renamed",
+                false,
+                Some(c"create symbolic"),
+            )
+            .unwrap(),
+        );
+        let mut symbolic = git_reference_lookup(&mut repository, c"refs/equiv/alias").unwrap();
+        let symbolic_type =
+            ffi::git_reference_t::from(git_reference_type(symbolic.as_ref()).unwrap()) as i32;
+        let original_target = git_reference_symbolic_target(symbolic.as_ref())
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        {
+            let mut symbolic_view = symbolic.as_mut();
+            drop(
+                git_reference_symbolic_set_target(
+                    &mut symbolic_view,
+                    c"refs/heads/master",
+                    Some(c"retarget symbolic"),
+                )
+                .unwrap(),
+            );
+        }
+        drop(symbolic);
+        let retargeted = git_reference_lookup(&mut repository, c"refs/equiv/alias").unwrap();
+        let resolved = git_reference_resolve(retargeted.as_ref()).unwrap();
+        let symbolic_observation = (
+            git_reference_name(retargeted.as_ref()).to_bytes().to_vec(),
+            original_target,
+            oid_bytes(git_reference_target(resolved.as_ref()).unwrap()),
+            symbolic_type,
+        );
+        drop(resolved);
+        drop(retargeted);
+        drop(git_reference_dwim(&mut repository, c"equiv-renamed").unwrap());
+        let tag = git_reference_lookup(&mut repository, c"refs/tags/v1.0").unwrap();
+        let peeled = git_reference_peel(tag.as_ref(), GitObjectType::COMMIT).unwrap();
+        let peeled_id = oid_bytes(crate::object::git_object_id(peeled.as_ref()));
+        drop(peeled);
+        drop(tag);
+        let names = git_reference_list(&mut repository).unwrap();
+        let mut all_names = (0..names.as_ref().count())
+            .map(|index| {
+                names
+                    .as_ref()
+                    .strings()
+                    .unwrap()
+                    .get(index)
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect::<Vec<_>>();
+        all_names.sort();
+        drop(names);
+        let mut head_names = Vec::new();
+        git_reference_foreach_glob(&mut repository, c"refs/heads/*", &mut |name: &CStr| {
+            head_names.push(name.to_bytes().to_vec());
+            0
+        })
+        .unwrap();
+        head_names.sort();
+        let mut refdb = crate::repository::git_repository_refdb(&mut repository).unwrap();
+        crate::refdb::git_refdb_compress(&mut refdb.as_mut()).unwrap();
+        drop(refdb);
+        let packed_refs = fixture.directory.path().join(".git/packed-refs").is_file();
+        let remove_alias = git_reference_remove(&mut repository, c"refs/equiv/alias")
+            .map_or_else(|error| error, |_| 0);
+        let mut renamed =
+            git_reference_lookup(&mut repository, c"refs/heads/equiv-renamed").unwrap();
+        let delete_renamed =
+            git_reference_delete(&mut renamed.as_mut()).map_or_else(|error| error, |_| 0);
+        ReferenceObservation {
+            validity,
+            normalized,
+            direct: direct_observation,
+            symbolic: symbolic_observation,
+            peeled: peeled_id,
+            names: all_names,
+            head_names,
+            packed_refs,
+            removed: [remove_alias, delete_renamed],
+        }
+    }
+
+    #[test]
+    fn io_equiv_reference_direct_symbolic_iteration_and_packing_lifecycle() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("refs-raw");
+        let safe = HistoryFixture::new("refs-safe");
+        let raw_observation = unsafe { raw_observe(&raw) };
+        assert_eq!(raw_observation, safe_observe(&safe));
+        assert!(raw_observation.packed_refs);
+        assert_eq!(raw_observation.removed, [0, 0]);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use core::mem::{MaybeUninit, align_of, size_of};
 

@@ -367,6 +367,690 @@ pub fn git_checkout_tree(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, TempDir};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct CheckoutObservation {
+        readme: Vec<u8>,
+        alpha: Vec<u8>,
+        beta: Vec<u8>,
+        junk_exists: bool,
+        guide_exists: bool,
+    }
+
+    fn dirty(fixture: &HistoryFixture) {
+        std::fs::write(
+            fixture.directory.path().join("README.md"),
+            b"dirty contents\n",
+        )
+        .unwrap();
+        std::fs::remove_file(fixture.directory.path().join("src/alpha.c")).unwrap();
+        std::fs::write(fixture.directory.path().join("junk.tmp"), b"untracked\n").unwrap();
+    }
+
+    fn observation(fixture: &HistoryFixture) -> CheckoutObservation {
+        CheckoutObservation {
+            readme: std::fs::read(fixture.directory.path().join("README.md")).unwrap(),
+            alpha: std::fs::read(fixture.directory.path().join("src/alpha.c")).unwrap(),
+            beta: std::fs::read(fixture.directory.path().join("src/beta.c")).unwrap(),
+            junk_exists: fixture.directory.path().join("junk.tmp").exists(),
+            guide_exists: fixture.directory.path().join("docs/guide.txt").exists(),
+        }
+    }
+
+    unsafe fn raw_checkout(fixture: &HistoryFixture) -> CheckoutObservation {
+        let repository = fixture.repository.as_ptr();
+        let mut options: ffi::git_checkout_options = unsafe { core::mem::zeroed() };
+        assert_eq!(
+            unsafe {
+                ffi::git_checkout_options_init(&mut options, ffi::GIT_CHECKOUT_OPTIONS_VERSION)
+            },
+            0
+        );
+        options.checkout_strategy = ffi::git_checkout_strategy_t_GIT_CHECKOUT_FORCE
+            | ffi::git_checkout_strategy_t_GIT_CHECKOUT_RECREATE_MISSING
+            | ffi::git_checkout_strategy_t_GIT_CHECKOUT_REMOVE_UNTRACKED;
+        assert_eq!(unsafe { ffi::git_checkout_head(repository, &options) }, 0);
+        std::fs::write(fixture.directory.path().join("README.md"), b"dirty again\n").unwrap();
+        assert_eq!(
+            unsafe { ffi::git_checkout_index(repository, core::ptr::null_mut(), &options) },
+            0
+        );
+
+        let mut prior = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut prior, repository, c"HEAD~2".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_checkout_tree(repository, prior, &options) },
+            0
+        );
+        assert!(fixture.directory.path().join("docs/guide.txt").exists());
+        assert_eq!(unsafe { ffi::git_checkout_head(repository, &options) }, 0);
+        unsafe { ffi::git_object_free(prior) };
+        observation(fixture)
+    }
+
+    fn safe_checkout(fixture: &HistoryFixture) -> CheckoutObservation {
+        let repository = fixture.repository.as_ptr();
+        let mut options = crate::api::checkout::GitCheckoutOptions::new();
+        options.as_mut().set_checkout_strategy(
+            crate::api::checkout::GitCheckoutStrategy::FORCE
+                | crate::api::checkout::GitCheckoutStrategy::RECREATE_MISSING
+                | crate::api::checkout::GitCheckoutStrategy::REMOVE_UNTRACKED,
+        );
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        git_checkout_head(&mut repository_view, Some(options.as_ref())).unwrap();
+        std::fs::write(fixture.directory.path().join("README.md"), b"dirty again\n").unwrap();
+        git_checkout_index(&mut repository_view, None, Some(options.as_ref())).unwrap();
+        let mut prior = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut prior, repository, c"HEAD~2".as_ptr()) },
+            0
+        );
+        let prior_view = unsafe { crate::object::GitObjectRef::from_ptr(prior) }.unwrap();
+        git_checkout_tree(
+            &mut repository_view,
+            Some(prior_view),
+            Some(options.as_ref()),
+        )
+        .unwrap();
+        assert!(fixture.directory.path().join("docs/guide.txt").exists());
+        git_checkout_head(&mut repository_view, Some(options.as_ref())).unwrap();
+        unsafe { ffi::git_object_free(prior) };
+        observation(fixture)
+    }
+
+    #[test]
+    fn io_equiv_force_checkout_head_index_and_tree() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("checkout-raw");
+        let safe = HistoryFixture::new("checkout-safe");
+        dirty(&raw);
+        dirty(&safe);
+        let raw_observation = unsafe { raw_checkout(&raw) };
+        assert_eq!(raw_observation, safe_checkout(&safe));
+        assert!(!raw_observation.junk_exists);
+        assert!(!raw_observation.guide_exists);
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct TargetObservation {
+        readme_exists: bool,
+        alpha: Vec<u8>,
+        beta: Vec<u8>,
+        guide_exists: bool,
+    }
+
+    fn target_observation(target: &TempDir) -> TargetObservation {
+        TargetObservation {
+            readme_exists: target.path().join("README.md").exists(),
+            alpha: std::fs::read(target.path().join("src/alpha.c")).unwrap(),
+            beta: std::fs::read(target.path().join("src/beta.c")).unwrap(),
+            guide_exists: target.path().join("docs/guide.txt").exists(),
+        }
+    }
+
+    unsafe fn raw_checkout_paths(
+        repository: *mut ffi::git_repository,
+        target: &TempDir,
+    ) -> TargetObservation {
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_checkout_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_checkout_options_init(&mut options, ffi::GIT_CHECKOUT_OPTIONS_VERSION)
+            },
+            0
+        );
+        options.checkout_strategy = ffi::git_checkout_strategy_t_GIT_CHECKOUT_FORCE
+            | ffi::git_checkout_strategy_t_GIT_CHECKOUT_DONT_UPDATE_INDEX;
+        let target_path = target.c_path();
+        options.target_directory = target_path.as_ptr();
+        let mut path = c"src/*".as_ptr().cast_mut();
+        options.paths = ffi::git_strarray {
+            strings: core::ptr::from_mut(&mut path),
+            count: 1,
+        };
+        assert_eq!(unsafe { ffi::git_checkout_head(repository, &options) }, 0);
+        target_observation(target)
+    }
+
+    fn safe_checkout_paths(
+        repository: *mut ffi::git_repository,
+        target: &TempDir,
+    ) -> TargetObservation {
+        let target_path = target.c_path();
+        let mut path = c"src/*".as_ptr().cast_mut();
+        let mut raw_paths = ffi::git_strarray {
+            strings: core::ptr::from_mut(&mut path),
+            count: 1,
+        };
+        let paths = unsafe {
+            crate::strarray::GitStrArrayRef::from_ptr(core::ptr::from_mut(&mut raw_paths))
+        }
+        .unwrap();
+        let mut options = crate::api::checkout::GitCheckoutOptions::new();
+        options.as_mut().set_checkout_strategy(
+            crate::api::checkout::GitCheckoutStrategy::FORCE
+                | crate::api::checkout::GitCheckoutStrategy::DONT_UPDATE_INDEX,
+        );
+        options.as_mut().set_target_directory(Some(&target_path));
+        options.as_mut().set_paths(paths);
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        git_checkout_head(&mut repository_view, Some(options.as_ref())).unwrap();
+        target_observation(target)
+    }
+
+    #[test]
+    fn io_equiv_checkout_pathspec_into_alternate_directory() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("checkout-paths-raw");
+        let safe = HistoryFixture::new("checkout-paths-safe");
+        let raw_target = TempDir::new("checkout-target-raw");
+        let safe_target = TempDir::new("checkout-target-safe");
+        let raw_observation = unsafe { raw_checkout_paths(raw.repository.as_ptr(), &raw_target) };
+        assert_eq!(
+            raw_observation,
+            safe_checkout_paths(safe.repository.as_ptr(), &safe_target)
+        );
+        assert!(!raw_observation.readme_exists);
+        assert!(!raw_observation.guide_exists);
+    }
+
+    fn prepare_conflict(fixture: &HistoryFixture) {
+        let path = fixture.directory.path();
+        let run = |arguments: &[&str], succeeds: bool| {
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(path)
+                .args(arguments)
+                .env("GIT_AUTHOR_DATE", "1700003000 +0000")
+                .env("GIT_COMMITTER_DATE", "1700003000 +0000")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert_eq!(status.success(), succeeds, "git command: {arguments:?}");
+        };
+        run(&["checkout", "-q", "-b", "checkout-side"], true);
+        std::fs::write(path.join("README.md"), b"theirs from side\n").unwrap();
+        run(&["add", "README.md"], true);
+        run(
+            &[
+                "-c",
+                "user.name=Crustify",
+                "-c",
+                "user.email=crustify@example.com",
+                "commit",
+                "-q",
+                "-m",
+                "side change",
+            ],
+            true,
+        );
+        run(&["checkout", "-q", "master"], true);
+        std::fs::write(path.join("README.md"), b"ours from master\n").unwrap();
+        run(&["add", "README.md"], true);
+        run(
+            &[
+                "-c",
+                "user.name=Crustify",
+                "-c",
+                "user.email=crustify@example.com",
+                "commit",
+                "-q",
+                "-m",
+                "master change",
+            ],
+            true,
+        );
+        run(
+            &[
+                "-c",
+                "user.name=Crustify",
+                "-c",
+                "user.email=crustify@example.com",
+                "merge",
+                "--no-commit",
+                "checkout-side",
+            ],
+            false,
+        );
+    }
+
+    unsafe fn raw_conflict_checkout(fixture: &HistoryFixture, ours: bool) -> Vec<u8> {
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_checkout_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_checkout_options_init(&mut options, ffi::GIT_CHECKOUT_OPTIONS_VERSION)
+            },
+            0
+        );
+        options.checkout_strategy = ffi::git_checkout_strategy_t_GIT_CHECKOUT_FORCE
+            | if ours {
+                ffi::git_checkout_strategy_t_GIT_CHECKOUT_USE_OURS
+            } else {
+                ffi::git_checkout_strategy_t_GIT_CHECKOUT_USE_THEIRS
+            };
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, fixture.repository.as_ptr()) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_index_read(index, 1) }, 0);
+        assert_eq!(
+            unsafe { ffi::git_checkout_index(fixture.repository.as_ptr(), index, &options,) },
+            0
+        );
+        unsafe { ffi::git_index_free(index) };
+        std::fs::read(fixture.directory.path().join("README.md")).unwrap()
+    }
+
+    fn safe_conflict_checkout(fixture: &HistoryFixture, ours: bool) -> Vec<u8> {
+        let mut options = crate::api::checkout::GitCheckoutOptions::new();
+        let side = if ours {
+            crate::api::checkout::GitCheckoutStrategy::USE_OURS
+        } else {
+            crate::api::checkout::GitCheckoutStrategy::USE_THEIRS
+        };
+        options
+            .as_mut()
+            .set_checkout_strategy(crate::api::checkout::GitCheckoutStrategy::FORCE | side);
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+                .unwrap();
+        let mut index = crate::repository::git_repository_index(&mut repository).unwrap();
+        crate::index::git_index_read(&mut index.as_mut(), true).unwrap();
+        git_checkout_index(
+            &mut repository,
+            Some(&mut index.as_mut()),
+            Some(options.as_ref()),
+        )
+        .unwrap();
+        std::fs::read(fixture.directory.path().join("README.md")).unwrap()
+    }
+
+    #[test]
+    fn io_equiv_checkout_conflicts_select_ours_and_theirs() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw_ours = HistoryFixture::new("checkout-conflict-raw-ours");
+        let safe_ours = HistoryFixture::new("checkout-conflict-safe-ours");
+        let raw_theirs = HistoryFixture::new("checkout-conflict-raw-theirs");
+        let safe_theirs = HistoryFixture::new("checkout-conflict-safe-theirs");
+        for fixture in [&raw_ours, &safe_ours, &raw_theirs, &safe_theirs] {
+            prepare_conflict(fixture);
+        }
+        let ours = unsafe { raw_conflict_checkout(&raw_ours, true) };
+        assert_eq!(ours, safe_conflict_checkout(&safe_ours, true));
+        let theirs = unsafe { raw_conflict_checkout(&raw_theirs, false) };
+        assert_eq!(theirs, safe_conflict_checkout(&safe_theirs, false));
+        assert_eq!(ours, b"ours from master\n");
+        assert_eq!(theirs, b"theirs from side\n");
+    }
+
+    unsafe fn raw_conflict_marker_checkout(fixture: &HistoryFixture, style: u32) -> Vec<u8> {
+        std::fs::write(
+            fixture.directory.path().join("README.md"),
+            b"replace this with conflict markers\n",
+        )
+        .unwrap();
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_checkout_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_checkout_options_init(&mut options, ffi::GIT_CHECKOUT_OPTIONS_VERSION)
+            },
+            0
+        );
+        options.checkout_strategy = ffi::git_checkout_strategy_t_GIT_CHECKOUT_FORCE
+            | ffi::git_checkout_strategy_t_GIT_CHECKOUT_ALLOW_CONFLICTS
+            | style;
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, fixture.repository.as_ptr()) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_index_read(index, 1) }, 0);
+        assert_eq!(
+            unsafe { ffi::git_checkout_index(fixture.repository.as_ptr(), index, &options) },
+            0
+        );
+        unsafe { ffi::git_index_free(index) };
+        std::fs::read(fixture.directory.path().join("README.md")).unwrap()
+    }
+
+    fn safe_conflict_marker_checkout(
+        fixture: &HistoryFixture,
+        style: crate::api::checkout::GitCheckoutStrategy,
+    ) -> Vec<u8> {
+        std::fs::write(
+            fixture.directory.path().join("README.md"),
+            b"replace this with conflict markers\n",
+        )
+        .unwrap();
+        let mut options = crate::api::checkout::GitCheckoutOptions::new();
+        options.as_mut().set_checkout_strategy(
+            crate::api::checkout::GitCheckoutStrategy::FORCE
+                | crate::api::checkout::GitCheckoutStrategy::ALLOW_CONFLICTS
+                | style,
+        );
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+                .unwrap();
+        let mut index = crate::repository::git_repository_index(&mut repository).unwrap();
+        crate::index::git_index_read(&mut index.as_mut(), true).unwrap();
+        git_checkout_index(
+            &mut repository,
+            Some(&mut index.as_mut()),
+            Some(options.as_ref()),
+        )
+        .unwrap();
+        std::fs::read(fixture.directory.path().join("README.md")).unwrap()
+    }
+
+    #[test]
+    fn io_equiv_checkout_writes_merge_and_diff3_conflict_markers() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw_merge = HistoryFixture::new("checkout-marker-raw-merge");
+        let safe_merge = HistoryFixture::new("checkout-marker-safe-merge");
+        let raw_diff3 = HistoryFixture::new("checkout-marker-raw-diff3");
+        let safe_diff3 = HistoryFixture::new("checkout-marker-safe-diff3");
+        for fixture in [&raw_merge, &safe_merge, &raw_diff3, &safe_diff3] {
+            prepare_conflict(fixture);
+        }
+
+        let merge = unsafe {
+            raw_conflict_marker_checkout(
+                &raw_merge,
+                ffi::git_checkout_strategy_t_GIT_CHECKOUT_CONFLICT_STYLE_MERGE,
+            )
+        };
+        assert_eq!(
+            merge,
+            safe_conflict_marker_checkout(
+                &safe_merge,
+                crate::api::checkout::GitCheckoutStrategy::CONFLICT_STYLE_MERGE,
+            )
+        );
+        let diff3 = unsafe {
+            raw_conflict_marker_checkout(
+                &raw_diff3,
+                ffi::git_checkout_strategy_t_GIT_CHECKOUT_CONFLICT_STYLE_DIFF3,
+            )
+        };
+        assert_eq!(
+            diff3,
+            safe_conflict_marker_checkout(
+                &safe_diff3,
+                crate::api::checkout::GitCheckoutStrategy::CONFLICT_STYLE_DIFF3,
+            )
+        );
+        assert!(merge.windows(7).any(|line| line == b"<<<<<<<"));
+        assert!(diff3.windows(7).any(|line| line == b"|||||||"));
+    }
+
+    fn prepare_callbacks(fixture: &HistoryFixture) {
+        std::fs::write(
+            fixture.directory.path().join("README.md"),
+            b"dirty callback contents\n",
+        )
+        .unwrap();
+        std::fs::remove_file(fixture.directory.path().join("src/alpha.c")).unwrap();
+        std::fs::write(
+            fixture.directory.path().join("untracked.txt"),
+            b"remove me\n",
+        )
+        .unwrap();
+        std::fs::write(fixture.directory.path().join(".gitignore"), b"ignored/\n").unwrap();
+        std::fs::create_dir_all(fixture.directory.path().join("ignored")).unwrap();
+        std::fs::write(
+            fixture.directory.path().join("ignored/cache.bin"),
+            b"ignored\n",
+        )
+        .unwrap();
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct CallbackObservation {
+        notify: Vec<(u32, Vec<u8>)>,
+        progress: Vec<(Vec<u8>, usize, usize)>,
+        perf: Vec<(usize, usize, usize)>,
+        readme: Vec<u8>,
+        alpha_exists: bool,
+        untracked_exists: bool,
+        ignored_exists: bool,
+    }
+
+    unsafe fn raw_callback_checkout(fixture: &HistoryFixture) -> CallbackObservation {
+        unsafe extern "C" fn notify(
+            why: u32,
+            path: *const core::ffi::c_char,
+            _: *const ffi::git_diff_file,
+            _: *const ffi::git_diff_file,
+            _: *const ffi::git_diff_file,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            let output = unsafe { &mut *payload.cast::<Vec<(u32, Vec<u8>)>>() };
+            let path = if path.is_null() {
+                Vec::new()
+            } else {
+                unsafe { core::ffi::CStr::from_ptr(path) }
+                    .to_bytes()
+                    .to_vec()
+            };
+            output.push((why, path));
+            0
+        }
+        unsafe extern "C" fn progress(
+            path: *const core::ffi::c_char,
+            completed: usize,
+            total: usize,
+            payload: *mut core::ffi::c_void,
+        ) {
+            let output = unsafe { &mut *payload.cast::<Vec<(Vec<u8>, usize, usize)>>() };
+            let path = if path.is_null() {
+                Vec::new()
+            } else {
+                unsafe { core::ffi::CStr::from_ptr(path) }
+                    .to_bytes()
+                    .to_vec()
+            };
+            output.push((path, completed, total));
+        }
+        unsafe extern "C" fn perf(
+            data: *const ffi::git_checkout_perfdata,
+            payload: *mut core::ffi::c_void,
+        ) {
+            unsafe { &mut *payload.cast::<Vec<(usize, usize, usize)>>() }.push((
+                unsafe { (*data).stat_calls },
+                unsafe { (*data).chmod_calls },
+                unsafe { (*data).mkdir_calls },
+            ));
+        }
+        let mut notify_output = Vec::new();
+        let mut progress_output = Vec::new();
+        let mut perf_output = Vec::new();
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_checkout_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_checkout_options_init(&mut options, ffi::GIT_CHECKOUT_OPTIONS_VERSION)
+            },
+            0
+        );
+        options.checkout_strategy = ffi::git_checkout_strategy_t_GIT_CHECKOUT_FORCE
+            | ffi::git_checkout_strategy_t_GIT_CHECKOUT_RECREATE_MISSING
+            | ffi::git_checkout_strategy_t_GIT_CHECKOUT_REMOVE_UNTRACKED
+            | ffi::git_checkout_strategy_t_GIT_CHECKOUT_REMOVE_IGNORED;
+        options.notify_flags = ffi::git_checkout_notify_t_GIT_CHECKOUT_NOTIFY_ALL;
+        options.notify_cb = Some(notify);
+        options.notify_payload = core::ptr::from_mut(&mut notify_output).cast();
+        options.progress_cb = Some(progress);
+        options.progress_payload = core::ptr::from_mut(&mut progress_output).cast();
+        options.perfdata_cb = Some(perf);
+        options.perfdata_payload = core::ptr::from_mut(&mut perf_output).cast();
+        assert_eq!(
+            unsafe { ffi::git_checkout_head(fixture.repository.as_ptr(), &options) },
+            0
+        );
+        CallbackObservation {
+            notify: notify_output,
+            progress: progress_output,
+            perf: perf_output,
+            readme: std::fs::read(fixture.directory.path().join("README.md")).unwrap(),
+            alpha_exists: fixture.directory.path().join("src/alpha.c").exists(),
+            untracked_exists: fixture.directory.path().join("untracked.txt").exists(),
+            ignored_exists: fixture.directory.path().join("ignored/cache.bin").exists(),
+        }
+    }
+
+    fn safe_callback_checkout(fixture: &HistoryFixture) -> CallbackObservation {
+        let mut notify_output = Vec::new();
+        let mut progress_output = Vec::new();
+        let mut perf_output = Vec::new();
+        let mut notify = |why: CheckoutNotify,
+                          path: Option<&core::ffi::CStr>,
+                          _: Option<crate::diff::DiffFileRef<'_>>,
+                          _: Option<crate::diff::DiffFileRef<'_>>,
+                          _: Option<crate::diff::DiffFileRef<'_>>| {
+            notify_output.push((
+                why.bits(),
+                path.map_or_else(Vec::new, |value| value.to_bytes().to_vec()),
+            ));
+            0
+        };
+        let mut progress = |path: Option<&core::ffi::CStr>, completed: usize, total: usize| {
+            progress_output.push((
+                path.map_or_else(Vec::new, |value| value.to_bytes().to_vec()),
+                completed,
+                total,
+            ));
+        };
+        let mut perf = |data: CheckoutPerfDataRef<'_>| {
+            perf_output.push((data.stat_calls(), data.chmod_calls(), data.mkdir_calls()));
+        };
+        let mut options = crate::api::checkout::GitCheckoutOptions::new();
+        options.as_mut().set_checkout_strategy(
+            crate::api::checkout::GitCheckoutStrategy::FORCE
+                | crate::api::checkout::GitCheckoutStrategy::RECREATE_MISSING
+                | crate::api::checkout::GitCheckoutStrategy::REMOVE_UNTRACKED
+                | crate::api::checkout::GitCheckoutStrategy::REMOVE_IGNORED,
+        );
+        options.as_mut().set_notify_flags(CheckoutNotify::ALL);
+        unsafe {
+            options.as_mut().set_notify_callback(&mut notify);
+            options.as_mut().set_progress_callback(&mut progress);
+            options.as_mut().set_perfdata_callback(&mut perf);
+        }
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+                .unwrap();
+        git_checkout_head(&mut repository, Some(options.as_ref())).unwrap();
+        CallbackObservation {
+            notify: notify_output,
+            progress: progress_output,
+            perf: perf_output,
+            readme: std::fs::read(fixture.directory.path().join("README.md")).unwrap(),
+            alpha_exists: fixture.directory.path().join("src/alpha.c").exists(),
+            untracked_exists: fixture.directory.path().join("untracked.txt").exists(),
+            ignored_exists: fixture.directory.path().join("ignored/cache.bin").exists(),
+        }
+    }
+
+    #[test]
+    fn io_equiv_checkout_notifications_progress_cleanup_and_perfdata() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("checkout-callbacks-raw");
+        let safe = HistoryFixture::new("checkout-callbacks-safe");
+        prepare_callbacks(&raw);
+        prepare_callbacks(&safe);
+        let raw_observation = unsafe { raw_callback_checkout(&raw) };
+        assert_eq!(raw_observation, safe_callback_checkout(&safe));
+        assert!(!raw_observation.notify.is_empty());
+        assert!(!raw_observation.progress.is_empty());
+        assert!(!raw_observation.untracked_exists);
+        assert!(!raw_observation.ignored_exists);
+    }
+
+    fn prepare_blockers(fixture: &HistoryFixture) {
+        std::fs::remove_dir_all(fixture.directory.path().join("src")).unwrap();
+        std::fs::write(
+            fixture.directory.path().join("src"),
+            b"file blocks directory\n",
+        )
+        .unwrap();
+        std::fs::remove_file(fixture.directory.path().join("README.md")).unwrap();
+        std::fs::create_dir_all(fixture.directory.path().join("README.md")).unwrap();
+        std::fs::write(
+            fixture.directory.path().join("README.md/untracked-child"),
+            b"directory blocks file\n",
+        )
+        .unwrap();
+    }
+
+    unsafe fn raw_checkout_blockers(fixture: &HistoryFixture) -> Vec<Vec<u8>> {
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_checkout_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_checkout_options_init(&mut options, ffi::GIT_CHECKOUT_OPTIONS_VERSION)
+            },
+            0
+        );
+        options.checkout_strategy = ffi::git_checkout_strategy_t_GIT_CHECKOUT_FORCE
+            | ffi::git_checkout_strategy_t_GIT_CHECKOUT_REMOVE_UNTRACKED;
+        assert_eq!(
+            unsafe { ffi::git_checkout_head(fixture.repository.as_ptr(), &options) },
+            0
+        );
+        std::fs::remove_file(fixture.directory.path().join("src/beta.c")).unwrap();
+        std::fs::create_dir(fixture.directory.path().join("src/beta.c")).unwrap();
+        assert_eq!(
+            unsafe { ffi::git_checkout_head(fixture.repository.as_ptr(), &options) },
+            0
+        );
+        ["README.md", "src/alpha.c", "src/beta.c"]
+            .map(|path| std::fs::read(fixture.directory.path().join(path)).unwrap())
+            .to_vec()
+    }
+
+    fn safe_checkout_blockers(fixture: &HistoryFixture) -> Vec<Vec<u8>> {
+        let mut options = crate::api::checkout::GitCheckoutOptions::new();
+        options.as_mut().set_checkout_strategy(
+            crate::api::checkout::GitCheckoutStrategy::FORCE
+                | crate::api::checkout::GitCheckoutStrategy::REMOVE_UNTRACKED,
+        );
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+                .unwrap();
+        git_checkout_head(&mut repository, Some(options.as_ref())).unwrap();
+        std::fs::remove_file(fixture.directory.path().join("src/beta.c")).unwrap();
+        std::fs::create_dir(fixture.directory.path().join("src/beta.c")).unwrap();
+        git_checkout_head(&mut repository, Some(options.as_ref())).unwrap();
+        ["README.md", "src/alpha.c", "src/beta.c"]
+            .map(|path| std::fs::read(fixture.directory.path().join(path)).unwrap())
+            .to_vec()
+    }
+
+    #[test]
+    fn io_equiv_checkout_replaces_file_directory_and_empty_directory_blockers() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("checkout-blockers-raw");
+        let safe = HistoryFixture::new("checkout-blockers-safe");
+        prepare_blockers(&raw);
+        prepare_blockers(&safe);
+        let raw_observation = unsafe { raw_checkout_blockers(&raw) };
+        let safe_observation = safe_checkout_blockers(&safe);
+        assert_eq!(raw_observation, safe_observation);
+        assert_eq!(raw_observation[0], b"fixture\nwith a third revision\n");
+    }
+}
+
+#[cfg(test)]
 mod scheduled_symbol_tests {
     use super::*;
 

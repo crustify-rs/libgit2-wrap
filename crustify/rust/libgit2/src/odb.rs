@@ -976,6 +976,761 @@ pub fn git_odb_read_prefix(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, TempDir};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct OdbObservation {
+        ids: Vec<Vec<u8>>,
+        written_id: Vec<u8>,
+        data: Vec<u8>,
+        size: usize,
+        kind: ffi::git_object_t,
+    }
+
+    unsafe fn raw_observation(repository: *mut ffi::git_repository) -> OdbObservation {
+        unsafe extern "C" fn collect(
+            id: *const ffi::git_oid,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            let ids = unsafe { &mut *payload.cast::<Vec<Vec<u8>>>() };
+            ids.push(unsafe { (*id).id }.to_vec());
+            0
+        }
+
+        let mut odb = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_repository_odb(&mut odb, repository) }, 0);
+        let mut ids = Vec::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_foreach(odb, Some(collect), core::ptr::from_mut(&mut ids).cast())
+            },
+            0
+        );
+        ids.sort();
+
+        let content = b"an object written by the ODB equivalence test\n";
+        let mut written = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_write(
+                    &mut written,
+                    odb,
+                    content.as_ptr().cast(),
+                    content.len(),
+                    ffi::git_object_t_GIT_OBJECT_BLOB,
+                )
+            },
+            0
+        );
+        let mut object = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_odb_read(&mut object, odb, &written) }, 0);
+        let size = unsafe { ffi::git_odb_object_size(object) };
+        let kind = unsafe { ffi::git_odb_object_type(object) };
+        let data =
+            unsafe { core::slice::from_raw_parts(ffi::git_odb_object_data(object).cast(), size) }
+                .to_vec();
+        unsafe {
+            ffi::git_odb_object_free(object);
+            ffi::git_odb_free(odb);
+        }
+        OdbObservation {
+            ids,
+            written_id: written.id.to_vec(),
+            data,
+            size,
+            kind,
+        }
+    }
+
+    fn safe_observation(
+        repository: &mut crate::repository::GitRepositoryMut<'_>,
+    ) -> OdbObservation {
+        let mut odb = crate::repository::git_repository_odb(repository).unwrap();
+        let mut ids = Vec::new();
+        git_odb_foreach(&mut odb.as_mut(), &mut |id: OidRef<'_>| {
+            ids.push(id.raw_bytes().elems().collect());
+            0
+        })
+        .unwrap();
+        ids.sort();
+
+        let content = b"an object written by the ODB equivalence test\n";
+        let mut written = git_odb_write(odb.as_ref(), content, GitObjectType::BLOB).unwrap();
+        let written_ref =
+            unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(written).cast()) }.unwrap();
+        let object = git_odb_read(&mut odb.as_mut(), written_ref).unwrap();
+        let size = git_odb_object_size(object.as_ref());
+        let kind = git_odb_object_type(object.as_ref()).unwrap().as_raw();
+        let data = git_odb_object_data(object.as_ref())
+            .unwrap()
+            .elems()
+            .collect();
+        OdbObservation {
+            ids,
+            written_id: written_ref.raw_bytes().elems().collect(),
+            data,
+            size,
+            kind,
+        }
+    }
+
+    #[test]
+    fn io_equiv_odb_enumeration_write_and_read() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("odb-raw");
+        let safe = HistoryFixture::new("odb-safe");
+        let raw_observation = unsafe { raw_observation(raw.repository.as_ptr()) };
+        let mut safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        assert_eq!(raw_observation, safe_observation(&mut safe_repository));
+        assert_eq!(
+            raw_observation.data,
+            b"an object written by the ODB equivalence test\n"
+        );
+    }
+
+    #[test]
+    fn io_equiv_multi_pack_index_generation() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("midx-raw");
+        let safe = HistoryFixture::new("midx-safe");
+        for fixture in [&raw, &safe] {
+            let status = std::process::Command::new("git")
+                .args([
+                    "-C",
+                    fixture.directory.path().to_str().unwrap(),
+                    "repack",
+                    "-ad",
+                ])
+                .status()
+                .unwrap();
+            assert!(status.success());
+            std::fs::write(
+                fixture.directory.path().join("extra-object"),
+                b"extra pack object\n",
+            )
+            .unwrap();
+            let object_id = std::process::Command::new("git")
+                .current_dir(fixture.directory.path())
+                .args(["hash-object", "-w", "extra-object"])
+                .output()
+                .unwrap();
+            assert!(object_id.status.success());
+            let mut pack = std::process::Command::new("git")
+                .current_dir(fixture.directory.path())
+                .args(["pack-objects", ".git/objects/pack/pack-extra"])
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .spawn()
+                .unwrap();
+            std::io::Write::write_all(pack.stdin.as_mut().unwrap(), &object_id.stdout).unwrap();
+            drop(pack.stdin.take());
+            assert!(pack.wait().unwrap().success());
+        }
+
+        let mut raw_repository = core::ptr::null_mut();
+        let raw_path = raw.directory.c_path();
+        assert_eq!(
+            unsafe { ffi::git_repository_open(&mut raw_repository, raw_path.as_ptr()) },
+            0
+        );
+        let mut raw_odb = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_odb(&mut raw_odb, raw_repository) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_odb_write_multi_pack_index(raw_odb) }, 0);
+        unsafe { ffi::git_odb_free(raw_odb) };
+        unsafe { ffi::git_repository_free(raw_repository) };
+
+        let safe_path = safe.directory.c_path();
+        let mut safe_repository = crate::repository::git_repository_open(&safe_path).unwrap();
+        let mut safe_odb =
+            crate::repository::git_repository_odb(&mut safe_repository.as_mut()).unwrap();
+        git_odb_write_multi_pack_index(&mut safe_odb.as_mut()).unwrap();
+        drop(safe_odb);
+
+        let relative = ".git/objects/pack/multi-pack-index";
+        let raw_index = std::fs::read(raw.directory.path().join(relative)).unwrap();
+        let safe_index = std::fs::read(safe.directory.path().join(relative)).unwrap();
+        assert_eq!(raw_index, safe_index);
+        assert!(raw_index.starts_with(b"MIDX"));
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct StreamObservation {
+        header: (usize, ffi::git_object_t),
+        streamed: Vec<u8>,
+        exists: Vec<bool>,
+        prefix: Vec<u8>,
+        written: Vec<u8>,
+        written_data: Vec<u8>,
+        hash: Vec<u8>,
+    }
+
+    unsafe fn raw_stream_observation(repository: *mut ffi::git_repository) -> StreamObservation {
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut odb = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_repository_odb(&mut odb, repository) }, 0);
+        let mut size = 0;
+        let mut kind = ffi::git_object_t_GIT_OBJECT_INVALID;
+        assert_eq!(
+            unsafe { ffi::git_odb_read_header(&mut size, &mut kind, odb, &head) },
+            0
+        );
+        let mut stream = core::ptr::null_mut();
+        let mut stream_size = 0;
+        let mut stream_kind = ffi::git_object_t_GIT_OBJECT_INVALID;
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_open_rstream(
+                    &mut stream,
+                    &mut stream_size,
+                    &mut stream_kind,
+                    odb,
+                    &head,
+                )
+            },
+            0
+        );
+        assert_eq!((stream_size, stream_kind), (size, kind));
+        let mut streamed = Vec::new();
+        loop {
+            let mut chunk = [0u8; 17];
+            let read =
+                unsafe { ffi::git_odb_stream_read(stream, chunk.as_mut_ptr().cast(), chunk.len()) };
+            assert!(read >= 0);
+            if read == 0 {
+                break;
+            }
+            streamed.extend_from_slice(&chunk[..read as usize]);
+        }
+        unsafe { ffi::git_odb_stream_free(stream) };
+
+        let exists = vec![unsafe { ffi::git_odb_exists(odb, &head) != 0 }, unsafe {
+            ffi::git_odb_exists_ext(
+                odb,
+                &head,
+                ffi::git_odb_lookup_flags_t_GIT_ODB_LOOKUP_NO_REFRESH,
+            ) != 0
+        }];
+        let mut prefix = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_odb_exists_prefix(&mut prefix, odb, &head, 8) },
+            0
+        );
+        let content = b"streamed ODB object split across several writes\n";
+        let mut writer = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_open_wstream(
+                    &mut writer,
+                    odb,
+                    content.len() as ffi::git_object_size_t,
+                    ffi::git_object_t_GIT_OBJECT_BLOB,
+                )
+            },
+            0
+        );
+        for chunk in content.chunks(7) {
+            assert_eq!(
+                unsafe { ffi::git_odb_stream_write(writer, chunk.as_ptr().cast(), chunk.len()) },
+                0
+            );
+        }
+        let mut written = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_odb_stream_finalize_write(&mut written, writer) },
+            0
+        );
+        unsafe { ffi::git_odb_stream_free(writer) };
+        assert_eq!(unsafe { ffi::git_odb_refresh(odb) }, 0);
+        let mut object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_odb_read_prefix(&mut object, odb, &written, 10) },
+            0
+        );
+        let object_size = unsafe { ffi::git_odb_object_size(object) };
+        let written_data = unsafe {
+            core::slice::from_raw_parts(ffi::git_odb_object_data(object).cast(), object_size)
+        }
+        .to_vec();
+        unsafe { ffi::git_odb_object_free(object) };
+        let mut hash = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_hash(
+                    &mut hash,
+                    content.as_ptr().cast(),
+                    content.len(),
+                    ffi::git_object_t_GIT_OBJECT_BLOB,
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_odb_free(odb) };
+        StreamObservation {
+            header: (size, kind),
+            streamed,
+            exists,
+            prefix: prefix.id.to_vec(),
+            written: written.id.to_vec(),
+            written_data,
+            hash: hash.id.to_vec(),
+        }
+    }
+
+    fn oid_bytes(mut id: Oid) -> Vec<u8> {
+        let id = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(id).cast()) }.unwrap();
+        id.raw_bytes().elems().collect()
+    }
+
+    fn safe_stream_observation(repository: *mut ffi::git_repository) -> StreamObservation {
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut odb = crate::repository::git_repository_odb(&mut repository).unwrap();
+        let head_ref = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(head).cast()) }.unwrap();
+        let (size, kind) = git_odb_read_header(&mut odb.as_mut(), head_ref).unwrap();
+        let mut odb_borrow = odb.as_mut();
+        let (mut reader, stream_size, stream_kind) =
+            git_odb_open_rstream(&mut odb_borrow, head_ref).unwrap();
+        assert_eq!((stream_size, stream_kind), (size, kind));
+        let mut streamed = Vec::new();
+        loop {
+            let mut chunk = [0u8; 17];
+            let read = git_odb_stream_read(&mut reader, &mut chunk).unwrap();
+            if read == 0 {
+                break;
+            }
+            streamed.extend_from_slice(&chunk[..read]);
+        }
+        drop(reader);
+        drop(odb_borrow);
+        let exists = vec![
+            git_odb_exists(&mut odb.as_mut(), head_ref),
+            git_odb_exists_ext(&mut odb.as_mut(), head_ref, GitOdbLookupFlags::NO_REFRESH),
+        ];
+        let prefix = oid_bytes(git_odb_exists_prefix(&mut odb.as_mut(), head_ref, 8).unwrap());
+        let content = b"streamed ODB object split across several writes\n";
+        let mut odb_borrow = odb.as_mut();
+        let mut writer = git_odb_open_wstream(
+            &mut odb_borrow,
+            content.len() as ffi::git_object_size_t,
+            GitObjectType::BLOB,
+        )
+        .unwrap();
+        for chunk in content.chunks(7) {
+            git_odb_stream_write(&mut writer, chunk).unwrap();
+        }
+        let written = git_odb_stream_finalize_write(&mut writer).unwrap();
+        drop(writer);
+        drop(odb_borrow);
+        git_odb_refresh(&mut odb.as_mut()).unwrap();
+        let mut written_for_ref = written;
+        let written_ref =
+            unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(written_for_ref).cast()) }.unwrap();
+        let object = git_odb_read_prefix(&mut odb.as_mut(), written_ref, 10).unwrap();
+        let written_data = git_odb_object_data(object.as_ref())
+            .unwrap()
+            .elems()
+            .collect();
+        StreamObservation {
+            header: (size, kind.as_raw()),
+            streamed,
+            exists,
+            prefix,
+            written: written_ref.raw_bytes().elems().collect(),
+            written_data,
+            hash: oid_bytes(git_odb_hash(content, GitObjectType::BLOB).unwrap()),
+        }
+    }
+
+    #[test]
+    fn io_equiv_odb_streaming_prefix_hash_and_refresh() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("odb-stream-raw");
+        let safe = HistoryFixture::new("odb-stream-safe");
+        let raw_observation = unsafe { raw_stream_observation(raw.repository.as_ptr()) };
+        assert_eq!(
+            raw_observation,
+            safe_stream_observation(safe.repository.as_ptr())
+        );
+        assert_eq!(
+            raw_observation.written_data,
+            b"streamed ODB object split across several writes\n"
+        );
+        assert_eq!(raw_observation.written, raw_observation.hash);
+    }
+
+    unsafe fn raw_open_alternate_and_hashfile(
+        fixture: &HistoryFixture,
+    ) -> (Vec<u8>, usize, u32, bool, usize, Vec<u8>) {
+        let objects = std::ffi::CString::new(
+            fixture
+                .directory
+                .path()
+                .join(".git/objects")
+                .to_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let readme =
+            std::ffi::CString::new(fixture.directory.path().join("README.md").to_str().unwrap())
+                .unwrap();
+        let mut hash = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_hashfile(
+                    &mut hash,
+                    readme.as_ptr(),
+                    ffi::git_object_t_GIT_OBJECT_BLOB,
+                )
+            },
+            0
+        );
+        let mut opened = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_odb_open(&mut opened, objects.as_ptr()) },
+            0
+        );
+        let opened_backends = unsafe { ffi::git_odb_num_backends(opened) };
+        let mut backend = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_odb_get_backend(&mut backend, opened, 0) },
+            0
+        );
+        let backend_version = unsafe { (*backend).version };
+
+        let mut alternate = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_odb_new(&mut alternate) }, 0);
+        assert_eq!(
+            unsafe { ffi::git_odb_add_disk_alternate(alternate, objects.as_ptr()) },
+            0
+        );
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(
+                    &mut head,
+                    fixture.repository.as_ptr(),
+                    c"HEAD".as_ptr(),
+                )
+            },
+            0
+        );
+        let found = unsafe { ffi::git_odb_exists(alternate, &head) } != 0;
+        let mut prefixed = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_odb_read_prefix(&mut prefixed, alternate, &head, 10) },
+            0
+        );
+        let prefix_id = unsafe { (*ffi::git_odb_object_id(prefixed)).id }.to_vec();
+        unsafe { ffi::git_odb_object_free(prefixed) };
+
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_odb_options>() };
+        assert_eq!(
+            unsafe { ffi::git_odb_options_init(&mut options, ffi::GIT_ODB_OPTIONS_VERSION) },
+            0
+        );
+        let mut extended = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_odb_open_ext(&mut extended, objects.as_ptr(), &options) },
+            0
+        );
+        let extended_backends = unsafe { ffi::git_odb_num_backends(extended) };
+        assert_eq!(
+            unsafe { ffi::git_odb_set_commit_graph(extended, core::ptr::null_mut()) },
+            0
+        );
+        unsafe {
+            ffi::git_odb_free(extended);
+            ffi::git_odb_free(alternate);
+            ffi::git_odb_free(opened);
+        }
+        (
+            hash.id.to_vec(),
+            opened_backends,
+            backend_version,
+            found,
+            extended_backends,
+            prefix_id,
+        )
+    }
+
+    fn safe_open_alternate_and_hashfile(
+        fixture: &HistoryFixture,
+    ) -> (Vec<u8>, usize, u32, bool, usize, Vec<u8>) {
+        let objects = std::ffi::CString::new(
+            fixture
+                .directory
+                .path()
+                .join(".git/objects")
+                .to_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let readme =
+            std::ffi::CString::new(fixture.directory.path().join("README.md").to_str().unwrap())
+                .unwrap();
+        let hash = git_odb_hashfile(&readme, GitObjectType::BLOB).unwrap();
+        let mut opened = git_odb_open(&objects).unwrap();
+        let opened_backends = git_odb_num_backends(&mut opened.as_mut());
+        let backend_version = git_odb_get_backend(&mut opened.as_mut(), 0)
+            .unwrap()
+            .version();
+
+        let mut alternate = git_odb_new().unwrap();
+        git_odb_add_disk_alternate(&mut alternate.as_mut(), &objects).unwrap();
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+                .unwrap();
+        let mut head = crate::refs::git_reference_name_to_id(&mut repository, c"HEAD").unwrap();
+        let head = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(head).cast()) }.unwrap();
+        let found = git_odb_exists(&mut alternate.as_mut(), head);
+        let prefixed = git_odb_read_prefix(&mut alternate.as_mut(), head, 10).unwrap();
+        let prefix_id = git_odb_object_id(prefixed.as_ref())
+            .raw_bytes()
+            .elems()
+            .collect();
+
+        let options = git_odb_options_init(ffi::GIT_ODB_OPTIONS_VERSION).unwrap();
+        let mut extended = git_odb_open_ext(&objects, Some(options.as_ref())).unwrap();
+        let extended_backends = git_odb_num_backends(&mut extended.as_mut());
+        git_odb_set_commit_graph(&mut extended.as_mut(), None).unwrap();
+        let mut hash = hash;
+        let hash = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(hash).cast()) }.unwrap();
+        (
+            hash.raw_bytes().elems().collect(),
+            opened_backends,
+            backend_version,
+            found,
+            extended_backends,
+            prefix_id,
+        )
+    }
+
+    #[test]
+    fn io_equiv_odb_open_disk_alternate_backend_hashfile_and_commit_graph_clear() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("odb-open-alternate-raw");
+        let safe = HistoryFixture::new("odb-open-alternate-safe");
+        let raw_observation = unsafe { raw_open_alternate_and_hashfile(&raw) };
+        let safe_observation = safe_open_alternate_and_hashfile(&safe);
+        assert_eq!(raw_observation, safe_observation);
+        assert!(raw_observation.3);
+        assert_eq!(raw_observation.5.len(), crate::oid::RAW_DIGEST_LEN);
+    }
+
+    fn delta_pack(fixture: &HistoryFixture) -> (Vec<u8>, ffi::git_oid) {
+        for revision in 0..16 {
+            let mut content = String::with_capacity(120_000);
+            for line in 0..2_000 {
+                use core::fmt::Write as _;
+                writeln!(
+                    content,
+                    "writepack record {line:04}: stable payload with revision {revision:02}"
+                )
+                .unwrap();
+            }
+            std::fs::write(
+                fixture.directory.path().join("writepack-history.txt"),
+                content,
+            )
+            .unwrap();
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(fixture.directory.path())
+                .args(["add", "writepack-history.txt"])
+                .status()
+                .unwrap();
+            assert!(status.success());
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(fixture.directory.path())
+                .args([
+                    "-c",
+                    "user.name=Crustify",
+                    "-c",
+                    "user.email=crustify@example.com",
+                    "commit",
+                    "-q",
+                    "-m",
+                    &format!("writepack revision {revision}"),
+                ])
+                .env("GIT_AUTHOR_DATE", format!("170001{revision:04} +0000"))
+                .env("GIT_COMMITTER_DATE", format!("170001{revision:04} +0000"))
+                .status()
+                .unwrap();
+            assert!(status.success());
+        }
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(fixture.directory.path())
+            .args(["pack-objects", "--stdout", "--all", "--delta-base-offset"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert!(output.stdout.starts_with(b"PACK"));
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(
+                    &mut head,
+                    fixture.repository.as_ptr(),
+                    c"HEAD".as_ptr(),
+                )
+            },
+            0
+        );
+        (output.stdout, head)
+    }
+
+    fn empty_objects(tag: &str) -> TempDir {
+        let directory = TempDir::new(tag);
+        std::fs::create_dir_all(directory.path().join("pack")).unwrap();
+        std::fs::create_dir_all(directory.path().join("info")).unwrap();
+        directory
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct WritepackObservation {
+        total_objects: u32,
+        indexed_objects: u32,
+        total_deltas: u32,
+        indexed_deltas: u32,
+        callback_count: usize,
+        head_exists: bool,
+        pack_files: usize,
+    }
+
+    unsafe fn raw_writepack(
+        objects: &TempDir,
+        pack: &[u8],
+        head: &ffi::git_oid,
+    ) -> WritepackObservation {
+        unsafe extern "C" fn progress(
+            _: *const ffi::git_indexer_progress,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            unsafe { *payload.cast::<usize>() += 1 };
+            0
+        }
+
+        let path = objects.c_path();
+        let mut odb = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_odb_open(&mut odb, path.as_ptr()) }, 0);
+        let mut callback_count = 0usize;
+        let mut writepack = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_write_pack(
+                    &mut writepack,
+                    odb,
+                    Some(progress),
+                    core::ptr::from_mut(&mut callback_count).cast(),
+                )
+            },
+            0
+        );
+        let mut stats = unsafe { core::mem::zeroed::<ffi::git_indexer_progress>() };
+        for chunk in pack.chunks(137) {
+            let append = unsafe { (*writepack).append.unwrap() };
+            assert_eq!(
+                unsafe { append(writepack, chunk.as_ptr().cast(), chunk.len(), &mut stats,) },
+                0
+            );
+        }
+        let commit = unsafe { (*writepack).commit.unwrap() };
+        assert_eq!(unsafe { commit(writepack, &mut stats) }, 0);
+        let free = unsafe { (*writepack).free.unwrap() };
+        unsafe { free(writepack) };
+        let head_exists = unsafe { ffi::git_odb_exists(odb, head) } != 0;
+        unsafe { ffi::git_odb_free(odb) };
+        WritepackObservation {
+            total_objects: stats.total_objects,
+            indexed_objects: stats.indexed_objects,
+            total_deltas: stats.total_deltas,
+            indexed_deltas: stats.indexed_deltas,
+            callback_count,
+            head_exists,
+            pack_files: std::fs::read_dir(objects.path().join("pack"))
+                .unwrap()
+                .count(),
+        }
+    }
+
+    fn safe_writepack(
+        objects: &TempDir,
+        pack: &[u8],
+        head: &mut ffi::git_oid,
+    ) -> WritepackObservation {
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        let path = objects.c_path();
+        let mut odb = git_odb_open(&path).unwrap();
+        let callback_count = Rc::new(Cell::new(0usize));
+        let callback_view = Rc::clone(&callback_count);
+        let mut writepack = git_odb_write_pack(odb.as_ref(), move |_: IndexerProgressRef<'_>| {
+            callback_view.set(callback_view.get() + 1);
+            0
+        })
+        .unwrap();
+        let mut stats = unsafe { core::mem::zeroed::<ffi::git_indexer_progress>() };
+        let mut stats_view =
+            unsafe { crate::indexer::IndexerProgressMut::from_ptr(&raw mut stats) }.unwrap();
+        for chunk in pack.chunks(137) {
+            writepack.as_mut().append(chunk, &mut stats_view).unwrap();
+        }
+        writepack.as_mut().commit(&mut stats_view).unwrap();
+        drop(writepack);
+        let head = unsafe { OidRef::from_ptr(core::ptr::from_mut(head)) }.unwrap();
+        let head_exists = git_odb_exists(&mut odb.as_mut(), head);
+        WritepackObservation {
+            total_objects: stats_view.as_ref().total_objects(),
+            indexed_objects: stats_view.as_ref().indexed_objects(),
+            total_deltas: stats_view.as_ref().total_deltas(),
+            indexed_deltas: stats_view.as_ref().indexed_deltas(),
+            callback_count: callback_count.get(),
+            head_exists,
+            pack_files: std::fs::read_dir(objects.path().join("pack"))
+                .unwrap()
+                .count(),
+        }
+    }
+
+    #[test]
+    fn io_equiv_odb_writepack_ingests_delta_pack_and_reports_progress() {
+        let _libgit2 = Libgit2Init::acquire();
+        let source = HistoryFixture::new("odb-writepack-source");
+        let (pack, mut head) = delta_pack(&source);
+        let raw_objects = empty_objects("odb-writepack-raw");
+        let safe_objects = empty_objects("odb-writepack-safe");
+        let raw = unsafe { raw_writepack(&raw_objects, &pack, &head) };
+        assert_eq!(raw, safe_writepack(&safe_objects, &pack, &mut head));
+        assert!(raw.head_exists);
+        assert!(raw.total_deltas > 0);
+        assert_eq!(raw.total_objects, raw.indexed_objects);
+        assert_eq!(raw.total_deltas, raw.indexed_deltas);
+        assert_eq!(raw.pack_files, 2);
+    }
+}
+
+#[cfg(test)]
 mod scheduled_alternate_and_prefix_tests {
     use super::*;
     use crate::oid::OidType;

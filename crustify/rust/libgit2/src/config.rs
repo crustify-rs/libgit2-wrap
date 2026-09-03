@@ -935,6 +935,532 @@ pub fn git_config_next<'iter>(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{Libgit2Init, RawBuf, TempDir, safe_buf_bytes};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct ConfigObservation {
+        enabled: bool,
+        small: i32,
+        large: i64,
+        text: Vec<u8>,
+        path: Vec<u8>,
+        snapshot_text: Vec<u8>,
+        entries: Vec<(Vec<u8>, Option<Vec<u8>>)>,
+    }
+
+    fn fixture(label: &str) -> (TempDir, std::ffi::CString) {
+        let directory = TempDir::new(label);
+        let path = directory.path().join("config");
+        std::fs::write(
+            &path,
+            b"[equiv]\n\tenabled = false\n\tsmall = 1\n\tlarge = 2\n\ttext = original\n\tpath = ./relative\n[multi]\n\tvalue = one\n\tvalue = two\n",
+        )
+        .unwrap();
+        let path = std::ffi::CString::new(path.to_str().unwrap()).unwrap();
+        (directory, path)
+    }
+
+    unsafe fn raw_config(path: &CStr) -> ConfigObservation {
+        let mut config = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_config_open_ondisk(&mut config, path.as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_config_set_bool(config, c"equiv.enabled".as_ptr(), 1) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_config_set_int32(config, c"equiv.small".as_ptr(), 42) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_config_set_int64(config, c"equiv.large".as_ptr(), 9_000_000_000) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_config_set_multivar(
+                    config,
+                    c"multi.value".as_ptr(),
+                    c"^one$".as_ptr(),
+                    c"replaced".as_ptr(),
+                )
+            },
+            0
+        );
+        let mut snapshot = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_config_snapshot(&mut snapshot, config) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_config_set_string(config, c"equiv.text".as_ptr(), c"updated".as_ptr())
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_config_delete_multivar(config, c"multi.value".as_ptr(), c"^two$".as_ptr())
+            },
+            0
+        );
+
+        let mut enabled = 0;
+        let mut small = 0;
+        let mut large = 0;
+        assert_eq!(
+            unsafe { ffi::git_config_get_bool(&mut enabled, config, c"equiv.enabled".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_config_get_int32(&mut small, config, c"equiv.small".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_config_get_int64(&mut large, config, c"equiv.large".as_ptr()) },
+            0
+        );
+        let mut text = RawBuf::new();
+        let mut snapshot_text = RawBuf::new();
+        let mut parsed_path = RawBuf::new();
+        assert_eq!(
+            unsafe { ffi::git_config_get_string_buf(&mut text.0, config, c"equiv.text".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_config_get_string_buf(
+                    &mut snapshot_text.0,
+                    snapshot,
+                    c"equiv.text".as_ptr(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_config_get_path(&mut parsed_path.0, config, c"equiv.path".as_ptr()) },
+            0
+        );
+
+        let mut iterator = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_config_iterator_glob_new(
+                    &mut iterator,
+                    config,
+                    c"^(equiv|multi)\\.".as_ptr(),
+                )
+            },
+            0
+        );
+        let mut entries = Vec::new();
+        loop {
+            let mut entry = core::ptr::null_mut();
+            let status = unsafe { ffi::git_config_next(&mut entry, iterator) };
+            if status == ffi::git_error_code_GIT_ITEROVER {
+                break;
+            }
+            assert_eq!(status, 0);
+            let name = unsafe { CStr::from_ptr((*entry).name) }.to_bytes().to_vec();
+            let value = if unsafe { (*entry).value }.is_null() {
+                None
+            } else {
+                Some(
+                    unsafe { CStr::from_ptr((*entry).value) }
+                        .to_bytes()
+                        .to_vec(),
+                )
+            };
+            entries.push((name, value));
+        }
+        entries.sort();
+        unsafe { ffi::git_config_iterator_free(iterator) };
+
+        let mut transaction = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_config_lock(&mut transaction, config) }, 0);
+        assert_eq!(unsafe { ffi::git_transaction_commit(transaction) }, 0);
+        unsafe { ffi::git_transaction_free(transaction) };
+        unsafe { ffi::git_config_free(snapshot) };
+        unsafe { ffi::git_config_free(config) };
+
+        ConfigObservation {
+            enabled: enabled != 0,
+            small,
+            large,
+            text: text.bytes(),
+            path: parsed_path.bytes(),
+            snapshot_text: snapshot_text.bytes(),
+            entries,
+        }
+    }
+
+    fn safe_config(path: &CStr) -> ConfigObservation {
+        let mut config = git_config_open_ondisk(path).unwrap();
+        git_config_set_bool(&mut config.as_mut(), c"equiv.enabled", true).unwrap();
+        git_config_set_int32(&mut config.as_mut(), c"equiv.small", 42).unwrap();
+        git_config_set_int64(&mut config.as_mut(), c"equiv.large", 9_000_000_000).unwrap();
+        git_config_set_multivar(&mut config.as_mut(), c"multi.value", c"^one$", c"replaced")
+            .unwrap();
+        let snapshot = git_config_snapshot(config.as_ref()).unwrap();
+        git_config_set_string(&mut config.as_mut(), c"equiv.text", c"updated").unwrap();
+        git_config_delete_multivar(&mut config.as_mut(), c"multi.value", c"^two$").unwrap();
+
+        let enabled = git_config_get_bool(config.as_ref(), c"equiv.enabled").unwrap();
+        let small = git_config_get_int32(config.as_ref(), c"equiv.small").unwrap();
+        let large = git_config_get_int64(config.as_ref(), c"equiv.large").unwrap();
+        let mut text = crate::api::buffer::GitBuf::new();
+        let mut snapshot_text = crate::api::buffer::GitBuf::new();
+        let mut path = crate::api::buffer::GitBuf::new();
+        git_config_get_string_buf(&mut text.as_mut(), config.as_ref(), c"equiv.text").unwrap();
+        git_config_get_string_buf(
+            &mut snapshot_text.as_mut(),
+            snapshot.as_ref(),
+            c"equiv.text",
+        )
+        .unwrap();
+        git_config_get_path(&mut path.as_mut(), config.as_ref(), c"equiv.path").unwrap();
+
+        let mut iterator =
+            git_config_iterator_glob_new(config.as_ref(), Some(c"^(equiv|multi)\\.")).unwrap();
+        let mut entries = Vec::new();
+        loop {
+            let next = {
+                let mut iterator_view = iterator.as_mut();
+                git_config_next(&mut iterator_view).map(|entry| {
+                    (
+                        entry.name().to_bytes().to_vec(),
+                        entry.value().map(|value| value.to_bytes().to_vec()),
+                    )
+                })
+            };
+            match next {
+                Ok(entry) => entries.push(entry),
+                Err(ffi::git_error_code_GIT_ITEROVER) => break,
+                Err(status) => panic!("config iteration failed: {status}"),
+            }
+        }
+        entries.sort();
+        {
+            let mut config_view = config.as_mut();
+            let mut transaction = git_config_lock(&mut config_view).unwrap();
+            crate::transaction::git_transaction_commit(&mut transaction.as_mut()).unwrap();
+        }
+
+        ConfigObservation {
+            enabled,
+            small,
+            large,
+            text: safe_buf_bytes(text.as_ref()),
+            path: safe_buf_bytes(path.as_ref()),
+            snapshot_text: safe_buf_bytes(snapshot_text.as_ref()),
+            entries,
+        }
+    }
+
+    fn layered_fixture(label: &str) -> (TempDir, std::ffi::CString, std::ffi::CString) {
+        let directory = TempDir::new(label);
+        let system = directory.path().join("system.config");
+        let local = directory.path().join("local.config");
+        std::fs::write(
+            &system,
+            b"[layer]\n\tvalue = system\n\tflag = false\n[multi]\n\titem = one\n",
+        )
+        .unwrap();
+        std::fs::write(
+            &local,
+            b"[layer]\n\tvalue = local\n\tflag = true\n[multi]\n\titem = two\n\titem = three\n",
+        )
+        .unwrap();
+        (
+            directory,
+            std::ffi::CString::new(system.to_str().unwrap()).unwrap(),
+            std::ffi::CString::new(local.to_str().unwrap()).unwrap(),
+        )
+    }
+
+    unsafe fn raw_layered_config(
+        system: &CStr,
+        local: &CStr,
+    ) -> (Vec<u8>, Vec<u8>, usize, usize, i32, i64) {
+        let mut config = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_config_new(&mut config) }, 0);
+        assert_eq!(
+            unsafe {
+                ffi::git_config_add_file_ondisk(
+                    config,
+                    system.as_ptr(),
+                    ffi::git_config_level_t_GIT_CONFIG_LEVEL_SYSTEM,
+                    core::ptr::null(),
+                    0,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_config_add_file_ondisk(
+                    config,
+                    local.as_ptr(),
+                    ffi::git_config_level_t_GIT_CONFIG_LEVEL_LOCAL,
+                    core::ptr::null(),
+                    0,
+                )
+            },
+            0
+        );
+        let mut value = RawBuf::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_config_get_string_buf(&mut value.0, config, c"layer.value".as_ptr())
+            },
+            0
+        );
+        let mut system_config = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_config_open_level(
+                    &mut system_config,
+                    config,
+                    ffi::git_config_level_t_GIT_CONFIG_LEVEL_SYSTEM,
+                )
+            },
+            0
+        );
+        let mut system_value = RawBuf::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_config_get_string_buf(
+                    &mut system_value.0,
+                    system_config,
+                    c"layer.value".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_config_free(system_config) };
+
+        unsafe extern "C" fn count(
+            _entry: *const ffi::git_config_entry,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            *unsafe { &mut *payload.cast::<usize>() } += 1;
+            0
+        }
+        let mut matched = 0usize;
+        assert_eq!(
+            unsafe {
+                ffi::git_config_foreach_match(
+                    config,
+                    c"^(layer|multi)\\.".as_ptr(),
+                    Some(count),
+                    core::ptr::from_mut(&mut matched).cast(),
+                )
+            },
+            0
+        );
+        let mut multi = 0usize;
+        assert_eq!(
+            unsafe {
+                ffi::git_config_get_multivar_foreach(
+                    config,
+                    c"multi.item".as_ptr(),
+                    c"^(one|two|three)$".as_ptr(),
+                    Some(count),
+                    core::ptr::from_mut(&mut multi).cast(),
+                )
+            },
+            0
+        );
+        let mut iterator = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_config_multivar_iterator_new(
+                    &mut iterator,
+                    config,
+                    c"multi.item".as_ptr(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let mut iterated = 0usize;
+        loop {
+            let mut entry = core::ptr::null_mut();
+            let status = unsafe { ffi::git_config_next(&mut entry, iterator) };
+            if status == ffi::git_error_code_GIT_ITEROVER {
+                break;
+            }
+            assert_eq!(status, 0);
+            iterated += 1;
+        }
+        assert_eq!(iterated, multi);
+        unsafe { ffi::git_config_iterator_free(iterator) };
+
+        let order = [
+            ffi::git_config_level_t_GIT_CONFIG_LEVEL_LOCAL,
+            ffi::git_config_level_t_GIT_CONFIG_LEVEL_SYSTEM,
+        ];
+        assert_eq!(
+            unsafe {
+                ffi::git_config_set_writeorder(config, order.as_ptr().cast_mut(), order.len())
+            },
+            0
+        );
+        let mut mapped = 0;
+        let maps = [
+            ffi::git_configmap {
+                type_: ffi::git_configmap_t_GIT_CONFIGMAP_FALSE,
+                str_match: core::ptr::null(),
+                map_value: 10,
+            },
+            ffi::git_configmap {
+                type_: ffi::git_configmap_t_GIT_CONFIGMAP_TRUE,
+                str_match: core::ptr::null(),
+                map_value: 20,
+            },
+        ];
+        assert_eq!(
+            unsafe {
+                ffi::git_config_get_mapped(
+                    &mut mapped,
+                    config,
+                    c"layer.flag".as_ptr(),
+                    maps.as_ptr(),
+                    maps.len(),
+                )
+            },
+            0
+        );
+        let mut parsed = 0i64;
+        assert_eq!(
+            unsafe { ffi::git_config_parse_int64(&mut parsed, c"3g".as_ptr()) },
+            0
+        );
+        unsafe { ffi::git_config_free(config) };
+        (
+            value.bytes(),
+            system_value.bytes(),
+            matched,
+            multi,
+            mapped,
+            parsed,
+        )
+    }
+
+    fn safe_layered_config(
+        system: &CStr,
+        local: &CStr,
+    ) -> (Vec<u8>, Vec<u8>, usize, usize, i32, i64) {
+        use crate::api::config::{GitConfigmap, GitConfigmapType};
+
+        let mut config = git_config_new().unwrap();
+        git_config_add_file_ondisk(&mut config.as_mut(), system, GitConfigLevel::SYSTEM, false)
+            .unwrap();
+        git_config_add_file_ondisk(&mut config.as_mut(), local, GitConfigLevel::LOCAL, false)
+            .unwrap();
+        let mut value = crate::api::buffer::GitBuf::new();
+        git_config_get_string_buf(&mut value.as_mut(), config.as_ref(), c"layer.value").unwrap();
+        let system_config = git_config_open_level(config.as_ref(), GitConfigLevel::SYSTEM).unwrap();
+        let mut system_value = crate::api::buffer::GitBuf::new();
+        git_config_get_string_buf(
+            &mut system_value.as_mut(),
+            system_config.as_ref(),
+            c"layer.value",
+        )
+        .unwrap();
+
+        let mut matched = 0usize;
+        git_config_foreach_match(
+            config.as_ref(),
+            Some(c"^(layer|multi)\\."),
+            &mut |_entry: GitConfigEntryRef<'_>| {
+                matched += 1;
+                0
+            },
+        )
+        .unwrap();
+        let mut multi = 0usize;
+        git_config_get_multivar_foreach(
+            config.as_ref(),
+            c"multi.item",
+            Some(c"^(one|two|three)$"),
+            &mut |_entry: GitConfigEntryRef<'_>| {
+                multi += 1;
+                0
+            },
+        )
+        .unwrap();
+        let mut iterator =
+            git_config_multivar_iterator_new(config.as_ref(), c"multi.item", None).unwrap();
+        let mut iterated = 0usize;
+        loop {
+            let result = {
+                let mut view = iterator.as_mut();
+                git_config_next(&mut view).map(|_| ())
+            };
+            match result {
+                Ok(_) => iterated += 1,
+                Err(ffi::git_error_code_GIT_ITEROVER) => break,
+                Err(status) => panic!("multivar iteration failed: {status}"),
+            }
+        }
+        assert_eq!(iterated, multi);
+        git_config_set_writeorder(
+            &mut config.as_mut(),
+            &[GitConfigLevel::LOCAL, GitConfigLevel::SYSTEM],
+        )
+        .unwrap();
+        let false_map = GitConfigmap::new(GitConfigmapType::False, 10);
+        let true_map = GitConfigmap::new(GitConfigmapType::True, 20);
+        let mapped = git_config_get_mapped(
+            config.as_ref(),
+            c"layer.flag",
+            &[false_map.as_ref(), true_map.as_ref()],
+        )
+        .unwrap();
+        (
+            safe_buf_bytes(value.as_ref()),
+            safe_buf_bytes(system_value.as_ref()),
+            matched,
+            multi,
+            mapped,
+            git_config_parse_int64(Some(c"3g")).unwrap(),
+        )
+    }
+
+    #[test]
+    fn io_equiv_ondisk_config_mutation_snapshot_iteration_and_locking() {
+        let _libgit2 = Libgit2Init::acquire();
+        let (_raw_directory, raw_path) = fixture("config-raw");
+        let (_safe_directory, safe_path) = fixture("config-safe");
+        let raw = unsafe { raw_config(&raw_path) };
+        assert_eq!(raw, safe_config(&safe_path));
+        assert!(raw.enabled);
+        assert_eq!(raw.snapshot_text, b"original");
+    }
+
+    #[test]
+    fn io_equiv_layered_config_levels_foreach_multivar_mapping_and_write_order() {
+        let _libgit2 = Libgit2Init::acquire();
+        let (_raw_directory, raw_system, raw_local) = layered_fixture("config-layered-raw");
+        let (_safe_directory, safe_system, safe_local) = layered_fixture("config-layered-safe");
+        let raw = unsafe { raw_layered_config(&raw_system, &raw_local) };
+        let safe = safe_layered_config(&safe_system, &safe_local);
+        assert_eq!(raw, safe);
+        assert_eq!(raw.0, b"local");
+        assert_eq!(raw.1, b"system");
+        assert_eq!(raw.4, 20);
+        assert_eq!(raw.5, 3 * 1024 * 1024 * 1024);
+    }
+}
+
+#[cfg(test)]
 mod scheduled_iterator_tests {
     use super::*;
 

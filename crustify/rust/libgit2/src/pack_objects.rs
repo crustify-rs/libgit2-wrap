@@ -584,3 +584,322 @@ mod tests {
         assert_eq!(status, -1);
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
+    use crate::api::buffer::GitBuf;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, TempDir};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct PackObservation {
+        streamed: Vec<u8>,
+        buffered: Vec<u8>,
+        object_count: usize,
+        written: usize,
+        name: Vec<u8>,
+        hash: Vec<u8>,
+        progress_events: usize,
+        index_events: usize,
+        files: usize,
+    }
+
+    fn pack_header(bytes: &[u8]) -> (&[u8], u32, u32) {
+        assert!(bytes.len() >= 12);
+        (
+            &bytes[..4],
+            u32::from_be_bytes(bytes[4..8].try_into().unwrap()),
+            u32::from_be_bytes(bytes[8..12].try_into().unwrap()),
+        )
+    }
+
+    fn assert_equivalent(raw: &PackObservation, safe: &PackObservation) {
+        // Pack construction may choose different, equally valid delta and
+        // compression encodings on separate invocations. Compare the format
+        // and represented object counts, not those non-contractual bytes.
+        assert_eq!(pack_header(&raw.streamed), pack_header(&safe.streamed));
+        assert_eq!(pack_header(&raw.buffered), pack_header(&safe.buffered));
+        assert_eq!(raw.object_count, safe.object_count);
+        assert_eq!(raw.written, safe.written);
+        assert_eq!(raw.name, safe.name);
+        assert_eq!(raw.hash, safe.hash);
+        assert_eq!(raw.files, safe.files);
+        assert!(raw.progress_events > 0);
+        assert!(safe.progress_events > 0);
+        assert!(raw.index_events > 0);
+        assert!(safe.index_events > 0);
+    }
+
+    unsafe fn resolve(repository: *mut ffi::git_repository, spec: &CStr) -> ffi::git_oid {
+        let mut object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut object, repository, spec.as_ptr()) },
+            0
+        );
+        let id = unsafe { *ffi::git_object_id(object) };
+        unsafe { ffi::git_object_free(object) };
+        id
+    }
+
+    unsafe fn raw_pack(fixture: &HistoryFixture, output: &TempDir) -> PackObservation {
+        unsafe extern "C" fn progress(_: i32, _: u32, _: u32, payload: *mut c_void) -> i32 {
+            unsafe { *payload.cast::<usize>() += 1 };
+            0
+        }
+        unsafe extern "C" fn stream(
+            bytes: *mut c_void,
+            length: usize,
+            payload: *mut c_void,
+        ) -> i32 {
+            let collected = unsafe { &mut *payload.cast::<Vec<u8>>() };
+            collected.extend_from_slice(unsafe {
+                core::slice::from_raw_parts(bytes.cast::<u8>(), length)
+            });
+            0
+        }
+        unsafe extern "C" fn indexed(
+            _: *const ffi::git_indexer_progress,
+            payload: *mut c_void,
+        ) -> i32 {
+            unsafe { *payload.cast::<usize>() += 1 };
+            0
+        }
+
+        let repository = fixture.repository.as_ptr();
+        let head = unsafe { resolve(repository, c"HEAD") };
+        let tree = unsafe { resolve(repository, c"HEAD^{tree}") };
+        let blob = unsafe { resolve(repository, c"HEAD:README.md") };
+        let mut builder = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_packbuilder_new(&mut builder, repository) },
+            0
+        );
+        assert!(unsafe { ffi::git_packbuilder_set_threads(builder, 1) } >= 1);
+        let mut progress_events = 0usize;
+        assert_eq!(
+            unsafe {
+                ffi::git_packbuilder_set_callbacks(
+                    builder,
+                    Some(progress),
+                    core::ptr::from_mut(&mut progress_events).cast(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_packbuilder_insert_recur(builder, &head, c"HEAD".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_packbuilder_insert_commit(builder, &head) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_packbuilder_insert_tree(builder, &tree) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_packbuilder_insert(builder, &blob, c"README.md".as_ptr()) },
+            0
+        );
+        let mut walk = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_revwalk_new(&mut walk, repository) }, 0);
+        assert_eq!(unsafe { ffi::git_revwalk_push_head(walk) }, 0);
+        assert_eq!(
+            unsafe { ffi::git_packbuilder_insert_walk(builder, walk) },
+            0
+        );
+        unsafe { ffi::git_revwalk_free(walk) };
+
+        let object_count = unsafe { ffi::git_packbuilder_object_count(builder) };
+        let mut streamed = Vec::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_packbuilder_foreach(
+                    builder,
+                    Some(stream),
+                    core::ptr::from_mut(&mut streamed).cast(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_packbuilder_free(builder) };
+
+        let mut buffer_builder = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_packbuilder_new(&mut buffer_builder, repository) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_packbuilder_insert_recur(buffer_builder, &head, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut buffer = unsafe { core::mem::zeroed::<ffi::git_buf>() };
+        assert_eq!(
+            unsafe { ffi::git_packbuilder_write_buf(&mut buffer, buffer_builder) },
+            0
+        );
+        let buffered =
+            unsafe { core::slice::from_raw_parts(buffer.ptr.cast::<u8>(), buffer.size).to_vec() };
+        unsafe { ffi::git_buf_dispose(&mut buffer) };
+        unsafe { ffi::git_packbuilder_free(buffer_builder) };
+
+        let output_path = output.c_path();
+        let mut disk_builder = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_packbuilder_new(&mut disk_builder, repository) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_packbuilder_insert_recur(disk_builder, &head, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut index_events = 0usize;
+        assert_eq!(
+            unsafe {
+                ffi::git_packbuilder_write(
+                    disk_builder,
+                    output_path.as_ptr(),
+                    0o644,
+                    Some(indexed),
+                    core::ptr::from_mut(&mut index_events).cast(),
+                )
+            },
+            0
+        );
+        let written = unsafe { ffi::git_packbuilder_written(disk_builder) };
+        let name = unsafe { CStr::from_ptr(ffi::git_packbuilder_name(disk_builder)) }
+            .to_bytes()
+            .to_vec();
+        let hash = unsafe { (*ffi::git_packbuilder_hash(disk_builder)).id }.to_vec();
+        let files = std::fs::read_dir(output.path()).unwrap().count();
+        unsafe { ffi::git_packbuilder_free(disk_builder) };
+        PackObservation {
+            streamed,
+            buffered,
+            object_count,
+            written,
+            name,
+            hash,
+            progress_events,
+            index_events,
+            files,
+        }
+    }
+
+    fn safe_pack(fixture: &HistoryFixture, output: &TempDir) -> PackObservation {
+        let repository = fixture.repository.as_ptr();
+        let mut head = unsafe { resolve(repository, c"HEAD") };
+        let mut tree = unsafe { resolve(repository, c"HEAD^{tree}") };
+        let mut blob = unsafe { resolve(repository, c"HEAD:README.md") };
+        let repository_view =
+            unsafe { crate::repository::GitRepositoryRef::from_ptr(repository) }.unwrap();
+        let mut builder = git_packbuilder_new(repository_view).unwrap();
+        assert!(git_packbuilder_set_threads(&mut builder.as_mut(), 1) >= 1);
+        let progress_events = Arc::new(AtomicUsize::new(0));
+        let progress_view = Arc::clone(&progress_events);
+        git_packbuilder_set_callbacks(
+            &mut builder,
+            Some(Box::new(move |_: GitPackbuilderStage, _: u32, _: u32| {
+                progress_view.fetch_add(1, Ordering::SeqCst);
+                0
+            })),
+        )
+        .unwrap();
+        let head_ref = unsafe { OidRef::from_ptr(core::ptr::from_mut(&mut head)) }.unwrap();
+        let tree_ref = unsafe { OidRef::from_ptr(core::ptr::from_mut(&mut tree)) }.unwrap();
+        let blob_ref = unsafe { OidRef::from_ptr(core::ptr::from_mut(&mut blob)) }.unwrap();
+        git_packbuilder_insert_recur(&mut builder.as_mut(), head_ref, Some(c"HEAD")).unwrap();
+        git_packbuilder_insert_commit(&mut builder.as_mut(), head_ref).unwrap();
+        git_packbuilder_insert_tree(&mut builder.as_mut(), tree_ref).unwrap();
+        git_packbuilder_insert(&mut builder.as_mut(), blob_ref, Some(c"README.md")).unwrap();
+        let mut raw_walk = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revwalk_new(&mut raw_walk, repository) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_revwalk_push_head(raw_walk) }, 0);
+        let mut walk = unsafe { crate::revwalk::GitRevwalkMut::from_ptr(raw_walk) }.unwrap();
+        git_packbuilder_insert_walk(&mut builder.as_mut(), &mut walk).unwrap();
+        unsafe { ffi::git_revwalk_free(raw_walk) };
+
+        let object_count = git_packbuilder_object_count(builder.as_ref());
+        let mut streamed = Vec::new();
+        git_packbuilder_foreach(&mut builder.as_mut(), &mut |bytes: &[u8]| {
+            streamed.extend_from_slice(bytes);
+            0
+        })
+        .unwrap();
+        drop(builder);
+
+        let mut buffer_builder = git_packbuilder_new(repository_view).unwrap();
+        git_packbuilder_insert_recur(&mut buffer_builder.as_mut(), head_ref, Some(c"HEAD"))
+            .unwrap();
+        let mut buffer = GitBuf::new();
+        git_packbuilder_write_buf(&mut buffer.as_mut(), &mut buffer_builder.as_mut()).unwrap();
+        let buffered = buffer
+            .as_ref()
+            .contents()
+            .unwrap()
+            .elems()
+            .collect::<Vec<_>>();
+        drop(buffer_builder);
+
+        let output_path = output.c_path();
+        let mut disk_builder = git_packbuilder_new(repository_view).unwrap();
+        git_packbuilder_insert_recur(&mut disk_builder.as_mut(), head_ref, Some(c"HEAD")).unwrap();
+        let index_events = Arc::new(AtomicUsize::new(0));
+        let index_view = Arc::clone(&index_events);
+        git_packbuilder_write(
+            &mut disk_builder.as_mut(),
+            Some(&output_path),
+            0o644,
+            &mut move |_: IndexerProgressRef<'_>| {
+                index_view.fetch_add(1, Ordering::SeqCst);
+                0
+            },
+        )
+        .unwrap();
+        let written = git_packbuilder_written(disk_builder.as_ref());
+        let name = git_packbuilder_name(disk_builder.as_ref())
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        let hash = git_packbuilder_hash(disk_builder.as_ref())
+            .raw_bytes()
+            .elems()
+            .collect();
+        PackObservation {
+            streamed,
+            buffered,
+            object_count,
+            written,
+            name,
+            hash,
+            progress_events: progress_events.load(Ordering::SeqCst),
+            index_events: index_events.load(Ordering::SeqCst),
+            files: std::fs::read_dir(output.path()).unwrap().count(),
+        }
+    }
+
+    #[test]
+    fn io_equiv_packbuilder_insert_stream_buffer_and_disk_write() {
+        let _libgit2 = Libgit2Init::acquire();
+        let fixture = HistoryFixture::new("packbuilder-source");
+        let raw_output = TempDir::new("packbuilder-raw");
+        let safe_output = TempDir::new("packbuilder-safe");
+        let raw = unsafe { raw_pack(&fixture, &raw_output) };
+        let safe = safe_pack(&fixture, &safe_output);
+        assert_equivalent(&raw, &safe);
+        assert!(raw.streamed.starts_with(b"PACK"));
+        assert!(raw.buffered.starts_with(b"PACK"));
+        assert!(raw.object_count >= raw.written);
+        assert!(raw.written > 0);
+        assert_eq!(raw.files, 2);
+    }
+}

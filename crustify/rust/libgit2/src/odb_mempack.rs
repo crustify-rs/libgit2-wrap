@@ -168,6 +168,192 @@ pub fn git_mempack_reset(backend: &mut GitMempackBackendMut<'_>) -> Result<(), i
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, safe_buf_bytes};
+
+    unsafe fn raw_dump(repository: *mut ffi::git_repository) -> Vec<u8> {
+        let mut backend = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_mempack_new(&mut backend) }, 0);
+        let mut pack = unsafe { core::mem::zeroed::<ffi::git_buf>() };
+        assert_eq!(
+            unsafe { ffi::git_mempack_dump(&mut pack, repository, backend) },
+            0
+        );
+        let bytes =
+            unsafe { core::slice::from_raw_parts(pack.ptr.cast::<u8>(), pack.size).to_vec() };
+        assert_eq!(unsafe { ffi::git_mempack_reset(backend) }, 0);
+        unsafe {
+            ffi::git_buf_dispose(&mut pack);
+            ((*backend).free.unwrap())(backend);
+        }
+        bytes
+    }
+
+    fn safe_dump(repository: *mut ffi::git_repository) -> Vec<u8> {
+        let mut backend = git_mempack_new().unwrap();
+        let mut pack = crate::api::buffer::GitBuf::new();
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        git_mempack_dump(&mut pack.as_mut(), &mut repository_view, backend.as_ref()).unwrap();
+        git_mempack_reset(&mut backend.as_mut()).unwrap();
+        safe_buf_bytes(pack.as_ref())
+    }
+
+    #[test]
+    fn io_equiv_empty_mempack_dump_and_reset() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("mempack-raw");
+        let safe = HistoryFixture::new("mempack-safe");
+        let raw_pack = unsafe { raw_dump(raw.repository.as_ptr()) };
+        assert_eq!(raw_pack, safe_dump(safe.repository.as_ptr()));
+        assert_eq!(&raw_pack[..12], b"PACK\0\0\0\x02\0\0\0\0");
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
+    unsafe fn raw_populated_dump(repository: *mut ffi::git_repository) -> Vec<u8> {
+        let mut odb = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_odb_new(&mut odb) }, 0);
+        let mut backend = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_mempack_new(&mut backend) }, 0);
+        assert_eq!(unsafe { ffi::git_odb_add_backend(odb, backend, 100) }, 0);
+        assert_eq!(unsafe { ffi::git_repository_set_odb(repository, odb) }, 0);
+        let mut blob = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_write(
+                    &mut blob,
+                    odb,
+                    b"hello from mempack\n".as_ptr().cast(),
+                    b"hello from mempack\n".len(),
+                    ffi::git_object_t_GIT_OBJECT_BLOB,
+                )
+            },
+            0
+        );
+        let mut tree_data = b"100644 file.txt\0".to_vec();
+        tree_data.extend_from_slice(&blob.id[..20]);
+        let mut tree = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_write(
+                    &mut tree,
+                    odb,
+                    tree_data.as_ptr().cast(),
+                    tree_data.len(),
+                    ffi::git_object_t_GIT_OBJECT_TREE,
+                )
+            },
+            0
+        );
+        let commit_data = format!(
+            "tree {}\nauthor Crustify <crustify@example.com> 1700002000 +0000\ncommitter Crustify <crustify@example.com> 1700002000 +0000\n\nmempack commit\n",
+            hex(&tree.id[..20])
+        );
+        let mut commit = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_write(
+                    &mut commit,
+                    odb,
+                    commit_data.as_ptr().cast(),
+                    commit_data.len(),
+                    ffi::git_object_t_GIT_OBJECT_COMMIT,
+                )
+            },
+            0
+        );
+        let mut pack = unsafe { core::mem::zeroed::<ffi::git_buf>() };
+        assert_eq!(
+            unsafe { ffi::git_mempack_dump(&mut pack, repository, backend) },
+            0
+        );
+        let bytes =
+            unsafe { core::slice::from_raw_parts(pack.ptr.cast::<u8>(), pack.size).to_vec() };
+        assert_eq!(unsafe { ffi::git_mempack_reset(backend) }, 0);
+        unsafe {
+            ffi::git_buf_dispose(&mut pack);
+            ffi::git_odb_free(odb);
+        }
+        bytes
+    }
+
+    fn safe_populated_dump(repository: *mut ffi::git_repository) -> Vec<u8> {
+        let mut odb = crate::odb::git_odb_new().unwrap();
+        let backend = git_mempack_new().unwrap();
+        let mempack_ptr = backend.as_ref().as_ptr();
+        let backend = GitMempackBackend::into_odb_backend(backend);
+        crate::odb::git_odb_add_backend(&mut odb.as_mut(), backend, 100).unwrap();
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        crate::repository::git_repository_set_odb(&mut repository_view, odb.as_ref()).unwrap();
+        let mut blob = crate::odb::git_odb_write(
+            odb.as_ref(),
+            b"hello from mempack\n",
+            crate::api::types::GitObjectType::BLOB,
+        )
+        .unwrap();
+        let blob_bytes: Vec<u8> = unsafe {
+            crate::oid::OidRef::from_ptr(core::ptr::from_mut(&mut blob).cast::<ffi::git_oid>())
+        }
+        .unwrap()
+        .digest()
+        .unwrap()
+        .elems()
+        .collect();
+        let mut tree_data = b"100644 file.txt\0".to_vec();
+        tree_data.extend_from_slice(&blob_bytes);
+        let mut tree = crate::odb::git_odb_write(
+            odb.as_ref(),
+            &tree_data,
+            crate::api::types::GitObjectType::TREE,
+        )
+        .unwrap();
+        let tree_bytes: Vec<u8> = unsafe {
+            crate::oid::OidRef::from_ptr(core::ptr::from_mut(&mut tree).cast::<ffi::git_oid>())
+        }
+        .unwrap()
+        .digest()
+        .unwrap()
+        .elems()
+        .collect();
+        let commit_data = format!(
+            "tree {}\nauthor Crustify <crustify@example.com> 1700002000 +0000\ncommitter Crustify <crustify@example.com> 1700002000 +0000\n\nmempack commit\n",
+            hex(&tree_bytes)
+        );
+        crate::odb::git_odb_write(
+            odb.as_ref(),
+            commit_data.as_bytes(),
+            crate::api::types::GitObjectType::COMMIT,
+        )
+        .unwrap();
+        let mut pack = crate::api::buffer::GitBuf::new();
+        let mempack = unsafe { GitMempackBackendRef::from_ptr(mempack_ptr.cast_mut()) }.unwrap();
+        git_mempack_dump(&mut pack.as_mut(), &mut repository_view, mempack).unwrap();
+        let mut mempack =
+            unsafe { GitMempackBackendMut::from_ptr(mempack_ptr.cast_mut()) }.unwrap();
+        git_mempack_reset(&mut mempack).unwrap();
+        safe_buf_bytes(pack.as_ref())
+    }
+
+    #[test]
+    fn io_equiv_populated_mempack_serializes_blob_tree_and_commit() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("mempack-populated-raw");
+        let safe = HistoryFixture::new("mempack-populated-safe");
+        let raw_pack = unsafe { raw_populated_dump(raw.repository.as_ptr()) };
+        assert_eq!(raw_pack, safe_populated_dump(safe.repository.as_ptr()));
+        assert_eq!(&raw_pack[..4], b"PACK");
+        assert_eq!(&raw_pack[8..12], &[0, 0, 0, 3]);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::api::buffer::GitBuf;

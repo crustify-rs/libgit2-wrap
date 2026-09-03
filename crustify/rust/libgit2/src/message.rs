@@ -331,3 +331,36 @@ pub fn git_message_prettify(
     };
     if status == 0 { Ok(()) } else { Err(status) }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    use super::*;
+    use crate::api::buffer::GitBuf;
+    use crate::io_equiv_support::{Libgit2Init, RawBuf, safe_buf_bytes};
+
+    #[test]
+    fn io_equiv_git_message_prettify() {
+        let _init = Libgit2Init::acquire();
+        let message = c"subject  \n\n# generated comment\nbody\n\n\n";
+        let comment = b'#' as core::ffi::c_char;
+
+        let mut raw = RawBuf::new();
+        // SAFETY: the raw buffer is a writable empty header and the message is
+        // a live NUL-terminated input retained by neither call.
+        let raw_status =
+            unsafe { ffi::git_message_prettify(&mut raw.0, message.as_ptr(), 1, comment) };
+
+        let mut safe = GitBuf::new();
+        let safe_status = git_message_prettify(&mut safe.as_mut(), message, true, comment);
+
+        assert_eq!(
+            safe_status,
+            if raw_status == 0 {
+                Ok(())
+            } else {
+                Err(raw_status)
+            }
+        );
+        assert_eq!(safe_buf_bytes(safe.as_ref()), raw.bytes());
+    }
+}

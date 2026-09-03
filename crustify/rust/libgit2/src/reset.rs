@@ -327,3 +327,228 @@ mod annotated_reset_tests {
         let _ = std::fs::remove_dir_all(&directory);
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use core::ffi::CStr;
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct ResetObservation {
+        head: Vec<u8>,
+        readme: Vec<u8>,
+        status: Vec<u8>,
+    }
+
+    fn stage_readme(fixture: &HistoryFixture) {
+        std::fs::write(
+            fixture.directory.path().join("README.md"),
+            b"staged reset-default contents\n",
+        )
+        .unwrap();
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(fixture.directory.path())
+            .args(["add", "README.md"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    unsafe fn resolve(repository: *mut ffi::git_repository, spec: &CStr) -> *mut ffi::git_object {
+        let mut object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut object, repository, spec.as_ptr()) },
+            0
+        );
+        object
+    }
+
+    fn observe(fixture: &HistoryFixture) -> ResetObservation {
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(
+                    &mut head,
+                    fixture.repository.as_ptr(),
+                    c"HEAD".as_ptr(),
+                )
+            },
+            0
+        );
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(fixture.directory.path())
+            .args(["status", "--porcelain=v1"])
+            .output()
+            .unwrap();
+        assert!(status.status.success());
+        ResetObservation {
+            head: head.id.to_vec(),
+            readme: std::fs::read(fixture.directory.path().join("README.md")).unwrap(),
+            status: status.stdout,
+        }
+    }
+
+    unsafe fn raw_reset(fixture: &HistoryFixture) -> ResetObservation {
+        let repository = fixture.repository.as_ptr();
+        let original = unsafe { resolve(repository, c"HEAD") };
+        let prior = unsafe { resolve(repository, c"HEAD~1") };
+        let older = unsafe { resolve(repository, c"HEAD~2") };
+        assert_eq!(
+            unsafe {
+                ffi::git_reset(
+                    repository,
+                    prior,
+                    ffi::git_reset_t_GIT_RESET_SOFT,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_reset(
+                    repository,
+                    older,
+                    ffi::git_reset_t_GIT_RESET_MIXED,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        std::fs::write(
+            fixture.directory.path().join("README.md"),
+            b"discard this hard-reset dirt\n",
+        )
+        .unwrap();
+        let mut checkout = unsafe { core::mem::zeroed::<ffi::git_checkout_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_checkout_options_init(&mut checkout, ffi::GIT_CHECKOUT_OPTIONS_VERSION)
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_reset(
+                    repository,
+                    original,
+                    ffi::git_reset_t_GIT_RESET_HARD,
+                    &checkout,
+                )
+            },
+            0
+        );
+
+        stage_readme(fixture);
+        let mut path = c"README.md".as_ptr().cast_mut();
+        let paths = ffi::git_strarray {
+            strings: core::ptr::from_mut(&mut path),
+            count: 1,
+        };
+        assert_eq!(
+            unsafe { ffi::git_reset_default(repository, prior, &paths) },
+            0
+        );
+
+        let mut annotated = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_lookup(
+                    &mut annotated,
+                    repository,
+                    ffi::git_object_id(older),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_reset_from_annotated(
+                    repository,
+                    annotated,
+                    ffi::git_reset_t_GIT_RESET_SOFT,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        unsafe {
+            ffi::git_annotated_commit_free(annotated);
+            ffi::git_object_free(older);
+            ffi::git_object_free(prior);
+            ffi::git_object_free(original);
+        }
+        observe(fixture)
+    }
+
+    fn safe_reset(fixture: &HistoryFixture) -> ResetObservation {
+        let repository = fixture.repository.as_ptr();
+        let original = unsafe { resolve(repository, c"HEAD") };
+        let prior = unsafe { resolve(repository, c"HEAD~1") };
+        let older = unsafe { resolve(repository, c"HEAD~2") };
+        let original_ref = unsafe { GitObjectRef::from_ptr(original) }.unwrap();
+        let prior_ref = unsafe { GitObjectRef::from_ptr(prior) }.unwrap();
+        let older_ref = unsafe { GitObjectRef::from_ptr(older) }.unwrap();
+        let mut repository_view = unsafe { GitRepositoryMut::from_ptr(repository) }.unwrap();
+        git_reset(&mut repository_view, prior_ref, ResetType::Soft, None).unwrap();
+        git_reset(&mut repository_view, older_ref, ResetType::Mixed, None).unwrap();
+        std::fs::write(
+            fixture.directory.path().join("README.md"),
+            b"discard this hard-reset dirt\n",
+        )
+        .unwrap();
+        let checkout = crate::api::checkout::GitCheckoutOptions::new();
+        git_reset(
+            &mut repository_view,
+            original_ref,
+            ResetType::Hard,
+            Some(checkout.as_ref()),
+        )
+        .unwrap();
+
+        stage_readme(fixture);
+        let mut path = c"README.md".as_ptr().cast_mut();
+        let mut raw_paths = ffi::git_strarray {
+            strings: core::ptr::from_mut(&mut path),
+            count: 1,
+        };
+        let paths = unsafe { GitStrArrayRef::from_ptr(&raw mut raw_paths) }.unwrap();
+        git_reset_default(&mut repository_view, Some(prior_ref), paths).unwrap();
+
+        let older_id =
+            unsafe { crate::oid::OidRef::from_ptr(ffi::git_object_id(older).cast_mut()) }.unwrap();
+        let annotated =
+            crate::annotated_commit::git_annotated_commit_lookup(&mut repository_view, older_id)
+                .unwrap();
+        git_reset_from_annotated(
+            &mut repository_view,
+            annotated.as_ref(),
+            ResetType::Soft,
+            None,
+        )
+        .unwrap();
+        drop(annotated);
+        unsafe {
+            ffi::git_object_free(older);
+            ffi::git_object_free(prior);
+            ffi::git_object_free(original);
+        }
+        observe(fixture)
+    }
+
+    #[test]
+    fn io_equiv_soft_mixed_hard_default_and_annotated_reset() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("reset-raw");
+        let safe = HistoryFixture::new("reset-safe");
+        let raw = unsafe { raw_reset(&raw) };
+        assert_eq!(raw, safe_reset(&safe));
+        assert!(!raw.status.is_empty());
+    }
+}

@@ -76,6 +76,94 @@ pub fn git_revert_options_init(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    unsafe fn lookup(
+        repository: *mut ffi::git_repository,
+        spec: &core::ffi::CStr,
+    ) -> *mut ffi::git_object {
+        let mut object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut object, repository, spec.as_ptr()) },
+            0
+        );
+        object
+    }
+
+    unsafe fn raw_paths(repository: *mut ffi::git_repository) -> Vec<Vec<u8>> {
+        let commit = unsafe { lookup(repository, c"HEAD") };
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_revert_commit(
+                    &mut index,
+                    repository,
+                    commit.cast(),
+                    commit.cast(),
+                    0,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let paths = (0..unsafe { ffi::git_index_entrycount(index) })
+            .map(|position| {
+                let entry = unsafe { ffi::git_index_get_byindex(index, position) };
+                unsafe { core::ffi::CStr::from_ptr((*entry).path) }
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect();
+        unsafe {
+            ffi::git_index_free(index);
+            ffi::git_object_free(commit);
+        }
+        paths
+    }
+
+    fn safe_paths(repository: *mut ffi::git_repository) -> Vec<Vec<u8>> {
+        let commit_raw = unsafe { lookup(repository, c"HEAD") };
+        let commit = unsafe { GitCommitRef::from_ptr(commit_raw.cast()) }.unwrap();
+        let mut view = unsafe { GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut index = git_revert_commit(&mut view, commit, commit, 0, None).unwrap();
+        let paths = (0..crate::index::git_index_entrycount(index.as_ref()))
+            .map(|position| {
+                crate::index::git_index_get_byindex(&mut index.as_mut(), position)
+                    .unwrap()
+                    .path()
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect();
+        drop(index);
+        unsafe { ffi::git_object_free(commit_raw) };
+        paths
+    }
+
+    #[test]
+    fn io_equiv_revert_commit_to_index() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("revert-raw");
+        let safe = HistoryFixture::new("revert-safe");
+        let raw_paths = unsafe { raw_paths(raw.repository.as_ptr()) };
+        assert_eq!(raw_paths, safe_paths(safe.repository.as_ptr()));
+        assert_eq!(
+            raw_paths,
+            [
+                b"README.md".to_vec(),
+                b"src/alpha.c".to_vec(),
+                b"src/beta.c".to_vec()
+            ]
+        );
+    }
+}
+
+#[cfg(test)]
 mod scheduled_wrapper_tests {
     use super::*;
     use crate::api::revert::GitRevertOptions;

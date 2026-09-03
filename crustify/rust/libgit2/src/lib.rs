@@ -87,3 +87,6 @@ pub mod transports;
 pub mod tree;
 pub mod util;
 pub mod worktree;
+
+#[cfg(test)]
+pub(crate) mod io_equiv_support;

@@ -82,6 +82,126 @@ pub fn git_graph_reachable_from_any(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct GraphObservation {
+        ahead_behind: (usize, usize),
+        descendant: bool,
+        reachable: bool,
+    }
+
+    fn write_commit_graph(fixture: &HistoryFixture) {
+        let status = std::process::Command::new("git")
+            .args([
+                "-C",
+                fixture.directory.path().to_str().unwrap(),
+                "commit-graph",
+                "write",
+                "--reachable",
+            ])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    unsafe fn raw_graph(path: &core::ffi::CStr) -> GraphObservation {
+        let mut repository = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_open(&mut repository, path.as_ptr()) },
+            0
+        );
+        let mut head: ffi::git_oid = unsafe { core::mem::zeroed() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut object, repository, c"HEAD~2".as_ptr()) },
+            0
+        );
+        let ancestor = unsafe { *ffi::git_object_id(object) };
+        let (mut ahead, mut behind) = (0, 0);
+        assert_eq!(
+            unsafe {
+                ffi::git_graph_ahead_behind(&mut ahead, &mut behind, repository, &head, &ancestor)
+            },
+            0
+        );
+        let descendant = unsafe { ffi::git_graph_descendant_of(repository, &head, &ancestor) } != 0;
+        let descendants = [head];
+        let reachable = unsafe {
+            ffi::git_graph_reachable_from_any(repository, &ancestor, descendants.as_ptr(), 1)
+        } != 0;
+        unsafe { ffi::git_object_free(object) };
+        unsafe { ffi::git_repository_free(repository) };
+        GraphObservation {
+            ahead_behind: (ahead, behind),
+            descendant,
+            reachable,
+        }
+    }
+
+    fn safe_graph(path: &core::ffi::CStr) -> GraphObservation {
+        let mut repository = crate::repository::git_repository_open(path).unwrap();
+        let mut head =
+            crate::refs::git_reference_name_to_id(&mut repository.as_mut(), c"HEAD").unwrap();
+        let mut object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_revparse_single(&mut object, repository.as_ptr(), c"HEAD~2".as_ptr())
+            },
+            0
+        );
+        let mut ancestor = unsafe { *ffi::git_object_id(object) };
+        let head_ref =
+            unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of_mut!(head).cast()) }.unwrap();
+        let ancestor_ref =
+            unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of_mut!(ancestor).cast()) }
+                .unwrap();
+        let ahead_behind =
+            git_graph_ahead_behind(repository.as_ref(), head_ref, ancestor_ref).unwrap();
+        let descendant =
+            git_graph_descendant_of(repository.as_ref(), head_ref, ancestor_ref).unwrap();
+        let ids = [head];
+        let descendants = unsafe {
+            ffibox::CSlice::from_raw_parts(
+                core::ptr::NonNull::new(ids.as_ptr().cast_mut()).unwrap(),
+                ids.len(),
+            )
+        };
+        let reachable =
+            git_graph_reachable_from_any(&mut repository.as_mut(), ancestor_ref, descendants)
+                .unwrap();
+        unsafe { ffi::git_object_free(object) };
+        GraphObservation {
+            ahead_behind,
+            descendant,
+            reachable,
+        }
+    }
+
+    #[test]
+    fn io_equiv_commit_graph_accelerated_queries() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("commit-graph-raw");
+        let safe = HistoryFixture::new("commit-graph-safe");
+        write_commit_graph(&raw);
+        write_commit_graph(&safe);
+        let raw_path = raw.directory.c_path();
+        let safe_path = safe.directory.c_path();
+        let raw_observation = unsafe { raw_graph(&raw_path) };
+        assert_eq!(raw_observation, safe_graph(&safe_path));
+        assert_eq!(raw_observation.ahead_behind, (2, 0));
+    }
+}
+
+#[cfg(test)]
 mod scheduled_graph_tests {
     use core::ptr::{NonNull, addr_of};
 

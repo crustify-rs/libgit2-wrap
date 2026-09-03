@@ -175,3 +175,57 @@ mod wrapper_tests {
         assert!(out.as_ref().size() > 0);
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    use super::*;
+    use crate::io_equiv_support::{Libgit2Init, RawBuf, RawDiff, safe_buf_bytes};
+
+    #[test]
+    fn io_equiv_git_diff_stats_to_buf() {
+        let _init = Libgit2Init::acquire();
+        let patch = b"diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1,2 +1,2 @@\n-old\n same\n+new\n";
+
+        let raw_diff = RawDiff::from_buffer(patch).unwrap();
+        let mut raw_stats = core::ptr::null_mut();
+        // SAFETY: the output slot is writable and the raw diff remains live.
+        let raw_stats_status =
+            unsafe { ffi::git_diff_get_stats(&mut raw_stats, raw_diff.as_ptr()) };
+        assert_eq!(raw_stats_status, 0);
+        assert!(!raw_stats.is_null());
+        let mut raw_output = RawBuf::new();
+        // SAFETY: both raw values remain live and the output header is empty
+        // and writable for this formatting operation.
+        let raw_status = unsafe {
+            ffi::git_diff_stats_to_buf(
+                &mut raw_output.0,
+                raw_stats,
+                ffi::git_diff_stats_format_t_GIT_DIFF_STATS_SHORT,
+                80,
+            )
+        };
+
+        let mut safe_diff = crate::diff_parse::git_diff_from_buffer(patch).unwrap();
+        let safe_stats = git_diff_get_stats(&mut safe_diff.as_mut()).unwrap();
+        let mut safe_output = GitBuf::new();
+        let safe_status = git_diff_stats_to_buf(
+            &mut safe_output,
+            safe_stats.as_ref(),
+            DiffStatsFormat::SHORT,
+            80,
+        );
+
+        assert_eq!(
+            safe_status,
+            if raw_status == 0 {
+                Ok(())
+            } else {
+                Err(raw_status)
+            }
+        );
+        assert_eq!(safe_buf_bytes(safe_output.as_ref()), raw_output.bytes());
+        drop(safe_stats);
+        // SAFETY: releases the one stats owner returned above exactly once.
+        unsafe { ffi::git_diff_stats_free(raw_stats) };
+    }
+}

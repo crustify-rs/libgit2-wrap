@@ -558,6 +558,238 @@ pub fn git_credential_userpass_plaintext_new(
     credential_from_status(status, out)
 }
 
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use core::ffi::CStr;
+
+    use super::*;
+    use crate::io_equiv_support::Libgit2Init;
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct CredentialObservation {
+        default_type: ffi::git_credential_t,
+        username_type: ffi::git_credential_t,
+        userpass_type: ffi::git_credential_t,
+        default_username: Option<Vec<u8>>,
+        username: Option<Vec<u8>>,
+        userpass_username: Option<Vec<u8>>,
+        has_username: [bool; 3],
+    }
+
+    unsafe fn raw_credentials() -> CredentialObservation {
+        let mut default = core::ptr::null_mut();
+        let mut username = core::ptr::null_mut();
+        let mut userpass = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_credential_default_new(&mut default) }, 0);
+        assert_eq!(
+            unsafe { ffi::git_credential_username_new(&mut username, c"alice".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_credential_userpass_plaintext_new(
+                    &mut userpass,
+                    c"bob".as_ptr(),
+                    c"secret".as_ptr(),
+                )
+            },
+            0
+        );
+        let get = |credential: *mut ffi::git_credential| {
+            let value = unsafe { ffi::git_credential_get_username(credential) };
+            (!value.is_null()).then(|| {
+                unsafe { core::ffi::CStr::from_ptr(value) }
+                    .to_bytes()
+                    .to_vec()
+            })
+        };
+        let observation = CredentialObservation {
+            default_type: unsafe { (*default).credtype },
+            username_type: unsafe { (*username).credtype },
+            userpass_type: unsafe { (*userpass).credtype },
+            default_username: get(default),
+            username: get(username),
+            userpass_username: get(userpass),
+            has_username: [
+                unsafe { ffi::git_credential_has_username(default) } != 0,
+                unsafe { ffi::git_credential_has_username(username) } != 0,
+                unsafe { ffi::git_credential_has_username(userpass) } != 0,
+            ],
+        };
+        unsafe { ffi::git_credential_free(default) };
+        unsafe { ffi::git_credential_free(username) };
+        unsafe { ffi::git_credential_free(userpass) };
+        observation
+    }
+
+    fn safe_credentials() -> CredentialObservation {
+        let default = git_credential_default_new().unwrap();
+        let username = git_credential_username_new(c"alice").unwrap();
+        let userpass = git_credential_userpass_plaintext_new(c"bob", c"secret").unwrap();
+        let kind = |credential: GitCredentialRef<'_>| credential.credential_type().unwrap().bits();
+        let get = |credential: GitCredentialRef<'_>| {
+            git_credential_get_username(credential).map(|value| value.to_bytes().to_vec())
+        };
+        CredentialObservation {
+            default_type: kind(default.as_ref()),
+            username_type: kind(username.as_ref()),
+            userpass_type: kind(userpass.as_ref()),
+            default_username: get(default.as_ref()),
+            username: get(username.as_ref()),
+            userpass_username: get(userpass.as_ref()),
+            has_username: [
+                git_credential_has_username(default.as_ref()),
+                git_credential_has_username(username.as_ref()),
+                git_credential_has_username(userpass.as_ref()),
+            ],
+        }
+    }
+
+    #[test]
+    fn io_equiv_default_username_and_userpass_credentials() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = unsafe { raw_credentials() };
+        assert_eq!(raw, safe_credentials());
+        assert_eq!(raw.username, Some(b"alice".to_vec()));
+        assert_eq!(raw.userpass_username, Some(b"bob".to_vec()));
+    }
+
+    unsafe fn raw_ssh_credentials() -> Vec<(ffi::git_credential_t, Vec<u8>)> {
+        type Constructor = unsafe extern "C" fn(
+            *mut *mut ffi::git_credential,
+            *const core::ffi::c_char,
+            *const core::ffi::c_char,
+            *const core::ffi::c_char,
+            *const core::ffi::c_char,
+        ) -> i32;
+        let mut output = Vec::new();
+        for constructor in [
+            ffi::git_cred_ssh_key_memory_new as Constructor,
+            ffi::git_credential_ssh_key_memory_new as Constructor,
+        ] {
+            let mut credential = core::ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    constructor(
+                        &mut credential,
+                        c"ssh-user".as_ptr(),
+                        c"public-key".as_ptr(),
+                        c"private-key".as_ptr(),
+                        c"passphrase".as_ptr(),
+                    )
+                },
+                -1
+            );
+            assert!(credential.is_null());
+        }
+        for constructor in [
+            ffi::git_cred_ssh_key_new as Constructor,
+            ffi::git_credential_ssh_key_new as Constructor,
+        ] {
+            let mut credential = core::ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    constructor(
+                        &mut credential,
+                        c"ssh-user".as_ptr(),
+                        c"public-key-or-path".as_ptr(),
+                        c"private-key-or-path".as_ptr(),
+                        c"passphrase".as_ptr(),
+                    )
+                },
+                0
+            );
+            output.push((
+                unsafe { (*credential).credtype },
+                unsafe { CStr::from_ptr(ffi::git_credential_get_username(credential)) }
+                    .to_bytes()
+                    .to_vec(),
+            ));
+            unsafe { ffi::git_credential_free(credential) };
+        }
+        for constructor in [
+            ffi::git_cred_ssh_key_from_agent,
+            ffi::git_credential_ssh_key_from_agent,
+        ] {
+            let mut credential = core::ptr::null_mut();
+            assert_eq!(
+                unsafe { constructor(&mut credential, c"agent-user".as_ptr()) },
+                0
+            );
+            output.push((
+                unsafe { (*credential).credtype },
+                unsafe { CStr::from_ptr(ffi::git_credential_get_username(credential)) }
+                    .to_bytes()
+                    .to_vec(),
+            ));
+            unsafe { ffi::git_credential_free(credential) };
+        }
+        output
+    }
+
+    fn safe_ssh_credentials() -> Vec<(ffi::git_credential_t, Vec<u8>)> {
+        assert!(
+            git_cred_ssh_key_memory_new(
+                c"ssh-user",
+                Some(c"public-key"),
+                c"private-key",
+                Some(c"passphrase"),
+            )
+            .is_err()
+        );
+        assert!(
+            git_credential_ssh_key_memory_new(
+                c"ssh-user",
+                Some(c"public-key"),
+                c"private-key",
+                Some(c"passphrase"),
+            )
+            .is_err()
+        );
+        let credentials = [
+            git_cred_ssh_key_new(
+                c"ssh-user",
+                Some(c"public-key-or-path"),
+                c"private-key-or-path",
+                Some(c"passphrase"),
+            )
+            .unwrap(),
+            git_credential_ssh_key_new(
+                c"ssh-user",
+                Some(c"public-key-or-path"),
+                c"private-key-or-path",
+                Some(c"passphrase"),
+            )
+            .unwrap(),
+            git_cred_ssh_key_from_agent(c"agent-user").unwrap(),
+            git_credential_ssh_key_from_agent(c"agent-user").unwrap(),
+        ];
+        credentials
+            .iter()
+            .map(|credential| {
+                (
+                    credential.as_ref().credential_type().unwrap().bits(),
+                    git_credential_get_username(credential.as_ref())
+                        .unwrap()
+                        .to_bytes()
+                        .to_vec(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn io_equiv_legacy_and_current_ssh_key_credentials() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = unsafe { raw_ssh_credentials() };
+        assert_eq!(raw, safe_ssh_credentials());
+        assert_eq!(raw.len(), 4);
+        assert!(raw.iter().all(|(_, username)| !username.is_empty()));
+    }
+}
+
 /// Wraps: git_credential_ssh_key_memory_new
 pub fn git_credential_ssh_key_memory_new(
     username: &core::ffi::CStr,

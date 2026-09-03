@@ -248,6 +248,298 @@ pub fn git_reflog_entry_committer<'a>(entry: GitReflogEntryRef<'a>) -> GitSignat
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, TempDir};
+    use crate::oid::RAW_DIGEST_LEN;
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct ReflogObservation {
+        count: usize,
+        newest_id: Vec<u8>,
+        messages: Vec<Option<Vec<u8>>>,
+        renamed_count: usize,
+        deleted_status: i32,
+    }
+
+    unsafe fn raw_reflog(
+        repository: *mut ffi::git_repository,
+        exercise_rename: bool,
+    ) -> ReflogObservation {
+        let mut id: ffi::git_oid = unsafe { core::mem::zeroed() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut id, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut signature = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_signature_new(
+                    &mut signature,
+                    c"Reflog Tester".as_ptr(),
+                    c"reflog@example.com".as_ptr(),
+                    1_700_000_500,
+                    0,
+                )
+            },
+            0
+        );
+        let mut reflog = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_reflog_read(&mut reflog, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_reflog_append(reflog, &id, signature, c"equivalence append one".as_ptr())
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_reflog_append(reflog, &id, signature, c"equivalence append two".as_ptr())
+            },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_reflog_write(reflog) }, 0);
+        assert_eq!(unsafe { ffi::git_reflog_drop(reflog, 1, 1) }, 0);
+        assert_eq!(unsafe { ffi::git_reflog_write(reflog) }, 0);
+
+        let count = unsafe { ffi::git_reflog_entrycount(reflog) };
+        let newest = unsafe { ffi::git_reflog_entry_byindex(reflog, 0) };
+        let newest_id_ptr = unsafe { ffi::git_reflog_entry_id_new(newest) };
+        let newest_id = unsafe {
+            core::slice::from_raw_parts((*newest_id_ptr).id.as_ptr(), RAW_DIGEST_LEN).to_vec()
+        };
+        let messages = (0..count)
+            .map(|index| {
+                let entry = unsafe { ffi::git_reflog_entry_byindex(reflog, index) };
+                let message = unsafe { ffi::git_reflog_entry_message(entry) };
+                if message.is_null() {
+                    None
+                } else {
+                    Some(unsafe { CStr::from_ptr(message) }.to_bytes().to_vec())
+                }
+            })
+            .collect();
+        unsafe { ffi::git_reflog_free(reflog) };
+        unsafe { ffi::git_signature_free(signature) };
+
+        let (renamed_count, deleted_status) = if exercise_rename {
+            assert_eq!(
+                unsafe {
+                    ffi::git_reflog_rename(
+                        repository,
+                        c"refs/heads/master".as_ptr(),
+                        c"refs/heads/reflog-archive".as_ptr(),
+                    )
+                },
+                0
+            );
+            assert_eq!(
+                unsafe {
+                    ffi::git_reflog_read(
+                        &mut reflog,
+                        repository,
+                        c"refs/heads/reflog-archive".as_ptr(),
+                    )
+                },
+                0
+            );
+            let renamed_count = unsafe { ffi::git_reflog_entrycount(reflog) };
+            unsafe { ffi::git_reflog_free(reflog) };
+            assert_eq!(
+                unsafe {
+                    ffi::git_reflog_delete(repository, c"refs/heads/reflog-archive".as_ptr())
+                },
+                0
+            );
+            let deleted_status = unsafe {
+                ffi::git_reflog_read(
+                    &mut reflog,
+                    repository,
+                    c"refs/heads/reflog-archive".as_ptr(),
+                )
+            };
+            if deleted_status == 0 {
+                unsafe { ffi::git_reflog_free(reflog) };
+            }
+            (renamed_count, deleted_status)
+        } else {
+            (count, 0)
+        };
+
+        ReflogObservation {
+            count,
+            newest_id,
+            messages,
+            renamed_count,
+            deleted_status,
+        }
+    }
+
+    fn safe_reflog(
+        repository: *mut ffi::git_repository,
+        exercise_rename: bool,
+    ) -> ReflogObservation {
+        let mut repository_view = unsafe { GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut id = crate::refs::git_reference_name_to_id(&mut repository_view, c"HEAD").unwrap();
+        let signature = crate::signature::git_signature_new(
+            c"Reflog Tester",
+            c"reflog@example.com",
+            1_700_000_500,
+            0,
+        )
+        .unwrap();
+        let (count, newest_id, messages) = {
+            let mut reflog = git_reflog_read(&mut repository_view, c"HEAD").unwrap();
+            let id = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(id).cast()) }.unwrap();
+            git_reflog_append(
+                &mut reflog.as_mut(),
+                id,
+                signature.as_ref(),
+                Some(c"equivalence append one"),
+            )
+            .unwrap();
+            git_reflog_append(
+                &mut reflog.as_mut(),
+                id,
+                signature.as_ref(),
+                Some(c"equivalence append two"),
+            )
+            .unwrap();
+            git_reflog_write(&mut reflog.as_mut()).unwrap();
+            git_reflog_drop(&mut reflog.as_mut(), 1, true).unwrap();
+            git_reflog_write(&mut reflog.as_mut()).unwrap();
+            let count = git_reflog_entrycount(reflog.as_ref());
+            let newest = git_reflog_entry_byindex(reflog.as_ref(), 0).unwrap();
+            let newest_id = git_reflog_entry_id_new(newest)
+                .raw_bytes()
+                .elems()
+                .collect();
+            let messages = (0..count)
+                .map(|index| {
+                    git_reflog_entry_message(
+                        git_reflog_entry_byindex(reflog.as_ref(), index).unwrap(),
+                    )
+                    .map(|message| message.to_bytes().to_vec())
+                })
+                .collect();
+            (count, newest_id, messages)
+        };
+        let (renamed_count, deleted_status) = if exercise_rename {
+            git_reflog_rename(
+                &mut repository_view,
+                c"refs/heads/master",
+                c"refs/heads/reflog-archive",
+            )
+            .unwrap();
+            let renamed_count = {
+                let reflog =
+                    git_reflog_read(&mut repository_view, c"refs/heads/reflog-archive").unwrap();
+                git_reflog_entrycount(reflog.as_ref())
+            };
+            git_reflog_delete(&mut repository_view, c"refs/heads/reflog-archive").unwrap();
+            let deleted_status =
+                match git_reflog_read(&mut repository_view, c"refs/heads/reflog-archive") {
+                    Ok(_) => 0,
+                    Err(status) => status,
+                };
+            (renamed_count, deleted_status)
+        } else {
+            (count, 0)
+        };
+        ReflogObservation {
+            count,
+            newest_id,
+            messages,
+            renamed_count,
+            deleted_status,
+        }
+    }
+
+    #[test]
+    fn io_equiv_reflog_append_rewrite_rename_and_delete() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("reflog-raw");
+        let safe = HistoryFixture::new("reflog-safe");
+        let raw_observation = unsafe { raw_reflog(raw.repository.as_ptr(), true) };
+        assert_eq!(raw_observation, safe_reflog(safe.repository.as_ptr(), true));
+        assert_eq!(
+            raw_observation.messages[0],
+            Some(b"equivalence append two".to_vec())
+        );
+        assert_eq!(raw_observation.deleted_status, 0);
+    }
+
+    unsafe fn reftable_repository(directory: &TempDir) -> *mut ffi::git_repository {
+        let path = directory.c_path();
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_repository_init_options>() };
+        assert_eq!(
+            unsafe { ffi::git_repository_init_options_init(&mut options, 1) },
+            0
+        );
+        options.refdb_type = ffi::git_refdb_t_GIT_REFDB_REFTABLE;
+        let mut repository = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_init_ext(&mut repository, path.as_ptr(), &mut options) },
+            0
+        );
+        let mut odb = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_repository_odb(&mut odb, repository) }, 0);
+        let content = b"reftable reflog target";
+        let mut oid = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_write(
+                    &mut oid,
+                    odb,
+                    content.as_ptr().cast(),
+                    content.len(),
+                    ffi::git_object_t_GIT_OBJECT_BLOB,
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_odb_free(odb) };
+        let mut reference = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_create(
+                    &mut reference,
+                    repository,
+                    c"refs/heads/master".as_ptr(),
+                    &oid,
+                    0,
+                    c"initialize reftable reflog".as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_reference_free(reference) };
+        repository
+    }
+
+    #[test]
+    fn io_equiv_reftable_reflog_append_write_drop_and_read() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw_directory = TempDir::new("reftable-reflog-raw");
+        let safe_directory = TempDir::new("reftable-reflog-safe");
+        let raw_repository = unsafe { reftable_repository(&raw_directory) };
+        let safe_repository = unsafe { reftable_repository(&safe_directory) };
+        let raw = unsafe { raw_reflog(raw_repository, false) };
+        assert_eq!(raw, safe_reflog(safe_repository, false));
+        unsafe {
+            ffi::git_repository_free(safe_repository);
+            ffi::git_repository_free(raw_repository);
+        }
+        assert_eq!(raw.messages[0], Some(b"equivalence append two".to_vec()));
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
     use core::ptr;

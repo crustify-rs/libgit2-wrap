@@ -4,8 +4,8 @@ tmp
 .worktrees
 rust/target
 rust.bak
-oracle/codeql
-oracle/.cache
+wavefront/codeql
+wavefront/.cache
 campaigns/**/logs
 audit/unsafe.json
 cli-config.json

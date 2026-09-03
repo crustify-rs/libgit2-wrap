@@ -35,6 +35,330 @@ pub struct RepositoryTree<'repo> {
     _repository: PhantomData<GitRepositoryRef<'repo>>,
 }
 
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct TreeObservation {
+        names: Vec<Vec<u8>>,
+        walked: Vec<(Vec<u8>, Vec<u8>)>,
+        nested_name: Vec<u8>,
+        nested_mode: ffi::git_filemode_t,
+        builder_entries: usize,
+        rewritten_id: Vec<u8>,
+    }
+
+    unsafe fn raw_tree(repository: *mut ffi::git_repository) -> TreeObservation {
+        let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut id, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut commit = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_commit_lookup(&mut commit, repository, &id) },
+            0
+        );
+        let mut tree = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_commit_tree(&mut tree, commit) }, 0);
+        let mut names = Vec::new();
+        for index in 0..unsafe { ffi::git_tree_entrycount(tree) } {
+            let entry = unsafe { ffi::git_tree_entry_byindex(tree, index) };
+            names.push(
+                unsafe { CStr::from_ptr(ffi::git_tree_entry_name(entry)) }
+                    .to_bytes()
+                    .to_vec(),
+            );
+            assert!(
+                !unsafe { ffi::git_tree_entry_byid(tree, ffi::git_tree_entry_id(entry)) }.is_null()
+            );
+        }
+        let mut nested = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_tree_entry_bypath(&mut nested, tree, c"src/alpha.c".as_ptr()) },
+            0
+        );
+        let nested_name = unsafe { CStr::from_ptr(ffi::git_tree_entry_name(nested)) }
+            .to_bytes()
+            .to_vec();
+        let nested_mode = unsafe { ffi::git_tree_entry_filemode(nested) };
+        unsafe extern "C" fn walk(
+            root: *const core::ffi::c_char,
+            entry: *const ffi::git_tree_entry,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            let output = unsafe { &mut *payload.cast::<Vec<(Vec<u8>, Vec<u8>)>>() };
+            output.push((
+                unsafe { CStr::from_ptr(root) }.to_bytes().to_vec(),
+                unsafe { CStr::from_ptr(ffi::git_tree_entry_name(entry)) }
+                    .to_bytes()
+                    .to_vec(),
+            ));
+            0
+        }
+        let mut walked = Vec::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_tree_walk(
+                    tree,
+                    ffi::git_treewalk_mode_GIT_TREEWALK_PRE,
+                    Some(walk),
+                    core::ptr::from_mut(&mut walked).cast(),
+                )
+            },
+            0
+        );
+        let mut builder = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_treebuilder_new(&mut builder, repository, tree) },
+            0
+        );
+        let readme = unsafe { ffi::git_tree_entry_byname(tree, c"README.md".as_ptr()) };
+        let readme_id = unsafe { *ffi::git_tree_entry_id(readme) };
+        let readme_mode = unsafe { ffi::git_tree_entry_filemode(readme) };
+        assert_eq!(
+            unsafe { ffi::git_treebuilder_remove(builder, c"README.md".as_ptr()) },
+            0
+        );
+        let mut inserted = core::ptr::null();
+        assert_eq!(
+            unsafe {
+                ffi::git_treebuilder_insert(
+                    &mut inserted,
+                    builder,
+                    c"README.md".as_ptr(),
+                    &readme_id,
+                    readme_mode,
+                )
+            },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_tree_entry_cmp(readme, inserted) }, 0);
+        let builder_entries = unsafe { ffi::git_treebuilder_entrycount(builder) };
+        let mut rewritten = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_treebuilder_write(&mut rewritten, builder) },
+            0
+        );
+        unsafe {
+            ffi::git_treebuilder_free(builder);
+            ffi::git_tree_entry_free(nested);
+            ffi::git_tree_free(tree);
+            ffi::git_commit_free(commit);
+        }
+        TreeObservation {
+            names,
+            walked,
+            nested_name,
+            nested_mode,
+            builder_entries,
+            rewritten_id: rewritten.id.to_vec(),
+        }
+    }
+
+    fn safe_tree(repository: *mut ffi::git_repository) -> TreeObservation {
+        let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut id, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let id_ref = unsafe { OidRef::from_ptr(core::ptr::from_mut(&mut id)) }.unwrap();
+        let repository_ref =
+            unsafe { crate::repository::GitRepositoryRef::from_ptr(repository) }.unwrap();
+        let commit = crate::object_api::git_commit_lookup(repository_ref, id_ref).unwrap();
+        let tree = crate::commit::git_commit_tree(commit.as_ref()).unwrap();
+        let mut names = Vec::new();
+        for index in 0..git_tree_entrycount(tree.as_ref()) {
+            let entry = git_tree_entry_byindex(tree.as_ref(), index).unwrap();
+            names.push(git_tree_entry_name(entry).to_bytes().to_vec());
+            assert!(git_tree_entry_byid(tree.as_ref(), git_tree_entry_id(entry)).is_some());
+        }
+        let nested = git_tree_entry_bypath(tree.as_ref(), c"src/alpha.c").unwrap();
+        let nested_name = git_tree_entry_name(nested.as_ref()).to_bytes().to_vec();
+        let nested_mode = git_tree_entry_filemode(nested.as_ref()).as_raw();
+        let mut walked = Vec::new();
+        let mut callback = |root: &CStr, entry: GitTreeEntryRef<'_>| {
+            walked.push((
+                root.to_bytes().to_vec(),
+                git_tree_entry_name(entry).to_bytes().to_vec(),
+            ));
+            0
+        };
+        git_tree_walk(tree.as_ref(), TreeWalkMode::Pre, &mut callback).unwrap();
+        let readme = git_tree_entry_byname(tree.as_ref(), c"README.md").unwrap();
+        let mut builder = git_treebuilder_new(repository_ref, Some(tree.as_ref())).unwrap();
+        let mut builder_handle = builder.as_mut();
+        git_treebuilder_remove(&mut builder_handle, c"README.md").unwrap();
+        let inserted = git_treebuilder_insert(
+            &mut builder_handle,
+            c"README.md",
+            git_tree_entry_id(readme),
+            git_tree_entry_filemode(readme),
+        )
+        .unwrap();
+        assert_eq!(
+            git_tree_entry_cmp(readme, inserted),
+            core::cmp::Ordering::Equal
+        );
+        let builder_entries = git_treebuilder_entrycount(builder_handle.as_ref());
+        let mut rewritten = git_treebuilder_write(&mut builder_handle).unwrap();
+        let rewritten_id =
+            unsafe { OidRef::from_ptr(core::ptr::from_mut(&mut rewritten).cast::<ffi::git_oid>()) }
+                .unwrap()
+                .raw_bytes()
+                .elems()
+                .collect();
+        TreeObservation {
+            names,
+            walked,
+            nested_name,
+            nested_mode,
+            builder_entries,
+            rewritten_id,
+        }
+    }
+
+    #[test]
+    fn io_equiv_tree_lookup_walk_path_and_builder_round_trip() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("tree-surface-raw");
+        let safe = HistoryFixture::new("tree-surface-safe");
+        let raw_observation = unsafe { raw_tree(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_tree(safe.repository.as_ptr()));
+        assert_eq!(raw_observation.walked.len(), 4);
+    }
+
+    unsafe fn raw_filter_and_update(
+        repository: *mut ffi::git_repository,
+    ) -> (usize, usize, Vec<u8>) {
+        unsafe extern "C" fn remove_readme(
+            entry: *const ffi::git_tree_entry,
+            _: *mut core::ffi::c_void,
+        ) -> i32 {
+            i32::from(unsafe { CStr::from_ptr(ffi::git_tree_entry_name(entry)) } == c"README.md")
+        }
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut commit = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_commit_lookup(&mut commit, repository, &head) },
+            0
+        );
+        let mut tree = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_commit_tree(&mut tree, commit) }, 0);
+        let readme = unsafe { ffi::git_tree_entry_byname(tree, c"README.md".as_ptr()) };
+        let mut builder = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_treebuilder_new(&mut builder, repository, tree) },
+            0
+        );
+        assert!(!unsafe { ffi::git_treebuilder_get(builder, c"README.md".as_ptr()) }.is_null());
+        assert_eq!(
+            unsafe {
+                ffi::git_treebuilder_filter(builder, Some(remove_readme), core::ptr::null_mut())
+            },
+            0
+        );
+        let filtered = unsafe { ffi::git_treebuilder_entrycount(builder) };
+        assert_eq!(unsafe { ffi::git_treebuilder_clear(builder) }, 0);
+        let cleared = unsafe { ffi::git_treebuilder_entrycount(builder) };
+        unsafe { ffi::git_treebuilder_free(builder) };
+
+        let updates = [
+            ffi::git_tree_update {
+                action: ffi::git_tree_update_t_GIT_TREE_UPDATE_REMOVE,
+                id: unsafe { core::mem::zeroed() },
+                filemode: ffi::git_filemode_t_GIT_FILEMODE_UNREADABLE,
+                path: c"README.md".as_ptr(),
+            },
+            ffi::git_tree_update {
+                action: ffi::git_tree_update_t_GIT_TREE_UPDATE_UPSERT,
+                id: unsafe { *ffi::git_tree_entry_id(readme) },
+                filemode: unsafe { ffi::git_tree_entry_filemode(readme) },
+                path: c"COPY.md".as_ptr(),
+            },
+        ];
+        let mut updated = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_tree_create_updated(
+                    &mut updated,
+                    repository,
+                    tree,
+                    updates.len(),
+                    updates.as_ptr(),
+                )
+            },
+            0
+        );
+        unsafe {
+            ffi::git_tree_free(tree);
+            ffi::git_commit_free(commit);
+        }
+        (filtered, cleared, updated.id.to_vec())
+    }
+
+    fn safe_filter_and_update(repository: *mut ffi::git_repository) -> (usize, usize, Vec<u8>) {
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let head = unsafe { OidRef::from_ptr(&raw mut head) }.unwrap();
+        let repository_ref = unsafe { GitRepositoryRef::from_ptr(repository) }.unwrap();
+        let commit = crate::object_api::git_commit_lookup(repository_ref, head).unwrap();
+        let tree = crate::commit::git_commit_tree(commit.as_ref()).unwrap();
+        let readme = git_tree_entry_byname(tree.as_ref(), c"README.md").unwrap();
+        let mut builder = git_treebuilder_new(repository_ref, Some(tree.as_ref())).unwrap();
+        assert!(git_treebuilder_get(builder.as_ref(), c"README.md").is_some());
+        git_treebuilder_filter(&mut builder.as_mut(), &mut |entry: GitTreeEntryRef<'_>| {
+            git_tree_entry_name(entry) == c"README.md"
+        })
+        .unwrap();
+        let filtered = git_treebuilder_entrycount(builder.as_ref());
+        git_treebuilder_clear(&mut builder.as_mut()).unwrap();
+        let cleared = git_treebuilder_entrycount(builder.as_ref());
+
+        let mut updates = [
+            ffi::git_tree_update {
+                action: ffi::git_tree_update_t_GIT_TREE_UPDATE_REMOVE,
+                id: unsafe { core::mem::zeroed() },
+                filemode: ffi::git_filemode_t_GIT_FILEMODE_UNREADABLE,
+                path: c"README.md".as_ptr(),
+            },
+            ffi::git_tree_update {
+                action: ffi::git_tree_update_t_GIT_TREE_UPDATE_UPSERT,
+                id: unsafe { *git_tree_entry_id(readme).as_ptr() },
+                filemode: git_tree_entry_filemode(readme).as_raw(),
+                path: c"COPY.md".as_ptr(),
+            },
+        ];
+        let ptr = NonNull::new(updates.as_mut_ptr().cast::<TreeUpdate>()).unwrap();
+        let updates = unsafe { CSlice::from_raw_parts(ptr, updates.len()) };
+        let mut updated =
+            git_tree_create_updated(repository_ref, Some(tree.as_ref()), updates).unwrap();
+        let updated = unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(updated).cast()) }.unwrap();
+        (filtered, cleared, updated.raw_bytes().elems().collect())
+    }
+
+    #[test]
+    fn io_equiv_treebuilder_get_filter_clear_and_create_updated() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("tree-update-raw");
+        let safe = HistoryFixture::new("tree-update-safe");
+        let raw = unsafe { raw_filter_and_update(raw.repository.as_ptr()) };
+        assert_eq!(raw, safe_filter_and_update(safe.repository.as_ptr()));
+        assert_eq!(raw.1, 0);
+    }
+}
+
 impl RepositoryTree<'_> {
     /// Borrows the tree.
     #[must_use]

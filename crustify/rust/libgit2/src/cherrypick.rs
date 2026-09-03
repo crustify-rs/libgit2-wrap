@@ -92,6 +92,204 @@ pub fn git_cherrypick_options_init(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct FullCherrypickObservation {
+        state: i32,
+        readme: Vec<u8>,
+        alpha: Vec<u8>,
+        beta: Vec<u8>,
+        index_paths: Vec<Vec<u8>>,
+    }
+
+    unsafe fn lookup(
+        repository: *mut crate::ffi::git_repository,
+        spec: &core::ffi::CStr,
+    ) -> *mut crate::ffi::git_object {
+        let mut object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { crate::ffi::git_revparse_single(&mut object, repository, spec.as_ptr()) },
+            0
+        );
+        object
+    }
+
+    unsafe fn raw_paths(repository: *mut crate::ffi::git_repository) -> Vec<Vec<u8>> {
+        let pick = unsafe { lookup(repository, c"HEAD~1") };
+        let ours = unsafe { lookup(repository, c"HEAD~2") };
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                crate::ffi::git_cherrypick_commit(
+                    &mut index,
+                    repository,
+                    pick.cast(),
+                    ours.cast(),
+                    0,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let paths = (0..unsafe { crate::ffi::git_index_entrycount(index) })
+            .map(|position| {
+                let entry = unsafe { crate::ffi::git_index_get_byindex(index, position) };
+                unsafe { core::ffi::CStr::from_ptr((*entry).path) }
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect();
+        unsafe {
+            crate::ffi::git_index_free(index);
+            crate::ffi::git_object_free(ours);
+            crate::ffi::git_object_free(pick);
+        }
+        paths
+    }
+
+    fn safe_paths(repository: *mut crate::ffi::git_repository) -> Vec<Vec<u8>> {
+        let pick_raw = unsafe { lookup(repository, c"HEAD~1") };
+        let ours_raw = unsafe { lookup(repository, c"HEAD~2") };
+        let pick = unsafe { crate::commit::GitCommitRef::from_ptr(pick_raw.cast()) }.unwrap();
+        let ours = unsafe { crate::commit::GitCommitRef::from_ptr(ours_raw.cast()) }.unwrap();
+        let mut view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut index = git_cherrypick_commit(&mut view, pick, ours, 0, None).unwrap();
+        let paths = (0..crate::index::git_index_entrycount(index.as_ref()))
+            .map(|position| {
+                crate::index::git_index_get_byindex(&mut index.as_mut(), position)
+                    .unwrap()
+                    .path()
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect();
+        drop(index);
+        unsafe {
+            crate::ffi::git_object_free(ours_raw);
+            crate::ffi::git_object_free(pick_raw);
+        }
+        paths
+    }
+
+    unsafe fn raw_full_cherrypick(fixture: &HistoryFixture) -> FullCherrypickObservation {
+        let repository = fixture.repository.as_ptr();
+        let pick = unsafe { lookup(repository, c"HEAD~1") };
+        let first = unsafe { lookup(repository, c"HEAD~2") };
+        assert_eq!(
+            unsafe {
+                crate::ffi::git_reset(
+                    repository,
+                    first,
+                    crate::ffi::git_reset_t_GIT_RESET_HARD,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { crate::ffi::git_cherrypick(repository, pick.cast(), core::ptr::null()) },
+            0
+        );
+        let observation = unsafe { full_observation(fixture) };
+        unsafe {
+            crate::ffi::git_object_free(first);
+            crate::ffi::git_object_free(pick);
+        }
+        observation
+    }
+
+    fn safe_full_cherrypick(fixture: &HistoryFixture) -> FullCherrypickObservation {
+        let repository = fixture.repository.as_ptr();
+        let pick = unsafe { lookup(repository, c"HEAD~1") };
+        let first = unsafe { lookup(repository, c"HEAD~2") };
+        {
+            let mut repository_view =
+                unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+            let first_view = unsafe { crate::object::GitObjectRef::from_ptr(first) }.unwrap();
+            crate::reset::git_reset(
+                &mut repository_view,
+                first_view,
+                crate::reset::ResetType::Hard,
+                None,
+            )
+            .unwrap();
+            let mut pick_view =
+                unsafe { crate::commit::GitCommitMut::from_ptr(pick.cast()) }.unwrap();
+            git_cherrypick(&mut repository_view, &mut pick_view, None).unwrap();
+        }
+        let observation = unsafe { full_observation(fixture) };
+        unsafe {
+            crate::ffi::git_object_free(first);
+            crate::ffi::git_object_free(pick);
+        }
+        observation
+    }
+
+    unsafe fn full_observation(fixture: &HistoryFixture) -> FullCherrypickObservation {
+        let repository = fixture.repository.as_ptr();
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { crate::ffi::git_repository_index(&mut index, repository) },
+            0
+        );
+        let index_paths = (0..unsafe { crate::ffi::git_index_entrycount(index) })
+            .map(|position| {
+                let entry = unsafe { crate::ffi::git_index_get_byindex(index, position) };
+                unsafe { core::ffi::CStr::from_ptr((*entry).path) }
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect();
+        unsafe { crate::ffi::git_index_free(index) };
+        FullCherrypickObservation {
+            state: unsafe { crate::ffi::git_repository_state(repository) },
+            readme: std::fs::read(fixture.directory.path().join("README.md")).unwrap(),
+            alpha: std::fs::read(fixture.directory.path().join("src/alpha.c")).unwrap(),
+            beta: std::fs::read(fixture.directory.path().join("src/beta.c")).unwrap(),
+            index_paths,
+        }
+    }
+
+    #[test]
+    fn io_equiv_cherrypick_commit_to_index() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("cherrypick-raw");
+        let safe = HistoryFixture::new("cherrypick-safe");
+        let raw_paths = unsafe { raw_paths(raw.repository.as_ptr()) };
+        assert_eq!(raw_paths, safe_paths(safe.repository.as_ptr()));
+        assert_eq!(
+            raw_paths,
+            [
+                b"README.md".to_vec(),
+                b"src/alpha.c".to_vec(),
+                b"src/beta.c".to_vec()
+            ]
+        );
+    }
+
+    #[test]
+    fn io_equiv_full_cherrypick_updates_index_workdir_and_state() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("full-cherrypick-raw");
+        let safe = HistoryFixture::new("full-cherrypick-safe");
+        let raw_observation = unsafe { raw_full_cherrypick(&raw) };
+        assert_eq!(raw_observation, safe_full_cherrypick(&safe));
+        assert_eq!(
+            raw_observation.state,
+            crate::ffi::git_repository_state_t_GIT_REPOSITORY_STATE_CHERRYPICK as i32
+        );
+        assert_eq!(raw_observation.alpha, b"int alpha(void) { return 2; }\n");
+    }
+}
+
+#[cfg(test)]
 mod scheduled_wrapper_tests {
     use super::*;
     use crate::api::cherrypick::GitCherrypickOptions;

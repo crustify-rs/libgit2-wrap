@@ -433,3 +433,307 @@ pub fn git_attr_options_init() -> Result<ffibox::CVal<crate::api::attr::GitAttrO
         Err(status)
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use core::ffi::CStr;
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    fn raw_value(value: *const core::ffi::c_char) -> Vec<u8> {
+        match unsafe { ffi::git_attr_value(value) } {
+            ffi::git_attr_value_t_GIT_ATTR_VALUE_UNSPECIFIED => b"<unspecified>".to_vec(),
+            ffi::git_attr_value_t_GIT_ATTR_VALUE_TRUE => b"<true>".to_vec(),
+            ffi::git_attr_value_t_GIT_ATTR_VALUE_FALSE => b"<false>".to_vec(),
+            ffi::git_attr_value_t_GIT_ATTR_VALUE_STRING => unsafe {
+                core::ffi::CStr::from_ptr(value).to_bytes().to_vec()
+            },
+            other => panic!("unexpected attr kind {other}"),
+        }
+    }
+
+    fn safe_value(value: Attribute<'_>) -> Vec<u8> {
+        match value {
+            Attribute::Unspecified => b"<unspecified>".to_vec(),
+            Attribute::True => b"<true>".to_vec(),
+            Attribute::False => b"<false>".to_vec(),
+            Attribute::String(value) => value.to_bytes().to_vec(),
+        }
+    }
+
+    unsafe extern "C" fn raw_foreach(
+        name: *const core::ffi::c_char,
+        value: *const core::ffi::c_char,
+        payload: *mut core::ffi::c_void,
+    ) -> i32 {
+        let output = unsafe { &mut *payload.cast::<Vec<(Vec<u8>, Vec<u8>)>>() };
+        output.push((
+            unsafe { core::ffi::CStr::from_ptr(name) }
+                .to_bytes()
+                .to_vec(),
+            raw_value(value),
+        ));
+        0
+    }
+
+    unsafe fn raw_attributes(repository: *mut ffi::git_repository) -> Vec<(Vec<u8>, Vec<u8>)> {
+        assert_eq!(
+            unsafe {
+                ffi::git_attr_add_macro(
+                    repository,
+                    c"compiled".as_ptr(),
+                    c"-diff custom=macro".as_ptr(),
+                )
+            },
+            0
+        );
+        let names = [c"text".as_ptr(), c"custom".as_ptr(), c"missing".as_ptr()];
+        let mut values = [core::ptr::null(); 3];
+        assert_eq!(
+            unsafe {
+                ffi::git_attr_get_many(
+                    values.as_mut_ptr(),
+                    repository,
+                    0,
+                    c"src/alpha.c".as_ptr(),
+                    names.len(),
+                    names.as_ptr().cast_mut(),
+                )
+            },
+            0
+        );
+        let mut observation = names
+            .iter()
+            .zip(values)
+            .map(|(name, value)| {
+                (
+                    unsafe { core::ffi::CStr::from_ptr(*name) }
+                        .to_bytes()
+                        .to_vec(),
+                    raw_value(value),
+                )
+            })
+            .collect::<Vec<_>>();
+        let mut foreach = Vec::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_attr_foreach(
+                    repository,
+                    0,
+                    c"src/alpha.c".as_ptr(),
+                    Some(raw_foreach),
+                    core::ptr::from_mut(&mut foreach).cast(),
+                )
+            },
+            0
+        );
+        observation.extend(foreach);
+        observation.sort();
+        observation
+    }
+
+    fn safe_attributes(repository: *mut ffi::git_repository) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        git_attr_add_macro(&mut view, c"compiled", c"-diff custom=macro").unwrap();
+        let values =
+            git_attr_get_many(view, 0, c"src/alpha.c", &[c"text", c"custom", c"missing"]).unwrap();
+        let mut observation = [c"text", c"custom", c"missing"]
+            .into_iter()
+            .zip(values)
+            .map(|(name, value)| (name.to_bytes().to_vec(), safe_value(value)))
+            .collect::<Vec<_>>();
+        let mut view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut callback = |name: &core::ffi::CStr, value: Attribute<'_>| {
+            observation.push((name.to_bytes().to_vec(), safe_value(value)));
+            0
+        };
+        git_attr_foreach(&mut view, 0, c"src/alpha.c", &mut callback).unwrap();
+        observation.sort();
+        observation
+    }
+
+    #[test]
+    fn io_equiv_attribute_macros_many_lookup_and_enumeration() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("attr-surface-raw");
+        let safe = HistoryFixture::new("attr-surface-safe");
+        let rules = b"*.c text custom=language\nsrc/alpha.c custom=alpha -export-ignore\n";
+        std::fs::write(raw.directory.path().join(".gitattributes"), rules).unwrap();
+        std::fs::write(safe.directory.path().join(".gitattributes"), rules).unwrap();
+        let raw_observation = unsafe { raw_attributes(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_attributes(safe.repository.as_ptr()));
+        assert!(raw_observation.iter().any(|entry| entry.1 == b"alpha"));
+    }
+
+    fn prepare_layered_attributes(fixture: &HistoryFixture) {
+        std::fs::write(
+            fixture.directory.path().join(".gitattributes"),
+            b"*.c source=committed text\n",
+        )
+        .unwrap();
+        let path = fixture.directory.path();
+        let run = |arguments: &[&str]| {
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(path)
+                .args(arguments)
+                .env("GIT_AUTHOR_DATE", "1700020000 +0000")
+                .env("GIT_COMMITTER_DATE", "1700020000 +0000")
+                .status()
+                .unwrap();
+            assert!(status.success(), "git command: {arguments:?}");
+        };
+        run(&["add", ".gitattributes"]);
+        run(&[
+            "-c",
+            "user.name=Crustify",
+            "-c",
+            "user.email=crustify@example.com",
+            "commit",
+            "-q",
+            "-m",
+            "attribute baseline",
+        ]);
+        std::fs::write(
+            fixture.directory.path().join(".gitattributes"),
+            b"*.c source=worktree -text custom=changed\n",
+        )
+        .unwrap();
+    }
+
+    unsafe fn raw_extended(repository: *mut ffi::git_repository) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_attr_options>() };
+        assert_eq!(
+            unsafe { ffi::git_attr_options_init(&mut options, ffi::GIT_ATTR_OPTIONS_VERSION) },
+            0
+        );
+        let mut output = Vec::new();
+        for (label, flags) in [(b"worktree".as_slice(), 0), (b"index".as_slice(), 2)] {
+            options.flags = flags;
+            let mut value = core::ptr::null();
+            assert_eq!(
+                unsafe {
+                    ffi::git_attr_get_ext(
+                        &mut value,
+                        repository,
+                        &mut options,
+                        c"src/alpha.c".as_ptr(),
+                        c"source".as_ptr(),
+                    )
+                },
+                0
+            );
+            output.push(([label, b":source".as_slice()].concat(), raw_value(value)));
+            let names = [c"text".as_ptr(), c"custom".as_ptr()];
+            let mut values = [core::ptr::null(); 2];
+            assert_eq!(
+                unsafe {
+                    ffi::git_attr_get_many_ext(
+                        values.as_mut_ptr(),
+                        repository,
+                        &mut options,
+                        c"src/alpha.c".as_ptr(),
+                        names.len(),
+                        names.as_ptr().cast_mut(),
+                    )
+                },
+                0
+            );
+            for (name, value) in [b":text".as_slice(), b":custom".as_slice()]
+                .into_iter()
+                .zip(values)
+            {
+                output.push(([label, name].concat(), raw_value(value)));
+            }
+            let mut foreach: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+            assert_eq!(
+                unsafe {
+                    ffi::git_attr_foreach_ext(
+                        repository,
+                        &mut options,
+                        c"src/alpha.c".as_ptr(),
+                        Some(raw_foreach),
+                        core::ptr::from_mut(&mut foreach).cast(),
+                    )
+                },
+                0
+            );
+            for (name, value) in foreach {
+                output.push((
+                    [label, b":each:".as_slice(), name.as_slice()].concat(),
+                    value,
+                ));
+            }
+        }
+        output.sort();
+        output
+    }
+
+    fn safe_extended(repository: *mut ffi::git_repository) -> Vec<(Vec<u8>, Vec<u8>)> {
+        let mut options = git_attr_options_init().unwrap();
+        let mut output = Vec::new();
+        for (label, flags) in [(b"worktree".as_slice(), 0), (b"index".as_slice(), 2)] {
+            options.as_mut().set_flags(flags);
+            let repository_view =
+                unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+            let value =
+                git_attr_get_ext(repository_view, options.as_ref(), c"src/alpha.c", c"source")
+                    .unwrap();
+            output.push(([label, b":source".as_slice()].concat(), safe_value(value)));
+            let repository_view =
+                unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+            let values = git_attr_get_many_ext(
+                repository_view,
+                options.as_ref(),
+                c"src/alpha.c",
+                &[c"text", c"custom"],
+            )
+            .unwrap();
+            for (name, value) in [b":text".as_slice(), b":custom".as_slice()]
+                .into_iter()
+                .zip(values)
+            {
+                output.push(([label, name].concat(), safe_value(value)));
+            }
+            let mut repository_view =
+                unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+            let mut foreach: Vec<(Vec<u8>, Vec<u8>)> = Vec::new();
+            git_attr_foreach_ext(
+                &mut repository_view,
+                options.as_ref(),
+                c"src/alpha.c",
+                &mut |name: &CStr, value: Attribute<'_>| {
+                    foreach.push((name.to_bytes().to_vec(), safe_value(value)));
+                    0
+                },
+            )
+            .unwrap();
+            for (name, value) in foreach {
+                output.push((
+                    [label, b":each:".as_slice(), name.as_slice()].concat(),
+                    value,
+                ));
+            }
+        }
+        output.sort();
+        output
+    }
+
+    #[test]
+    fn io_equiv_extended_attributes_select_worktree_or_index_sources() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("attr-extended-raw");
+        let safe = HistoryFixture::new("attr-extended-safe");
+        prepare_layered_attributes(&raw);
+        prepare_layered_attributes(&safe);
+        let raw = unsafe { raw_extended(raw.repository.as_ptr()) };
+        assert_eq!(raw, safe_extended(safe.repository.as_ptr()));
+        assert!(raw.iter().any(|item| item.1 == b"worktree"));
+        assert!(raw.iter().any(|item| item.1 == b"<unspecified>"));
+    }
+}

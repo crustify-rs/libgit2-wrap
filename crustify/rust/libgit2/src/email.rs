@@ -93,6 +93,61 @@ pub fn git_email_create_options_init(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, RawBuf, safe_buf_bytes};
+
+    unsafe fn raw_email(repository: *mut ffi::git_repository) -> Vec<u8> {
+        let mut object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut object, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut buffer = RawBuf::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_email_create_from_commit(&mut buffer.0, object.cast(), core::ptr::null())
+            },
+            0
+        );
+        let bytes = buffer.bytes();
+        unsafe { ffi::git_object_free(object) };
+        bytes
+    }
+
+    fn safe_email(repository: *mut ffi::git_repository) -> Vec<u8> {
+        let mut object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut object, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut commit = unsafe { crate::commit::GitCommitMut::from_ptr(object.cast()) }.unwrap();
+        let mut buffer = crate::api::buffer::GitBuf::new();
+        git_email_create_from_commit(&mut buffer.as_mut(), &mut commit, None).unwrap();
+        let bytes = safe_buf_bytes(buffer.as_ref());
+        unsafe { ffi::git_object_free(object) };
+        bytes
+    }
+
+    #[test]
+    fn io_equiv_email_patch_from_commit() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("email-raw");
+        let safe = HistoryFixture::new("email-safe");
+        let raw_email = unsafe { raw_email(raw.repository.as_ptr()) };
+        assert_eq!(raw_email, safe_email(safe.repository.as_ptr()));
+        assert!(raw_email.starts_with(b"From "));
+        assert!(
+            raw_email
+                .windows(16)
+                .any(|window| window == b"Subject: [PATCH]")
+        );
+    }
+}
+
+#[cfg(test)]
 mod scheduled_email_tests {
     use super::*;
     use crate::api::buffer::GitBuf;

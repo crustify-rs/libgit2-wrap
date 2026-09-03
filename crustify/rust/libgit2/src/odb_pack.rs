@@ -191,3 +191,134 @@ mod scheduled_constructor_tests {
         let _ = std::fs::remove_dir_all(&directory);
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    fn pack_paths(
+        fixture: &HistoryFixture,
+    ) -> (std::ffi::CString, std::ffi::CString, ffi::git_oid) {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(fixture.directory.path())
+            .args(["gc", "--prune=now"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let objects = fixture.directory.path().join(".git/objects");
+        let index = std::fs::read_dir(objects.join("pack"))
+            .unwrap()
+            .map(Result::unwrap)
+            .map(|entry| entry.path())
+            .find(|path| path.extension().is_some_and(|extension| extension == "idx"))
+            .unwrap();
+        let objects = std::ffi::CString::new(objects.to_str().unwrap()).unwrap();
+        let index = std::ffi::CString::new(index.to_str().unwrap()).unwrap();
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(
+                    &mut head,
+                    fixture.repository.as_ptr(),
+                    c"HEAD".as_ptr(),
+                )
+            },
+            0
+        );
+        (objects, index, head)
+    }
+
+    unsafe fn raw_pack_backend(
+        path: &core::ffi::CStr,
+        head: &ffi::git_oid,
+        one_pack: bool,
+    ) -> (i32, usize, Vec<u8>) {
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_odb_backend_pack_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_odb_backend_pack_options_init(
+                    &mut options,
+                    ffi::GIT_ODB_BACKEND_PACK_OPTIONS_VERSION,
+                )
+            },
+            0
+        );
+        options.oid_type = ffi::git_oid_t_GIT_OID_SHA1;
+        let mut backend = core::ptr::null_mut();
+        let status = if one_pack {
+            unsafe { ffi::git_odb_backend_one_pack(&mut backend, path.as_ptr(), &options) }
+        } else {
+            unsafe { ffi::git_odb_backend_pack(&mut backend, path.as_ptr(), &options) }
+        };
+        assert_eq!(status, 0);
+        let mut odb = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_odb_new(&mut odb) }, 0);
+        assert_eq!(unsafe { ffi::git_odb_add_backend(odb, backend, 10) }, 0);
+        let mut object = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_odb_read(&mut object, odb, head) }, 0);
+        let kind = unsafe { ffi::git_odb_object_type(object) };
+        let size = unsafe { ffi::git_odb_object_size(object) };
+        let prefix = unsafe {
+            core::slice::from_raw_parts(ffi::git_odb_object_data(object).cast::<u8>(), size.min(32))
+                .to_vec()
+        };
+        unsafe {
+            ffi::git_odb_object_free(object);
+            ffi::git_odb_free(odb);
+        }
+        (kind, size, prefix)
+    }
+
+    fn safe_pack_backend(
+        path: &core::ffi::CStr,
+        head: &mut ffi::git_oid,
+        one_pack: bool,
+    ) -> (i32, usize, Vec<u8>) {
+        let mut options =
+            git_odb_backend_pack_options_init(ffi::GIT_ODB_BACKEND_PACK_OPTIONS_VERSION).unwrap();
+        options
+            .as_mut()
+            .set_oid_type(Some(crate::oid::OidType::Sha1));
+        let backend = if one_pack {
+            git_odb_backend_one_pack(path, Some(options.as_ref())).unwrap()
+        } else {
+            git_odb_backend_pack(path, Some(options.as_ref())).unwrap()
+        };
+        let mut odb = crate::odb::git_odb_new().unwrap();
+        crate::odb::git_odb_add_backend(&mut odb.as_mut(), backend, 10).unwrap();
+        let head = unsafe { crate::oid::OidRef::from_ptr(head) }.unwrap();
+        let object = crate::odb::git_odb_read(&mut odb.as_mut(), head).unwrap();
+        (
+            crate::odb::git_odb_object_type(object.as_ref())
+                .unwrap()
+                .as_raw(),
+            crate::odb::git_odb_object_size(object.as_ref()),
+            crate::odb::git_odb_object_data(object.as_ref())
+                .unwrap()
+                .elems()
+                .take(32)
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn io_equiv_pack_directory_and_single_pack_backends_read_objects() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("odb-pack-backend-raw");
+        let safe = HistoryFixture::new("odb-pack-backend-safe");
+        let (raw_objects, raw_index, raw_head) = pack_paths(&raw);
+        let (safe_objects, safe_index, mut safe_head) = pack_paths(&safe);
+        let raw_one = unsafe { raw_pack_backend(&raw_index, &raw_head, true) };
+        let safe_one = safe_pack_backend(&safe_index, &mut safe_head, true);
+        assert_eq!(raw_one, safe_one);
+        let raw_directory = unsafe { raw_pack_backend(&raw_objects, &raw_head, false) };
+        let safe_directory = safe_pack_backend(&safe_objects, &mut safe_head, false);
+        assert_eq!(raw_directory, safe_directory);
+        assert_eq!(raw_one, raw_directory);
+        assert_eq!(raw_one.0, ffi::git_object_t_GIT_OBJECT_COMMIT);
+    }
+}

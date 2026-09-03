@@ -241,6 +241,216 @@ pub fn git_revparse_single<'repo>(
     adopt_repository_object(status, object)
 }
 
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    const SPECS: [&CStr; 42] = [
+        c"HEAD@{0}",
+        c"HEAD@{1}",
+        c"master@{2}",
+        c"HEAD@{2023-11-14 22:13:20 +0000}",
+        c"HEAD@{one week ago}",
+        c"HEAD@{yesterday noon}",
+        c"HEAD^",
+        c"HEAD^0",
+        c"HEAD^1",
+        c"HEAD~2",
+        c"HEAD~1^0",
+        c"HEAD^{object}",
+        c"HEAD^{commit}",
+        c"HEAD^{tree}",
+        c"HEAD:README.md",
+        c"HEAD^{/third fixture commit}",
+        c":/second fixture commit",
+        c"v1.0^{}",
+        c"v1.0^{tag}",
+        c"HEAD^{blob}",
+        c"HEAD^2",
+        c"HEAD~999",
+        c"@{-1}",
+        c"master@{upstream}",
+        c"master@{u}",
+        c"master@{push}",
+        c"origin/master",
+        c"HEAD^{/third}",
+        c":/second",
+        c":README.md",
+        c":0:README.md",
+        c"master~1:src/alpha.c",
+        c"HEAD@{1700000000}",
+        c"HEAD@{2023-11-14}",
+        c"HEAD@{Tue, 14 Nov 2023 22:13:20 +0000}",
+        c"HEAD@{2.days.ago}",
+        c"HEAD@{3 months ago}",
+        c"HEAD@{last monday}",
+        c"HEAD@{noon yesterday}",
+        c"HEAD@{midnight}",
+        c"HEAD@{tea time}",
+        c"HEAD@{now}",
+    ];
+
+    fn prepare_revision_shorthands(fixture: &HistoryFixture) {
+        let run = |arguments: &[&str]| {
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(fixture.directory.path())
+                .args(arguments)
+                .stdout(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(status.success(), "git command failed: {arguments:?}");
+        };
+        run(&["update-ref", "refs/remotes/origin/master", "master"]);
+        run(&[
+            "config",
+            "remote.origin.url",
+            "https://example.invalid/repo",
+        ]);
+        run(&["config", "branch.master.remote", "origin"]);
+        run(&["config", "branch.master.merge", "refs/heads/master"]);
+        run(&["config", "remote.pushDefault", "origin"]);
+        run(&["checkout", "-q", "topic"]);
+        run(&["checkout", "-q", "master"]);
+    }
+
+    unsafe fn raw_dates(repository: *mut ffi::git_repository) -> Vec<Result<Vec<u8>, i32>> {
+        SPECS
+            .into_iter()
+            .map(|spec| {
+                let mut object = core::ptr::null_mut();
+                let status =
+                    unsafe { ffi::git_revparse_single(&mut object, repository, spec.as_ptr()) };
+                if status != 0 {
+                    Err(status)
+                } else {
+                    let id = unsafe { ffi::git_object_id(object) };
+                    let bytes = unsafe { (*id).id.to_vec() };
+                    unsafe { ffi::git_object_free(object) };
+                    Ok(bytes)
+                }
+            })
+            .collect()
+    }
+
+    fn safe_dates(repository: *mut ffi::git_repository) -> Vec<Result<Vec<u8>, i32>> {
+        SPECS
+            .into_iter()
+            .map(|spec| {
+                let repository =
+                    unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+                git_revparse_single(repository, spec).map(|object| {
+                    crate::object::git_object_id(object.as_ref())
+                        .raw_bytes()
+                        .elems()
+                        .collect()
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn io_equiv_reflog_revision_date_expressions() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("revparse-date-raw");
+        let safe = HistoryFixture::new("revparse-date-safe");
+        let raw_results = unsafe { raw_dates(raw.repository.as_ptr()) };
+        assert_eq!(raw_results, safe_dates(safe.repository.as_ptr()));
+        assert!(raw_results[..4].iter().all(Result::is_ok));
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct RangeObservation {
+        flags: ffi::git_revspec_t,
+        from: Option<Vec<u8>>,
+        to: Option<Vec<u8>>,
+    }
+
+    const RANGES: [&CStr; 5] = [
+        c"HEAD~2..HEAD",
+        c"HEAD~2...HEAD",
+        c"HEAD",
+        c"HEAD~1..",
+        c"..HEAD",
+    ];
+
+    unsafe fn raw_ranges(
+        repository: *mut ffi::git_repository,
+    ) -> Vec<Result<RangeObservation, i32>> {
+        RANGES
+            .into_iter()
+            .map(|spec| {
+                let mut result = unsafe { core::mem::zeroed::<ffi::git_revspec>() };
+                let status = unsafe { ffi::git_revparse(&mut result, repository, spec.as_ptr()) };
+                if status != 0 {
+                    return Err(status);
+                }
+                let id = |object: *mut ffi::git_object| {
+                    (!object.is_null())
+                        .then(|| unsafe { (*ffi::git_object_id(object)).id.to_vec() })
+                };
+                let observation = RangeObservation {
+                    flags: result.flags,
+                    from: id(result.from),
+                    to: id(result.to),
+                };
+                unsafe {
+                    if result.to != result.from {
+                        ffi::git_object_free(result.to);
+                    }
+                    ffi::git_object_free(result.from);
+                }
+                Ok(observation)
+            })
+            .collect()
+    }
+
+    fn safe_ranges(repository: *mut ffi::git_repository) -> Vec<Result<RangeObservation, i32>> {
+        RANGES
+            .into_iter()
+            .map(|spec| {
+                let repository =
+                    unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+                git_revparse(repository, spec).map(|result| {
+                    let result = result.as_ref();
+                    let id = |object: Option<crate::object::GitObjectRef<'_>>| {
+                        object.map(|object| {
+                            crate::object::git_object_id(object)
+                                .raw_bytes()
+                                .elems()
+                                .collect()
+                        })
+                    };
+                    RangeObservation {
+                        flags: result.flags().unwrap().bits(),
+                        from: id(result.from()),
+                        to: id(result.to()),
+                    }
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn io_equiv_revision_parent_peel_search_path_and_range_syntax() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("revparse-syntax-raw");
+        let safe = HistoryFixture::new("revparse-syntax-safe");
+        prepare_revision_shorthands(&raw);
+        prepare_revision_shorthands(&safe);
+        let raw_singles = unsafe { raw_dates(raw.repository.as_ptr()) };
+        assert_eq!(raw_singles, safe_dates(safe.repository.as_ptr()));
+        assert!(raw_singles[6].is_ok());
+        assert!(raw_singles[19..22].iter().all(Result::is_err));
+        let raw_ranges = unsafe { raw_ranges(raw.repository.as_ptr()) };
+        assert_eq!(raw_ranges, safe_ranges(safe.repository.as_ptr()));
+        assert!(raw_ranges.iter().all(Result::is_ok));
+    }
+}
+
 /// An owned revspec whose resolved objects cannot outlive their repository.
 pub struct RepositoryRevspec<'repo> {
     inner: GitRevspecOwned,

@@ -1626,3 +1626,1183 @@ pub fn git_merge_options_init<'data>(
         Err(status)
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct MergeObservation {
+        paths: Vec<Vec<u8>>,
+        conflicts: bool,
+    }
+
+    unsafe fn commits(
+        repository: *mut ffi::git_repository,
+    ) -> (*mut ffi::git_object, *mut ffi::git_object) {
+        let mut ours = core::ptr::null_mut();
+        let mut theirs = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut ours, repository, c"HEAD~2".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut theirs, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        (ours, theirs)
+    }
+
+    unsafe fn raw_observation(repository: *mut ffi::git_repository) -> MergeObservation {
+        let (ours, theirs) = unsafe { commits(repository) };
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_merge_commits(
+                    &mut index,
+                    repository,
+                    ours.cast(),
+                    theirs.cast(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let mut paths = Vec::new();
+        for position in 0..unsafe { ffi::git_index_entrycount(index) } {
+            let entry = unsafe { ffi::git_index_get_byindex(index, position) };
+            paths.push(unsafe { CStr::from_ptr((*entry).path) }.to_bytes().to_vec());
+        }
+        let conflicts = unsafe { ffi::git_index_has_conflicts(index) } != 0;
+        unsafe {
+            ffi::git_index_free(index);
+            ffi::git_object_free(theirs);
+            ffi::git_object_free(ours);
+        }
+        MergeObservation { paths, conflicts }
+    }
+
+    fn safe_observation(repository: *mut ffi::git_repository) -> MergeObservation {
+        let (ours, theirs) = unsafe { commits(repository) };
+        let ours = unsafe { crate::commit::GitCommitRef::from_ptr(ours.cast()) }.unwrap();
+        let theirs = unsafe { crate::commit::GitCommitRef::from_ptr(theirs.cast()) }.unwrap();
+        let mut view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut index = git_merge_commits(&mut view, ours, theirs, None).unwrap();
+        let mut paths = Vec::new();
+        for position in 0..crate::index::git_index_entrycount(index.as_ref()) {
+            paths.push(
+                crate::index::git_index_get_byindex(&mut index.as_mut(), position)
+                    .unwrap()
+                    .path()
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec(),
+            );
+        }
+        let conflicts = crate::index::git_index_has_conflicts(index.as_ref());
+        drop(index);
+        unsafe {
+            ffi::git_object_free(theirs.as_ptr().cast_mut().cast());
+            ffi::git_object_free(ours.as_ptr().cast_mut().cast());
+        }
+        MergeObservation { paths, conflicts }
+    }
+
+    #[test]
+    fn io_equiv_merge_commits_to_index() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("merge-raw");
+        let safe = HistoryFixture::new("merge-safe");
+        let raw_observation = unsafe { raw_observation(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_observation(safe.repository.as_ptr()));
+        assert!(!raw_observation.conflicts);
+        assert_eq!(
+            raw_observation.paths,
+            [
+                b"README.md".to_vec(),
+                b"src/alpha.c".to_vec(),
+                b"src/beta.c".to_vec()
+            ]
+        );
+    }
+
+    fn prepare_divergent_branch(fixture: &HistoryFixture) {
+        let path = fixture.directory.path();
+        let run = |arguments: &[&str]| {
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(path)
+                .args(arguments)
+                .env("GIT_AUTHOR_DATE", "2023-11-14T22:30:00Z")
+                .env("GIT_COMMITTER_DATE", "2023-11-14T22:30:00Z")
+                .status()
+                .unwrap();
+            assert!(status.success(), "git command failed: {arguments:?}");
+        };
+        run(&["checkout", "-q", "-b", "divergent", "HEAD~1"]);
+        std::fs::write(path.join("docs/topic.txt"), b"topic branch contribution\n").unwrap();
+        run(&["add", "docs/topic.txt"]);
+        run(&[
+            "-c",
+            "user.name=Crustify",
+            "-c",
+            "user.email=crustify@example.com",
+            "commit",
+            "-q",
+            "-m",
+            "divergent topic commit",
+        ]);
+        run(&["checkout", "-q", "master"]);
+    }
+
+    fn prepare_octopus_branches(fixture: &HistoryFixture) {
+        let path = fixture.directory.path();
+        let run = |arguments: &[&str]| {
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(path)
+                .args(arguments)
+                .env("GIT_AUTHOR_DATE", "2023-11-14T22:31:00Z")
+                .env("GIT_COMMITTER_DATE", "2023-11-14T22:31:00Z")
+                .status()
+                .unwrap();
+            assert!(status.success(), "git command failed: {arguments:?}");
+        };
+        for (branch, file, contents) in [
+            (
+                "octopus-one",
+                "docs/one.txt",
+                b"first octopus head\n".as_slice(),
+            ),
+            (
+                "octopus-two",
+                "docs/two.txt",
+                b"second octopus head\n".as_slice(),
+            ),
+        ] {
+            run(&["checkout", "-q", "-b", branch, "HEAD~1"]);
+            std::fs::create_dir_all(path.join("docs")).unwrap();
+            std::fs::write(path.join(file), contents).unwrap();
+            run(&["add", file]);
+            run(&[
+                "-c",
+                "user.name=Crustify",
+                "-c",
+                "user.email=crustify@example.com",
+                "commit",
+                "-q",
+                "-m",
+                branch,
+            ]);
+            run(&["checkout", "-q", "master"]);
+        }
+    }
+
+    unsafe fn raw_octopus_merge(fixture: &HistoryFixture) -> (i32, Vec<Vec<u8>>, Vec<Vec<u8>>) {
+        let repository = fixture.repository.as_ptr();
+        let mut annotated = [core::ptr::null_mut(); 2];
+        for (slot, name) in annotated.iter_mut().zip([c"octopus-one", c"octopus-two"]) {
+            assert_eq!(
+                unsafe { ffi::git_annotated_commit_from_revspec(slot, repository, name.as_ptr()) },
+                0
+            );
+        }
+        let mut heads = annotated.map(|head| head.cast_const());
+        assert_eq!(
+            unsafe {
+                ffi::git_merge(
+                    repository,
+                    heads.as_mut_ptr(),
+                    heads.len(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        unsafe extern "C" fn collect(
+            oid: *const ffi::git_oid,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            unsafe { &mut *payload.cast::<Vec<Vec<u8>>>() }.push(unsafe { (*oid).id }.to_vec());
+            0
+        }
+        let mut mergeheads = Vec::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_repository_mergehead_foreach(
+                    repository,
+                    Some(collect),
+                    core::ptr::from_mut(&mut mergeheads).cast(),
+                )
+            },
+            0
+        );
+        mergeheads.sort();
+        for head in annotated {
+            unsafe { ffi::git_annotated_commit_free(head) };
+        }
+        (
+            unsafe { ffi::git_repository_state(repository) },
+            ["docs/one.txt", "docs/two.txt"]
+                .map(|path| std::fs::read(fixture.directory.path().join(path)).unwrap())
+                .to_vec(),
+            mergeheads,
+        )
+    }
+
+    fn safe_octopus_merge(fixture: &HistoryFixture) -> (i32, Vec<Vec<u8>>, Vec<Vec<u8>>) {
+        let repository = fixture.repository.as_ptr();
+        let mut annotated = [core::ptr::null_mut(); 2];
+        for (slot, name) in annotated.iter_mut().zip([c"octopus-one", c"octopus-two"]) {
+            assert_eq!(
+                unsafe { ffi::git_annotated_commit_from_revspec(slot, repository, name.as_ptr()) },
+                0
+            );
+        }
+        let views = annotated.map(|head| unsafe { AnnotatedCommitRef::from_ptr(head) }.unwrap());
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        git_merge(&mut repository_view, &views, None, None).unwrap();
+        let mut mergeheads = Vec::new();
+        git_repository_mergehead_foreach(repository_view.as_ref(), &mut |oid: OidRef<'_>| {
+            mergeheads.push(oid.raw_bytes().elems().collect());
+            0
+        })
+        .unwrap();
+        mergeheads.sort();
+        let state = crate::repository::git_repository_state(&mut repository_view).unwrap() as i32;
+        for head in annotated {
+            unsafe { ffi::git_annotated_commit_free(head) };
+        }
+        (
+            state,
+            ["docs/one.txt", "docs/two.txt"]
+                .map(|path| std::fs::read(fixture.directory.path().join(path)).unwrap())
+                .to_vec(),
+            mergeheads,
+        )
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct FullMergeObservation {
+        state: i32,
+        topic: Vec<u8>,
+        paths: Vec<Vec<u8>>,
+        conflicts: bool,
+    }
+
+    unsafe fn full_merge_observation(fixture: &HistoryFixture) -> FullMergeObservation {
+        let repository = fixture.repository.as_ptr();
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, repository) },
+            0
+        );
+        let paths = (0..unsafe { ffi::git_index_entrycount(index) })
+            .map(|position| {
+                let entry = unsafe { ffi::git_index_get_byindex(index, position) };
+                unsafe { CStr::from_ptr((*entry).path) }.to_bytes().to_vec()
+            })
+            .collect();
+        let conflicts = unsafe { ffi::git_index_has_conflicts(index) } != 0;
+        unsafe { ffi::git_index_free(index) };
+        FullMergeObservation {
+            state: unsafe { ffi::git_repository_state(repository) },
+            topic: std::fs::read(fixture.directory.path().join("docs/topic.txt")).unwrap(),
+            paths,
+            conflicts,
+        }
+    }
+
+    unsafe fn raw_full_merge(fixture: &HistoryFixture) -> FullMergeObservation {
+        let repository = fixture.repository.as_ptr();
+        let mut annotated = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_revspec(
+                    &mut annotated,
+                    repository,
+                    c"divergent".as_ptr(),
+                )
+            },
+            0
+        );
+        let mut heads = [annotated.cast_const()];
+        assert_eq!(
+            unsafe {
+                ffi::git_merge(
+                    repository,
+                    heads.as_mut_ptr(),
+                    1,
+                    core::ptr::null(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_annotated_commit_free(annotated) };
+        unsafe { full_merge_observation(fixture) }
+    }
+
+    fn safe_full_merge(fixture: &HistoryFixture) -> FullMergeObservation {
+        let repository = fixture.repository.as_ptr();
+        let mut annotated = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_revspec(
+                    &mut annotated,
+                    repository,
+                    c"divergent".as_ptr(),
+                )
+            },
+            0
+        );
+        {
+            let mut repository_view =
+                unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+            let annotated_view =
+                unsafe { crate::annotated_commit::AnnotatedCommitRef::from_ptr(annotated) }
+                    .unwrap();
+            git_merge(&mut repository_view, &[annotated_view], None, None).unwrap();
+        }
+        unsafe { ffi::git_annotated_commit_free(annotated) };
+        unsafe { full_merge_observation(fixture) }
+    }
+
+    #[test]
+    fn io_equiv_full_non_fast_forward_merge_updates_workdir_and_index() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("full-merge-raw");
+        let safe = HistoryFixture::new("full-merge-safe");
+        prepare_divergent_branch(&raw);
+        prepare_divergent_branch(&safe);
+        let raw_observation = unsafe { raw_full_merge(&raw) };
+        assert_eq!(raw_observation, safe_full_merge(&safe));
+        assert_eq!(
+            raw_observation.state,
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_MERGE as i32
+        );
+        assert!(!raw_observation.conflicts);
+    }
+
+    #[test]
+    fn io_equiv_octopus_merge_two_heads_and_mergehead_iteration() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("octopus-merge-raw");
+        let safe = HistoryFixture::new("octopus-merge-safe");
+        prepare_octopus_branches(&raw);
+        prepare_octopus_branches(&safe);
+        let raw_observation = unsafe { raw_octopus_merge(&raw) };
+        let safe_observation = safe_octopus_merge(&safe);
+        assert_eq!(raw_observation, safe_observation);
+        assert_eq!(raw_observation.2.len(), 2);
+        assert_eq!(
+            raw_observation.0,
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_MERGE as i32
+        );
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct AnalysisObservation {
+        analysis: ffi::git_merge_analysis_t,
+        preference: ffi::git_merge_preference_t,
+        for_ref_analysis: ffi::git_merge_analysis_t,
+        base: Vec<u8>,
+        base_many: Vec<u8>,
+        base_octopus: Vec<u8>,
+        bases: usize,
+        bases_many: usize,
+    }
+
+    unsafe fn raw_analysis(repository: *mut ffi::git_repository) -> AnalysisObservation {
+        let mut theirs = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_revspec(
+                    &mut theirs,
+                    repository,
+                    c"divergent".as_ptr(),
+                )
+            },
+            0
+        );
+        let mut head = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_head(&mut head, repository) },
+            0
+        );
+        let mut heads = [theirs.cast_const()];
+        let mut analysis = 0;
+        let mut preference = 0;
+        assert_eq!(
+            unsafe {
+                ffi::git_merge_analysis(
+                    &mut analysis,
+                    &mut preference,
+                    repository,
+                    heads.as_mut_ptr(),
+                    heads.len(),
+                )
+            },
+            0
+        );
+        let mut for_ref_analysis = 0;
+        let mut for_ref_preference = 0;
+        assert_eq!(
+            unsafe {
+                ffi::git_merge_analysis_for_ref(
+                    &mut for_ref_analysis,
+                    &mut for_ref_preference,
+                    repository,
+                    head,
+                    heads.as_mut_ptr(),
+                    heads.len(),
+                )
+            },
+            0
+        );
+        assert_eq!(preference, for_ref_preference);
+        let mut ours = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        let mut theirs_id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut ours, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(
+                    &mut theirs_id,
+                    repository,
+                    c"refs/heads/divergent".as_ptr(),
+                )
+            },
+            0
+        );
+        let inputs = [ours, theirs_id];
+        let mut base = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        let mut base_many = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_merge_base(&mut base, repository, &inputs[0], &inputs[1]) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_merge_base_many(&mut base_many, repository, inputs.len(), inputs.as_ptr())
+            },
+            0
+        );
+        let octopus_inputs = [inputs[0], inputs[1], base];
+        let mut base_octopus = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_merge_base_octopus(
+                    &mut base_octopus,
+                    repository,
+                    octopus_inputs.len(),
+                    octopus_inputs.as_ptr(),
+                )
+            },
+            0
+        );
+        let mut bases = unsafe { core::mem::zeroed::<ffi::git_oidarray>() };
+        let mut bases_many = unsafe { core::mem::zeroed::<ffi::git_oidarray>() };
+        assert_eq!(
+            unsafe { ffi::git_merge_bases(&mut bases, repository, &inputs[0], &inputs[1]) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_merge_bases_many(
+                    &mut bases_many,
+                    repository,
+                    inputs.len(),
+                    inputs.as_ptr(),
+                )
+            },
+            0
+        );
+        let observation = AnalysisObservation {
+            analysis,
+            preference,
+            for_ref_analysis,
+            base: base.id.to_vec(),
+            base_many: base_many.id.to_vec(),
+            base_octopus: base_octopus.id.to_vec(),
+            bases: bases.count,
+            bases_many: bases_many.count,
+        };
+        unsafe {
+            ffi::git_oidarray_dispose(&mut bases_many);
+            ffi::git_oidarray_dispose(&mut bases);
+            ffi::git_reference_free(head);
+            ffi::git_annotated_commit_free(theirs);
+        }
+        observation
+    }
+
+    fn safe_analysis(repository: *mut ffi::git_repository) -> AnalysisObservation {
+        let mut theirs = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_revspec(
+                    &mut theirs,
+                    repository,
+                    c"divergent".as_ptr(),
+                )
+            },
+            0
+        );
+        let mut head = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_head(&mut head, repository) },
+            0
+        );
+        let repository_ref =
+            unsafe { crate::repository::GitRepositoryRef::from_ptr(repository) }.unwrap();
+        let theirs_ref =
+            unsafe { crate::annotated_commit::AnnotatedCommitRef::from_ptr(theirs) }.unwrap();
+        let head_ref = unsafe { crate::refs::GitReferenceRef::from_ptr(head) }.unwrap();
+        let (analysis, preference) = git_merge_analysis(repository_ref, theirs_ref).unwrap();
+        let (for_ref_analysis, for_ref_preference) =
+            git_merge_analysis_for_ref(repository_ref, head_ref, theirs_ref).unwrap();
+        assert_eq!(preference, for_ref_preference);
+        let mut ours = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        let mut theirs_id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut ours, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(
+                    &mut theirs_id,
+                    repository,
+                    c"refs/heads/divergent".as_ptr(),
+                )
+            },
+            0
+        );
+        let ours_ref = unsafe { OidRef::from_ptr(core::ptr::from_mut(&mut ours)) }.unwrap();
+        let theirs_id_ref =
+            unsafe { OidRef::from_ptr(core::ptr::from_mut(&mut theirs_id)) }.unwrap();
+        let mut base = git_merge_base(repository_ref, ours_ref, theirs_id_ref).unwrap();
+        let mut base_many =
+            git_merge_base_many(repository_ref, &[ours_ref, theirs_id_ref]).unwrap();
+        let mut raw_inputs = [ours, theirs_id, unsafe {
+            core::ptr::from_ref(&base).cast::<ffi::git_oid>().read()
+        }];
+        let inputs = unsafe {
+            ffibox::CSlice::from_raw_parts(
+                core::ptr::NonNull::new(raw_inputs.as_mut_ptr().cast::<Oid>()).unwrap(),
+                raw_inputs.len(),
+            )
+        };
+        let mut base_octopus = git_merge_base_octopus(repository_ref, inputs).unwrap();
+        let bases = git_merge_bases(repository_ref, ours_ref, theirs_id_ref)
+            .unwrap()
+            .as_ref()
+            .count();
+        let bases_many = git_merge_bases_many(repository_ref, &[ours_ref, theirs_id_ref])
+            .unwrap()
+            .as_ref()
+            .count();
+        let oid_bytes = |value: &mut Oid| {
+            unsafe { OidRef::from_ptr(core::ptr::from_mut(value).cast::<ffi::git_oid>()) }
+                .unwrap()
+                .raw_bytes()
+                .elems()
+                .collect()
+        };
+        let observation = AnalysisObservation {
+            analysis: analysis.bits(),
+            preference: preference.into(),
+            for_ref_analysis: for_ref_analysis.bits(),
+            base: oid_bytes(&mut base),
+            base_many: oid_bytes(&mut base_many),
+            base_octopus: oid_bytes(&mut base_octopus),
+            bases,
+            bases_many,
+        };
+        unsafe {
+            ffi::git_reference_free(head);
+            ffi::git_annotated_commit_free(theirs);
+        }
+        observation
+    }
+
+    #[test]
+    fn io_equiv_merge_analysis_and_common_ancestor_queries() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("merge-analysis-raw");
+        let safe = HistoryFixture::new("merge-analysis-safe");
+        prepare_divergent_branch(&raw);
+        prepare_divergent_branch(&safe);
+        let raw_observation = unsafe { raw_analysis(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_analysis(safe.repository.as_ptr()));
+        assert_ne!(raw_observation.analysis, 0);
+        assert_eq!(raw_observation.bases, 1);
+    }
+
+    fn prepare_content_conflict(fixture: &HistoryFixture) {
+        let path = fixture.directory.path();
+        let run = |arguments: &[&str]| {
+            let status = std::process::Command::new("git")
+                .current_dir(path)
+                .args(arguments)
+                .env("GIT_AUTHOR_DATE", "1700110000 +0000")
+                .env("GIT_COMMITTER_DATE", "1700110000 +0000")
+                .stdout(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(status.success(), "git command failed: {arguments:?}");
+        };
+        run(&["checkout", "-q", "-b", "content-conflict"]);
+        std::fs::write(path.join("README.md"), b"the side branch version\n").unwrap();
+        run(&["add", "README.md"]);
+        run(&[
+            "-c",
+            "user.name=Crustify",
+            "-c",
+            "user.email=crustify@example.com",
+            "commit",
+            "-q",
+            "-m",
+            "side content",
+        ]);
+        run(&["checkout", "-q", "master"]);
+        std::fs::write(path.join("README.md"), b"the master branch version\n").unwrap();
+        run(&["add", "README.md"]);
+        run(&[
+            "-c",
+            "user.name=Crustify",
+            "-c",
+            "user.email=crustify@example.com",
+            "commit",
+            "-q",
+            "-m",
+            "master content",
+        ]);
+    }
+
+    unsafe fn conflict_trees(repository: *mut ffi::git_repository) -> [*mut ffi::git_tree; 3] {
+        let specs = [
+            c"master~1^{tree}",
+            c"master^{tree}",
+            c"content-conflict^{tree}",
+        ];
+        let mut trees = [core::ptr::null_mut(); 3];
+        for (slot, spec) in trees.iter_mut().zip(specs) {
+            let mut object = core::ptr::null_mut();
+            assert_eq!(
+                unsafe { ffi::git_revparse_single(&mut object, repository, spec.as_ptr()) },
+                0
+            );
+            *slot = object.cast();
+        }
+        trees
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct TreeMergeObservation(Vec<(bool, Vec<(u16, Vec<u8>, Vec<u8>)>)>);
+
+    unsafe fn raw_tree_merges(repository: *mut ffi::git_repository) -> TreeMergeObservation {
+        let trees = unsafe { conflict_trees(repository) };
+        let mut variants = Vec::new();
+        for favor in [
+            ffi::git_merge_file_favor_t_GIT_MERGE_FILE_FAVOR_NORMAL,
+            ffi::git_merge_file_favor_t_GIT_MERGE_FILE_FAVOR_OURS,
+            ffi::git_merge_file_favor_t_GIT_MERGE_FILE_FAVOR_THEIRS,
+            ffi::git_merge_file_favor_t_GIT_MERGE_FILE_FAVOR_UNION,
+        ] {
+            let mut options = unsafe { core::mem::zeroed::<ffi::git_merge_options>() };
+            assert_eq!(
+                unsafe {
+                    ffi::git_merge_options_init(&mut options, ffi::GIT_MERGE_OPTIONS_VERSION)
+                },
+                0
+            );
+            options.file_favor = favor;
+            options.file_flags = ffi::git_merge_file_flag_t_GIT_MERGE_FILE_STYLE_DIFF3
+                | ffi::git_merge_file_flag_t_GIT_MERGE_FILE_DIFF_PATIENCE;
+            let mut index = core::ptr::null_mut();
+            assert_eq!(
+                unsafe {
+                    ffi::git_merge_trees(
+                        &mut index, repository, trees[0], trees[1], trees[2], &options,
+                    )
+                },
+                0
+            );
+            let conflicts = unsafe { ffi::git_index_has_conflicts(index) != 0 };
+            let mut entries = (0..unsafe { ffi::git_index_entrycount(index) })
+                .map(|position| {
+                    let entry = unsafe { ffi::git_index_get_byindex(index, position) };
+                    (
+                        unsafe { (*entry).flags },
+                        unsafe { CStr::from_ptr((*entry).path) }.to_bytes().to_vec(),
+                        unsafe { (*entry).id.id }.to_vec(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            entries.sort();
+            variants.push((conflicts, entries));
+            unsafe { ffi::git_index_free(index) };
+        }
+        for tree in trees {
+            unsafe { ffi::git_object_free(tree.cast()) };
+        }
+        TreeMergeObservation(variants)
+    }
+
+    fn safe_tree_merges(repository: *mut ffi::git_repository) -> TreeMergeObservation {
+        let trees = unsafe { conflict_trees(repository) };
+        let tree_refs =
+            trees.map(|tree| unsafe { crate::tree::GitTreeRef::from_ptr(tree) }.unwrap());
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut variants = Vec::new();
+        for favor in [
+            MergeFileFavor::Normal,
+            MergeFileFavor::Ours,
+            MergeFileFavor::Theirs,
+            MergeFileFavor::Union,
+        ] {
+            let mut options = crate::api::merge::GitMergeOptions::new();
+            options.as_mut().set_file_favor(favor);
+            options
+                .as_mut()
+                .set_file_flags(MergeFileFlags::STYLE_DIFF3 | MergeFileFlags::DIFF_PATIENCE);
+            let mut index = git_merge_trees(
+                &mut repository,
+                Some(tree_refs[0]),
+                Some(tree_refs[1]),
+                Some(tree_refs[2]),
+                Some(options.as_ref()),
+            )
+            .unwrap();
+            let conflicts = crate::index::git_index_has_conflicts(index.as_ref());
+            let mut entries = Vec::new();
+            for position in 0..crate::index::git_index_entrycount(index.as_ref()) {
+                let mut index_view = index.as_mut();
+                let entry = crate::index::git_index_get_byindex(&mut index_view, position).unwrap();
+                entries.push((
+                    entry.flags(),
+                    entry.path().unwrap().to_bytes().to_vec(),
+                    entry.id().raw_bytes().elems().collect(),
+                ));
+            }
+            entries.sort();
+            variants.push((conflicts, entries));
+        }
+        drop(repository);
+        for tree in trees {
+            unsafe { ffi::git_object_free(tree.cast()) };
+        }
+        TreeMergeObservation(variants)
+    }
+
+    #[test]
+    fn io_equiv_merge_trees_conflicts_and_content_favor_modes() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("merge-trees-raw");
+        let safe = HistoryFixture::new("merge-trees-safe");
+        prepare_content_conflict(&raw);
+        prepare_content_conflict(&safe);
+        let raw_observation = unsafe { raw_tree_merges(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_tree_merges(safe.repository.as_ptr()));
+        assert!(raw_observation.0[0].0);
+        assert!(raw_observation.0[1..].iter().all(|variant| !variant.0));
+    }
+
+    fn prepare_rename_conflict(fixture: &HistoryFixture) {
+        let path = fixture.directory.path();
+        let run = |arguments: &[&str], timestamp: &str| {
+            let status = std::process::Command::new("git")
+                .current_dir(path)
+                .args(arguments)
+                .env("GIT_AUTHOR_DATE", timestamp)
+                .env("GIT_COMMITTER_DATE", timestamp)
+                .stdout(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(status.success(), "git command failed: {arguments:?}");
+        };
+        run(&["checkout", "-q", "-b", "rename-side"], "1700120000 +0000");
+        run(
+            &["mv", "src/alpha.c", "src/side-alpha.c"],
+            "1700120000 +0000",
+        );
+        run(&["add", "-A"], "1700120000 +0000");
+        run(
+            &[
+                "-c",
+                "user.name=Crustify",
+                "-c",
+                "user.email=crustify@example.com",
+                "commit",
+                "-q",
+                "-m",
+                "side rename",
+            ],
+            "1700120000 +0000",
+        );
+        run(&["checkout", "-q", "master"], "1700120100 +0000");
+        run(
+            &["mv", "src/alpha.c", "src/master-alpha.c"],
+            "1700120100 +0000",
+        );
+        run(&["add", "-A"], "1700120100 +0000");
+        run(
+            &[
+                "-c",
+                "user.name=Crustify",
+                "-c",
+                "user.email=crustify@example.com",
+                "commit",
+                "-q",
+                "-m",
+                "master rename",
+            ],
+            "1700120100 +0000",
+        );
+    }
+
+    unsafe fn rename_trees(repository: *mut ffi::git_repository) -> [*mut ffi::git_tree; 3] {
+        let specs = [c"master~1^{tree}", c"master^{tree}", c"rename-side^{tree}"];
+        let mut trees = [core::ptr::null_mut(); 3];
+        for (tree, spec) in trees.iter_mut().zip(specs) {
+            let mut object = core::ptr::null_mut();
+            assert_eq!(
+                unsafe { ffi::git_revparse_single(&mut object, repository, spec.as_ptr()) },
+                0
+            );
+            *tree = object.cast();
+        }
+        trees
+    }
+
+    unsafe fn raw_rename_merge(repository: *mut ffi::git_repository) -> Vec<(u16, Vec<u8>)> {
+        let trees = unsafe { rename_trees(repository) };
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_merge_options>() };
+        assert_eq!(
+            unsafe { ffi::git_merge_options_init(&mut options, ffi::GIT_MERGE_OPTIONS_VERSION) },
+            0
+        );
+        options.flags = ffi::git_merge_flag_t_GIT_MERGE_FIND_RENAMES;
+        options.rename_threshold = 40;
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_merge_trees(
+                    &mut index, repository, trees[0], trees[1], trees[2], &options,
+                )
+            },
+            0
+        );
+        assert_ne!(unsafe { ffi::git_index_has_conflicts(index) }, 0);
+        let entries = (0..unsafe { ffi::git_index_entrycount(index) })
+            .map(|position| {
+                let entry = unsafe { ffi::git_index_get_byindex(index, position) };
+                (
+                    unsafe { (*entry).flags },
+                    unsafe { CStr::from_ptr((*entry).path) }.to_bytes().to_vec(),
+                )
+            })
+            .collect();
+        unsafe { ffi::git_index_free(index) };
+        for tree in trees {
+            unsafe { ffi::git_object_free(tree.cast()) };
+        }
+        entries
+    }
+
+    fn safe_rename_merge(repository: *mut ffi::git_repository) -> Vec<(u16, Vec<u8>)> {
+        let trees = unsafe { rename_trees(repository) };
+        let trees = trees.map(|tree| unsafe { crate::tree::GitTreeRef::from_ptr(tree) }.unwrap());
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut options = crate::api::merge::GitMergeOptions::new();
+        options
+            .as_mut()
+            .set_flags(crate::api::merge::GitMergeFlags::FIND_RENAMES);
+        options.as_mut().set_rename_threshold(40);
+        let mut index = git_merge_trees(
+            &mut repository,
+            Some(trees[0]),
+            Some(trees[1]),
+            Some(trees[2]),
+            Some(options.as_ref()),
+        )
+        .unwrap();
+        assert!(crate::index::git_index_has_conflicts(index.as_ref()));
+        let entries = (0..crate::index::git_index_entrycount(index.as_ref()))
+            .map(|position| {
+                let mut view = index.as_mut();
+                let entry = crate::index::git_index_get_byindex(&mut view, position).unwrap();
+                (entry.flags(), entry.path().unwrap().to_bytes().to_vec())
+            })
+            .collect();
+        drop(index);
+        drop(repository);
+        for tree in trees {
+            unsafe { ffi::git_object_free(tree.as_ptr().cast_mut().cast()) };
+        }
+        entries
+    }
+
+    #[test]
+    fn io_equiv_rename_rename_conflict_detection() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("merge-rename-raw");
+        let safe = HistoryFixture::new("merge-rename-safe");
+        prepare_rename_conflict(&raw);
+        prepare_rename_conflict(&safe);
+        let raw = unsafe { raw_rename_merge(raw.repository.as_ptr()) };
+        assert_eq!(raw, safe_rename_merge(safe.repository.as_ptr()));
+        assert!(raw.iter().any(|(_, path)| path == b"src/master-alpha.c"));
+        assert!(raw.iter().any(|(_, path)| path == b"src/side-alpha.c"));
+    }
+
+    fn prepare_rename_delete_conflict(fixture: &HistoryFixture) {
+        let path = fixture.directory.path();
+        let run = |arguments: &[&str], timestamp: &str| {
+            let status = std::process::Command::new("git")
+                .current_dir(path)
+                .args(arguments)
+                .env("GIT_AUTHOR_DATE", timestamp)
+                .env("GIT_COMMITTER_DATE", timestamp)
+                .stdout(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(status.success(), "git command failed: {arguments:?}");
+        };
+        run(&["checkout", "-q", "-b", "rename-side"], "1700130000 +0000");
+        run(&["rm", "-q", "src/alpha.c"], "1700130000 +0000");
+        run(
+            &[
+                "-c",
+                "user.name=Crustify",
+                "-c",
+                "user.email=crustify@example.com",
+                "commit",
+                "-q",
+                "-m",
+                "side delete",
+            ],
+            "1700130000 +0000",
+        );
+        run(&["checkout", "-q", "master"], "1700130100 +0000");
+        run(
+            &["mv", "src/alpha.c", "src/master-alpha.c"],
+            "1700130100 +0000",
+        );
+        run(
+            &[
+                "-c",
+                "user.name=Crustify",
+                "-c",
+                "user.email=crustify@example.com",
+                "commit",
+                "-q",
+                "-m",
+                "master rename",
+            ],
+            "1700130100 +0000",
+        );
+    }
+
+    #[test]
+    fn io_equiv_rename_delete_conflict_detection() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("merge-rename-delete-raw");
+        let safe = HistoryFixture::new("merge-rename-delete-safe");
+        prepare_rename_delete_conflict(&raw);
+        prepare_rename_delete_conflict(&safe);
+        let raw = unsafe { raw_rename_merge(raw.repository.as_ptr()) };
+        assert_eq!(raw, safe_rename_merge(safe.repository.as_ptr()));
+        assert!(raw.iter().any(|(_, path)| path == b"src/master-alpha.c"));
+    }
+
+    fn prepare_directory_file_conflict(fixture: &HistoryFixture) {
+        let path = fixture.directory.path();
+        let run = |arguments: &[&str], timestamp: &str| {
+            let status = std::process::Command::new("git")
+                .current_dir(path)
+                .args(arguments)
+                .env("GIT_AUTHOR_DATE", timestamp)
+                .env("GIT_COMMITTER_DATE", timestamp)
+                .stdout(std::process::Stdio::null())
+                .status()
+                .unwrap();
+            assert!(status.success(), "git command failed: {arguments:?}");
+        };
+        run(&["checkout", "-q", "-b", "rename-side"], "1700140000 +0000");
+        run(&["rm", "-q", "-r", "src"], "1700140000 +0000");
+        std::fs::write(path.join("src"), b"side replaced the directory\n").unwrap();
+        run(&["add", "src"], "1700140000 +0000");
+        run(
+            &[
+                "-c",
+                "user.name=Crustify",
+                "-c",
+                "user.email=crustify@example.com",
+                "commit",
+                "-q",
+                "-m",
+                "side directory to file",
+            ],
+            "1700140000 +0000",
+        );
+        run(&["checkout", "-q", "master"], "1700140100 +0000");
+        std::fs::write(
+            path.join("src/beta.c"),
+            b"int beta(int x) { return x * x * x; }\n",
+        )
+        .unwrap();
+        run(&["add", "src/beta.c"], "1700140100 +0000");
+        run(
+            &[
+                "-c",
+                "user.name=Crustify",
+                "-c",
+                "user.email=crustify@example.com",
+                "commit",
+                "-q",
+                "-m",
+                "master directory edit",
+            ],
+            "1700140100 +0000",
+        );
+    }
+
+    #[test]
+    fn io_equiv_directory_file_conflict_detection() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("merge-directory-file-raw");
+        let safe = HistoryFixture::new("merge-directory-file-safe");
+        prepare_directory_file_conflict(&raw);
+        prepare_directory_file_conflict(&safe);
+        let raw = unsafe { raw_rename_merge(raw.repository.as_ptr()) };
+        assert_eq!(raw, safe_rename_merge(safe.repository.as_ptr()));
+        assert!(raw.iter().any(|(_, path)| path.starts_with(b"src")));
+    }
+
+    unsafe fn raw_conflicted_full_merge(fixture: &HistoryFixture) -> (i32, bool, Vec<Vec<u8>>) {
+        let repository = fixture.repository.as_ptr();
+        let mut annotated = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_revspec(
+                    &mut annotated,
+                    repository,
+                    c"rename-side".as_ptr(),
+                )
+            },
+            0
+        );
+        let mut heads = [annotated.cast_const()];
+        assert_eq!(
+            unsafe {
+                ffi::git_merge(
+                    repository,
+                    heads.as_mut_ptr(),
+                    heads.len(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_annotated_commit_free(annotated) };
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, repository) },
+            0
+        );
+        let conflicts = unsafe { ffi::git_index_has_conflicts(index) } != 0;
+        let paths = (0..unsafe { ffi::git_index_entrycount(index) })
+            .map(|position| {
+                let entry = unsafe { ffi::git_index_get_byindex(index, position) };
+                unsafe { CStr::from_ptr((*entry).path) }.to_bytes().to_vec()
+            })
+            .collect();
+        unsafe { ffi::git_index_free(index) };
+        (
+            unsafe { ffi::git_repository_state(repository) },
+            conflicts,
+            paths,
+        )
+    }
+
+    fn safe_conflicted_full_merge(fixture: &HistoryFixture) -> (i32, bool, Vec<Vec<u8>>) {
+        let repository = fixture.repository.as_ptr();
+        let mut annotated = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_revspec(
+                    &mut annotated,
+                    repository,
+                    c"rename-side".as_ptr(),
+                )
+            },
+            0
+        );
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let annotated = unsafe { AnnotatedCommitRef::from_ptr(annotated) }.unwrap();
+        git_merge(&mut repository, &[annotated], None, None).unwrap();
+        unsafe { ffi::git_annotated_commit_free(annotated.as_ptr().cast_mut()) };
+        let mut index = crate::repository::git_repository_index(&mut repository).unwrap();
+        let conflicts = crate::index::git_index_has_conflicts(index.as_ref());
+        let paths = (0..crate::index::git_index_entrycount(index.as_ref()))
+            .map(|position| {
+                let mut view = index.as_mut();
+                crate::index::git_index_get_byindex(&mut view, position)
+                    .unwrap()
+                    .path()
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect();
+        let state = crate::repository::git_repository_state(&mut repository).unwrap() as i32;
+        (state, conflicts, paths)
+    }
+
+    #[test]
+    fn io_equiv_full_rename_rename_merge_updates_checkout_and_index() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("full-directory-file-raw");
+        let safe = HistoryFixture::new("full-directory-file-safe");
+        prepare_rename_conflict(&raw);
+        prepare_rename_conflict(&safe);
+        let raw_observation = unsafe { raw_conflicted_full_merge(&raw) };
+        assert_eq!(raw_observation, safe_conflicted_full_merge(&safe));
+        assert!(raw_observation.1);
+        assert_eq!(
+            raw_observation.0,
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_MERGE as i32
+        );
+    }
+
+    #[test]
+    fn io_equiv_full_rename_delete_merge_updates_checkout_and_index() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("full-rename-delete-raw");
+        let safe = HistoryFixture::new("full-rename-delete-safe");
+        prepare_rename_delete_conflict(&raw);
+        prepare_rename_delete_conflict(&safe);
+        let raw_observation = unsafe { raw_conflicted_full_merge(&raw) };
+        assert_eq!(raw_observation, safe_conflicted_full_merge(&safe));
+        assert!(raw_observation.1);
+        assert_eq!(
+            raw_observation.0,
+            ffi::git_repository_state_t_GIT_REPOSITORY_STATE_MERGE as i32
+        );
+    }
+}

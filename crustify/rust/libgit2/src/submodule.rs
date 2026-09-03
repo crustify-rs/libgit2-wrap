@@ -921,6 +921,714 @@ pub fn git_submodule_update_options_init(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, safe_buf_bytes};
+
+    fn file_url(path: &std::path::Path) -> std::ffi::CString {
+        std::ffi::CString::new(format!("file://{}", path.to_str().unwrap())).unwrap()
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct SubmoduleObservation {
+        name: Vec<u8>,
+        path: Vec<u8>,
+        url: Vec<u8>,
+        head: Option<Vec<u8>>,
+        index: Option<Vec<u8>>,
+        workdir: Option<Vec<u8>>,
+    }
+
+    unsafe fn raw_add(repository: *mut ffi::git_repository, url: &CStr) -> SubmoduleObservation {
+        let mut submodule = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_add_setup(
+                    &mut submodule,
+                    repository,
+                    url.as_ptr(),
+                    c"deps/child".as_ptr(),
+                    1,
+                )
+            },
+            0
+        );
+        let mut cloned = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_submodule_clone(&mut cloned, submodule, core::ptr::null()) },
+            0
+        );
+        unsafe { ffi::git_repository_free(cloned) };
+        assert_eq!(unsafe { ffi::git_submodule_add_finalize(submodule) }, 0);
+        assert_eq!(unsafe { ffi::git_submodule_reload(submodule, 1) }, 0);
+        let oid = |value: *const ffi::git_oid| {
+            (!value.is_null()).then(|| unsafe { (*value).id }.to_vec())
+        };
+        let observation = SubmoduleObservation {
+            name: unsafe { CStr::from_ptr(ffi::git_submodule_name(submodule)) }
+                .to_bytes()
+                .to_vec(),
+            path: unsafe { CStr::from_ptr(ffi::git_submodule_path(submodule)) }
+                .to_bytes()
+                .to_vec(),
+            url: unsafe { CStr::from_ptr(ffi::git_submodule_url(submodule)) }
+                .to_bytes()
+                .to_vec(),
+            head: oid(unsafe { ffi::git_submodule_head_id(submodule) }),
+            index: oid(unsafe { ffi::git_submodule_index_id(submodule) }),
+            workdir: oid(unsafe { ffi::git_submodule_wd_id(submodule) }),
+        };
+        unsafe { ffi::git_submodule_free(submodule) };
+        observation
+    }
+
+    fn safe_add(
+        repository: crate::repository::GitRepositoryMut<'_>,
+        url: &CStr,
+    ) -> SubmoduleObservation {
+        let mut submodule = git_submodule_add_setup(repository, url, c"deps/child", true).unwrap();
+        drop(git_submodule_clone(&mut submodule.as_mut(), None).unwrap());
+        git_submodule_add_finalize(&mut submodule.as_mut()).unwrap();
+        git_submodule_reload(&mut submodule.as_mut(), true).unwrap();
+        let oid =
+            |value: Option<OidRef<'_>>| value.map(|id| id.raw_bytes().elems().collect::<Vec<_>>());
+        let name = git_submodule_name(submodule.as_ref()).to_bytes().to_vec();
+        let path = git_submodule_path(submodule.as_ref()).to_bytes().to_vec();
+        let url = git_submodule_url(submodule.as_ref())
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        let head = oid(git_submodule_head_id(submodule.as_ref()));
+        let index = oid(git_submodule_index_id(submodule.as_ref()));
+        let workdir = oid(git_submodule_wd_id(&mut submodule.as_mut()));
+        SubmoduleObservation {
+            name,
+            path,
+            url,
+            head,
+            index,
+            workdir,
+        }
+    }
+
+    #[test]
+    fn io_equiv_submodule_add_clone_and_finalize() {
+        let _libgit2 = Libgit2Init::acquire();
+        let child = HistoryFixture::new("submodule-child");
+        let raw_parent = HistoryFixture::new("submodule-parent-raw");
+        let safe_parent = HistoryFixture::new("submodule-parent-safe");
+        let url = file_url(child.directory.path());
+        let raw = unsafe { raw_add(raw_parent.repository.as_ptr(), &url) };
+        let safe_repository = unsafe {
+            crate::repository::GitRepositoryMut::from_ptr(safe_parent.repository.as_ptr())
+        }
+        .unwrap();
+        assert_eq!(raw, safe_add(safe_repository, &url));
+        assert_eq!(raw.name, b"deps/child");
+        assert!(raw.index.is_some());
+        assert_eq!(raw.index, raw.workdir);
+    }
+
+    unsafe fn raw_repo_init_and_null_output_clone(
+        init_parent: &HistoryFixture,
+        clone_parent: &HistoryFixture,
+        url: &CStr,
+    ) -> (bool, bool, Vec<u8>) {
+        let mut submodule = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_add_setup(
+                    &mut submodule,
+                    init_parent.repository.as_ptr(),
+                    url.as_ptr(),
+                    c"deps/initialized".as_ptr(),
+                    1,
+                )
+            },
+            0
+        );
+        std::fs::remove_dir_all(init_parent.directory.path().join("deps/initialized")).unwrap();
+        let _ = std::fs::remove_dir_all(
+            init_parent
+                .directory
+                .path()
+                .join(".git/modules/deps/initialized"),
+        );
+        let mut initialized = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_submodule_repo_init(&mut initialized, submodule, 1) },
+            0
+        );
+        let empty = unsafe { ffi::git_repository_is_empty(initialized) } != 0;
+        let workdir_present = !unsafe { ffi::git_repository_workdir(initialized) }.is_null();
+        unsafe {
+            ffi::git_repository_free(initialized);
+            ffi::git_submodule_free(submodule);
+        }
+
+        let mut cloned = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_add_setup(
+                    &mut cloned,
+                    clone_parent.repository.as_ptr(),
+                    url.as_ptr(),
+                    c"deps/null-output".as_ptr(),
+                    1,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_submodule_clone(core::ptr::null_mut(), cloned, core::ptr::null()) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_submodule_add_finalize(cloned) }, 0);
+        unsafe { ffi::git_submodule_free(cloned) };
+        let contents = std::fs::read(
+            clone_parent
+                .directory
+                .path()
+                .join("deps/null-output/README.md"),
+        )
+        .unwrap();
+        (empty, workdir_present, contents)
+    }
+
+    fn safe_repo_init_and_null_output_clone(
+        init_parent: &HistoryFixture,
+        clone_parent: &HistoryFixture,
+        url: &CStr,
+    ) -> (bool, bool, Vec<u8>) {
+        let init_repository = unsafe {
+            crate::repository::GitRepositoryMut::from_ptr(init_parent.repository.as_ptr())
+        }
+        .unwrap();
+        let submodule =
+            git_submodule_add_setup(init_repository, url, c"deps/initialized", true).unwrap();
+        std::fs::remove_dir_all(init_parent.directory.path().join("deps/initialized")).unwrap();
+        let _ = std::fs::remove_dir_all(
+            init_parent
+                .directory
+                .path()
+                .join(".git/modules/deps/initialized"),
+        );
+        let mut initialized = git_submodule_repo_init(submodule.as_ref(), true).unwrap();
+        let empty = crate::repository::git_repository_is_empty(&mut initialized.as_mut()).unwrap();
+        let workdir_present =
+            crate::repository::git_repository_workdir(initialized.as_ref()).is_some();
+        drop(initialized);
+        drop(submodule);
+
+        let clone_repository = unsafe {
+            crate::repository::GitRepositoryMut::from_ptr(clone_parent.repository.as_ptr())
+        }
+        .unwrap();
+        let mut cloned =
+            git_submodule_add_setup(clone_repository, url, c"deps/null-output", true).unwrap();
+        git_submodule_clone_without_repository(&mut cloned.as_mut(), None).unwrap();
+        git_submodule_add_finalize(&mut cloned.as_mut()).unwrap();
+        let contents = std::fs::read(
+            clone_parent
+                .directory
+                .path()
+                .join("deps/null-output/README.md"),
+        )
+        .unwrap();
+        (empty, workdir_present, contents)
+    }
+
+    #[test]
+    fn io_equiv_submodule_repo_init_and_clone_without_repository_output() {
+        let _libgit2 = Libgit2Init::acquire();
+        let child = HistoryFixture::new("submodule-init-child");
+        let raw_init = HistoryFixture::new("submodule-init-parent-raw");
+        let raw_clone = HistoryFixture::new("submodule-null-clone-parent-raw");
+        let safe_init = HistoryFixture::new("submodule-init-parent-safe");
+        let safe_clone = HistoryFixture::new("submodule-null-clone-parent-safe");
+        let url = file_url(child.directory.path());
+        let raw = unsafe { raw_repo_init_and_null_output_clone(&raw_init, &raw_clone, &url) };
+        let safe = safe_repo_init_and_null_output_clone(&safe_init, &safe_clone, &url);
+        assert_eq!(raw, safe);
+        assert!(raw.0);
+        assert!(raw.1);
+        assert_eq!(raw.2, b"fixture\nwith a third revision\n");
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct LifecycleObservation {
+        status: ffi::git_submodule_status_t,
+        location: ffi::git_submodule_status_t,
+        update: ffi::git_submodule_update_t,
+        ignore: ffi::git_submodule_ignore_t,
+        recurse: ffi::git_submodule_recurse_t,
+        branch: Option<Vec<u8>>,
+        resolved_url: Vec<u8>,
+        owner_is_bare: bool,
+        child_is_bare: bool,
+        exists: bool,
+        foreach_names: Vec<Vec<u8>>,
+        foreach_stop: i32,
+    }
+
+    unsafe fn raw_lifecycle(
+        repository: *mut ffi::git_repository,
+        url: &CStr,
+    ) -> LifecycleObservation {
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_set_branch(repository, c"deps/child".as_ptr(), c"topic".as_ptr())
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_set_ignore(
+                    repository,
+                    c"deps/child".as_ptr(),
+                    ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_UNTRACKED,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_set_update(
+                    repository,
+                    c"deps/child".as_ptr(),
+                    ffi::git_submodule_update_t_GIT_SUBMODULE_UPDATE_CHECKOUT,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_set_fetch_recurse_submodules(
+                    repository,
+                    c"deps/child".as_ptr(),
+                    ffi::git_submodule_recurse_t_GIT_SUBMODULE_RECURSE_ONDEMAND,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_submodule_set_url(repository, c"deps/child".as_ptr(), url.as_ptr()) },
+            0
+        );
+
+        unsafe extern "C" fn collect(
+            _submodule: *mut ffi::git_submodule,
+            name: *const core::ffi::c_char,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            unsafe { &mut *payload.cast::<Vec<Vec<u8>>>() }
+                .push(unsafe { CStr::from_ptr(name) }.to_bytes().to_vec());
+            0
+        }
+        unsafe extern "C" fn stop(
+            _submodule: *mut ffi::git_submodule,
+            _name: *const core::ffi::c_char,
+            _payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            17
+        }
+        let mut foreach_names = Vec::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_foreach(
+                    repository,
+                    Some(collect),
+                    core::ptr::from_mut(&mut foreach_names).cast(),
+                )
+            },
+            0
+        );
+        let foreach_stop =
+            unsafe { ffi::git_submodule_foreach(repository, Some(stop), core::ptr::null_mut()) };
+
+        let exists = unsafe {
+            ffi::git_submodule_lookup(core::ptr::null_mut(), repository, c"deps/child".as_ptr())
+                == 0
+        };
+        let mut submodule = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_lookup(&mut submodule, repository, c"deps/child".as_ptr())
+            },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_submodule_init(submodule, 1) }, 0);
+        assert_eq!(unsafe { ffi::git_submodule_sync(submodule) }, 0);
+        assert_eq!(unsafe { ffi::git_submodule_reload(submodule, 1) }, 0);
+        assert_eq!(unsafe { ffi::git_submodule_add_to_index(submodule, 1) }, 0);
+        let mut status = 0;
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_status(
+                    &mut status,
+                    repository,
+                    c"deps/child".as_ptr(),
+                    ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_UNSPECIFIED,
+                )
+            },
+            0
+        );
+        let mut location = 0;
+        assert_eq!(
+            unsafe { ffi::git_submodule_location(&mut location, submodule) },
+            0
+        );
+        let mut resolved = unsafe { core::mem::zeroed::<ffi::git_buf>() };
+        assert_eq!(
+            unsafe { ffi::git_submodule_resolve_url(&mut resolved, repository, url.as_ptr()) },
+            0
+        );
+        let resolved_url = unsafe {
+            core::slice::from_raw_parts(resolved.ptr.cast::<u8>(), resolved.size).to_vec()
+        };
+        unsafe { ffi::git_buf_dispose(&mut resolved) };
+        let mut child = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_submodule_open(&mut child, submodule) }, 0);
+        let owner_is_bare =
+            unsafe { ffi::git_repository_is_bare(ffi::git_submodule_owner(submodule)) != 0 };
+        let child_is_bare = unsafe { ffi::git_repository_is_bare(child) != 0 };
+        let branch = {
+            let value = unsafe { ffi::git_submodule_branch(submodule) };
+            (!value.is_null()).then(|| unsafe { CStr::from_ptr(value) }.to_bytes().to_vec())
+        };
+        let observation = LifecycleObservation {
+            status,
+            location,
+            update: unsafe { ffi::git_submodule_update_strategy(submodule) },
+            ignore: unsafe { ffi::git_submodule_ignore(submodule) },
+            recurse: unsafe { ffi::git_submodule_fetch_recurse_submodules(submodule) },
+            branch,
+            resolved_url,
+            owner_is_bare,
+            child_is_bare,
+            exists,
+            foreach_names,
+            foreach_stop,
+        };
+        unsafe {
+            ffi::git_repository_free(child);
+            ffi::git_submodule_free(submodule);
+        }
+        observation
+    }
+
+    fn safe_lifecycle(repository: *mut ffi::git_repository, url: &CStr) -> LifecycleObservation {
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        git_submodule_set_branch(&mut repository_view, c"deps/child", Some(c"topic")).unwrap();
+        git_submodule_set_ignore(
+            &mut repository_view,
+            c"deps/child",
+            GitSubmoduleIgnore::Untracked,
+        )
+        .unwrap();
+        git_submodule_set_update(
+            &mut repository_view,
+            c"deps/child",
+            GitSubmoduleUpdate::Checkout,
+        )
+        .unwrap();
+        git_submodule_set_fetch_recurse_submodules(
+            &mut repository_view,
+            c"deps/child",
+            GitSubmoduleRecurse::OnDemand,
+        )
+        .unwrap();
+        git_submodule_set_url(&mut repository_view, c"deps/child", url).unwrap();
+        let mut foreach_names = Vec::new();
+        git_submodule_foreach(
+            &mut repository_view,
+            &mut |_submodule: crate::submodule::GitSubmoduleMut<'_>, name: &CStr| {
+                foreach_names.push(name.to_bytes().to_vec());
+                0
+            },
+        )
+        .unwrap();
+        let foreach_stop = git_submodule_foreach(
+            &mut repository_view,
+            &mut |_submodule: crate::submodule::GitSubmoduleMut<'_>, _name: &CStr| 17,
+        )
+        .unwrap_err();
+        let exists = git_submodule_exists(&mut repository_view, c"deps/child").is_ok();
+        let mut submodule = git_submodule_lookup(repository_view, c"deps/child").unwrap();
+        git_submodule_init(&mut submodule.as_mut(), true).unwrap();
+        git_submodule_sync(&mut submodule.as_mut()).unwrap();
+        git_submodule_reload(&mut submodule.as_mut(), true).unwrap();
+        git_submodule_add_to_index(&mut submodule.as_mut(), true).unwrap();
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let status = git_submodule_status(
+            &mut repository_view,
+            c"deps/child",
+            GitSubmoduleIgnore::Unspecified,
+        )
+        .unwrap()
+        .bits();
+        let location = git_submodule_location(&mut submodule.as_mut())
+            .unwrap()
+            .bits();
+        let resolved_url = safe_buf_bytes(
+            git_submodule_resolve_url(&mut repository_view, url)
+                .unwrap()
+                .as_ref(),
+        );
+        let child = git_submodule_open(&mut submodule.as_mut()).unwrap();
+        let owner_is_bare =
+            crate::repository::git_repository_is_bare(git_submodule_owner(submodule.as_ref()));
+        let child_is_bare = crate::repository::git_repository_is_bare(child.as_ref());
+        LifecycleObservation {
+            status,
+            location,
+            update: git_submodule_update_strategy(submodule.as_ref())
+                .unwrap()
+                .into(),
+            ignore: git_submodule_ignore(submodule.as_ref()).unwrap().into(),
+            recurse: git_submodule_fetch_recurse_submodules(submodule.as_ref())
+                .unwrap()
+                .into(),
+            branch: git_submodule_branch(submodule.as_ref()).map(|value| value.to_bytes().to_vec()),
+            resolved_url,
+            owner_is_bare,
+            child_is_bare,
+            exists,
+            foreach_names,
+            foreach_stop,
+        }
+    }
+
+    #[test]
+    fn io_equiv_submodule_configuration_status_and_repository_lifecycle() {
+        let _libgit2 = Libgit2Init::acquire();
+        let child = HistoryFixture::new("submodule-lifecycle-child");
+        let raw_parent = HistoryFixture::new("submodule-lifecycle-raw");
+        let safe_parent = HistoryFixture::new("submodule-lifecycle-safe");
+        let url = file_url(child.directory.path());
+        unsafe { raw_add(raw_parent.repository.as_ptr(), &url) };
+        let safe_repository = unsafe {
+            crate::repository::GitRepositoryMut::from_ptr(safe_parent.repository.as_ptr())
+        }
+        .unwrap();
+        safe_add(safe_repository, &url);
+        let raw = unsafe { raw_lifecycle(raw_parent.repository.as_ptr(), &url) };
+        assert_eq!(raw, safe_lifecycle(safe_parent.repository.as_ptr(), &url));
+        assert!(raw.exists);
+        assert_eq!(raw.branch.as_deref(), Some(b"topic".as_slice()));
+    }
+
+    fn advance_child(child: &HistoryFixture) -> ffi::git_oid {
+        std::fs::write(
+            child.directory.path().join("fetched-by-update.txt"),
+            b"the update engine must fetch this object\n",
+        )
+        .unwrap();
+        let add = std::process::Command::new("git")
+            .current_dir(child.directory.path())
+            .args(["add", "fetched-by-update.txt"])
+            .status()
+            .unwrap();
+        assert!(add.success());
+        let commit = std::process::Command::new("git")
+            .current_dir(child.directory.path())
+            .args([
+                "-c",
+                "user.name=Update Test",
+                "-c",
+                "user.email=update@example.com",
+                "commit",
+                "-m",
+                "new submodule target",
+            ])
+            .env("GIT_AUTHOR_DATE", "1700090000 +0000")
+            .env("GIT_COMMITTER_DATE", "1700090000 +0000")
+            .status()
+            .unwrap();
+        assert!(commit.success());
+        let output = std::process::Command::new("git")
+            .current_dir(child.directory.path())
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let oid = std::ffi::CString::new(String::from_utf8(output.stdout).unwrap().trim()).unwrap();
+        let mut result = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_oid_fromstr(&mut result, oid.as_ptr()) },
+            0
+        );
+        result
+    }
+
+    unsafe fn set_submodule_index_target(
+        repository: *mut ffi::git_repository,
+        target: &ffi::git_oid,
+    ) {
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, repository) },
+            0
+        );
+        let existing = unsafe { ffi::git_index_get_bypath(index, c"deps/child".as_ptr(), 0) };
+        assert!(!existing.is_null());
+        let mut entry = unsafe { existing.read() };
+        entry.id = *target;
+        assert_eq!(unsafe { ffi::git_index_add(index, &entry) }, 0);
+        assert_eq!(unsafe { ffi::git_index_write(index) }, 0);
+        unsafe { ffi::git_index_free(index) };
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct UpdateObservation {
+        update_status: i32,
+        workdir: Vec<u8>,
+        head: Vec<u8>,
+        file: Vec<u8>,
+        status: ffi::git_submodule_status_t,
+    }
+
+    unsafe fn raw_update(repository: *mut ffi::git_repository) -> UpdateObservation {
+        let mut submodule = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_lookup(&mut submodule, repository, c"deps/child".as_ptr())
+            },
+            0
+        );
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_submodule_update_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_update_options_init(
+                    &mut options,
+                    ffi::GIT_SUBMODULE_UPDATE_OPTIONS_VERSION,
+                )
+            },
+            0
+        );
+        options.checkout_opts.checkout_strategy = ffi::git_checkout_strategy_t_GIT_CHECKOUT_FORCE;
+        let update_status = unsafe { ffi::git_submodule_update(submodule, 1, &mut options) };
+        assert_eq!(update_status, 0);
+        assert_eq!(unsafe { ffi::git_submodule_reload(submodule, 1) }, 0);
+        let workdir = unsafe { (*ffi::git_submodule_wd_id(submodule)).id }.to_vec();
+        let mut child = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_submodule_open(&mut child, submodule) }, 0);
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, child, c"HEAD".as_ptr()) },
+            0
+        );
+        let path = unsafe { CStr::from_ptr(ffi::git_repository_workdir(child)) }
+            .to_str()
+            .unwrap();
+        let file = std::fs::read(std::path::Path::new(path).join("fetched-by-update.txt")).unwrap();
+        let mut status = 0;
+        assert_eq!(
+            unsafe {
+                ffi::git_submodule_status(
+                    &mut status,
+                    repository,
+                    c"deps/child".as_ptr(),
+                    ffi::git_submodule_ignore_t_GIT_SUBMODULE_IGNORE_NONE,
+                )
+            },
+            0
+        );
+        unsafe {
+            ffi::git_repository_free(child);
+            ffi::git_submodule_free(submodule);
+        }
+        UpdateObservation {
+            update_status,
+            workdir,
+            head: head.id.to_vec(),
+            file,
+            status,
+        }
+    }
+
+    fn safe_update(repository: *mut ffi::git_repository) -> UpdateObservation {
+        let repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut submodule = git_submodule_lookup(repository_view, c"deps/child").unwrap();
+        let mut options = crate::api::submodule::GitSubmoduleUpdateOptions::new();
+        options
+            .as_mut()
+            .checkout_options_mut()
+            .set_checkout_strategy(crate::api::checkout::GitCheckoutStrategy::FORCE);
+        let update_status =
+            git_submodule_update(&mut submodule.as_mut(), true, Some(options.as_ref()))
+                .map_or_else(|error| error, |_| 0);
+        assert_eq!(update_status, 0);
+        git_submodule_reload(&mut submodule.as_mut(), true).unwrap();
+        let workdir = git_submodule_wd_id(&mut submodule.as_mut())
+            .unwrap()
+            .raw_bytes()
+            .elems()
+            .collect();
+        let child = git_submodule_open(&mut submodule.as_mut()).unwrap();
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, child.as_ptr(), c"HEAD".as_ptr()) },
+            0
+        );
+        let path = crate::repository::git_repository_workdir(child.as_ref())
+            .unwrap()
+            .to_str()
+            .unwrap();
+        let file = std::fs::read(std::path::Path::new(path).join("fetched-by-update.txt")).unwrap();
+        drop(child);
+        drop(submodule);
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let status = git_submodule_status(
+            &mut repository_view,
+            c"deps/child",
+            GitSubmoduleIgnore::None,
+        )
+        .unwrap()
+        .bits();
+        UpdateObservation {
+            update_status,
+            workdir,
+            head: head.id.to_vec(),
+            file,
+            status,
+        }
+    }
+
+    #[test]
+    fn io_equiv_submodule_update_fetches_missing_index_commit_and_checks_it_out() {
+        let _libgit2 = Libgit2Init::acquire();
+        let child = HistoryFixture::new("submodule-update-child");
+        let raw_parent = HistoryFixture::new("submodule-update-raw");
+        let safe_parent = HistoryFixture::new("submodule-update-safe");
+        let url = file_url(child.directory.path());
+        unsafe {
+            raw_add(raw_parent.repository.as_ptr(), &url);
+        }
+        let safe_repository = unsafe {
+            crate::repository::GitRepositoryMut::from_ptr(safe_parent.repository.as_ptr())
+        }
+        .unwrap();
+        safe_add(safe_repository, &url);
+        let target = advance_child(&child);
+        unsafe {
+            set_submodule_index_target(raw_parent.repository.as_ptr(), &target);
+            set_submodule_index_target(safe_parent.repository.as_ptr(), &target);
+        }
+        let raw = unsafe { raw_update(raw_parent.repository.as_ptr()) };
+        assert_eq!(raw, safe_update(safe_parent.repository.as_ptr()));
+        assert_eq!(raw.head, target.id.to_vec());
+        assert_eq!(raw.workdir, target.id.to_vec());
+    }
+}
+
+#[cfg(test)]
 mod submodule_update_options_init_tests {
     use std::ffi::CString;
 

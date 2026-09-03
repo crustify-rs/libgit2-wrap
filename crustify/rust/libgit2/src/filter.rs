@@ -386,3 +386,366 @@ pub fn git_filter_options_init<'data>()
         Err(status)
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, safe_buf_bytes};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct FilterObservation {
+        clean_buffer: Vec<u8>,
+        clean_file: Vec<u8>,
+        smudge_buffer: Vec<u8>,
+        contains_crlf: bool,
+    }
+
+    unsafe fn take_buf(buffer: &mut ffi::git_buf) -> Vec<u8> {
+        let bytes =
+            unsafe { core::slice::from_raw_parts(buffer.ptr.cast::<u8>(), buffer.size).to_vec() };
+        unsafe { ffi::git_buf_dispose(buffer) };
+        bytes
+    }
+
+    unsafe fn raw_filters(repository: *mut ffi::git_repository) -> FilterObservation {
+        let mut clean = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_filter_list_load(
+                    &mut clean,
+                    repository,
+                    core::ptr::null_mut(),
+                    c"src/alpha.c".as_ptr(),
+                    ffi::git_filter_mode_t_GIT_FILTER_TO_ODB,
+                    ffi::git_filter_flag_t_GIT_FILTER_DEFAULT,
+                )
+            },
+            0
+        );
+        let input = b"one\r\ntwo\r\n";
+        let mut clean_buffer = unsafe { core::mem::zeroed::<ffi::git_buf>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_filter_list_apply_to_buffer(
+                    &mut clean_buffer,
+                    clean,
+                    input.as_ptr().cast(),
+                    input.len(),
+                )
+            },
+            0
+        );
+        let mut clean_file = unsafe { core::mem::zeroed::<ffi::git_buf>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_filter_list_apply_to_file(
+                    &mut clean_file,
+                    clean,
+                    repository,
+                    c"src/alpha.c".as_ptr(),
+                )
+            },
+            0
+        );
+        let contains_crlf = unsafe { ffi::git_filter_list_contains(clean, c"crlf".as_ptr()) } != 0;
+        unsafe { ffi::git_filter_list_free(clean) };
+
+        let mut smudge = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_filter_list_load(
+                    &mut smudge,
+                    repository,
+                    core::ptr::null_mut(),
+                    c"src/alpha.c".as_ptr(),
+                    ffi::git_filter_mode_t_GIT_FILTER_TO_WORKTREE,
+                    ffi::git_filter_flag_t_GIT_FILTER_DEFAULT,
+                )
+            },
+            0
+        );
+        let input = b"one\ntwo\n";
+        let mut smudge_buffer = unsafe { core::mem::zeroed::<ffi::git_buf>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_filter_list_apply_to_buffer(
+                    &mut smudge_buffer,
+                    smudge,
+                    input.as_ptr().cast(),
+                    input.len(),
+                )
+            },
+            0
+        );
+        unsafe { ffi::git_filter_list_free(smudge) };
+        FilterObservation {
+            clean_buffer: unsafe { take_buf(&mut clean_buffer) },
+            clean_file: unsafe { take_buf(&mut clean_file) },
+            smudge_buffer: unsafe { take_buf(&mut smudge_buffer) },
+            contains_crlf,
+        }
+    }
+
+    fn safe_filters(repository: *mut ffi::git_repository) -> FilterObservation {
+        let repository_ref =
+            unsafe { crate::repository::GitRepositoryRef::from_ptr(repository) }.unwrap();
+        let mut clean = git_filter_list_load(
+            repository_ref,
+            None,
+            c"src/alpha.c",
+            crate::api::filter::GitFilterMode::CLEAN,
+            crate::api::filter::GitFilterFlags::DEFAULT,
+        )
+        .unwrap()
+        .unwrap();
+        let clean_buffer = safe_buf_bytes(
+            git_filter_list_apply_to_buffer(Some(&mut clean.as_mut()), b"one\r\ntwo\r\n")
+                .unwrap()
+                .as_ref(),
+        );
+        let clean_file = safe_buf_bytes(
+            git_filter_list_apply_to_file(
+                Some(&mut clean.as_mut()),
+                repository_ref,
+                c"src/alpha.c",
+            )
+            .unwrap()
+            .as_ref(),
+        );
+        let contains_crlf = git_filter_list_contains(Some(clean.as_ref()), c"crlf");
+        drop(clean);
+        let mut smudge = git_filter_list_load(
+            repository_ref,
+            None,
+            c"src/alpha.c",
+            crate::api::filter::GitFilterMode::SMUDGE,
+            crate::api::filter::GitFilterFlags::DEFAULT,
+        )
+        .unwrap()
+        .unwrap();
+        let smudge_buffer = safe_buf_bytes(
+            git_filter_list_apply_to_buffer(Some(&mut smudge.as_mut()), b"one\ntwo\n")
+                .unwrap()
+                .as_ref(),
+        );
+        FilterObservation {
+            clean_buffer,
+            clean_file,
+            smudge_buffer,
+            contains_crlf,
+        }
+    }
+
+    #[test]
+    fn io_equiv_crlf_filters_apply_to_buffers_and_files() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("filters-raw");
+        let safe = HistoryFixture::new("filters-safe");
+        let attributes = b"*.c text eol=crlf\n";
+        std::fs::write(raw.directory.path().join(".gitattributes"), attributes).unwrap();
+        std::fs::write(safe.directory.path().join(".gitattributes"), attributes).unwrap();
+        let raw_observation = unsafe { raw_filters(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_filters(safe.repository.as_ptr()));
+        assert_eq!(raw_observation.clean_buffer, b"one\ntwo\n");
+        assert_eq!(raw_observation.smudge_buffer, b"one\r\ntwo\r\n");
+        assert!(raw_observation.contains_crlf);
+    }
+
+    #[repr(C)]
+    struct CollectStream {
+        stream: ffi::git_writestream,
+        bytes: Vec<u8>,
+    }
+
+    impl CollectStream {
+        fn new() -> Self {
+            Self {
+                stream: ffi::git_writestream {
+                    write: Some(collect_write),
+                    close: Some(collect_close),
+                    free: Some(collect_free),
+                },
+                bytes: Vec::new(),
+            }
+        }
+    }
+
+    unsafe extern "C" fn collect_write(
+        stream: *mut ffi::git_writestream,
+        buffer: *const core::ffi::c_char,
+        length: usize,
+    ) -> i32 {
+        let stream = unsafe { &mut *stream.cast::<CollectStream>() };
+        stream
+            .bytes
+            .extend_from_slice(unsafe { core::slice::from_raw_parts(buffer.cast::<u8>(), length) });
+        0
+    }
+
+    unsafe extern "C" fn collect_close(_: *mut ffi::git_writestream) -> i32 {
+        0
+    }
+
+    unsafe extern "C" fn collect_free(_: *mut ffi::git_writestream) {}
+
+    unsafe fn raw_blob_and_stream_filters(
+        repository: *mut ffi::git_repository,
+    ) -> (Vec<u8>, [Vec<u8>; 3], bool) {
+        let input = b"blob one\r\nblob two\r\n";
+        let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_blob_create_from_buffer(
+                    &mut id,
+                    repository,
+                    input.as_ptr().cast(),
+                    input.len(),
+                )
+            },
+            0
+        );
+        let mut blob = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_blob_lookup(&mut blob, repository, &id) },
+            0
+        );
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_filter_options>() };
+        assert_eq!(
+            unsafe { ffi::git_filter_options_init(&mut options, ffi::GIT_FILTER_OPTIONS_VERSION) },
+            0
+        );
+        let mut filters = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_filter_list_load_ext(
+                    &mut filters,
+                    repository,
+                    blob,
+                    c"src/generated.c".as_ptr(),
+                    ffi::git_filter_mode_t_GIT_FILTER_TO_ODB,
+                    &mut options,
+                )
+            },
+            0
+        );
+        let mut applied = unsafe { core::mem::zeroed::<ffi::git_buf>() };
+        assert_eq!(
+            unsafe { ffi::git_filter_list_apply_to_blob(&mut applied, filters, blob) },
+            0
+        );
+        let applied = unsafe { take_buf(&mut applied) };
+        let mut streams = [
+            CollectStream::new(),
+            CollectStream::new(),
+            CollectStream::new(),
+        ];
+        assert_eq!(
+            unsafe {
+                ffi::git_filter_list_stream_buffer(
+                    filters,
+                    input.as_ptr().cast(),
+                    input.len(),
+                    &mut streams[0].stream,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_filter_list_stream_file(
+                    filters,
+                    repository,
+                    c"src/alpha.c".as_ptr(),
+                    &mut streams[1].stream,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_filter_list_stream_blob(filters, blob, &mut streams[2].stream) },
+            0
+        );
+        let contains = unsafe { ffi::git_filter_list_contains(filters, c"crlf".as_ptr()) } != 0;
+        unsafe {
+            ffi::git_filter_list_free(filters);
+            ffi::git_blob_free(blob);
+        }
+        (applied, streams.map(|stream| stream.bytes), contains)
+    }
+
+    fn safe_blob_and_stream_filters(
+        repository: *mut ffi::git_repository,
+    ) -> (Vec<u8>, [Vec<u8>; 3], bool) {
+        let input = b"blob one\r\nblob two\r\n";
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut raw_id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        {
+            let mut id = unsafe { crate::oid::OidMut::from_ptr(&mut raw_id) }.unwrap();
+            crate::blob::git_blob_create_from_buffer(&mut id, &mut repository_view, input).unwrap();
+        }
+        let id = unsafe { crate::oid::OidRef::from_ptr(&mut raw_id) }.unwrap();
+        let mut blob = crate::object_api::git_blob_lookup(repository_view.as_ref(), id).unwrap();
+        let mut options = git_filter_options_init().unwrap();
+        let mut filters = git_filter_list_load_ext(
+            repository_view.as_ref(),
+            Some(blob.as_ref()),
+            c"src/generated.c",
+            crate::api::filter::GitFilterMode::CLEAN,
+            &mut options.as_mut(),
+        )
+        .unwrap()
+        .unwrap();
+        let applied = safe_buf_bytes(
+            git_filter_list_apply_to_blob(Some(&mut filters.as_mut()), &mut blob.as_mut())
+                .unwrap()
+                .as_ref(),
+        );
+        let mut streams = [
+            CollectStream::new(),
+            CollectStream::new(),
+            CollectStream::new(),
+        ];
+        {
+            let mut targets = streams.each_mut().map(|stream| {
+                unsafe { crate::api::types::GitWriteStreamMut::from_ptr(&mut stream.stream) }
+                    .unwrap()
+            });
+            git_filter_list_stream_buffer(Some(&mut filters.as_mut()), input, &mut targets[0])
+                .unwrap();
+            git_filter_list_stream_file(
+                Some(&mut filters.as_mut()),
+                repository_view.as_ref(),
+                c"src/alpha.c",
+                &mut targets[1],
+            )
+            .unwrap();
+            git_filter_list_stream_blob(
+                Some(&mut filters.as_mut()),
+                &mut blob.as_mut(),
+                &mut targets[2],
+            )
+            .unwrap();
+        }
+        let contains = git_filter_list_contains(Some(filters.as_ref()), c"crlf");
+        (applied, streams.map(|stream| stream.bytes), contains)
+    }
+
+    #[test]
+    fn io_equiv_extended_blob_and_stream_filtering() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("filter-streams-raw");
+        let safe = HistoryFixture::new("filter-streams-safe");
+        let attributes = b"*.c text eol=lf\n";
+        std::fs::write(raw.directory.path().join(".gitattributes"), attributes).unwrap();
+        std::fs::write(safe.directory.path().join(".gitattributes"), attributes).unwrap();
+        let raw = unsafe { raw_blob_and_stream_filters(raw.repository.as_ptr()) };
+        assert_eq!(raw, safe_blob_and_stream_filters(safe.repository.as_ptr()));
+        assert_eq!(raw.0, b"blob one\nblob two\n");
+        assert_eq!(raw.1[0], raw.0);
+        assert_eq!(raw.1[2], raw.0);
+        assert!(raw.2);
+    }
+}

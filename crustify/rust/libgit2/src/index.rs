@@ -1632,6 +1632,929 @@ pub fn git_index_open_ext(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct IndexObservation {
+        initial_count: usize,
+        count_after_add: usize,
+        alpha_position: usize,
+        src_position: usize,
+        version: u32,
+        caps: i32,
+        conflict_paths: [Vec<u8>; 3],
+        iterated_paths: Vec<Vec<u8>>,
+        tree_id: Vec<u8>,
+        checksum_nonzero: bool,
+        count_after_remove_directory: usize,
+        count_after_clear: usize,
+    }
+
+    unsafe fn conflict_entries(template: *const ffi::git_index_entry) -> [ffi::git_index_entry; 3] {
+        assert!(!template.is_null());
+        let base = unsafe { template.read() };
+        let mut entries = [base, base, base];
+        let stages = [
+            ffi::git_index_stage_t_GIT_INDEX_STAGE_ANCESTOR,
+            ffi::git_index_stage_t_GIT_INDEX_STAGE_OURS,
+            ffi::git_index_stage_t_GIT_INDEX_STAGE_THEIRS,
+        ];
+        for (entry, stage) in entries.iter_mut().zip(stages) {
+            entry.path = c"conflict.txt".as_ptr();
+            entry.flags = (stage as u16) << 12;
+        }
+        entries
+    }
+
+    unsafe fn raw_observation(fixture: &HistoryFixture) -> IndexObservation {
+        std::fs::write(
+            fixture.directory.path().join("src/gamma.c"),
+            b"int gamma(void) { return 3; }\n",
+        )
+        .unwrap();
+        std::fs::write(fixture.directory.path().join("extra.txt"), b"extra\n").unwrap();
+
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, fixture.repository.as_ptr()) },
+            0
+        );
+        let initial_count = unsafe { ffi::git_index_entrycount(index) };
+        assert_eq!(
+            unsafe { ffi::git_index_add_bypath(index, c"src/gamma.c".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_index_add_bypath(index, c"extra.txt".as_ptr()) },
+            0
+        );
+        let count_after_add = unsafe { ffi::git_index_entrycount(index) };
+
+        let mut alpha_position = 0;
+        assert_eq!(
+            unsafe { ffi::git_index_find(&mut alpha_position, index, c"src/alpha.c".as_ptr()) },
+            0
+        );
+        let mut src_position = 0;
+        assert_eq!(
+            unsafe { ffi::git_index_find_prefix(&mut src_position, index, c"src".as_ptr()) },
+            0
+        );
+
+        assert_eq!(unsafe { ffi::git_index_set_version(index, 3) }, 0);
+        assert_eq!(unsafe { ffi::git_index_set_version(index, 2) }, 0);
+        let version = unsafe { ffi::git_index_version(index) };
+        assert_eq!(
+            unsafe {
+                ffi::git_index_set_caps(
+                    index,
+                    ffi::git_index_capability_t_GIT_INDEX_CAPABILITY_NO_FILEMODE,
+                )
+            },
+            0
+        );
+        let caps = unsafe { ffi::git_index_caps(index) };
+
+        let template = unsafe {
+            ffi::git_index_get_bypath(
+                index,
+                c"README.md".as_ptr(),
+                ffi::git_index_stage_t_GIT_INDEX_STAGE_NORMAL,
+            )
+        };
+        let entries = unsafe { conflict_entries(template) };
+        assert_eq!(
+            unsafe { ffi::git_index_conflict_add(index, &entries[0], &entries[1], &entries[2]) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_index_has_conflicts(index) }, 1);
+        let mut ancestor = core::ptr::null();
+        let mut ours = core::ptr::null();
+        let mut theirs = core::ptr::null();
+        assert_eq!(
+            unsafe {
+                ffi::git_index_conflict_get(
+                    &mut ancestor,
+                    &mut ours,
+                    &mut theirs,
+                    index,
+                    c"conflict.txt".as_ptr(),
+                )
+            },
+            0
+        );
+        let conflict_paths = [ancestor, ours, theirs].map(|entry| {
+            assert!(!entry.is_null());
+            unsafe { CStr::from_ptr((*entry).path) }.to_bytes().to_vec()
+        });
+
+        let mut conflicts = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_index_conflict_iterator_new(&mut conflicts, index) },
+            0
+        );
+        let mut iter_ancestor = core::ptr::null();
+        let mut iter_ours = core::ptr::null();
+        let mut iter_theirs = core::ptr::null();
+        assert_eq!(
+            unsafe {
+                ffi::git_index_conflict_next(
+                    &mut iter_ancestor,
+                    &mut iter_ours,
+                    &mut iter_theirs,
+                    conflicts,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_index_conflict_next(
+                    &mut iter_ancestor,
+                    &mut iter_ours,
+                    &mut iter_theirs,
+                    conflicts,
+                )
+            },
+            ffi::git_error_code_GIT_ITEROVER
+        );
+        unsafe { ffi::git_index_conflict_iterator_free(conflicts) };
+        assert_eq!(
+            unsafe { ffi::git_index_conflict_remove(index, c"conflict.txt".as_ptr()) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_index_conflict_cleanup(index) }, 0);
+
+        let mut iterator = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_index_iterator_new(&mut iterator, index) },
+            0
+        );
+        let mut iterated_paths = Vec::new();
+        loop {
+            let mut entry = core::ptr::null();
+            let status = unsafe { ffi::git_index_iterator_next(&mut entry, iterator) };
+            if status == ffi::git_error_code_GIT_ITEROVER {
+                break;
+            }
+            assert_eq!(status, 0);
+            iterated_paths.push(unsafe { CStr::from_ptr((*entry).path) }.to_bytes().to_vec());
+        }
+        unsafe { ffi::git_index_iterator_free(iterator) };
+
+        let mut tree_id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(unsafe { ffi::git_index_write_tree(&mut tree_id, index) }, 0);
+        assert_eq!(unsafe { ffi::git_index_write(index) }, 0);
+        assert_eq!(unsafe { ffi::git_index_read(index, 1) }, 0);
+        let checksum = unsafe {
+            core::slice::from_raw_parts(
+                ffi::git_index_checksum(index).cast::<u8>(),
+                crate::oid::RAW_DIGEST_LEN,
+            )
+        }
+        .to_vec();
+
+        assert_eq!(
+            unsafe {
+                ffi::git_index_remove_directory(
+                    index,
+                    c"src/".as_ptr(),
+                    ffi::git_index_stage_t_GIT_INDEX_STAGE_ANY,
+                )
+            },
+            0
+        );
+        let count_after_remove_directory = unsafe { ffi::git_index_entrycount(index) };
+        assert_eq!(unsafe { ffi::git_index_clear(index) }, 0);
+        let count_after_clear = unsafe { ffi::git_index_entrycount(index) };
+        unsafe { ffi::git_index_free(index) };
+
+        IndexObservation {
+            initial_count,
+            count_after_add,
+            alpha_position,
+            src_position,
+            version,
+            caps,
+            conflict_paths,
+            iterated_paths,
+            tree_id: tree_id.id.to_vec(),
+            checksum_nonzero: checksum.iter().any(|byte| *byte != 0),
+            count_after_remove_directory,
+            count_after_clear,
+        }
+    }
+
+    fn safe_observation(fixture: &HistoryFixture) -> IndexObservation {
+        std::fs::write(
+            fixture.directory.path().join("src/gamma.c"),
+            b"int gamma(void) { return 3; }\n",
+        )
+        .unwrap();
+        std::fs::write(fixture.directory.path().join("extra.txt"), b"extra\n").unwrap();
+
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+                .unwrap();
+        let mut index = crate::repository::git_repository_index(&mut repository).unwrap();
+        let initial_count = git_index_entrycount(index.as_ref());
+        git_index_add_bypath(&mut index.as_mut(), c"src/gamma.c").unwrap();
+        git_index_add_bypath(&mut index.as_mut(), c"extra.txt").unwrap();
+        let count_after_add = git_index_entrycount(index.as_ref());
+
+        let alpha_position = git_index_find(&mut index.as_mut(), c"src/alpha.c").unwrap();
+        let src_position = git_index_find_prefix(&mut index.as_mut(), c"src").unwrap();
+        git_index_set_version(&mut index.as_mut(), 3).unwrap();
+        git_index_set_version(&mut index.as_mut(), 2).unwrap();
+        let version = git_index_version(&mut index.as_mut());
+        git_index_set_caps(
+            &mut index.as_mut(),
+            crate::api::index::GitIndexCapabilities::NO_FILEMODE,
+        )
+        .unwrap();
+        let caps = git_index_caps(index.as_ref()).as_raw();
+
+        let mut entries = {
+            let mut index_view = index.as_mut();
+            let template =
+                git_index_get_bypath(&mut index_view, c"README.md", GitIndexStage::Normal).unwrap();
+            unsafe { conflict_entries(template.as_ptr()) }
+        };
+        let entry_handles = entries
+            .each_mut()
+            .map(|entry| unsafe { IndexEntryRef::from_ptr(core::ptr::from_mut(entry)).unwrap() });
+        git_index_conflict_add(
+            &mut index.as_mut(),
+            Some(entry_handles[0]),
+            Some(entry_handles[1]),
+            Some(entry_handles[2]),
+        )
+        .unwrap();
+        assert!(git_index_has_conflicts(index.as_ref()));
+        let conflict_paths = {
+            let mut index_view = index.as_mut();
+            let conflict = git_index_conflict_get(&mut index_view, c"conflict.txt").unwrap();
+            [conflict.ancestor, conflict.ours, conflict.theirs].map(|entry| {
+                entry
+                    .expect("all conflict stages are present")
+                    .path()
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec()
+            })
+        };
+        {
+            let mut conflicts = git_index_conflict_iterator_new(index.as_mut()).unwrap();
+            let conflict = git_index_conflict_next(&mut conflicts).unwrap();
+            assert!(conflict.ancestor.is_some());
+            assert_eq!(
+                git_index_conflict_next(&mut conflicts).err(),
+                Some(ffi::git_error_code_GIT_ITEROVER)
+            );
+        }
+        git_index_conflict_remove(&mut index.as_mut(), c"conflict.txt").unwrap();
+        git_index_conflict_cleanup(&mut index.as_mut()).unwrap();
+
+        let mut iterated_paths = Vec::new();
+        {
+            let mut iterator = git_index_iterator_new(index.as_mut()).unwrap();
+            loop {
+                match git_index_iterator_next(&mut iterator) {
+                    Ok(entry) => iterated_paths.push(entry.path().unwrap().to_bytes().to_vec()),
+                    Err(status) if status == ffi::git_error_code_GIT_ITEROVER => break,
+                    Err(status) => panic!("index iteration failed: {status}"),
+                }
+            }
+        }
+
+        let tree_id = git_index_write_tree(&mut index.as_mut()).unwrap();
+        git_index_write(&mut index.as_mut()).unwrap();
+        git_index_read(&mut index.as_mut(), true).unwrap();
+        let checksum: Vec<u8> = git_index_checksum(index.as_ref()).elems().collect();
+        let tree_id =
+            unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of!(tree_id).cast_mut().cast()) }
+                .unwrap()
+                .raw_bytes()
+                .elems()
+                .collect();
+
+        git_index_remove_directory(&mut index.as_mut(), c"src/", GitIndexStage::Any).unwrap();
+        let count_after_remove_directory = git_index_entrycount(index.as_ref());
+        git_index_clear(&mut index.as_mut()).unwrap();
+        let count_after_clear = git_index_entrycount(index.as_ref());
+
+        IndexObservation {
+            initial_count,
+            count_after_add,
+            alpha_position,
+            src_position,
+            version,
+            caps,
+            conflict_paths,
+            iterated_paths,
+            tree_id,
+            checksum_nonzero: checksum.iter().any(|byte| *byte != 0),
+            count_after_remove_directory,
+            count_after_clear,
+        }
+    }
+
+    #[test]
+    fn io_equiv_index_mutation_conflicts_iteration_and_tree_writes() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("index-surface-raw");
+        let safe = HistoryFixture::new("index-surface-safe");
+
+        let raw_observation = unsafe { raw_observation(&raw) };
+        let safe_observation = safe_observation(&safe);
+        assert_eq!(raw_observation, safe_observation);
+        assert!(raw_observation.count_after_add > raw_observation.initial_count);
+        assert_eq!(raw_observation.count_after_clear, 0);
+    }
+
+    fn prepare_bulk(fixture: &HistoryFixture) {
+        std::fs::create_dir_all(fixture.directory.path().join("bulk/deep")).unwrap();
+        std::fs::write(
+            fixture.directory.path().join("bulk/a.txt"),
+            b"a version one\n",
+        )
+        .unwrap();
+        std::fs::write(
+            fixture.directory.path().join("bulk/deep/b.txt"),
+            b"b version one\n",
+        )
+        .unwrap();
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct BulkObservation {
+        callbacks: Vec<(Vec<u8>, Vec<u8>)>,
+        counts: [usize; 4],
+        extension: Vec<u8>,
+        tree: Vec<u8>,
+        owner_matches: bool,
+    }
+
+    unsafe extern "C" fn raw_matched(
+        path: *const core::ffi::c_char,
+        matched: *const core::ffi::c_char,
+        payload: *mut core::ffi::c_void,
+    ) -> i32 {
+        let output = unsafe { &mut *payload.cast::<Vec<(Vec<u8>, Vec<u8>)>>() };
+        let matched = if matched.is_null() {
+            Vec::new()
+        } else {
+            unsafe { CStr::from_ptr(matched) }.to_bytes().to_vec()
+        };
+        output.push((unsafe { CStr::from_ptr(path) }.to_bytes().to_vec(), matched));
+        0
+    }
+
+    unsafe fn raw_bulk(fixture: &HistoryFixture) -> BulkObservation {
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, fixture.repository.as_ptr()) },
+            0
+        );
+        let mut pattern = c"bulk/*".as_ptr().cast_mut();
+        let pathspec = ffi::git_strarray {
+            strings: core::ptr::from_mut(&mut pattern),
+            count: 1,
+        };
+        let mut callbacks = Vec::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_index_add_all(
+                    index,
+                    &pathspec,
+                    0,
+                    Some(raw_matched),
+                    core::ptr::from_mut(&mut callbacks).cast(),
+                )
+            },
+            0
+        );
+        let first = unsafe { ffi::git_index_entrycount(index) };
+        std::fs::write(
+            fixture.directory.path().join("bulk/a.txt"),
+            b"a version two\n",
+        )
+        .unwrap();
+        std::fs::remove_file(fixture.directory.path().join("bulk/deep/b.txt")).unwrap();
+        std::fs::write(
+            fixture.directory.path().join("bulk/c.txt"),
+            b"c version one\n",
+        )
+        .unwrap();
+        assert_eq!(
+            unsafe {
+                ffi::git_index_update_all(
+                    index,
+                    &pathspec,
+                    Some(raw_matched),
+                    core::ptr::from_mut(&mut callbacks).cast(),
+                )
+            },
+            0
+        );
+        let updated = unsafe { ffi::git_index_entrycount(index) };
+        assert_eq!(
+            unsafe {
+                ffi::git_index_add_all(
+                    index,
+                    &pathspec,
+                    0,
+                    Some(raw_matched),
+                    core::ptr::from_mut(&mut callbacks).cast(),
+                )
+            },
+            0
+        );
+        let added = unsafe { ffi::git_index_entrycount(index) };
+        assert_eq!(
+            unsafe {
+                ffi::git_index_extension_add(
+                    index,
+                    c"TEST".as_ptr(),
+                    b"extension-data".as_ptr().cast(),
+                    b"extension-data".len(),
+                )
+            },
+            0
+        );
+        let mut extension = unsafe { core::mem::zeroed::<ffi::git_buf>() };
+        assert_eq!(
+            unsafe { ffi::git_index_extension_lookup(&mut extension, index, c"TEST".as_ptr()) },
+            0
+        );
+        let extension_data =
+            unsafe { core::slice::from_raw_parts(extension.ptr.cast::<u8>(), extension.size) }
+                .to_vec();
+        unsafe { ffi::git_buf_dispose(&mut extension) };
+        assert_eq!(
+            unsafe { ffi::git_index_extension_remove(index, c"TEST".as_ptr()) },
+            0
+        );
+        let mut tree = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_index_write_tree_to(&mut tree, index, fixture.repository.as_ptr()) },
+            0
+        );
+        let owner_matches = unsafe { ffi::git_index_owner(index) == fixture.repository.as_ptr() };
+        assert_eq!(
+            unsafe {
+                ffi::git_index_remove_all(
+                    index,
+                    &pathspec,
+                    Some(raw_matched),
+                    core::ptr::from_mut(&mut callbacks).cast(),
+                )
+            },
+            0
+        );
+        let removed = unsafe { ffi::git_index_entrycount(index) };
+        unsafe { ffi::git_index_free(index) };
+        BulkObservation {
+            callbacks,
+            counts: [first, updated, added, removed],
+            extension: extension_data,
+            tree: tree.id.to_vec(),
+            owner_matches,
+        }
+    }
+
+    fn safe_bulk(fixture: &HistoryFixture) -> BulkObservation {
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+                .unwrap();
+        let mut index = crate::repository::git_repository_index(&mut repository).unwrap();
+        let mut pattern = c"bulk/*".as_ptr().cast_mut();
+        let mut raw_pathspec = ffi::git_strarray {
+            strings: core::ptr::from_mut(&mut pattern),
+            count: 1,
+        };
+        let pathspec = unsafe {
+            crate::strarray::GitStrArrayRef::from_ptr(core::ptr::from_mut(&mut raw_pathspec))
+        }
+        .unwrap();
+        let mut callbacks = Vec::new();
+        let mut collect = |path: &CStr, matched: Option<&CStr>| {
+            callbacks.push((
+                path.to_bytes().to_vec(),
+                matched.map_or_else(Vec::new, |value| value.to_bytes().to_vec()),
+            ));
+            0
+        };
+        git_index_add_all(
+            &mut index.as_mut(),
+            Some(pathspec),
+            GitIndexAddOptions::DEFAULT,
+            Some(&mut collect),
+        )
+        .unwrap();
+        let first = git_index_entrycount(index.as_ref());
+        std::fs::write(
+            fixture.directory.path().join("bulk/a.txt"),
+            b"a version two\n",
+        )
+        .unwrap();
+        std::fs::remove_file(fixture.directory.path().join("bulk/deep/b.txt")).unwrap();
+        std::fs::write(
+            fixture.directory.path().join("bulk/c.txt"),
+            b"c version one\n",
+        )
+        .unwrap();
+        git_index_update_all_with_callback(&mut index.as_mut(), pathspec, &mut collect).unwrap();
+        let updated = git_index_entrycount(index.as_ref());
+        git_index_add_all(
+            &mut index.as_mut(),
+            Some(pathspec),
+            GitIndexAddOptions::DEFAULT,
+            Some(&mut collect),
+        )
+        .unwrap();
+        let added = git_index_entrycount(index.as_ref());
+        git_index_extension_add(&mut index.as_mut(), c"TEST", b"extension-data").unwrap();
+        let extension = git_index_extension_lookup(&mut index.as_mut(), c"TEST").unwrap();
+        let extension_data = crate::io_equiv_support::safe_buf_bytes(extension.as_ref());
+        git_index_extension_remove(&mut index.as_mut(), c"TEST").unwrap();
+        let mut tree = git_index_write_tree_to(&mut index.as_mut(), repository.as_ref()).unwrap();
+        let tree = unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of_mut!(tree).cast()) }
+            .unwrap()
+            .raw_bytes()
+            .elems()
+            .collect();
+        let owner_matches =
+            git_index_owner(index.as_ref()).unwrap().as_ptr() == repository.as_ref().as_ptr();
+        git_index_remove_all_with_callback(&mut index.as_mut(), pathspec, &mut collect).unwrap();
+        let removed = git_index_entrycount(index.as_ref());
+        drop(collect);
+        BulkObservation {
+            callbacks,
+            counts: [first, updated, added, removed],
+            extension: extension_data,
+            tree,
+            owner_matches,
+        }
+    }
+
+    #[test]
+    fn io_equiv_index_bulk_pathspec_callbacks_extensions_and_tree_target() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("index-bulk-raw");
+        let safe = HistoryFixture::new("index-bulk-safe");
+        prepare_bulk(&raw);
+        prepare_bulk(&safe);
+        let raw_observation = unsafe { raw_bulk(&raw) };
+        assert_eq!(raw_observation, safe_bulk(&safe));
+        assert!(raw_observation.owner_matches);
+        assert_eq!(raw_observation.extension, b"extension-data");
+    }
+
+    unsafe fn raw_buffer_entries_and_extended_open(
+        fixture: &HistoryFixture,
+    ) -> (Vec<Vec<u8>>, usize, bool, bool, usize) {
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, fixture.repository.as_ptr()) },
+            0
+        );
+        let template = unsafe { ffi::git_index_get_bypath(index, c"README.md".as_ptr(), 0) };
+        assert!(!template.is_null());
+        let mut entries = [unsafe { template.read() }, unsafe { template.read() }];
+        entries[0].path = c"buffer-one.txt".as_ptr();
+        entries[1].path = c"buffer-two.txt".as_ptr();
+        let contents = [
+            b"first in-memory index blob\n".as_slice(),
+            b"second in-memory index blob\n",
+        ];
+        assert_eq!(
+            unsafe {
+                ffi::git_index_add_from_buffer(
+                    index,
+                    &entries[0],
+                    contents[0].as_ptr().cast(),
+                    contents[0].len(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_index_add_frombuffer(
+                    index,
+                    &entries[1],
+                    contents[1].as_ptr().cast(),
+                    contents[1].len(),
+                )
+            },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_index_write(index) }, 0);
+        let ids = [c"buffer-one.txt", c"buffer-two.txt"]
+            .map(|path| {
+                let entry = unsafe { ffi::git_index_get_bypath(index, path.as_ptr(), 0) };
+                assert!(!entry.is_null());
+                unsafe { (*entry).id.id }.to_vec()
+            })
+            .to_vec();
+        let path_present = !unsafe { ffi::git_index_path(index) }.is_null();
+        let mut iterator = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_index_iterator_new(&mut iterator, index) },
+            0
+        );
+        let mut iterated = 0usize;
+        loop {
+            let mut entry = core::ptr::null();
+            let status = unsafe { ffi::git_index_iterator_next(&mut entry, iterator) };
+            if status == ffi::git_error_code_GIT_ITEROVER {
+                break;
+            }
+            assert_eq!(status, 0);
+            iterated += 1;
+        }
+        unsafe { ffi::git_index_iterator_free(iterator) };
+        let expected_count = unsafe { ffi::git_index_entrycount(index) };
+        unsafe { ffi::git_index_free(index) };
+
+        let mut memory = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_index_new(&mut memory) }, 0);
+        let memory_pathless = unsafe { ffi::git_index_path(memory) }.is_null();
+        unsafe { ffi::git_index_free(memory) };
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_index_options>() };
+        assert_eq!(
+            unsafe { ffi::git_index_options_init(&mut options, ffi::GIT_INDEX_OPTIONS_VERSION) },
+            0
+        );
+        let index_path = std::ffi::CString::new(
+            fixture
+                .directory
+                .path()
+                .join(".git/index")
+                .to_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let mut extended = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_index_open_ext(&mut extended, index_path.as_ptr(), &options) },
+            0
+        );
+        let extended_count = unsafe { ffi::git_index_entrycount(extended) };
+        unsafe { ffi::git_index_free(extended) };
+        assert_eq!(iterated, expected_count);
+        (ids, iterated, path_present, memory_pathless, extended_count)
+    }
+
+    fn safe_buffer_entries_and_extended_open(
+        fixture: &HistoryFixture,
+    ) -> (Vec<Vec<u8>>, usize, bool, bool, usize) {
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+                .unwrap();
+        let mut index = crate::repository::git_repository_index(&mut repository).unwrap();
+        let mut entries = {
+            let mut view = index.as_mut();
+            let template =
+                git_index_get_bypath(&mut view, c"README.md", GitIndexStage::Normal).unwrap();
+            [unsafe { template.as_ptr().read() }, unsafe {
+                template.as_ptr().read()
+            }]
+        };
+        entries[0].path = c"buffer-one.txt".as_ptr();
+        entries[1].path = c"buffer-two.txt".as_ptr();
+        let contents = [
+            b"first in-memory index blob\n".as_slice(),
+            b"second in-memory index blob\n",
+        ];
+        let handles = entries
+            .each_mut()
+            .map(|entry| unsafe { IndexEntryRef::from_ptr(core::ptr::from_mut(entry)).unwrap() });
+        git_index_add_from_buffer(&mut index.as_mut(), handles[0], contents[0]).unwrap();
+        git_index_add_frombuffer(&mut index.as_mut(), handles[1], contents[1]).unwrap();
+        git_index_write(&mut index.as_mut()).unwrap();
+        let ids = [c"buffer-one.txt", c"buffer-two.txt"]
+            .map(|path| {
+                git_index_get_bypath(&mut index.as_mut(), path, GitIndexStage::Normal)
+                    .unwrap()
+                    .id()
+                    .raw_bytes()
+                    .elems()
+                    .collect()
+            })
+            .to_vec();
+        let path_present = git_index_path(index.as_ref()).is_some();
+        let mut iterator = git_index_iterator_new(index.as_mut()).unwrap();
+        let mut iterated = 0usize;
+        loop {
+            match git_index_iterator_next(&mut iterator) {
+                Ok(_) => iterated += 1,
+                Err(ffi::git_error_code_GIT_ITEROVER) => break,
+                Err(status) => panic!("index iteration failed: {status}"),
+            }
+        }
+        drop(iterator);
+        let expected_count = git_index_entrycount(index.as_ref());
+        drop(index);
+
+        let memory = git_index_new().unwrap();
+        let memory_pathless = git_index_path(memory.as_ref()).is_none();
+        drop(memory);
+        let options = git_index_options_init(ffi::GIT_INDEX_OPTIONS_VERSION).unwrap();
+        let index_path = std::ffi::CString::new(
+            fixture
+                .directory
+                .path()
+                .join(".git/index")
+                .to_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let extended = git_index_open_ext(&index_path, Some(options.as_ref())).unwrap();
+        let extended_count = git_index_entrycount(extended.as_ref());
+        assert_eq!(iterated, expected_count);
+        (ids, iterated, path_present, memory_pathless, extended_count)
+    }
+
+    #[test]
+    fn io_equiv_index_buffer_entries_iterators_paths_and_extended_open() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("index-buffer-raw");
+        let safe = HistoryFixture::new("index-buffer-safe");
+        let raw_observation = unsafe { raw_buffer_entries_and_extended_open(&raw) };
+        let safe_observation = safe_buffer_entries_and_extended_open(&safe);
+        assert_eq!(raw_observation, safe_observation);
+        assert_eq!(raw_observation.0.len(), 2);
+        assert_eq!(raw_observation.1, 5);
+        assert!(raw_observation.2);
+        assert!(raw_observation.3);
+    }
+
+    fn prepare_special_index_files(fixture: &HistoryFixture) {
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("README.md", fixture.directory.path().join("readme-link"))
+            .unwrap();
+        let script = fixture.directory.path().join("run-equivalence.sh");
+        std::fs::write(&script, b"#!/bin/sh\nexit 0\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        for suffix in ["alpha", "alphabet", "alphanumeric", "alpine"] {
+            let path = fixture
+                .directory
+                .path()
+                .join(format!("long/common/prefix/{suffix}.txt"));
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, format!("{suffix}\n")).unwrap();
+        }
+    }
+
+    unsafe fn raw_special_index(fixture: &HistoryFixture) -> Vec<(Vec<u8>, u32, Vec<u8>)> {
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, fixture.repository.as_ptr()) },
+            0
+        );
+        for path in [
+            c"readme-link",
+            c"run-equivalence.sh",
+            c"long/common/prefix/alpha.txt",
+            c"long/common/prefix/alphabet.txt",
+            c"long/common/prefix/alphanumeric.txt",
+            c"long/common/prefix/alpine.txt",
+        ] {
+            assert_eq!(
+                unsafe { ffi::git_index_add_bypath(index, path.as_ptr()) },
+                0
+            );
+        }
+        let template = unsafe { ffi::git_index_get_bypath(index, c"README.md".as_ptr(), 0) };
+        let entries = unsafe { conflict_entries(template) };
+        assert_eq!(
+            unsafe { ffi::git_index_conflict_add(index, &entries[0], &entries[1], &entries[2]) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_index_conflict_remove(index, c"conflict.txt".as_ptr()) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_index_set_version(index, 4) }, 0);
+        assert_eq!(unsafe { ffi::git_index_write(index) }, 0);
+        unsafe { ffi::git_index_free(index) };
+        let index_path = std::ffi::CString::new(
+            fixture
+                .directory
+                .path()
+                .join(".git/index")
+                .to_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let mut reopened = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_index_open(&mut reopened, index_path.as_ptr()) },
+            0
+        );
+        let entries = (0..unsafe { ffi::git_index_entrycount(reopened) })
+            .map(|position| {
+                let entry = unsafe { ffi::git_index_get_byindex(reopened, position) };
+                (
+                    unsafe { CStr::from_ptr((*entry).path) }.to_bytes().to_vec(),
+                    unsafe { (*entry).mode },
+                    unsafe { (*entry).id.id }.to_vec(),
+                )
+            })
+            .collect();
+        unsafe { ffi::git_index_free(reopened) };
+        entries
+    }
+
+    fn safe_special_index(fixture: &HistoryFixture) -> Vec<(Vec<u8>, u32, Vec<u8>)> {
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+                .unwrap();
+        let mut index = crate::repository::git_repository_index(&mut repository).unwrap();
+        for path in [
+            c"readme-link",
+            c"run-equivalence.sh",
+            c"long/common/prefix/alpha.txt",
+            c"long/common/prefix/alphabet.txt",
+            c"long/common/prefix/alphanumeric.txt",
+            c"long/common/prefix/alpine.txt",
+        ] {
+            git_index_add_bypath(&mut index.as_mut(), path).unwrap();
+        }
+        let mut entries = {
+            let mut view = index.as_mut();
+            let template =
+                git_index_get_bypath(&mut view, c"README.md", GitIndexStage::Normal).unwrap();
+            unsafe { conflict_entries(template.as_ptr()) }
+        };
+        let entries = entries
+            .each_mut()
+            .map(|entry| unsafe { IndexEntryRef::from_ptr(entry) }.unwrap());
+        git_index_conflict_add(
+            &mut index.as_mut(),
+            Some(entries[0]),
+            Some(entries[1]),
+            Some(entries[2]),
+        )
+        .unwrap();
+        git_index_conflict_remove(&mut index.as_mut(), c"conflict.txt").unwrap();
+        git_index_set_version(&mut index.as_mut(), 4).unwrap();
+        git_index_write(&mut index.as_mut()).unwrap();
+        drop(index);
+        let index_path = std::ffi::CString::new(
+            fixture
+                .directory
+                .path()
+                .join(".git/index")
+                .to_str()
+                .unwrap(),
+        )
+        .unwrap();
+        let mut reopened = git_index_open(&index_path).unwrap();
+        let entries = (0..git_index_entrycount(reopened.as_ref()))
+            .map(|position| {
+                let mut view = reopened.as_mut();
+                let entry = git_index_get_byindex(&mut view, position).unwrap();
+                (
+                    entry.path().unwrap().to_bytes().to_vec(),
+                    entry.mode(),
+                    entry.id().raw_bytes().elems().collect(),
+                )
+            })
+            .collect();
+        entries
+    }
+
+    #[test]
+    fn io_equiv_index_v4_symlink_executable_and_prefix_compression() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("index-special-raw");
+        let safe = HistoryFixture::new("index-special-safe");
+        prepare_special_index_files(&raw);
+        prepare_special_index_files(&safe);
+        let raw = unsafe { raw_special_index(&raw) };
+        assert_eq!(raw, safe_special_index(&safe));
+        assert!(raw.iter().any(|(path, mode, _)| {
+            path == b"readme-link" && *mode == ffi::git_filemode_t_GIT_FILEMODE_LINK
+        }));
+        assert!(raw.iter().any(|(path, mode, _)| {
+            path == b"run-equivalence.sh"
+                && *mode == ffi::git_filemode_t_GIT_FILEMODE_BLOB_EXECUTABLE
+        }));
+    }
+}
+
+#[cfg(test)]
 mod scheduled_symbol_tests {
     use super::*;
 

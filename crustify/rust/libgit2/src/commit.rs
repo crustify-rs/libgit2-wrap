@@ -1057,3 +1057,851 @@ mod scheduled_creation_and_amend_tests {
         let _ = std::fs::remove_dir_all(&directory);
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use core::ffi::CStr;
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, RawBuf, safe_buf_bytes};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct CommitObservation {
+        message: Vec<u8>,
+        message_raw: Vec<u8>,
+        summary: Vec<u8>,
+        body: Vec<u8>,
+        encoding: Vec<u8>,
+        raw_header: Vec<u8>,
+        tree_header: Vec<u8>,
+        author: (Vec<u8>, Vec<u8>, i64, i32),
+        committer: (Vec<u8>, Vec<u8>, i64, i32),
+        mapped_author: (Vec<u8>, Vec<u8>),
+        parent_count: u32,
+        parent_id: Vec<u8>,
+        ancestor_id: Vec<u8>,
+        tree_id: Vec<u8>,
+        tree_entries: Vec<(Vec<u8>, u32, i32)>,
+        short_id: Vec<u8>,
+    }
+
+    unsafe fn optional_cstr_bytes(value: *const core::ffi::c_char) -> Vec<u8> {
+        if value.is_null() {
+            Vec::new()
+        } else {
+            unsafe { CStr::from_ptr(value) }.to_bytes().to_vec()
+        }
+    }
+
+    unsafe fn raw_signature(value: *const ffi::git_signature) -> (Vec<u8>, Vec<u8>, i64, i32) {
+        assert!(!value.is_null());
+        (
+            unsafe { CStr::from_ptr((*value).name) }.to_bytes().to_vec(),
+            unsafe { CStr::from_ptr((*value).email) }
+                .to_bytes()
+                .to_vec(),
+            unsafe { (*value).when.time },
+            unsafe { (*value).when.offset },
+        )
+    }
+
+    fn safe_signature(
+        value: crate::api::types::GitSignatureRef<'_>,
+    ) -> (Vec<u8>, Vec<u8>, i64, i32) {
+        (
+            value.name().to_bytes().to_vec(),
+            value.email().to_bytes().to_vec(),
+            value.when().time(),
+            value.when().offset(),
+        )
+    }
+
+    unsafe fn raw_observation(fixture: &HistoryFixture) -> CommitObservation {
+        let repository = fixture.repository.as_ptr();
+        let mut head_id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head_id, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut commit = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_commit_lookup(&mut commit, repository, &head_id) },
+            0
+        );
+
+        let message = unsafe { optional_cstr_bytes(ffi::git_commit_message(commit)) };
+        let message_raw = unsafe { optional_cstr_bytes(ffi::git_commit_message_raw(commit)) };
+        let summary = unsafe { optional_cstr_bytes(ffi::git_commit_summary(commit)) };
+        let body = unsafe { optional_cstr_bytes(ffi::git_commit_body(commit)) };
+        let encoding = unsafe { optional_cstr_bytes(ffi::git_commit_message_encoding(commit)) };
+        let raw_header = unsafe { CStr::from_ptr(ffi::git_commit_raw_header(commit)) }
+            .to_bytes()
+            .to_vec();
+        let author = unsafe { raw_signature(ffi::git_commit_author(commit)) };
+        let committer = unsafe { raw_signature(ffi::git_commit_committer(commit)) };
+
+        let mut mapped = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_commit_author_with_mailmap(&mut mapped, commit, core::ptr::null()) },
+            0
+        );
+        let mapped_author = (
+            unsafe { CStr::from_ptr((*mapped).name) }
+                .to_bytes()
+                .to_vec(),
+            unsafe { CStr::from_ptr((*mapped).email) }
+                .to_bytes()
+                .to_vec(),
+        );
+        unsafe { ffi::git_signature_free(mapped) };
+
+        let parent_count = unsafe { ffi::git_commit_parentcount(commit) };
+        let parent_id = unsafe { ffi::git_commit_parent_id(commit, 0) };
+        assert!(!parent_id.is_null());
+        let parent_id = unsafe { (*parent_id).id.to_vec() };
+        let mut ancestor = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_commit_nth_gen_ancestor(&mut ancestor, commit, 2) },
+            0
+        );
+        let ancestor_id = unsafe { (*ffi::git_commit_id(ancestor)).id.to_vec() };
+        unsafe { ffi::git_commit_free(ancestor) };
+
+        let tree_id = unsafe { (*ffi::git_commit_tree_id(commit)).id.to_vec() };
+        let mut tree = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_commit_tree(&mut tree, commit) }, 0);
+        let mut tree_entries = Vec::new();
+        for index in 0..unsafe { ffi::git_tree_entrycount(tree) } {
+            let entry = unsafe { ffi::git_tree_entry_byindex(tree, index) };
+            tree_entries.push((
+                unsafe { CStr::from_ptr(ffi::git_tree_entry_name(entry)) }
+                    .to_bytes()
+                    .to_vec(),
+                unsafe { ffi::git_tree_entry_filemode(entry) },
+                unsafe { ffi::git_tree_entry_type(entry) },
+            ));
+        }
+        unsafe { ffi::git_tree_free(tree) };
+
+        let mut tree_header = RawBuf::new();
+        assert_eq!(
+            unsafe { ffi::git_commit_header_field(&mut tree_header.0, commit, c"tree".as_ptr()) },
+            0
+        );
+        let tree_header = tree_header.bytes();
+        let mut short_id = RawBuf::new();
+        assert_eq!(
+            unsafe { ffi::git_object_short_id(&mut short_id.0, commit.cast()) },
+            0
+        );
+        let short_id = short_id.bytes();
+
+        unsafe { ffi::git_commit_free(commit) };
+
+        CommitObservation {
+            message,
+            message_raw,
+            summary,
+            body,
+            encoding,
+            raw_header,
+            tree_header,
+            author,
+            committer,
+            mapped_author,
+            parent_count,
+            parent_id,
+            ancestor_id,
+            tree_id,
+            tree_entries,
+            short_id,
+        }
+    }
+
+    fn safe_observation(fixture: &HistoryFixture) -> CommitObservation {
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+                .unwrap();
+        let mut head_id = crate::refs::git_reference_name_to_id(&mut repository, c"HEAD").unwrap();
+        let head_id =
+            unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of_mut!(head_id).cast()) }
+                .unwrap();
+        let mut commit =
+            crate::object_api::git_commit_lookup(repository.as_ref(), head_id).unwrap();
+
+        let message = git_commit_message(commit.as_ref())
+            .map_or_else(Vec::new, |value| value.to_bytes().to_vec());
+        let message_raw = git_commit_message_raw(commit.as_ref())
+            .map_or_else(Vec::new, |value| value.to_bytes().to_vec());
+        let summary = git_commit_summary(commit.as_mut())
+            .map_or_else(Vec::new, |value| value.to_bytes().to_vec());
+        let body = git_commit_body(commit.as_mut())
+            .map_or_else(Vec::new, |value| value.to_bytes().to_vec());
+        let encoding = git_commit_message_encoding(commit.as_ref())
+            .map_or_else(Vec::new, |value| value.to_bytes().to_vec());
+        let raw_header = git_commit_raw_header(commit.as_ref()).to_bytes().to_vec();
+        let author = safe_signature(git_commit_author(commit.as_ref()));
+        let committer = safe_signature(git_commit_committer(commit.as_ref()));
+
+        let mapped = git_commit_author_with_mailmap(commit.as_ref(), None).unwrap();
+        let mapped_author = (
+            mapped.as_ref().name().to_bytes().to_vec(),
+            mapped.as_ref().email().to_bytes().to_vec(),
+        );
+        drop(mapped);
+
+        let parent_count = git_commit_parentcount(commit.as_ref());
+        let parent_id: Vec<u8> = git_commit_parent_id(commit.as_ref(), 0)
+            .unwrap()
+            .raw_bytes()
+            .elems()
+            .collect();
+        let ancestor = git_commit_nth_gen_ancestor(commit.as_ref(), 2).unwrap();
+        let ancestor_id = crate::object_api::git_commit_id(ancestor.as_ref())
+            .raw_bytes()
+            .elems()
+            .collect();
+
+        let tree_id = git_commit_tree_id(commit.as_ref())
+            .raw_bytes()
+            .elems()
+            .collect();
+        let tree = git_commit_tree(commit.as_ref()).unwrap();
+        let mut tree_entries = Vec::new();
+        for index in 0..crate::tree::git_tree_entrycount(tree.as_ref()) {
+            let entry = crate::tree::git_tree_entry_byindex(tree.as_ref(), index).unwrap();
+            tree_entries.push((
+                crate::tree::git_tree_entry_name(entry).to_bytes().to_vec(),
+                crate::tree::git_tree_entry_filemode(entry).as_raw(),
+                crate::tree::git_tree_entry_type(entry).as_raw(),
+            ));
+        }
+
+        let mut tree_header = crate::api::buffer::GitBuf::new();
+        git_commit_header_field(&mut tree_header.as_mut(), commit.as_ref(), c"tree").unwrap();
+        let tree_header = safe_buf_bytes(tree_header.as_ref());
+        let object = unsafe {
+            crate::object::GitObjectRef::from_ptr(commit.as_ref().as_ptr().cast_mut().cast())
+        }
+        .unwrap();
+        let short_id = crate::object::git_object_short_id(object).unwrap();
+        let short_id = safe_buf_bytes(short_id.as_ref());
+
+        CommitObservation {
+            message,
+            message_raw,
+            summary,
+            body,
+            encoding,
+            raw_header,
+            tree_header,
+            author,
+            committer,
+            mapped_author,
+            parent_count,
+            parent_id,
+            ancestor_id,
+            tree_id,
+            tree_entries,
+            short_id,
+        }
+    }
+
+    #[test]
+    fn io_equiv_commit_metadata_parents_tree_and_object_views() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("commit-surface-raw");
+        let safe = HistoryFixture::new("commit-surface-safe");
+
+        let raw_observation = unsafe { raw_observation(&raw) };
+        let safe_observation = safe_observation(&safe);
+        assert_eq!(raw_observation, safe_observation);
+        assert_eq!(raw_observation.parent_count, 1);
+        assert_eq!(raw_observation.tree_entries.len(), 2);
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct BufferObservation {
+        content: Vec<u8>,
+        created_id: Vec<u8>,
+        extract_status: i32,
+    }
+
+    unsafe fn raw_buffer(repository: *mut ffi::git_repository) -> BufferObservation {
+        let mut commit = core::ptr::null_mut();
+        let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut id, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_commit_lookup(&mut commit, repository, &id) },
+            0
+        );
+        let mut tree = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_commit_tree(&mut tree, commit) }, 0);
+        let mut content = RawBuf::new();
+        let mut parents = [commit.cast_const()];
+        assert_eq!(
+            unsafe {
+                ffi::git_commit_create_buffer(
+                    &mut content.0,
+                    repository,
+                    ffi::git_commit_author(commit),
+                    ffi::git_commit_committer(commit),
+                    core::ptr::null(),
+                    c"buffered equivalence commit".as_ptr(),
+                    tree,
+                    parents.len(),
+                    parents.as_mut_ptr(),
+                )
+            },
+            0
+        );
+        let content_bytes = content.bytes();
+        let content_string = unsafe { CStr::from_ptr(content.0.ptr) };
+        let mut created = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_commit_create_with_signature(
+                    &mut created,
+                    repository,
+                    content_string.as_ptr(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let mut signature = RawBuf::new();
+        let mut signed = RawBuf::new();
+        let extract_status = unsafe {
+            ffi::git_commit_extract_signature(
+                &mut signature.0,
+                &mut signed.0,
+                repository,
+                &mut created,
+                core::ptr::null(),
+            )
+        };
+        unsafe {
+            ffi::git_tree_free(tree);
+            ffi::git_commit_free(commit);
+        }
+        BufferObservation {
+            content: content_bytes,
+            created_id: created.id.to_vec(),
+            extract_status,
+        }
+    }
+
+    fn safe_buffer(repository: *mut ffi::git_repository) -> BufferObservation {
+        let mut commit = core::ptr::null_mut();
+        let mut id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut id, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_commit_lookup(&mut commit, repository, &id) },
+            0
+        );
+        let mut tree = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_commit_tree(&mut tree, commit) }, 0);
+        let commit_ref = unsafe { GitCommitRef::from_ptr(commit) }.unwrap();
+        let tree_ref = unsafe { crate::tree::GitTreeRef::from_ptr(tree) }.unwrap();
+        let author = git_commit_author(commit_ref);
+        let committer = git_commit_committer(commit_ref);
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut content = crate::api::buffer::GitBuf::new();
+        git_commit_create_buffer(
+            &mut content.as_mut(),
+            &mut repository_view,
+            author,
+            committer,
+            None,
+            c"buffered equivalence commit",
+            tree_ref,
+            &[commit_ref],
+        )
+        .unwrap();
+        let content_bytes = safe_buf_bytes(content.as_ref());
+        let content_string = unsafe { CStr::from_ptr((*content.as_ref().as_ptr()).ptr) };
+        let mut created = crate::oid::Oid::zeroed();
+        let mut created_mut = unsafe {
+            crate::oid::OidMut::from_ptr(core::ptr::from_mut(&mut created).cast::<ffi::git_oid>())
+        }
+        .unwrap();
+        git_commit_create_with_signature(
+            &mut created_mut,
+            &mut repository_view,
+            content_string,
+            None,
+            None,
+        )
+        .unwrap();
+        let created_ref = unsafe {
+            crate::oid::OidRef::from_ptr(core::ptr::from_mut(&mut created).cast::<ffi::git_oid>())
+        }
+        .unwrap();
+        let mut signature = crate::api::buffer::GitBuf::new();
+        let mut signed = crate::api::buffer::GitBuf::new();
+        let extract_status = match git_commit_extract_signature(
+            &mut signature.as_mut(),
+            &mut signed.as_mut(),
+            &mut repository_view,
+            created_ref,
+            None,
+        ) {
+            Ok(()) => 0,
+            Err(error) => error,
+        };
+        let created_id = created_ref.raw_bytes().elems().collect();
+        unsafe {
+            ffi::git_tree_free(tree);
+            ffi::git_commit_free(commit);
+        }
+        BufferObservation {
+            content: content_bytes,
+            created_id,
+            extract_status,
+        }
+    }
+
+    #[test]
+    fn io_equiv_commit_buffer_creation_and_unsigned_signature_lookup() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("commit-buffer-raw");
+        let safe = HistoryFixture::new("commit-buffer-safe");
+        let raw_observation = unsafe { raw_buffer(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_buffer(safe.repository.as_ptr()));
+        assert_eq!(
+            raw_observation.extract_status,
+            ffi::git_error_code_GIT_ENOTFOUND
+        );
+    }
+
+    fn prepare_stage(fixture: &HistoryFixture, contents: &[u8]) {
+        std::fs::write(fixture.directory.path().join("signed-stage.txt"), contents).unwrap();
+        let status = std::process::Command::new("git")
+            .current_dir(fixture.directory.path())
+            .args(["add", "signed-stage.txt"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct StageCommitObservation {
+        created: Vec<u8>,
+        amended: Vec<u8>,
+        signature_header: Vec<u8>,
+        message: Vec<u8>,
+        ancestor: Vec<u8>,
+    }
+
+    unsafe extern "C" fn raw_sign(
+        builder: *mut ffi::git_commitbuilder,
+        _: *mut ffi::git_repository,
+        _: *const core::ffi::c_char,
+        _: *mut core::ffi::c_void,
+    ) -> i32 {
+        unsafe {
+            ffi::git_commitbuilder_add_header(
+                builder,
+                c"x-crustify-signature".as_ptr(),
+                c"deterministic-signature".as_ptr(),
+            )
+        }
+    }
+
+    unsafe fn refresh_index(repository: *mut ffi::git_repository) {
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, repository) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_index_read(index, 1) }, 0);
+        unsafe { ffi::git_index_free(index) };
+    }
+
+    unsafe fn raw_stage_commit(fixture: &HistoryFixture) -> StageCommitObservation {
+        let repository = fixture.repository.as_ptr();
+        unsafe { refresh_index(repository) };
+        let mut signature = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_signature_new(
+                    &mut signature,
+                    c"Stage Author".as_ptr(),
+                    c"stage@example.com".as_ptr(),
+                    1_700_400_000,
+                    0,
+                )
+            },
+            0
+        );
+        let mut options = unsafe { core::mem::zeroed::<ffi::git_commit_create_options>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_commit_create_options_init(
+                    &mut options,
+                    ffi::GIT_COMMIT_CREATE_OPTIONS_VERSION,
+                )
+            },
+            0
+        );
+        options.author = signature;
+        options.committer = signature;
+        options.sign = Some(raw_sign);
+        let mut created = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_commit_create_from_stage(
+                    &mut created,
+                    repository,
+                    c"created from staged state\n\nbody\n".as_ptr(),
+                    &options,
+                )
+            },
+            0
+        );
+        prepare_stage(fixture, b"amended staged contents\n");
+        unsafe { refresh_index(repository) };
+        let mut amended = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_commit_amend_from_stage(
+                    &mut amended,
+                    repository,
+                    c"amended from staged state\n\nnew body\n".as_ptr(),
+                    &options,
+                )
+            },
+            0
+        );
+        let mut commit = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_commit_lookup(&mut commit, repository, &amended) },
+            0
+        );
+        let mut header = crate::io_equiv_support::RawBuf::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_commit_header_field(
+                    &mut header.0,
+                    commit,
+                    c"x-crustify-signature".as_ptr(),
+                )
+            },
+            0
+        );
+        let message = unsafe { CStr::from_ptr(ffi::git_commit_message(commit)) }
+            .to_bytes()
+            .to_vec();
+        let mut ancestor = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_commit_nth_gen_ancestor(&mut ancestor, commit, 2) },
+            0
+        );
+        let ancestor_id = unsafe { (*ffi::git_commit_id(ancestor)).id }.to_vec();
+        unsafe {
+            ffi::git_commit_free(ancestor);
+            ffi::git_commit_free(commit);
+            ffi::git_signature_free(signature);
+        }
+        StageCommitObservation {
+            created: created.id.to_vec(),
+            amended: amended.id.to_vec(),
+            signature_header: header.bytes(),
+            message,
+            ancestor: ancestor_id,
+        }
+    }
+
+    fn safe_stage_commit(fixture: &HistoryFixture) -> StageCommitObservation {
+        unsafe { refresh_index(fixture.repository.as_ptr()) };
+        let signature = crate::signature::git_signature_new(
+            c"Stage Author",
+            c"stage@example.com",
+            1_700_400_000,
+            0,
+        )
+        .unwrap();
+        let mut options =
+            git_commit_create_options_init(ffi::GIT_COMMIT_CREATE_OPTIONS_VERSION).unwrap();
+        unsafe {
+            options
+                .as_mut()
+                .set_borrowed_author(Some(signature.as_ref()));
+            options
+                .as_mut()
+                .set_borrowed_committer(Some(signature.as_ref()));
+        }
+        let mut signer = |mut builder: GitCommitbuilderMut<'_>,
+                          _: crate::repository::GitRepositoryMut<'_>,
+                          _: &CStr| {
+            git_commitbuilder_add_header(
+                &mut builder,
+                c"x-crustify-signature",
+                c"deterministic-signature",
+            )
+            .map_or_else(|error| error, |_| 0)
+        };
+        unsafe {
+            options.as_mut().set_signing_callback(&mut signer);
+        }
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(fixture.repository.as_ptr()) }
+                .unwrap();
+        let mut created = crate::oid::Oid::zeroed();
+        let mut created_view =
+            unsafe { crate::oid::OidMut::from_ptr(core::ptr::addr_of_mut!(created).cast()) }
+                .unwrap();
+        git_commit_create_from_stage(
+            &mut created_view,
+            &mut repository,
+            c"created from staged state\n\nbody\n",
+            Some(options.as_ref()),
+        )
+        .unwrap();
+        prepare_stage(fixture, b"amended staged contents\n");
+        unsafe { refresh_index(fixture.repository.as_ptr()) };
+        let mut amended = crate::oid::Oid::zeroed();
+        let mut amended_view =
+            unsafe { crate::oid::OidMut::from_ptr(core::ptr::addr_of_mut!(amended).cast()) }
+                .unwrap();
+        git_commit_amend_from_stage(
+            &mut amended_view,
+            &mut repository,
+            Some(c"amended from staged state\n\nnew body\n"),
+            Some(options.as_ref()),
+        )
+        .unwrap();
+        let amended_ref =
+            unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of_mut!(amended).cast()) }
+                .unwrap();
+        let commit =
+            crate::object_api::git_commit_lookup(repository.as_ref(), amended_ref).unwrap();
+        let mut header = crate::api::buffer::GitBuf::new();
+        git_commit_header_field(
+            &mut header.as_mut(),
+            commit.as_ref(),
+            c"x-crustify-signature",
+        )
+        .unwrap();
+        let message = git_commit_message(commit.as_ref())
+            .unwrap()
+            .to_bytes()
+            .to_vec();
+        let ancestor = git_commit_nth_gen_ancestor(commit.as_ref(), 2).unwrap();
+        let bytes = |value: crate::oid::OidRef<'_>| value.raw_bytes().elems().collect();
+        StageCommitObservation {
+            created: bytes(
+                unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of_mut!(created).cast()) }
+                    .unwrap(),
+            ),
+            amended: bytes(amended_ref),
+            signature_header: safe_buf_bytes(header.as_ref()),
+            message,
+            ancestor: bytes(crate::object_api::git_commit_id(ancestor.as_ref())),
+        }
+    }
+
+    #[test]
+    fn io_equiv_commit_create_and_amend_from_stage_with_signing_callback() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("commit-stage-raw");
+        let safe = HistoryFixture::new("commit-stage-safe");
+        prepare_stage(&raw, b"created staged contents\n");
+        prepare_stage(&safe, b"created staged contents\n");
+        let raw_observation = unsafe { raw_stage_commit(&raw) };
+        assert_eq!(raw_observation, safe_stage_commit(&safe));
+        assert_eq!(raw_observation.signature_header, b"deterministic-signature");
+        assert!(
+            raw_observation
+                .message
+                .starts_with(b"amended from staged state")
+        );
+    }
+
+    unsafe fn raw_legacy_create_and_amend(
+        repository: *mut ffi::git_repository,
+    ) -> (Vec<u8>, Vec<u8>, i32, Vec<u8>) {
+        let mut parent_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut parent_object, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let parent = parent_object.cast::<ffi::git_commit>();
+        let mut tree = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_commit_tree(&mut tree, parent) }, 0);
+        let mut signature = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_signature_new(
+                    &mut signature,
+                    c"Legacy Author".as_ptr(),
+                    c"legacy@example.com".as_ptr(),
+                    1_700_500_000,
+                    90,
+                )
+            },
+            0
+        );
+        let mut parents = [parent.cast_const()];
+        let mut created = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_commit_create(
+                    &mut created,
+                    repository,
+                    core::ptr::null(),
+                    signature,
+                    signature,
+                    c"UTF-8".as_ptr(),
+                    c"legacy create\n\nbody\n".as_ptr(),
+                    tree,
+                    parents.len(),
+                    parents.as_mut_ptr(),
+                )
+            },
+            0
+        );
+        let mut commit = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_commit_lookup(&mut commit, repository, &created) },
+            0
+        );
+        let mut amended = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_commit_amend(
+                    &mut amended,
+                    commit,
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    signature,
+                    core::ptr::null(),
+                    c"legacy amend\n\nnew body\n".as_ptr(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let mut amended_commit = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_commit_lookup(&mut amended_commit, repository, &amended) },
+            0
+        );
+        let offset = unsafe { ffi::git_commit_time_offset(amended_commit) };
+        let message = unsafe { CStr::from_ptr(ffi::git_commit_message(amended_commit)) }
+            .to_bytes()
+            .to_vec();
+        unsafe {
+            ffi::git_commit_free(amended_commit);
+            ffi::git_commit_free(commit);
+            ffi::git_signature_free(signature);
+            ffi::git_tree_free(tree);
+            ffi::git_object_free(parent_object);
+        }
+        (created.id.to_vec(), amended.id.to_vec(), offset, message)
+    }
+
+    fn safe_legacy_create_and_amend(
+        repository: *mut ffi::git_repository,
+    ) -> (Vec<u8>, Vec<u8>, i32, Vec<u8>) {
+        let mut parent_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_revparse_single(&mut parent_object, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let parent = unsafe { GitCommitRef::from_ptr(parent_object.cast()) }.unwrap();
+        let mut tree = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_commit_tree(&mut tree, parent.as_ptr()) },
+            0
+        );
+        let tree_view = unsafe { crate::tree::GitTreeRef::from_ptr(tree) }.unwrap();
+        let signature = crate::signature::git_signature_new(
+            c"Legacy Author",
+            c"legacy@example.com",
+            1_700_500_000,
+            90,
+        )
+        .unwrap();
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut created = crate::oid::Oid::zeroed();
+        let mut created_view =
+            unsafe { crate::oid::OidMut::from_ptr(core::ptr::addr_of_mut!(created).cast()) }
+                .unwrap();
+        git_commit_create(
+            &mut created_view,
+            &mut repository_view,
+            None,
+            signature.as_ref(),
+            signature.as_ref(),
+            Some(c"UTF-8"),
+            c"legacy create\n\nbody\n",
+            tree_view,
+            &[parent],
+        )
+        .unwrap();
+        let created_ref =
+            unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of_mut!(created).cast()) }
+                .unwrap();
+        let commit =
+            crate::object_api::git_commit_lookup(repository_view.as_ref(), created_ref).unwrap();
+        let mut amended = crate::oid::Oid::zeroed();
+        let mut amended_view =
+            unsafe { crate::oid::OidMut::from_ptr(core::ptr::addr_of_mut!(amended).cast()) }
+                .unwrap();
+        git_commit_amend(
+            &mut amended_view,
+            commit.as_ref(),
+            None,
+            None,
+            Some(signature.as_ref()),
+            None,
+            Some(c"legacy amend\n\nnew body\n"),
+            None,
+        )
+        .unwrap();
+        let amended_ref =
+            unsafe { crate::oid::OidRef::from_ptr(core::ptr::addr_of_mut!(amended).cast()) }
+                .unwrap();
+        let amended_commit =
+            crate::object_api::git_commit_lookup(repository_view.as_ref(), amended_ref).unwrap();
+        let observation = (
+            created_ref.raw_bytes().elems().collect(),
+            amended_ref.raw_bytes().elems().collect(),
+            git_commit_time_offset(amended_commit.as_ref()),
+            git_commit_message(amended_commit.as_ref())
+                .unwrap()
+                .to_bytes()
+                .to_vec(),
+        );
+        drop(amended_commit);
+        drop(commit);
+        unsafe {
+            ffi::git_tree_free(tree);
+            ffi::git_object_free(parent_object);
+        }
+        observation
+    }
+
+    #[test]
+    fn io_equiv_legacy_commit_create_and_amend() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("commit-legacy-raw");
+        let safe = HistoryFixture::new("commit-legacy-safe");
+        let raw = unsafe { raw_legacy_create_and_amend(raw.repository.as_ptr()) };
+        assert_eq!(raw, safe_legacy_create_and_amend(safe.repository.as_ptr()));
+        assert_eq!(raw.2, 90);
+        assert!(raw.3.starts_with(b"legacy amend"));
+    }
+}

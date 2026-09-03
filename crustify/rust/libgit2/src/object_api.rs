@@ -313,3 +313,142 @@ pub fn git_commit_owner<'a>(commit: crate::commit::GitCommitRef<'a>) -> GitRepos
     // SAFETY: the repository is the commit's retained owner and is non-null.
     unsafe { GitRepositoryRef::from_ptr(raw) }.expect("a live commit has an owner")
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    type Observation = Vec<Vec<u8>>;
+
+    unsafe fn raw_prefixes(repository: *mut ffi::git_repository) -> Observation {
+        let mut commit_id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut commit_id, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut commit = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_commit_lookup_prefix(&mut commit, repository, &commit_id, 10) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_commit_owner(commit) }, repository);
+        let mut tree = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_commit_tree(&mut tree, commit) }, 0);
+        let tree_id = unsafe { *ffi::git_tree_id(tree) };
+        let mut tree_prefix = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_tree_lookup_prefix(&mut tree_prefix, repository, &tree_id, 10) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_tree_owner(tree_prefix) }, repository);
+        let readme = unsafe { ffi::git_tree_entry_byname(tree_prefix, c"README.md".as_ptr()) };
+        let blob_id = unsafe { *ffi::git_tree_entry_id(readme) };
+        let mut blob = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_blob_lookup_prefix(&mut blob, repository, &blob_id, 10) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_blob_owner(blob) }, repository);
+
+        let mut tag_id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(&mut tag_id, repository, c"refs/tags/v1.0".as_ptr())
+            },
+            0
+        );
+        let mut tag = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_tag_lookup_prefix(&mut tag, repository, &tag_id, 10) },
+            0
+        );
+        assert_eq!(unsafe { ffi::git_tag_owner(tag) }, repository);
+        let mut duplicate = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_tag_dup(&mut duplicate, tag) }, 0);
+        let observed = vec![
+            unsafe { (*ffi::git_commit_id(commit)).id }.to_vec(),
+            unsafe { (*ffi::git_tree_id(tree_prefix)).id }.to_vec(),
+            unsafe { (*ffi::git_blob_id(blob)).id }.to_vec(),
+            unsafe { (*ffi::git_tag_id(tag)).id }.to_vec(),
+            unsafe { (*ffi::git_tag_id(duplicate)).id }.to_vec(),
+        ];
+        unsafe {
+            ffi::git_tag_free(duplicate);
+            ffi::git_tag_free(tag);
+            ffi::git_blob_free(blob);
+            ffi::git_tree_free(tree_prefix);
+            ffi::git_tree_free(tree);
+            ffi::git_commit_free(commit);
+        }
+        observed
+    }
+
+    fn safe_prefixes(repository: *mut ffi::git_repository) -> Observation {
+        let mut commit_id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut commit_id, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let commit_id = unsafe { OidRef::from_ptr(&raw mut commit_id) }.unwrap();
+        let repository_ref = unsafe { GitRepositoryRef::from_ptr(repository) }.unwrap();
+        let commit = git_commit_lookup_prefix(repository_ref, commit_id, 10).unwrap();
+        assert_eq!(
+            git_commit_owner(commit.as_ref()).as_ptr(),
+            repository.cast_const()
+        );
+        let tree = crate::commit::git_commit_tree(commit.as_ref()).unwrap();
+        let tree_prefix =
+            git_tree_lookup_prefix(repository_ref, git_tree_id(tree.as_ref()), 10).unwrap();
+        assert_eq!(
+            git_tree_owner(tree_prefix.as_ref()).as_ptr(),
+            repository.cast_const()
+        );
+        let readme =
+            crate::tree::git_tree_entry_byname(tree_prefix.as_ref(), c"README.md").unwrap();
+        let blob =
+            git_blob_lookup_prefix(repository_ref, crate::tree::git_tree_entry_id(readme), 10)
+                .unwrap();
+        assert_eq!(
+            git_blob_owner(blob.as_ref()).as_ptr(),
+            repository.cast_const()
+        );
+        let mut tag_id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(&mut tag_id, repository, c"refs/tags/v1.0".as_ptr())
+            },
+            0
+        );
+        let tag_id = unsafe { OidRef::from_ptr(&raw mut tag_id) }.unwrap();
+        let repository_mut = unsafe { GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let tag = git_tag_lookup_prefix(repository_mut, tag_id, 10).unwrap();
+        assert_eq!(
+            git_tag_owner(tag.as_ref()).as_ptr(),
+            repository.cast_const()
+        );
+        let duplicate = tag.clone();
+        vec![
+            git_commit_id(commit.as_ref()).raw_bytes().elems().collect(),
+            git_tree_id(tree_prefix.as_ref())
+                .raw_bytes()
+                .elems()
+                .collect(),
+            git_blob_id(blob.as_ref()).raw_bytes().elems().collect(),
+            git_tag_id(tag.as_ref()).raw_bytes().elems().collect(),
+            git_tag_id(duplicate.as_ref()).raw_bytes().elems().collect(),
+        ]
+    }
+
+    #[test]
+    fn io_equiv_prefix_lookups_ids_owners_and_tag_duplication() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("object-prefix-raw");
+        let safe = HistoryFixture::new("object-prefix-safe");
+        let raw = unsafe { raw_prefixes(raw.repository.as_ptr()) };
+        assert_eq!(raw, safe_prefixes(safe.repository.as_ptr()));
+        assert_eq!(raw[3], raw[4]);
+    }
+}

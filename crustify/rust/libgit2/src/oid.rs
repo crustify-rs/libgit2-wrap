@@ -881,3 +881,244 @@ mod scheduled_oid_tests {
         assert!(unsafe { ffi::git_libgit2_shutdown() } >= 0);
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    use core::ffi::CStr;
+
+    use super::*;
+    use crate::io_equiv_support::Libgit2Init;
+
+    fn safe_observation(mut oid: Oid) -> (ffi::git_oid_t, Vec<u8>) {
+        // SAFETY: the initialized stack value remains live for this complete
+        // observation and is only borrowed through the handle.
+        let oid = unsafe { OidRef::from_ptr(addr_of_mut!(oid).cast()) }.unwrap();
+        (
+            oid.oid_type().unwrap().into(),
+            oid.raw_bytes().elems().collect(),
+        )
+    }
+
+    #[test]
+    fn io_equiv_git_oid_fromstr() {
+        let input = c"0123456789abcdef0123456789abcdef01234567";
+        let mut raw = ffi::git_oid {
+            id: [0; RAW_DIGEST_LEN],
+            type_: 0,
+        };
+        // SAFETY: `raw` is writable and `input` is one complete SHA-1 string.
+        let raw_status = unsafe { ffi::git_oid_fromstr(&mut raw, input.as_ptr()) };
+        let safe = git_oid_fromstr(input);
+
+        assert_eq!(raw_status, 0);
+        let safe = safe.expect("the safe parser accepts the raw parser's input");
+        assert_eq!(safe_observation(safe), (raw.type_.into(), raw.id.to_vec()));
+
+        let malformed = c"g123456789abcdef0123456789abcdef01234567";
+        let mut raw = ffi::git_oid {
+            id: [0; RAW_DIGEST_LEN],
+            type_: 0,
+        };
+        // SAFETY: the malformed input still supplies all 40 readable bytes.
+        let raw_status = unsafe { ffi::git_oid_fromstr(&mut raw, malformed.as_ptr()) };
+        assert_eq!(git_oid_fromstr(malformed).err(), Some(raw_status));
+    }
+
+    #[test]
+    fn io_equiv_git_oid_pathfmt() {
+        let input = c"0123456789abcdef0123456789abcdef01234567";
+        let mut raw_oid = ffi::git_oid {
+            id: [0; RAW_DIGEST_LEN],
+            type_: 0,
+        };
+        // SAFETY: both arguments are valid for a complete SHA-1 parse.
+        let raw_parse_status = unsafe { ffi::git_oid_fromstr(&mut raw_oid, input.as_ptr()) };
+        assert_eq!(raw_parse_status, 0);
+        let mut raw_output = [0u8; 41];
+        // SAFETY: `raw_output` has the 41 bytes required for a SHA-1 path and
+        // `raw_oid` is a complete live object ID.
+        let raw_status = unsafe { ffi::git_oid_pathfmt(raw_output.as_mut_ptr().cast(), &raw_oid) };
+
+        let mut safe_oid = git_oid_fromstr(input).unwrap();
+        // SAFETY: the initialized stack value remains live for the call.
+        let safe_oid = unsafe { OidRef::from_ptr(addr_of_mut!(safe_oid).cast()) }.unwrap();
+        let mut safe_output = [0u8; 41];
+        let safe_status = git_oid_pathfmt(&mut safe_output, safe_oid);
+
+        assert_eq!(raw_status, 0);
+        assert_eq!(safe_status, Ok(raw_output.len()));
+        assert_eq!(safe_output, raw_output);
+    }
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct OidObservation {
+        ids: Vec<Vec<u8>>,
+        comparisons: Vec<i32>,
+        formatted: Vec<Vec<u8>>,
+        shortened: Vec<i32>,
+    }
+
+    unsafe fn raw_matrix() -> OidObservation {
+        let text = c"0123456789abcdef0123456789abcdef01234567";
+        let other = c"0123456789abcdef0123456789abcdef01234568";
+        let raw = [0xabu8; 20];
+        let mut ids = [unsafe { core::mem::zeroed::<ffi::git_oid>() }; 5];
+        assert_eq!(
+            unsafe {
+                ffi::git_oid_from_string(&mut ids[0], text.as_ptr(), ffi::git_oid_t_GIT_OID_SHA1)
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_oid_from_prefix(
+                    &mut ids[1],
+                    text.as_ptr(),
+                    12,
+                    ffi::git_oid_t_GIT_OID_SHA1,
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_oid_from_raw(&mut ids[2], raw.as_ptr(), ffi::git_oid_t_GIT_OID_SHA1)
+            },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_oid_fromraw(&mut ids[3], raw.as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_oid_fromstrp(&mut ids[4], c"0123456789ab".as_ptr()) },
+            0
+        );
+        let mut counted = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_oid_fromstrn(&mut counted, text.as_ptr(), 16) },
+            0
+        );
+        let mut copy = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(unsafe { ffi::git_oid_cpy(&mut copy, &ids[0]) }, 0);
+        let mut zero = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        zero.type_ = ffi::git_oid_t_GIT_OID_SHA1 as u8;
+
+        let comparisons = vec![
+            unsafe { ffi::git_oid_cmp(&ids[0], &copy) },
+            unsafe { ffi::git_oid_equal(&ids[0], &copy) },
+            unsafe { ffi::git_oid_ncmp(&ids[0], &ids[1], 12) },
+            unsafe { ffi::git_oid_strcmp(&ids[0], other.as_ptr()) },
+            unsafe { ffi::git_oid_streq(&ids[0], text.as_ptr()) },
+            unsafe { ffi::git_oid_is_zero(&zero) },
+        ];
+        let mut fmt = vec![0u8; 40];
+        assert_eq!(
+            unsafe { ffi::git_oid_fmt(fmt.as_mut_ptr().cast(), &ids[0]) },
+            0
+        );
+        let mut nfmt = vec![0u8; 48];
+        assert_eq!(
+            unsafe { ffi::git_oid_nfmt(nfmt.as_mut_ptr().cast(), nfmt.len(), &ids[0]) },
+            0
+        );
+        let mut tostr = vec![0u8; 41];
+        assert!(
+            !unsafe { ffi::git_oid_tostr(tostr.as_mut_ptr().cast(), tostr.len(), &ids[0]) }
+                .is_null()
+        );
+        let tls = unsafe { CStr::from_ptr(ffi::git_oid_tostr_s(&ids[0])) }
+            .to_bytes()
+            .to_vec();
+
+        let first = c"0000000000000000000000000000000000000000";
+        let second = c"0000000000000000000000000000000000000001";
+        let shortener = unsafe { ffi::git_oid_shorten_new(4) };
+        let shortened = vec![
+            unsafe { ffi::git_oid_shorten_add(shortener, first.as_ptr()) },
+            unsafe { ffi::git_oid_shorten_add(shortener, second.as_ptr()) },
+        ];
+        unsafe { ffi::git_oid_shorten_free(shortener) };
+        OidObservation {
+            ids: ids
+                .into_iter()
+                .chain([counted, copy])
+                .map(|id| id.id.to_vec())
+                .collect(),
+            comparisons,
+            formatted: vec![fmt, nfmt, tostr[..40].to_vec(), tls],
+            shortened,
+        }
+    }
+
+    fn safe_matrix() -> OidObservation {
+        let text = c"0123456789abcdef0123456789abcdef01234567";
+        let other = c"0123456789abcdef0123456789abcdef01234568";
+        let raw = [0xabu8; 20];
+        let mut ids = [
+            git_oid_from_string(text, OidType::Sha1).unwrap(),
+            git_oid_from_prefix(&text.to_bytes()[..12], OidType::Sha1).unwrap(),
+            git_oid_from_raw(&raw, OidType::Sha1).unwrap(),
+            git_oid_fromraw(&raw).unwrap(),
+            git_oid_fromstrp(c"0123456789ab").unwrap(),
+        ];
+        let counted = git_oid_fromstrn(&text.to_bytes()[..16]).unwrap();
+        let first = unsafe { OidRef::from_ptr((&raw mut ids[0]).cast()) }.unwrap();
+        let second = unsafe { OidRef::from_ptr((&raw mut ids[1]).cast()) }.unwrap();
+        let copy = git_oid_cpy(first);
+        let mut copy_for_ref = copy;
+        let copy_ref = unsafe { OidRef::from_ptr((&raw mut copy_for_ref).cast()) }.unwrap();
+        let mut zero = Oid::zeroed();
+        {
+            let mut zero_mut =
+                unsafe { OidMut::from_ptr(core::ptr::addr_of_mut!(zero).cast()) }.unwrap();
+            zero_mut.set_oid_type(OidType::Sha1);
+        }
+        let zero = unsafe { OidRef::from_ptr((&raw mut zero).cast()) }.unwrap();
+        let comparisons = vec![
+            git_oid_cmp(first, copy_ref) as i32,
+            i32::from(git_oid_equal(first, copy_ref)),
+            i32::from(git_oid_ncmp(first, second, 12)) - 1,
+            git_oid_strcmp(first, other),
+            i32::from(git_oid_streq(first, text)) - 1,
+            i32::from(git_oid_is_zero(zero)),
+        ];
+        let mut fmt = vec![0u8; 40];
+        git_oid_fmt(&mut fmt, first).unwrap();
+        let mut nfmt = vec![0u8; 48];
+        git_oid_nfmt(&mut nfmt, Some(first)).unwrap();
+        let mut tostr = vec![0u8; 41];
+        let tostr_value = git_oid_tostr(&mut tostr, first).unwrap();
+        let tostr = tostr_value.to_bytes().to_vec();
+        let tls = git_oid_tostr_s(first).unwrap().into_bytes();
+        let first_text = c"0000000000000000000000000000000000000000";
+        let second_text = c"0000000000000000000000000000000000000001";
+        let mut shortener = git_oid_shorten_new(4).unwrap();
+        let shortened = vec![
+            git_oid_shorten_add(&mut shortener, first_text).unwrap() as i32,
+            git_oid_shorten_add(&mut shortener, second_text).unwrap() as i32,
+        ];
+        OidObservation {
+            ids: ids
+                .into_iter()
+                .chain([counted, copy_for_ref])
+                .map(|mut id| {
+                    unsafe { OidRef::from_ptr(core::ptr::addr_of_mut!(id).cast()) }
+                        .unwrap()
+                        .raw_bytes()
+                        .elems()
+                        .collect()
+                })
+                .collect(),
+            comparisons,
+            formatted: vec![fmt, nfmt, tostr, tls],
+            shortened,
+        }
+    }
+
+    #[test]
+    fn io_equiv_oid_parsing_formatting_comparison_and_shortening_matrix() {
+        let _libgit2 = Libgit2Init::acquire();
+        assert_eq!(unsafe { raw_matrix() }, safe_matrix());
+    }
+}

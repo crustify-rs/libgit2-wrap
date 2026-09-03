@@ -415,6 +415,355 @@ pub fn git_pathspec_match_list_diff_entry<'a>(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct PathspecObservation {
+        direct: Vec<bool>,
+        matches: Vec<Vec<u8>>,
+        failures: Vec<Vec<u8>>,
+    }
+
+    fn patterns(values: &mut [*mut core::ffi::c_char; 3]) -> ffi::git_strarray {
+        ffi::git_strarray {
+            strings: values.as_mut_ptr(),
+            count: values.len(),
+        }
+    }
+
+    unsafe fn raw_observation(repository: *mut ffi::git_repository) -> PathspecObservation {
+        let mut values = [
+            c"src/*.c".as_ptr().cast_mut(),
+            c"README.md".as_ptr().cast_mut(),
+            c"missing/*.txt".as_ptr().cast_mut(),
+        ];
+        let array = patterns(&mut values);
+        let mut pathspec = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_pathspec_new(&mut pathspec, &array) }, 0);
+        let direct = [c"src/alpha.c", c"README.md", c"docs/nope.txt"]
+            .into_iter()
+            .map(|path| unsafe { ffi::git_pathspec_matches_path(pathspec, 0, path.as_ptr()) != 0 })
+            .collect();
+        let mut list = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_pathspec_match_workdir(
+                    &mut list,
+                    repository,
+                    ffi::git_pathspec_flag_t_GIT_PATHSPEC_FIND_FAILURES,
+                    pathspec,
+                )
+            },
+            0
+        );
+        let matches = (0..unsafe { ffi::git_pathspec_match_list_entrycount(list) })
+            .map(|index| {
+                let entry = unsafe { ffi::git_pathspec_match_list_entry(list, index) };
+                unsafe { CStr::from_ptr(entry) }.to_bytes().to_vec()
+            })
+            .collect();
+        let failures = (0..unsafe { ffi::git_pathspec_match_list_failed_entrycount(list) })
+            .map(|index| {
+                let entry = unsafe { ffi::git_pathspec_match_list_failed_entry(list, index) };
+                unsafe { CStr::from_ptr(entry) }.to_bytes().to_vec()
+            })
+            .collect();
+        unsafe {
+            ffi::git_pathspec_match_list_free(list);
+            ffi::git_pathspec_free(pathspec);
+        }
+        PathspecObservation {
+            direct,
+            matches,
+            failures,
+        }
+    }
+
+    fn safe_observation(
+        repository: &mut crate::repository::GitRepositoryMut<'_>,
+    ) -> PathspecObservation {
+        let mut values = [
+            c"src/*.c".as_ptr().cast_mut(),
+            c"README.md".as_ptr().cast_mut(),
+            c"missing/*.txt".as_ptr().cast_mut(),
+        ];
+        let mut array = patterns(&mut values);
+        let array = unsafe { GitStrArrayRef::from_ptr(&mut array) }.unwrap();
+        let mut pathspec = git_pathspec_new(array).unwrap();
+        let direct = [c"src/alpha.c", c"README.md", c"docs/nope.txt"]
+            .into_iter()
+            .map(|path| {
+                git_pathspec_matches_path(pathspec.as_ref(), GitPathspecFlags::DEFAULT, path)
+            })
+            .collect();
+        let list = git_pathspec_match_workdir(
+            repository,
+            GitPathspecFlags::FIND_FAILURES,
+            &mut pathspec.as_mut(),
+        )
+        .unwrap();
+        let matches = (0..git_pathspec_match_list_entrycount(list.as_ref()))
+            .map(|index| {
+                git_pathspec_match_list_entry(list.as_ref(), index)
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect();
+        let failures = (0..git_pathspec_match_list_failed_entrycount(list.as_ref()))
+            .map(|index| {
+                git_pathspec_match_list_failed_entry(list.as_ref(), index)
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect();
+        PathspecObservation {
+            direct,
+            matches,
+            failures,
+        }
+    }
+
+    unsafe fn raw_repository_sources(
+        repository: *mut ffi::git_repository,
+    ) -> Vec<PathspecObservation> {
+        let mut values = [
+            c"src/*".as_ptr().cast_mut(),
+            c"README.md".as_ptr().cast_mut(),
+            c"missing/*.txt".as_ptr().cast_mut(),
+        ];
+        let array = patterns(&mut values);
+        let mut pathspec = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_pathspec_new(&mut pathspec, &array) }, 0);
+
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, repository) },
+            0
+        );
+        let mut tree_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_revparse_single(&mut tree_object, repository, c"HEAD^{tree}".as_ptr())
+            },
+            0
+        );
+        let tree = tree_object.cast::<ffi::git_tree>();
+        let mut diff = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_diff_tree_to_workdir(&mut diff, repository, tree, core::ptr::null())
+            },
+            0
+        );
+
+        let flags = ffi::git_pathspec_flag_t_GIT_PATHSPEC_FIND_FAILURES;
+        let mut lists = Vec::new();
+        for source in 0..3 {
+            let mut list = core::ptr::null_mut();
+            let status = match source {
+                0 => unsafe { ffi::git_pathspec_match_index(&mut list, index, flags, pathspec) },
+                1 => unsafe { ffi::git_pathspec_match_tree(&mut list, tree, flags, pathspec) },
+                _ => unsafe { ffi::git_pathspec_match_diff(&mut list, diff, flags, pathspec) },
+            };
+            assert_eq!(status, 0);
+            let matches = (0..unsafe { ffi::git_pathspec_match_list_entrycount(list) })
+                .map(|position| {
+                    if source == 2 {
+                        let delta =
+                            unsafe { ffi::git_pathspec_match_list_diff_entry(list, position) };
+                        assert!(!delta.is_null());
+                        let file = unsafe { &(*delta).new_file };
+                        let path = if file.path.is_null() {
+                            unsafe { (*delta).old_file.path }
+                        } else {
+                            file.path
+                        };
+                        unsafe { CStr::from_ptr(path) }.to_bytes().to_vec()
+                    } else {
+                        let entry = unsafe { ffi::git_pathspec_match_list_entry(list, position) };
+                        unsafe { CStr::from_ptr(entry) }.to_bytes().to_vec()
+                    }
+                })
+                .collect();
+            let failures = (0..unsafe { ffi::git_pathspec_match_list_failed_entrycount(list) })
+                .map(|position| {
+                    let entry =
+                        unsafe { ffi::git_pathspec_match_list_failed_entry(list, position) };
+                    unsafe { CStr::from_ptr(entry) }.to_bytes().to_vec()
+                })
+                .collect();
+            lists.push(PathspecObservation {
+                direct: Vec::new(),
+                matches,
+                failures,
+            });
+            unsafe { ffi::git_pathspec_match_list_free(list) };
+        }
+
+        unsafe {
+            ffi::git_diff_free(diff);
+            ffi::git_object_free(tree_object);
+            ffi::git_index_free(index);
+            ffi::git_pathspec_free(pathspec);
+        }
+        lists
+    }
+
+    fn safe_repository_sources(
+        repository: &mut crate::repository::GitRepositoryMut<'_>,
+    ) -> Vec<PathspecObservation> {
+        let mut values = [
+            c"src/*".as_ptr().cast_mut(),
+            c"README.md".as_ptr().cast_mut(),
+            c"missing/*.txt".as_ptr().cast_mut(),
+        ];
+        let mut array = patterns(&mut values);
+        let array = unsafe { GitStrArrayRef::from_ptr(&mut array) }.unwrap();
+        let mut pathspec = git_pathspec_new(array).unwrap();
+
+        let raw_repository = repository.as_mut_ptr();
+        let mut index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_repository_index(&mut index, raw_repository) },
+            0
+        );
+        let mut tree_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_revparse_single(&mut tree_object, raw_repository, c"HEAD^{tree}".as_ptr())
+            },
+            0
+        );
+        let tree = tree_object.cast::<ffi::git_tree>();
+        let mut diff = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_diff_tree_to_workdir(&mut diff, raw_repository, tree, core::ptr::null())
+            },
+            0
+        );
+
+        let raw_index = index;
+        let raw_diff = diff;
+        let mut index = unsafe { GitIndexMut::from_ptr(raw_index) }.unwrap();
+        let tree = unsafe { GitTreeRef::from_ptr(tree) }.unwrap();
+        let mut diff = unsafe { DiffMut::from_ptr(diff) }.unwrap();
+        let flags = GitPathspecFlags::FIND_FAILURES;
+        let mut lists = Vec::new();
+        for source in 0..3 {
+            let observation = if source == 0 {
+                let list = git_pathspec_match_index(&mut index, flags, pathspec.as_ref()).unwrap();
+                safe_string_list(list.as_ref())
+            } else if source == 1 {
+                let list = git_pathspec_match_tree(tree, flags, pathspec.as_ref()).unwrap();
+                safe_string_list(list.as_ref())
+            } else {
+                let list =
+                    git_pathspec_match_diff(&mut diff, flags, &mut pathspec.as_mut()).unwrap();
+                let matches = (0..git_pathspec_match_list_entrycount(list.as_ref()))
+                    .map(|position| {
+                        let delta = git_pathspec_match_list_diff_entry(list.as_ref(), position)
+                            .expect("diff-backed match");
+                        delta
+                            .new_file()
+                            .path()
+                            .or_else(|| delta.old_file().path())
+                            .unwrap()
+                            .to_bytes()
+                            .to_vec()
+                    })
+                    .collect();
+                let failures = safe_failures(list.as_ref());
+                PathspecObservation {
+                    direct: Vec::new(),
+                    matches,
+                    failures,
+                }
+            };
+            lists.push(observation);
+        }
+        unsafe {
+            ffi::git_diff_free(raw_diff);
+            ffi::git_object_free(tree_object);
+            ffi::git_index_free(raw_index);
+        }
+        lists
+    }
+
+    fn safe_string_list(list: GitPathspecMatchListRef<'_>) -> PathspecObservation {
+        let matches = (0..git_pathspec_match_list_entrycount(list))
+            .map(|position| {
+                git_pathspec_match_list_entry(list, position)
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect();
+        PathspecObservation {
+            direct: Vec::new(),
+            matches,
+            failures: safe_failures(list),
+        }
+    }
+
+    fn safe_failures(list: GitPathspecMatchListRef<'_>) -> Vec<Vec<u8>> {
+        (0..git_pathspec_match_list_failed_entrycount(list))
+            .map(|position| {
+                git_pathspec_match_list_failed_entry(list, position)
+                    .unwrap()
+                    .to_bytes()
+                    .to_vec()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn io_equiv_pathspec_workdir_matching() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("pathspec-raw");
+        let safe = HistoryFixture::new("pathspec-safe");
+        let raw_observation = unsafe { raw_observation(raw.repository.as_ptr()) };
+        let mut safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        assert_eq!(raw_observation, safe_observation(&mut safe_repository));
+        assert_eq!(raw_observation.direct, [true, true, false]);
+        assert_eq!(raw_observation.failures, [b"missing/*.txt".to_vec()]);
+    }
+
+    #[test]
+    fn io_equiv_pathspec_index_tree_and_diff_matching() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("pathspec-sources-raw");
+        let safe = HistoryFixture::new("pathspec-sources-safe");
+        std::fs::write(raw.directory.path().join("README.md"), b"raw change\n").unwrap();
+        std::fs::write(safe.directory.path().join("README.md"), b"raw change\n").unwrap();
+        std::fs::write(raw.directory.path().join("src/gamma.c"), b"int gamma;\n").unwrap();
+        std::fs::write(safe.directory.path().join("src/gamma.c"), b"int gamma;\n").unwrap();
+
+        let raw_observation = unsafe { raw_repository_sources(raw.repository.as_ptr()) };
+        let mut safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        assert_eq!(
+            raw_observation,
+            safe_repository_sources(&mut safe_repository)
+        );
+        assert!(
+            raw_observation
+                .iter()
+                .all(|source| source.failures.contains(&b"missing/*.txt".to_vec()))
+        );
+    }
+}
+
+#[cfg(test)]
 mod index_match_tests {
     use super::*;
 

@@ -254,6 +254,528 @@ pub fn git_diff_tree_to_workdir_with_index<'repo>(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::ffi;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init, RawBuf, safe_buf_bytes};
+
+    fn mutate_workdir(fixture: &HistoryFixture) {
+        std::fs::write(
+            fixture.directory.path().join("src/alpha.c"),
+            b"int alpha(void) { return 42; }\n",
+        )
+        .unwrap();
+        std::fs::remove_file(fixture.directory.path().join("src/beta.c")).unwrap();
+        std::fs::write(
+            fixture.directory.path().join("untracked.txt"),
+            b"untracked\n",
+        )
+        .unwrap();
+    }
+
+    unsafe fn raw_patch(repository: *mut crate::ffi::git_repository) -> Vec<u8> {
+        let mut tree_object = core::ptr::null_mut();
+        // SAFETY: repository, spec and output are live.
+        assert_eq!(
+            unsafe {
+                crate::ffi::git_revparse_single(
+                    &mut tree_object,
+                    repository,
+                    c"HEAD^{tree}".as_ptr(),
+                )
+            },
+            0
+        );
+        let mut diff = core::ptr::null_mut();
+        // SAFETY: all inputs and the output slot are live.
+        assert_eq!(
+            unsafe {
+                crate::ffi::git_diff_tree_to_workdir_with_index(
+                    &mut diff,
+                    repository,
+                    tree_object.cast(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let mut buffer = RawBuf::new();
+        // SAFETY: diff and output buffer are live and exclusive.
+        assert_eq!(
+            unsafe {
+                crate::ffi::git_diff_to_buf(
+                    &mut buffer.0,
+                    diff,
+                    crate::ffi::git_diff_format_t_GIT_DIFF_FORMAT_PATCH,
+                )
+            },
+            0
+        );
+        let bytes = buffer.bytes();
+        // SAFETY: successful constructors transferred these owners.
+        unsafe {
+            crate::ffi::git_diff_free(diff);
+            crate::ffi::git_object_free(tree_object);
+        }
+        bytes
+    }
+
+    unsafe fn raw_statuses(repository: *mut crate::ffi::git_repository) -> Vec<(Vec<u8>, u32)> {
+        unsafe extern "C" fn callback(
+            path: *const core::ffi::c_char,
+            status: u32,
+            payload: *mut core::ffi::c_void,
+        ) -> i32 {
+            // SAFETY: the caller supplies the exact vector payload and C
+            // supplies a transient NUL-terminated path.
+            let output = unsafe { &mut *payload.cast::<Vec<(Vec<u8>, u32)>>() };
+            output.push((
+                unsafe { core::ffi::CStr::from_ptr(path) }
+                    .to_bytes()
+                    .to_vec(),
+                status,
+            ));
+            0
+        }
+        let mut output = Vec::new();
+        // SAFETY: repository and payload remain live for the traversal.
+        assert_eq!(
+            unsafe {
+                crate::ffi::git_status_foreach(
+                    repository,
+                    Some(callback),
+                    core::ptr::from_mut(&mut output).cast(),
+                )
+            },
+            0
+        );
+        output.sort();
+        output
+    }
+
+    fn safe_patch(repository: &mut crate::repository::GitRepositoryMut<'_>) -> Vec<u8> {
+        let mut tree_object = core::ptr::null_mut();
+        // Use the raw lookup only to obtain a borrowed tree input. The value
+        // under comparison is generated and formatted through safe wrappers.
+        assert_eq!(
+            unsafe {
+                crate::ffi::git_revparse_single(
+                    &mut tree_object,
+                    repository.as_mut_ptr(),
+                    c"HEAD^{tree}".as_ptr(),
+                )
+            },
+            0
+        );
+        // SAFETY: the successful object lookup returned a live tree object.
+        let tree = unsafe { crate::tree::GitTreeRef::from_ptr(tree_object.cast()) }.unwrap();
+        let mut diff = git_diff_tree_to_workdir_with_index(repository, Some(tree), None).unwrap();
+        let output =
+            crate::diff_print::git_diff_to_buf(&mut diff.as_mut(), crate::diff::DiffFormat::Patch)
+                .unwrap();
+        let bytes = safe_buf_bytes(output.as_ref());
+        drop(output);
+        drop(diff);
+        // SAFETY: the raw lookup transferred this sole object owner.
+        unsafe { crate::ffi::git_object_free(tree_object) };
+        bytes
+    }
+
+    fn safe_statuses(
+        repository: &mut crate::repository::GitRepositoryMut<'_>,
+    ) -> Vec<(Vec<u8>, u32)> {
+        let mut output = Vec::new();
+        crate::status::git_status_foreach(
+            repository,
+            &mut |path: &core::ffi::CStr, status: crate::status::Status| {
+                output.push((path.to_bytes().to_vec(), status.bits()));
+                0
+            },
+        )
+        .unwrap();
+        output.sort();
+        output
+    }
+
+    #[test]
+    fn io_equiv_workdir_diff_and_status() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("diff-raw");
+        let safe = HistoryFixture::new("diff-safe");
+        mutate_workdir(&raw);
+        mutate_workdir(&safe);
+
+        // SAFETY: fixture is live and not concurrently accessed.
+        let raw_patch = unsafe { raw_patch(raw.repository.as_ptr()) };
+        // SAFETY: fixture is live and not concurrently accessed.
+        let raw_statuses = unsafe { raw_statuses(raw.repository.as_ptr()) };
+        // SAFETY: this is the only handle used for the safe fixture here.
+        let mut safe_repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(safe.repository.as_ptr()) }
+                .unwrap();
+        assert_eq!(raw_patch, safe_patch(&mut safe_repository));
+        assert_eq!(raw_statuses, safe_statuses(&mut safe_repository));
+        assert!(
+            raw_patch
+                .windows(b"alpha".len())
+                .any(|part| part == b"alpha")
+        );
+        assert!(raw_patch.windows(b"beta".len()).any(|part| part == b"beta"));
+    }
+
+    fn prepare_matrix(fixture: &HistoryFixture) {
+        std::fs::write(
+            fixture.directory.path().join("src/alpha.c"),
+            b"int alpha(void) { return 314; }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            fixture.directory.path().join("staged.txt"),
+            b"staged matrix\n",
+        )
+        .unwrap();
+        let status = std::process::Command::new("git")
+            .current_dir(fixture.directory.path())
+            .args(["add", "staged.txt"])
+            .status()
+            .unwrap();
+        assert!(status.success());
+        std::fs::create_dir_all(fixture.directory.path().join("untracked/deep")).unwrap();
+        std::fs::write(
+            fixture.directory.path().join("untracked/deep/value.txt"),
+            b"untracked matrix\n",
+        )
+        .unwrap();
+    }
+
+    unsafe fn raw_diff_bytes(diff: *mut ffi::git_diff) -> Vec<u8> {
+        let mut output = RawBuf::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_diff_to_buf(
+                    &mut output.0,
+                    diff,
+                    ffi::git_diff_format_t_GIT_DIFF_FORMAT_PATCH,
+                )
+            },
+            0
+        );
+        let bytes = output.bytes();
+        unsafe { ffi::git_diff_free(diff) };
+        bytes
+    }
+
+    unsafe fn raw_matrix(repository: *mut ffi::git_repository) -> Vec<Vec<u8>> {
+        let mut old_object = core::ptr::null_mut();
+        let mut new_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_revparse_single(&mut old_object, repository, c"HEAD~1^{tree}".as_ptr())
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_revparse_single(&mut new_object, repository, c"HEAD^{tree}".as_ptr())
+            },
+            0
+        );
+        let old_tree = old_object.cast::<ffi::git_tree>();
+        let new_tree = new_object.cast::<ffi::git_tree>();
+        let index_path = std::ffi::CString::new(
+            std::path::Path::new(
+                unsafe { core::ffi::CStr::from_ptr(ffi::git_repository_path(repository)) }
+                    .to_str()
+                    .unwrap(),
+            )
+            .join("index")
+            .to_str()
+            .unwrap(),
+        )
+        .unwrap();
+        let mut old_index = core::ptr::null_mut();
+        let mut new_index = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_index_open(&mut old_index, index_path.as_ptr()) },
+            0
+        );
+        assert_eq!(
+            unsafe { ffi::git_index_open(&mut new_index, index_path.as_ptr()) },
+            0
+        );
+        let mut output = Vec::new();
+        let mut diff = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_diff_tree_to_tree(
+                    &mut diff,
+                    repository,
+                    old_tree,
+                    new_tree,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        output.push(unsafe { raw_diff_bytes(diff) });
+        diff = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_diff_tree_to_index(
+                    &mut diff,
+                    repository,
+                    old_tree,
+                    old_index,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        output.push(unsafe { raw_diff_bytes(diff) });
+        diff = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_diff_index_to_workdir(&mut diff, repository, old_index, core::ptr::null())
+            },
+            0
+        );
+        output.push(unsafe { raw_diff_bytes(diff) });
+        diff = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_diff_tree_to_workdir(&mut diff, repository, old_tree, core::ptr::null())
+            },
+            0
+        );
+        output.push(unsafe { raw_diff_bytes(diff) });
+        diff = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_diff_tree_to_workdir_with_index(
+                    &mut diff,
+                    repository,
+                    old_tree,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        output.push(unsafe { raw_diff_bytes(diff) });
+        diff = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_diff_index_to_index(
+                    &mut diff,
+                    repository,
+                    old_index,
+                    new_index,
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        output.push(unsafe { raw_diff_bytes(diff) });
+        unsafe {
+            ffi::git_index_free(new_index);
+            ffi::git_index_free(old_index);
+            ffi::git_object_free(new_object);
+            ffi::git_object_free(old_object);
+        }
+        output
+    }
+
+    fn safe_diff_bytes(mut diff: RepositoryDiff<'_>) -> Vec<u8> {
+        let output =
+            crate::diff_print::git_diff_to_buf(&mut diff.as_mut(), crate::diff::DiffFormat::Patch)
+                .unwrap();
+        safe_buf_bytes(output.as_ref())
+    }
+
+    fn safe_matrix(repository: *mut ffi::git_repository) -> Vec<Vec<u8>> {
+        let mut old_object = core::ptr::null_mut();
+        let mut new_object = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_revparse_single(&mut old_object, repository, c"HEAD~1^{tree}".as_ptr())
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_revparse_single(&mut new_object, repository, c"HEAD^{tree}".as_ptr())
+            },
+            0
+        );
+        let old_tree = unsafe { crate::tree::GitTreeRef::from_ptr(old_object.cast()) }.unwrap();
+        let new_tree = unsafe { crate::tree::GitTreeRef::from_ptr(new_object.cast()) }.unwrap();
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let index_path = std::ffi::CString::new(
+            std::path::Path::new(
+                crate::repository::git_repository_path(repository_view.as_ref())
+                    .unwrap()
+                    .to_str()
+                    .unwrap(),
+            )
+            .join("index")
+            .to_str()
+            .unwrap(),
+        )
+        .unwrap();
+        let mut old_index = crate::index::git_index_open(&index_path).unwrap();
+        let mut new_index = crate::index::git_index_open(&index_path).unwrap();
+        let output = vec![
+            safe_diff_bytes(
+                git_diff_tree_to_tree(&mut repository_view, Some(old_tree), Some(new_tree), None)
+                    .unwrap(),
+            ),
+            safe_diff_bytes(
+                git_diff_tree_to_index(
+                    &mut repository_view,
+                    Some(old_tree),
+                    Some(&mut old_index.as_mut()),
+                    None,
+                )
+                .unwrap(),
+            ),
+            safe_diff_bytes(
+                git_diff_index_to_workdir(
+                    &mut repository_view,
+                    Some(&mut old_index.as_mut()),
+                    None,
+                )
+                .unwrap(),
+            ),
+            safe_diff_bytes(
+                git_diff_tree_to_workdir(&mut repository_view, Some(old_tree), None).unwrap(),
+            ),
+            safe_diff_bytes(
+                git_diff_tree_to_workdir_with_index(&mut repository_view, Some(old_tree), None)
+                    .unwrap(),
+            ),
+            safe_diff_bytes(
+                git_diff_index_to_index(
+                    &mut repository_view,
+                    &mut old_index.as_mut(),
+                    &mut new_index.as_mut(),
+                    None,
+                )
+                .unwrap(),
+            ),
+        ];
+        unsafe {
+            ffi::git_object_free(new_object);
+            ffi::git_object_free(old_object);
+        }
+        output
+    }
+
+    #[test]
+    fn io_equiv_diff_matrix_across_trees_index_and_workdir() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("diff-matrix-raw");
+        let safe = HistoryFixture::new("diff-matrix-safe");
+        prepare_matrix(&raw);
+        prepare_matrix(&safe);
+        let raw_output = unsafe { raw_matrix(raw.repository.as_ptr()) };
+        assert_eq!(raw_output, safe_matrix(safe.repository.as_ptr()));
+        assert!(raw_output.iter().filter(|patch| !patch.is_empty()).count() >= 4);
+    }
+
+    fn prepare_diff_drivers(fixture: &HistoryFixture) {
+        let path = fixture.directory.path();
+        std::fs::write(
+            path.join(".gitattributes"),
+            b"*.bin binary\n*.word diff=word\n",
+        )
+        .unwrap();
+        std::fs::write(path.join("payload.bin"), [0, 1, 2, 0, 4, 5]).unwrap();
+        std::fs::write(
+            path.join("sections.word"),
+            b"section alpha\nfirst original sentence\nsection beta\nsecond sentence\n",
+        )
+        .unwrap();
+        let run = |arguments: &[&str]| {
+            let status = std::process::Command::new("git")
+                .arg("-C")
+                .arg(path)
+                .args(arguments)
+                .env("GIT_AUTHOR_DATE", "2023-11-14T22:32:00Z")
+                .env("GIT_COMMITTER_DATE", "2023-11-14T22:32:00Z")
+                .status()
+                .unwrap();
+            assert!(status.success(), "git command failed: {arguments:?}");
+        };
+        run(&["config", "diff.word.xfuncname", "^section .*"]);
+        run(&["config", "diff.word.wordRegex", "[A-Za-z]+"]);
+        run(&["add", ".gitattributes", "payload.bin", "sections.word"]);
+        run(&[
+            "-c",
+            "user.name=Crustify",
+            "-c",
+            "user.email=crustify@example.com",
+            "commit",
+            "-q",
+            "-m",
+            "diff driver baseline",
+        ]);
+        std::fs::write(path.join("payload.bin"), [0, 1, 9, 0, 8, 5]).unwrap();
+        std::fs::write(
+            path.join("sections.word"),
+            b"section alpha\nfirst changed phrase\nsection beta\nsecond sentence\n",
+        )
+        .unwrap();
+    }
+
+    unsafe fn raw_driver_diff(repository: *mut ffi::git_repository) -> Vec<u8> {
+        let mut diff = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_diff_index_to_workdir(
+                    &mut diff,
+                    repository,
+                    core::ptr::null_mut(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        unsafe { raw_diff_bytes(diff) }
+    }
+
+    fn safe_driver_diff(repository: *mut ffi::git_repository) -> Vec<u8> {
+        let mut repository =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let diff = git_diff_index_to_workdir(&mut repository, None, None).unwrap();
+        safe_diff_bytes(diff)
+    }
+
+    #[test]
+    fn io_equiv_generated_diff_binary_and_custom_word_driver() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("diff-driver-raw");
+        let safe = HistoryFixture::new("diff-driver-safe");
+        prepare_diff_drivers(&raw);
+        prepare_diff_drivers(&safe);
+        let raw_output = unsafe { raw_driver_diff(raw.repository.as_ptr()) };
+        let safe_output = safe_driver_diff(safe.repository.as_ptr());
+        assert_eq!(raw_output, safe_output);
+        assert!(
+            raw_output
+                .windows(b"Binary files".len())
+                .any(|w| w == b"Binary files")
+        );
+        assert!(
+            raw_output
+                .windows(b"section alpha".len())
+                .any(|w| w == b"section alpha")
+        );
+    }
+}
+
+#[cfg(test)]
 mod owner_result_tests {
     use super::*;
 

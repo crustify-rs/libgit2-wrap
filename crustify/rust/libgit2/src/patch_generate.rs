@@ -381,6 +381,224 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::Libgit2Init;
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct PatchObservation {
+        rendered: Vec<u8>,
+        hunks: usize,
+        lines: usize,
+        additions: usize,
+        deletions: usize,
+        size: usize,
+        owner_is_null: bool,
+        added_hunks: usize,
+        empty_hunks: usize,
+    }
+
+    unsafe fn raw_patch() -> PatchObservation {
+        let old = b"header\ncommon\nold value\ntail\n";
+        let new = b"header\ncommon\nnew value\ntail\nadded\n";
+        let mut patch = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_patch_from_buffers(
+                    &mut patch,
+                    old.as_ptr().cast(),
+                    old.len(),
+                    c"sample.txt".as_ptr(),
+                    new.as_ptr().cast(),
+                    new.len(),
+                    c"sample.txt".as_ptr(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let hunks = unsafe { ffi::git_patch_num_hunks(patch) };
+        let lines = unsafe { ffi::git_patch_num_lines_in_hunk(patch, 0) } as usize;
+        let mut context = 0usize;
+        let mut additions = 0usize;
+        let mut deletions = 0usize;
+        assert_eq!(
+            unsafe {
+                ffi::git_patch_line_stats(&mut context, &mut additions, &mut deletions, patch)
+            },
+            0
+        );
+        let mut hunk = core::ptr::null();
+        let mut hunk_lines = 0usize;
+        assert_eq!(
+            unsafe { ffi::git_patch_get_hunk(&mut hunk, &mut hunk_lines, patch, 0) },
+            0
+        );
+        let mut line = core::ptr::null();
+        assert_eq!(
+            unsafe { ffi::git_patch_get_line_in_hunk(&mut line, patch, 0, hunk_lines - 1) },
+            0
+        );
+        let size = unsafe { ffi::git_patch_size(patch, 1, 1, 1) };
+        let owner_is_null = unsafe { ffi::git_patch_owner(patch) }.is_null();
+        let mut rendered = unsafe { core::mem::zeroed::<ffi::git_buf>() };
+        assert_eq!(unsafe { ffi::git_patch_to_buf(&mut rendered, patch) }, 0);
+        let rendered_bytes = unsafe {
+            core::slice::from_raw_parts(rendered.ptr.cast::<u8>(), rendered.size).to_vec()
+        };
+        unsafe { ffi::git_buf_dispose(&mut rendered) };
+        unsafe { ffi::git_patch_free(patch) };
+
+        let mut added = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_patch_from_blob_and_buffer(
+                    &mut added,
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    new.as_ptr().cast(),
+                    new.len(),
+                    c"added.txt".as_ptr(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let added_hunks = unsafe { ffi::git_patch_num_hunks(added) };
+        unsafe { ffi::git_patch_free(added) };
+
+        let mut empty = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_patch_from_blobs(
+                    &mut empty,
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                )
+            },
+            0
+        );
+        let empty_hunks = unsafe { ffi::git_patch_num_hunks(empty) };
+        unsafe { ffi::git_patch_free(empty) };
+        assert_eq!(
+            unsafe {
+                ffi::git_diff_buffers(
+                    old.as_ptr().cast(),
+                    old.len(),
+                    c"sample.txt".as_ptr(),
+                    new.as_ptr().cast(),
+                    new.len(),
+                    c"sample.txt".as_ptr(),
+                    core::ptr::null(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    core::ptr::null_mut(),
+                )
+            },
+            0
+        );
+        assert_eq!(
+            unsafe {
+                ffi::git_diff_blobs(
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    core::ptr::null(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    core::ptr::null_mut(),
+                )
+            },
+            0
+        );
+        PatchObservation {
+            rendered: rendered_bytes,
+            hunks,
+            lines,
+            additions,
+            deletions,
+            size,
+            owner_is_null,
+            added_hunks,
+            empty_hunks,
+        }
+    }
+
+    fn safe_patch() -> PatchObservation {
+        let old = b"header\ncommon\nold value\ntail\n";
+        let new = b"header\ncommon\nnew value\ntail\nadded\n";
+        let mut patch =
+            git_patch_from_buffers(old, Some(c"sample.txt"), new, Some(c"sample.txt"), None)
+                .unwrap();
+        let hunks = crate::patch::git_patch_num_hunks(patch.as_ref());
+        let lines = crate::patch::git_patch_num_lines_in_hunk(patch.as_ref(), 0).unwrap();
+        let stats = crate::patch::git_patch_line_stats(patch.as_ref()).unwrap();
+        let (_, hunk_lines) = crate::patch::git_patch_get_hunk(patch.as_ref(), 0).unwrap();
+        crate::patch::git_patch_get_line_in_hunk(patch.as_ref(), 0, hunk_lines - 1).unwrap();
+        let size = crate::patch::git_patch_size(patch.as_ref(), true, true, true);
+        let owner_is_null = crate::patch::git_patch_owner(patch.as_ref()).is_none();
+        let rendered = crate::diff_print::git_patch_to_buf(&mut patch.as_mut()).unwrap();
+        let rendered = rendered
+            .as_ref()
+            .contents()
+            .unwrap()
+            .elems()
+            .collect::<Vec<_>>();
+        let added =
+            git_patch_from_blob_and_buffer(None, None, new, Some(c"added.txt"), None).unwrap();
+        let added_hunks = crate::patch::git_patch_num_hunks(added.as_ref());
+        let empty = git_patch_from_blobs(None, None, None, None, None).unwrap();
+        let empty_hunks = crate::patch::git_patch_num_hunks(empty.as_ref());
+        git_diff_buffers(
+            Some(old),
+            Some(c"sample.txt"),
+            Some(new),
+            Some(c"sample.txt"),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        git_diff_blobs(None, None, None, None, None, None, None, None, None).unwrap();
+        PatchObservation {
+            rendered,
+            hunks,
+            lines,
+            additions: stats.additions,
+            deletions: stats.deletions,
+            size,
+            owner_is_null,
+            added_hunks,
+            empty_hunks,
+        }
+    }
+
+    #[test]
+    fn io_equiv_generated_patch_buffers_callbacks_and_introspection() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = unsafe { raw_patch() };
+        assert_eq!(raw, safe_patch());
+        assert!(raw.rendered.starts_with(b"diff --git"));
+        assert_eq!(raw.hunks, 1);
+        assert_eq!(raw.additions, 2);
+        assert_eq!(raw.deletions, 1);
+        assert!(raw.owner_is_null);
+    }
+}
+
 /// Wraps: git_diff_blob_to_buffer
 /// Compares an optional blob with an optional borrowed byte buffer and reports
 /// the differences synchronously.

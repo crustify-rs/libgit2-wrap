@@ -267,3 +267,74 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod io_equiv {
+    use super::*;
+    use crate::io_equiv_support::Libgit2Init;
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct RefspecObservation {
+        text: Vec<u8>,
+        source: Option<Vec<u8>>,
+        destination: Option<Vec<u8>>,
+        direction: ffi::git_direction,
+        force: bool,
+    }
+
+    unsafe fn raw_optional_string(value: *const core::ffi::c_char) -> Option<Vec<u8>> {
+        if value.is_null() {
+            None
+        } else {
+            // SAFETY: the caller supplies a refspec-owned live C string.
+            Some(unsafe { CStr::from_ptr(value) }.to_bytes().to_vec())
+        }
+    }
+
+    #[test]
+    fn io_equiv_git_refspec_parse() {
+        let _init = Libgit2Init::acquire();
+        let input = c"+refs/heads/*:refs/remotes/origin/*";
+        let mut raw = core::ptr::null_mut();
+        // SAFETY: the output slot is writable and the input is a live C
+        // string copied by the parser.
+        let raw_status = unsafe { ffi::git_refspec_parse(&mut raw, input.as_ptr(), 1) };
+        assert_eq!(raw_status, 0);
+        assert!(!raw.is_null());
+        // SAFETY: successful parsing returned a complete refspec whose
+        // strings and scalar fields remain live until the free below.
+        let (raw_text, raw_source, raw_destination, raw_direction, raw_force) = unsafe {
+            (
+                CStr::from_ptr(ffi::git_refspec_string(raw))
+                    .to_bytes()
+                    .to_vec(),
+                raw_optional_string(ffi::git_refspec_src(raw)),
+                raw_optional_string(ffi::git_refspec_dst(raw)),
+                ffi::git_refspec_direction(raw),
+                ffi::git_refspec_force(raw) != 0,
+            )
+        };
+        let raw_observation = RefspecObservation {
+            text: raw_text,
+            source: raw_source,
+            destination: raw_destination,
+            direction: raw_direction,
+            force: raw_force,
+        };
+
+        let safe = git_refspec_parse(input, true).unwrap();
+        let safe_view = safe.as_ref();
+        let safe_observation = RefspecObservation {
+            text: git_refspec_string(safe_view).to_bytes().to_vec(),
+            source: git_refspec_src(safe_view).map(|value| value.to_bytes().to_vec()),
+            destination: git_refspec_dst(safe_view).map(|value| value.to_bytes().to_vec()),
+            direction: git_refspec_direction(safe_view).unwrap().into(),
+            force: git_refspec_force(safe_view),
+        };
+
+        assert_eq!(safe_observation, raw_observation);
+        drop(safe);
+        // SAFETY: releases the complete raw refspec owner exactly once.
+        unsafe { ffi::git_refspec_free(raw) };
+    }
+}

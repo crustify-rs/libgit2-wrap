@@ -266,3 +266,159 @@ pub fn git_annotated_commit_from_revspec<'repo>(
     let inner = unsafe { ffibox::CBox::<AnnotatedCommit>::from_raw(out) };
     annotated_result(status, inner)
 }
+
+#[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    type Observation = Vec<(Vec<u8>, Option<Vec<u8>>)>;
+
+    unsafe fn inspect(commit: *mut ffi::git_annotated_commit) -> (Vec<u8>, Option<Vec<u8>>) {
+        let id = unsafe { (*ffi::git_annotated_commit_id(commit)).id }.to_vec();
+        let name = unsafe { ffi::git_annotated_commit_ref(commit) };
+        let name = if name.is_null() {
+            None
+        } else {
+            Some(
+                unsafe { core::ffi::CStr::from_ptr(name) }
+                    .to_bytes()
+                    .to_vec(),
+            )
+        };
+        (id, name)
+    }
+
+    unsafe fn raw_annotated(repository: *mut ffi::git_repository) -> Observation {
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let mut output = Vec::new();
+
+        let mut commit = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_fetchhead(
+                    &mut commit,
+                    repository,
+                    c"refs/heads/master".as_ptr(),
+                    c"https://example.invalid/source.git".as_ptr(),
+                    &head,
+                )
+            },
+            0
+        );
+        output.push(unsafe { inspect(commit) });
+        unsafe { ffi::git_annotated_commit_free(commit) };
+
+        let mut reference = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_lookup(&mut reference, repository, c"refs/heads/master".as_ptr())
+            },
+            0
+        );
+        commit = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_annotated_commit_from_ref(&mut commit, repository, reference) },
+            0
+        );
+        output.push(unsafe { inspect(commit) });
+        unsafe {
+            ffi::git_annotated_commit_free(commit);
+            ffi::git_reference_free(reference);
+        }
+
+        commit = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_annotated_commit_from_revspec(&mut commit, repository, c"HEAD~1".as_ptr())
+            },
+            0
+        );
+        output.push(unsafe { inspect(commit) });
+        unsafe { ffi::git_annotated_commit_free(commit) };
+
+        commit = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_annotated_commit_lookup(&mut commit, repository, &head) },
+            0
+        );
+        output.push(unsafe { inspect(commit) });
+        unsafe { ffi::git_annotated_commit_free(commit) };
+        output
+    }
+
+    fn safe_inspect(commit: AnnotatedCommitRef<'_>) -> (Vec<u8>, Option<Vec<u8>>) {
+        let id = git_annotated_commit_id(commit)
+            .unwrap()
+            .raw_bytes()
+            .elems()
+            .collect();
+        let name = git_annotated_commit_ref(commit).map(|name| name.to_bytes().to_vec());
+        (id, name)
+    }
+
+    fn safe_annotated(repository: *mut ffi::git_repository) -> Observation {
+        let mut head = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe { ffi::git_reference_name_to_id(&mut head, repository, c"HEAD".as_ptr()) },
+            0
+        );
+        let head_ref = unsafe { crate::oid::OidRef::from_ptr(&raw mut head) }.unwrap();
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let mut output = Vec::new();
+
+        let commit = git_annotated_commit_from_fetchhead(
+            &mut repository_view,
+            c"refs/heads/master",
+            c"https://example.invalid/source.git",
+            head_ref,
+        )
+        .unwrap();
+        output.push(safe_inspect(commit.as_ref()));
+        drop(commit);
+
+        let mut raw_reference = core::ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_lookup(
+                    &mut raw_reference,
+                    repository,
+                    c"refs/heads/master".as_ptr(),
+                )
+            },
+            0
+        );
+        let reference = unsafe { crate::refs::GitReferenceRef::from_ptr(raw_reference) }.unwrap();
+        let commit = git_annotated_commit_from_ref(&mut repository_view, reference).unwrap();
+        output.push(safe_inspect(commit.as_ref()));
+        drop(commit);
+        unsafe { ffi::git_reference_free(raw_reference) };
+
+        let commit = git_annotated_commit_from_revspec(&mut repository_view, c"HEAD~1").unwrap();
+        output.push(safe_inspect(commit.as_ref()));
+        drop(commit);
+        let commit = git_annotated_commit_lookup(&mut repository_view, head_ref).unwrap();
+        output.push(safe_inspect(commit.as_ref()));
+        output
+    }
+
+    #[test]
+    fn io_equiv_annotated_commits_from_fetchhead_ref_revspec_and_lookup() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("annotated-raw");
+        let safe = HistoryFixture::new("annotated-safe");
+        let raw = unsafe { raw_annotated(raw.repository.as_ptr()) };
+        assert_eq!(raw, safe_annotated(safe.repository.as_ptr()));
+        assert_eq!(raw[0].1.as_deref(), Some(b"refs/heads/master".as_slice()));
+        assert_eq!(raw[1].1.as_deref(), Some(b"refs/heads/master".as_slice()));
+        assert!(raw[2].1.is_none());
+        assert!(raw[3].1.is_none());
+    }
+}

@@ -362,6 +362,179 @@ pub fn git_tag_create_from_buffer(
 }
 
 #[cfg(test)]
+mod io_equiv {
+    #![allow(clippy::undocumented_unsafe_blocks)]
+
+    use super::*;
+    use crate::io_equiv_support::{HistoryFixture, Libgit2Init};
+
+    #[derive(Debug, Eq, PartialEq)]
+    struct TagObservation {
+        name: Vec<u8>,
+        message: Vec<u8>,
+        target_id: Vec<u8>,
+        target_type: ffi::git_object_t,
+        tag_count: usize,
+        matched_count: usize,
+        foreach_names: Vec<Vec<u8>>,
+        valid_name: bool,
+    }
+
+    unsafe extern "C" fn collect_tag(
+        name: *const core::ffi::c_char,
+        _id: *mut ffi::git_oid,
+        payload: *mut core::ffi::c_void,
+    ) -> i32 {
+        unsafe { &mut *payload.cast::<Vec<Vec<u8>>>() }
+            .push(unsafe { CStr::from_ptr(name) }.to_bytes().to_vec());
+        0
+    }
+
+    unsafe fn raw_tags(repository: *mut ffi::git_repository) -> TagObservation {
+        let mut tag_id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(&mut tag_id, repository, c"refs/tags/v1.0".as_ptr())
+            },
+            0
+        );
+        let mut tag = core::ptr::null_mut();
+        assert_eq!(
+            unsafe { ffi::git_tag_lookup(&mut tag, repository, &tag_id) },
+            0
+        );
+        let name = unsafe { CStr::from_ptr(ffi::git_tag_name(tag)) }
+            .to_bytes()
+            .to_vec();
+        let message = unsafe { CStr::from_ptr(ffi::git_tag_message(tag)) }
+            .to_bytes()
+            .to_vec();
+        let target_id = unsafe { (*ffi::git_tag_target_id(tag)).id.to_vec() };
+        let target_type = unsafe { ffi::git_tag_target_type(tag) };
+        let mut target = core::ptr::null_mut();
+        assert_eq!(unsafe { ffi::git_tag_peel(&mut target, tag) }, 0);
+        let mut light = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_tag_create_lightweight(
+                    &mut light,
+                    repository,
+                    c"light".as_ptr(),
+                    target,
+                    0,
+                )
+            },
+            0
+        );
+        let mut tags = unsafe { core::mem::zeroed::<ffi::git_strarray>() };
+        let mut matched = unsafe { core::mem::zeroed::<ffi::git_strarray>() };
+        assert_eq!(unsafe { ffi::git_tag_list(&mut tags, repository) }, 0);
+        assert_eq!(
+            unsafe { ffi::git_tag_list_match(&mut matched, c"v*".as_ptr(), repository) },
+            0
+        );
+        let mut foreach_names = Vec::new();
+        assert_eq!(
+            unsafe {
+                ffi::git_tag_foreach(
+                    repository,
+                    Some(collect_tag),
+                    core::ptr::from_mut(&mut foreach_names).cast(),
+                )
+            },
+            0
+        );
+        foreach_names.sort();
+        let mut valid = 0;
+        assert_eq!(
+            unsafe { ffi::git_tag_name_is_valid(&mut valid, c"release/candidate".as_ptr()) },
+            0
+        );
+        let observation = TagObservation {
+            name,
+            message,
+            target_id,
+            target_type,
+            tag_count: tags.count,
+            matched_count: matched.count,
+            foreach_names,
+            valid_name: valid != 0,
+        };
+        assert_eq!(
+            unsafe { ffi::git_tag_delete(repository, c"light".as_ptr()) },
+            0
+        );
+        unsafe {
+            ffi::git_strarray_dispose(&mut matched);
+            ffi::git_strarray_dispose(&mut tags);
+            ffi::git_object_free(target);
+            ffi::git_tag_free(tag);
+        }
+        observation
+    }
+
+    fn safe_tags(repository: *mut ffi::git_repository) -> TagObservation {
+        let mut tag_id = unsafe { core::mem::zeroed::<ffi::git_oid>() };
+        assert_eq!(
+            unsafe {
+                ffi::git_reference_name_to_id(&mut tag_id, repository, c"refs/tags/v1.0".as_ptr())
+            },
+            0
+        );
+        let tag_id_ref = unsafe { OidRef::from_ptr(core::ptr::from_mut(&mut tag_id)) }.unwrap();
+        let repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        let tag = crate::object_api::git_tag_lookup(repository_view, tag_id_ref).unwrap();
+        let name = git_tag_name(tag.as_ref()).to_bytes().to_vec();
+        let message = git_tag_message(tag.as_ref()).unwrap().to_bytes().to_vec();
+        let target_id = git_tag_target_id(tag.as_ref())
+            .raw_bytes()
+            .elems()
+            .collect();
+        let target_type = git_tag_target_type(tag.as_ref()).unwrap().as_raw();
+        let target = git_tag_peel(tag.as_ref()).unwrap();
+        let mut repository_view =
+            unsafe { crate::repository::GitRepositoryMut::from_ptr(repository) }.unwrap();
+        git_tag_create_lightweight(&mut repository_view, c"light", target.as_ref(), false).unwrap();
+        let tag_count = git_tag_list(&mut repository_view).unwrap().as_ref().count();
+        let matched_count = git_tag_list_match(&mut repository_view, c"v*")
+            .unwrap()
+            .as_ref()
+            .count();
+        let mut foreach_names = Vec::new();
+        git_tag_foreach(&mut repository_view, &mut |name: &CStr, _id: OidRef<'_>| {
+            foreach_names.push(name.to_bytes().to_vec());
+            0
+        })
+        .unwrap();
+        foreach_names.sort();
+        let valid_name = git_tag_name_is_valid(Some(c"release/candidate")).unwrap();
+        git_tag_delete(&mut repository_view, c"light").unwrap();
+        TagObservation {
+            name,
+            message,
+            target_id,
+            target_type,
+            tag_count,
+            matched_count,
+            foreach_names,
+            valid_name,
+        }
+    }
+
+    #[test]
+    fn io_equiv_tag_metadata_listing_foreach_and_lightweight_lifecycle() {
+        let _libgit2 = Libgit2Init::acquire();
+        let raw = HistoryFixture::new("tag-surface-raw");
+        let safe = HistoryFixture::new("tag-surface-safe");
+        let raw_observation = unsafe { raw_tags(raw.repository.as_ptr()) };
+        assert_eq!(raw_observation, safe_tags(safe.repository.as_ptr()));
+        assert_eq!(raw_observation.tag_count, 2);
+        assert!(raw_observation.valid_name);
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use core::mem::{align_of, size_of};
     use core::ptr;
